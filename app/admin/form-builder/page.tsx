@@ -6,7 +6,7 @@ import { ArrowLeft, Plus, Trash2, GripVertical, Save } from 'lucide-react'
 
 interface FormField {
   id: string
-  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'date' | 'email' | 'phone' | 'number'
+  type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'date' | 'email' | 'phone' | 'number' | 'co-listing-agent' | 'intermediary-agent' | 'referral-agent'
   label: string
   placeholder?: string
   required: boolean
@@ -332,6 +332,9 @@ export default function FormBuilderPage() {
                           <option value="select">Select (Dropdown)</option>
                           <option value="radio">Radio Buttons</option>
                           <option value="checkbox">Checkbox</option>
+                          <option value="co-listing-agent">Co-Listing Agent</option>
+                          <option value="intermediary-agent">Intermediary Agent</option>
+                          <option value="referral-agent">Referral Agent</option>
                         </select>
                       </div>
                       
@@ -360,7 +363,7 @@ export default function FormBuilderPage() {
                       />
                     </div>
 
-                    {field.type !== 'checkbox' && (
+                    {field.type !== 'checkbox' && !field.type.includes('-agent') && (
                       <div>
                         <label className="block text-xs mb-1 text-luxury-gray-2">Placeholder</label>
                         <input
@@ -370,6 +373,11 @@ export default function FormBuilderPage() {
                           className="input-luxury text-sm"
                           placeholder="Placeholder text"
                         />
+                      </div>
+                    )}
+                    {(field.type === 'co-listing-agent' || field.type === 'intermediary-agent' || field.type === 'referral-agent') && (
+                      <div className="bg-luxury-light p-3 rounded text-xs text-luxury-gray-2">
+                        This field will show a searchable dropdown of all agents in the firm (including inactive agents).
                       </div>
                     )}
 

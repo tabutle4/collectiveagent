@@ -506,9 +506,51 @@ export default function FormResponsesPage() {
     try {
       const response = await fetch('/api/forms/list')
       const data = await response.json()
-      if (data.success && data.forms) {
-        setForms(data.forms)
-      }
+      const dbForms = data.success && data.forms ? data.forms : []
+      
+      // Add default forms if they don't exist in database
+      const defaultForms = [
+        {
+          id: 'prospective-agent',
+          name: 'Prospective Agent Form',
+          description: 'Public form for prospective agents to join the firm',
+          form_type: 'prospective-agent',
+          is_active: true,
+          shareable_link_url: '/prospective-agent-form',
+          shareable_token: null,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'pre-listing',
+          name: 'Pre-Listing Form',
+          description: 'Submit when you have executed a new listing agreement but the property is not yet active on the MLS',
+          form_type: 'pre-listing',
+          is_active: true,
+          shareable_link_url: null, // These use the old system, no shareable link yet
+          shareable_token: null,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'just-listed',
+          name: 'Just Listed Form',
+          description: 'Submit when you have a new active listing that is already on the MLS',
+          form_type: 'just-listed',
+          is_active: true,
+          shareable_link_url: null, // These use the old system, no shareable link yet
+          shareable_token: null,
+          created_at: new Date().toISOString(),
+        },
+      ]
+      
+      // Merge: use database forms if they exist, otherwise use defaults
+      const allForms = [...dbForms]
+      defaultForms.forEach(defaultForm => {
+        if (!dbForms.find((f: any) => f.form_type === defaultForm.form_type)) {
+          allForms.push(defaultForm)
+        }
+      })
+      
+      setForms(allForms)
     } catch (error) {
       console.error('Error loading forms:', error)
     }
@@ -649,9 +691,9 @@ export default function FormResponsesPage() {
     }
   }
   
-  const handleEditForm = (form: any) => {
+  const handleEditForm = (formId: string) => {
     // Navigate to form builder instead of opening modal
-    router.push(`/admin/form-builder?id=${form.id}`)
+    router.push(`/admin/form-builder?id=${formId}`)
   }
   
   const handleUpdateForm = async () => {
@@ -986,7 +1028,7 @@ export default function FormResponsesPage() {
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-2 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-2 w-5 h-5" />
               <input
                 type="text"
                 value={searchQuery}
@@ -996,7 +1038,7 @@ export default function FormResponsesPage() {
                     ? 'Search by name, description, type...' 
                     : 'Search by name, email, address...'
                 }
-                className="input-luxury pl-10"
+                className="input-luxury pl-12 py-3 text-base"
               />
             </div>
             {activeTab !== 'forms' && (
@@ -1419,61 +1461,75 @@ export default function FormResponsesPage() {
                         </td>
                         <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleEditForm(form.id)}
-                              className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const response = await fetch('/api/forms/update', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ id: form.id, is_active: !form.is_active }),
-                                  })
-                                  const data = await response.json()
-                                  if (data.success) {
-                                    loadForms()
-                                  }
-                                } catch (error) {
-                                  console.error('Error toggling form status:', error)
-                                }
-                              }}
-                              className={`p-1.5 rounded transition-colors ${
-                                form.is_active
-                                  ? 'text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50'
-                                  : 'text-green-600 hover:text-green-800 hover:bg-green-50'
-                              }`}
-                              title={form.is_active ? 'Deactivate' : 'Activate'}
-                            >
-                              <Power className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (confirm(`Are you sure you want to delete "${form.name}"?`)) {
-                                  try {
-                                    const response = await fetch('/api/forms/delete', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: form.id }),
-                                    })
-                                    const data = await response.json()
-                                    if (data.success) {
-                                      loadForms()
-                                    }
-                                  } catch (error) {
-                                    console.error('Error deleting form:', error)
-                                  }
-                                }
-                              }}
-                              className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {/* Show edit/delete for all forms, including default forms */}
+                            {form.id && (
+                              <>
+                                {/* Only show edit for database forms (have UUID) */}
+                                {form.id.length > 20 && (
+                                  <button
+                                    onClick={() => handleEditForm(form.id)}
+                                    className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {/* Only show activate/deactivate for database forms */}
+                                {form.id.length > 20 && (
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const response = await fetch('/api/forms/update', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ id: form.id, is_active: !form.is_active }),
+                                        })
+                                        const data = await response.json()
+                                        if (data.success) {
+                                          loadForms()
+                                        }
+                                      } catch (error) {
+                                        console.error('Error toggling form status:', error)
+                                      }
+                                    }}
+                                    className={`p-1.5 rounded transition-colors ${
+                                      form.is_active
+                                        ? 'text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50'
+                                        : 'text-green-600 hover:text-green-800 hover:bg-green-50'
+                                    }`}
+                                    title={form.is_active ? 'Deactivate' : 'Activate'}
+                                  >
+                                    <Power className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {/* Only show delete for database forms */}
+                                {form.id.length > 20 && (
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm(`Are you sure you want to delete "${form.name}"?`)) {
+                                        try {
+                                          const response = await fetch('/api/forms/delete', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ id: form.id }),
+                                          })
+                                          const data = await response.json()
+                                          if (data.success) {
+                                            loadForms()
+                                          }
+                                        } catch (error) {
+                                          console.error('Error deleting form:', error)
+                                        }
+                                      }
+                                    }}
+                                    className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

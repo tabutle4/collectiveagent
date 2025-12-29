@@ -4,6 +4,111 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ServiceConfiguration } from '@/types/listing-coordination'
 
+// Reusable Agent Dropdown Component
+function AgentDropdown({ 
+  fieldName, 
+  fieldType, 
+  agents, 
+  formData, 
+  setFormData, 
+  required, 
+  placeholder 
+}: {
+  fieldName: string
+  fieldType: string
+  agents: Array<{id: string, name: string}>
+  formData: any
+  setFormData: (data: any) => void
+  required?: boolean
+  placeholder?: string
+}) {
+  const [search, setSearch] = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  
+  const fieldIdKey = `${fieldName}_id`
+  const fieldNameKey = `${fieldName}_name`
+  const selectedAgent = agents.find(a => a.id === formData[fieldIdKey])
+  
+  useEffect(() => {
+    if (selectedAgent) {
+      setSearch(selectedAgent.name)
+    }
+  }, [selectedAgent])
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+  
+  const filteredAgents = agents.filter(agent =>
+    agent.name.toLowerCase().includes(search.toLowerCase())
+  )
+  
+  const handleSelect = (agent: {id: string, name: string}) => {
+    setSearch(agent.name)
+    setDropdownOpen(false)
+    setFormData({
+      ...formData,
+      [fieldIdKey]: agent.id,
+      [fieldNameKey]: agent.name,
+    })
+  }
+  
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value)
+          setDropdownOpen(true)
+          if (!e.target.value) {
+            setFormData({
+              ...formData,
+              [fieldIdKey]: '',
+              [fieldNameKey]: '',
+            })
+          }
+        }}
+        onFocus={() => {
+          if (search) {
+            setDropdownOpen(true)
+          }
+        }}
+        className="input-luxury"
+        placeholder={placeholder}
+        required={required}
+        autoComplete="off"
+      />
+      {dropdownOpen && search && filteredAgents.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
+          {filteredAgents.map((agent) => (
+            <button
+              key={agent.id}
+              type="button"
+              onClick={() => handleSelect(agent)}
+              className="w-full text-left px-4 py-2 hover:bg-luxury-light transition-colors text-sm"
+            >
+              {agent.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {dropdownOpen && search && filteredAgents.length === 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
+          No agents found
+        </div>
+      )}
+    </div>
+  )
+}
+
 // This is a dynamic form page that handles any form type
 // For pre-listing and just-listed, it uses the existing form logic
 // For other form types, it shows a generic form structure
@@ -25,9 +130,29 @@ export default function DynamicFormPage() {
   const [selectedAgent, setSelectedAgent] = useState<{id: string, name: string} | null>(null)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   
+  // Additional agent fields (co-listing, intermediary, referral)
+  const [coListingAgentSearch, setCoListingAgentSearch] = useState('')
+  const [coListingAgentDropdownOpen, setCoListingAgentDropdownOpen] = useState(false)
+  const [selectedCoListingAgent, setSelectedCoListingAgent] = useState<{id: string, name: string} | null>(null)
+  const coListingAgentDropdownRef = useRef<HTMLDivElement>(null)
+  
+  // Track all agent field states dynamically
+  const [agentFieldStates, setAgentFieldStates] = useState<{[key: string]: {
+    search: string
+    dropdownOpen: boolean
+    selected: {id: string, name: string} | null
+    ref: React.RefObject<HTMLDivElement>
+  }}>({})
+  
   const [formData, setFormData] = useState({
     agent_id: '',
     agent_name: '',
+    co_listing_agent_id: '',
+    co_listing_agent_name: '',
+    intermediary_agent_id: '',
+    intermediary_agent_name: '',
+    referral_agent_id: '',
+    referral_agent_name: '',
     property_address: '',
     transaction_type: 'sale' as 'sale' | 'lease',
     client_names: '',
@@ -89,11 +214,14 @@ export default function DynamicFormPage() {
       .catch(err => console.error('Error fetching agents:', err))
   }, [token, formType])
   
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (agentDropdownRef.current && !agentDropdownRef.current.contains(event.target as Node)) {
         setAgentDropdownOpen(false)
+      }
+      if (coListingAgentDropdownRef.current && !coListingAgentDropdownRef.current.contains(event.target as Node)) {
+        setCoListingAgentDropdownOpen(false)
       }
     }
     
@@ -293,6 +421,61 @@ export default function DynamicFormPage() {
               )}
             </div>
             
+            {/* Co-Listing Agent Field */}
+            <div className="relative" ref={coListingAgentDropdownRef}>
+              <label className="block text-sm mb-2 text-luxury-gray-1">
+                Co-Listing Agent
+              </label>
+              <input
+                type="text"
+                value={coListingAgentSearch}
+                onChange={(e) => {
+                  setCoListingAgentSearch(e.target.value)
+                  setCoListingAgentDropdownOpen(true)
+                  if (!e.target.value) {
+                    setSelectedCoListingAgent(null)
+                    setFormData({...formData, co_listing_agent_id: '', co_listing_agent_name: ''})
+                  }
+                }}
+                onFocus={() => {
+                  if (coListingAgentSearch) {
+                    setCoListingAgentDropdownOpen(true)
+                  }
+                }}
+                className="input-luxury"
+                placeholder="Type to search for a co-listing agent..."
+                autoComplete="off"
+              />
+              {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
+                  {filteredAgents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCoListingAgent(agent)
+                        setCoListingAgentSearch(agent.name)
+                        setCoListingAgentDropdownOpen(false)
+                        setFormData({
+                          ...formData,
+                          co_listing_agent_id: agent.id,
+                          co_listing_agent_name: agent.name,
+                        })
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-luxury-light transition-colors text-sm"
+                    >
+                      {agent.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length === 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
+                  No agents found
+                </div>
+              )}
+            </div>
+            
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Property Address <span className="text-red-500">*</span>
@@ -307,16 +490,139 @@ export default function DynamicFormPage() {
               />
             </div>
             
-            {/* For now, show basic fields. Custom form types can be extended later */}
-            {(formType === 'pre-listing' || formType === 'just-listed') ? (
-              <p className="text-sm text-luxury-gray-2 italic">
-                This form type uses a dedicated form page. Please use the specific form link.
-              </p>
-            ) : (
-              <div className="bg-luxury-light p-4 rounded">
-                <p className="text-sm text-luxury-gray-2">
-                  This is a custom form. Additional fields can be configured by an admin.
-                </p>
+            {/* Render dynamic form fields from form_config */}
+            {formDefinition?.form_config?.fields && formDefinition.form_config.fields.length > 0 && (
+              <div className="space-y-6">
+                {formDefinition.form_config.fields.map((field: any) => (
+                  <div key={field.id || field.name}>
+                    <label className="block text-sm mb-2 text-luxury-gray-1">
+                      {field.label} {field.required && <span className="text-red-500">*</span>}
+                    </label>
+                    {field.type === 'text' && (
+                      <input
+                        type="text"
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="input-luxury"
+                        placeholder={field.placeholder || ''}
+                        required={field.required}
+                      />
+                    )}
+                    {field.type === 'textarea' && (
+                      <textarea
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="textarea-luxury"
+                        placeholder={field.placeholder || ''}
+                        required={field.required}
+                        rows={field.rows || 3}
+                      />
+                    )}
+                    {field.type === 'select' && field.options && (
+                      <select
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="select-luxury"
+                        required={field.required}
+                      >
+                        <option value="">Select...</option>
+                        {field.options.map((option: string) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    )}
+                    {field.type === 'radio' && field.options && (
+                      <div className="space-y-2">
+                        {field.options.map((option: string) => (
+                          <label key={option} className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={field.name}
+                              value={option}
+                              checked={String(formData[field.name as keyof typeof formData] || '') === option}
+                              onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                              className="mt-0.5"
+                              required={field.required}
+                            />
+                            <span className="text-sm">{option}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {field.type === 'checkbox' && (
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name={field.name}
+                          checked={!!formData[field.name as keyof typeof formData]}
+                          onChange={(e) => setFormData({...formData, [field.name]: e.target.checked})}
+                          className="mt-0.5"
+                        />
+                        <span className="text-sm">{field.label}</span>
+                      </label>
+                    )}
+                    {field.type === 'date' && (
+                      <input
+                        type="date"
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="input-luxury"
+                        required={field.required}
+                      />
+                    )}
+                    {field.type === 'email' && (
+                      <input
+                        type="email"
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="input-luxury"
+                        placeholder={field.placeholder || ''}
+                        required={field.required}
+                      />
+                    )}
+                    {field.type === 'phone' && (
+                      <input
+                        type="tel"
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="input-luxury"
+                        placeholder={field.placeholder || ''}
+                        required={field.required}
+                      />
+                    )}
+                    {field.type === 'number' && (
+                      <input
+                        type="number"
+                        name={field.name}
+                        value={String(formData[field.name as keyof typeof formData] || '')}
+                        onChange={(e) => setFormData({...formData, [field.name]: e.target.value})}
+                        className="input-luxury"
+                        placeholder={field.placeholder || ''}
+                        min={field.validation?.min}
+                        max={field.validation?.max}
+                        required={field.required}
+                      />
+                    )}
+                    {/* Agent field types: co-listing, intermediary, referral */}
+                    {(field.type === 'co-listing-agent' || field.type === 'intermediary-agent' || field.type === 'referral-agent') && (
+                      <AgentDropdown
+                        fieldName={field.name}
+                        fieldType={field.type}
+                        agents={agents}
+                        formData={formData}
+                        setFormData={setFormData}
+                        required={field.required}
+                        placeholder={field.placeholder || `Type to search for ${field.type.replace('-agent', '')} agent...`}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             )}
             
