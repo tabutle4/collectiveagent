@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { X, Download, Plus, Trash2, Copy, Check, Search, ArrowUpDown, Edit2, Power } from 'lucide-react'
-import { getFormLinkUrl } from '@/lib/magic-links'
 
 interface ProspectResponse {
   id: string
@@ -101,7 +100,6 @@ export default function FormResponsesPage() {
   const [agents, setAgents] = useState<Array<{id: string, name: string}>>([])
   const [agentSearch, setAgentSearch] = useState<{[key: string]: string}>({})
   const [agentDropdownOpen, setAgentDropdownOpen] = useState<{[key: string]: boolean}>({})
-  const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [createFormModalOpen, setCreateFormModalOpen] = useState(false)
   const [newFormDefinition, setNewFormDefinition] = useState({
     name: '',
@@ -497,12 +495,6 @@ export default function FormResponsesPage() {
 
   const preListingForms = listings.filter(l => l.pre_listing_form_completed)
   const justListedForms = listings.filter(l => l.just_listed_form_completed)
-
-  const handleCopyLink = (link: string, listingId: string) => {
-    navigator.clipboard.writeText(link)
-    setCopiedLink(listingId)
-    setTimeout(() => setCopiedLink(null), 2000)
-  }
 
   const handleCopyFormLink = (link: string, formId: string) => {
     navigator.clipboard.writeText(link)
@@ -1216,32 +1208,6 @@ export default function FormResponsesPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
-                          {listing.pre_listing_token ? (
-                            <button
-                              onClick={() => {
-                                const link = getFormLinkUrl(listing.pre_listing_token!, 'pre-listing')
-                                handleCopyLink(link, listing.id)
-                              }}
-                              className="flex items-center gap-1 text-xs text-luxury-black hover:text-luxury-gray-1 transition-colors"
-                              title="Copy shareable link"
-                            >
-                              {copiedLink === listing.id ? (
-                                <>
-                                  <Check className="w-3 h-3" />
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  Copy Link
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-luxury-gray-2">No link</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={(e) => handleDeleteListing(listing.id, 'pre-listing', e)}
                             className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
@@ -1313,7 +1279,6 @@ export default function FormResponsesPage() {
                           <ArrowUpDown className="w-3 h-3" />
                         </button>
                       </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Shareable Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Actions</th>
                     </tr>
                   </thead>
@@ -1337,32 +1302,6 @@ export default function FormResponsesPage() {
                           }`}>
                             {listing.status}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
-                          {listing.just_listed_token ? (
-                            <button
-                              onClick={() => {
-                                const link = getFormLinkUrl(listing.just_listed_token!, 'just-listed')
-                                handleCopyLink(link, listing.id)
-                              }}
-                              className="flex items-center gap-1 text-xs text-luxury-black hover:text-luxury-gray-1 transition-colors"
-                              title="Copy shareable link"
-                            >
-                              {copiedLink === listing.id ? (
-                                <>
-                                  <Check className="w-3 h-3" />
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  Copy Link
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-luxury-gray-2">No link</span>
-                          )}
                         </td>
                         <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
                           <button
