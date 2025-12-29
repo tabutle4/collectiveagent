@@ -1,0 +1,3 @@
+{
+  "/api/campaign/verify-token/route": "app/api/campaign/verify-token/route.js"
+}

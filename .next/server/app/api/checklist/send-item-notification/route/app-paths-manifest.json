@@ -1,0 +1,3 @@
+{
+  "/api/checklist/send-item-notification/route": "app/api/checklist/send-item-notification/route.js"
+}

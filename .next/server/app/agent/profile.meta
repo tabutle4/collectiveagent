@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/agent/layout,_N_T_/agent/profile/layout,_N_T_/agent/profile/page,_N_T_/agent/profile"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/agent/profile/__PAGE__",
+    "/agent/profile",
+    "/agent",
+    "/_index",
+    "/_head"
+  ]
+}

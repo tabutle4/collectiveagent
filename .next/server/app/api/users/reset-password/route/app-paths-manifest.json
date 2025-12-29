@@ -1,0 +1,3 @@
+{
+  "/api/users/reset-password/route": "app/api/users/reset-password/route.js"
+}

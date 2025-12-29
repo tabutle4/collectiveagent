@@ -1,0 +1,3 @@
+{
+  "/api/service-config/get/route": "app/api/service-config/get/route.js"
+}

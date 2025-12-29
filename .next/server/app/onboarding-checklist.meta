@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/onboarding-checklist/layout,_N_T_/onboarding-checklist/page,_N_T_/onboarding-checklist"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/onboarding-checklist/__PAGE__",
+    "/onboarding-checklist",
+    "/_index",
+    "/_head"
+  ]
+}

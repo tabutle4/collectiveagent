@@ -1,0 +1,3 @@
+{
+  "/api/coordination/delete-report/route": "app/api/coordination/delete-report/route.js"
+}

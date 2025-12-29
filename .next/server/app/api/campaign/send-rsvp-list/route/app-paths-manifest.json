@@ -1,0 +1,3 @@
+{
+  "/api/campaign/send-rsvp-list/route": "app/api/campaign/send-rsvp-list/route.js"
+}

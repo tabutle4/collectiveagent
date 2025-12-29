@@ -1,0 +1,3 @@
+{
+  "/api/campaign/migrate-profile-updates/route": "app/api/campaign/migrate-profile-updates/route.js"
+}

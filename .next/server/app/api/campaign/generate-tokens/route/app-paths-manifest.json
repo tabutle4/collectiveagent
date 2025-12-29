@@ -1,0 +1,3 @@
+{
+  "/api/campaign/generate-tokens/route": "app/api/campaign/generate-tokens/route.js"
+}

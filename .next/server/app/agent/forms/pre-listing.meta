@@ -1,0 +1,17 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/agent/layout,_N_T_/agent/forms/layout,_N_T_/agent/forms/pre-listing/layout,_N_T_/agent/forms/pre-listing/page,_N_T_/agent/forms/pre-listing"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/agent/forms/pre-listing/__PAGE__",
+    "/agent/forms/pre-listing",
+    "/agent/forms",
+    "/agent",
+    "/_index",
+    "/_head"
+  ]
+}

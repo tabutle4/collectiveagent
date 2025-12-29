@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/prospective-agent-form/layout,_N_T_/prospective-agent-form/success/layout,_N_T_/prospective-agent-form/success/page,_N_T_/prospective-agent-form/success"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/prospective-agent-form/success/__PAGE__",
+    "/prospective-agent-form/success",
+    "/prospective-agent-form",
+    "/_index",
+    "/_head"
+  ]
+}

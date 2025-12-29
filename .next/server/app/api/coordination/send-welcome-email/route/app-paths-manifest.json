@@ -1,0 +1,3 @@
+{
+  "/api/coordination/send-welcome-email/route": "app/api/coordination/send-welcome-email/route.js"
+}
