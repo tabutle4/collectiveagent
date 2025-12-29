@@ -503,6 +503,12 @@ export default function FormResponsesPage() {
     setCopiedLink(listingId)
     setTimeout(() => setCopiedLink(null), 2000)
   }
+
+  const handleCopyFormLink = (link: string, formId: string) => {
+    navigator.clipboard.writeText(link)
+    setFormCopiedLink(formId)
+    setTimeout(() => setFormCopiedLink(null), 2000)
+  }
   
   const loadForms = async () => {
     try {
@@ -985,21 +991,26 @@ export default function FormResponsesPage() {
         </div>
         
         {/* Search and Filter Bar */}
-        {(activeTab === 'prospects' || activeTab === 'pre-listing' || activeTab === 'just-listed') && (
-          <div className="card-section mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-2 w-4 h-4" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, email, address..."
-                  className="input-luxury pl-10"
-                />
-              </div>
-              {activeTab === 'prospects' && (
-                <select
+        <div className="card-section mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-2 w-4 h-4" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  activeTab === 'forms' 
+                    ? 'Search by name, description, type...' 
+                    : 'Search by name, email, address...'
+                }
+                className="input-luxury pl-10"
+              />
+            </div>
+            {activeTab !== 'forms' && (
+              <>
+                {activeTab === 'prospects' && (
+                  <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
                   className="select-luxury"
@@ -1027,9 +1038,10 @@ export default function FormResponsesPage() {
                   <option value="cancelled">Cancelled</option>
                 </select>
               )}
-            </div>
+              </>
+            )}
           </div>
-        )}
+        </div>
 
         {loading ? (
           <div className="card-section text-center py-12">
@@ -1256,17 +1268,57 @@ export default function FormResponsesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Agent</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('created_at')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Date
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('agent_name')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Agent
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('property_address')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Property Address
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('client_names')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Client Name
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('status')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Status
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Shareable Link</th>
                       <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {justListedForms.map((listing) => (
+                    {getFilteredAndSortedData(justListedForms).map((listing) => (
                       <tr
                         key={listing.id}
                         onClick={() => handleRowClick(listing, 'just-listed')}
@@ -1328,6 +1380,170 @@ export default function FormResponsesPage() {
                 {justListedForms.length === 0 && (
                   <div className="text-center py-12">
                     <p className="text-luxury-gray-2">No just listed form responses</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Forms Management Table */}
+            {activeTab === 'forms' && (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-luxury-gray-5">
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('name')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Name
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Description</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        <button
+                          onClick={() => handleSort('form_type')}
+                          className="flex items-center gap-1 hover:text-luxury-black transition-colors"
+                        >
+                          Type
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Shareable Link</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forms.filter(form => {
+                      if (searchQuery) {
+                        const query = searchQuery.toLowerCase()
+                        return (
+                          (form.name || '').toLowerCase().includes(query) ||
+                          (form.description || '').toLowerCase().includes(query) ||
+                          (form.form_type || '').toLowerCase().includes(query)
+                        )
+                      }
+                      return true
+                    }).sort((a, b) => {
+                      let aVal = a[sortField] || ''
+                      let bVal = b[sortField] || ''
+                      if (sortField === 'name' || sortField === 'form_type') {
+                        aVal = aVal.toString().toLowerCase()
+                        bVal = bVal.toString().toLowerCase()
+                      }
+                      if (sortDirection === 'asc') {
+                        return aVal > bVal ? 1 : -1
+                      } else {
+                        return aVal < bVal ? 1 : -1
+                      }
+                    }).map((form) => (
+                      <tr
+                        key={form.id}
+                        className="border-b border-luxury-gray-5 hover:bg-luxury-light transition-colors"
+                      >
+                        <td className="py-3 px-4 text-sm font-medium">{form.name}</td>
+                        <td className="py-3 px-4 text-sm text-luxury-gray-2">{form.description || '—'}</td>
+                        <td className="py-3 px-4 text-sm">{form.form_type}</td>
+                        <td className="py-3 px-4 text-sm">
+                          <span className={`px-2 py-1 text-xs rounded ${
+                            form.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {form.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                          {form.shareable_link_url ? (
+                            <button
+                              onClick={() => {
+                                handleCopyFormLink(form.shareable_link_url, form.id)
+                              }}
+                              className="flex items-center gap-1 text-xs text-luxury-black hover:text-luxury-gray-1 transition-colors"
+                              title="Copy shareable link"
+                            >
+                              {formCopiedLink === form.id ? (
+                                <>
+                                  <Check className="w-3 h-3" />
+                                  Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  Copy Link
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-luxury-gray-2">No link</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditForm(form.id)}
+                              className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch('/api/forms/update', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: form.id, is_active: !form.is_active }),
+                                  })
+                                  const data = await response.json()
+                                  if (data.success) {
+                                    loadForms()
+                                  }
+                                } catch (error) {
+                                  console.error('Error toggling form status:', error)
+                                }
+                              }}
+                              className={`p-1.5 rounded transition-colors ${
+                                form.is_active
+                                  ? 'text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50'
+                                  : 'text-green-600 hover:text-green-800 hover:bg-green-50'
+                              }`}
+                              title={form.is_active ? 'Deactivate' : 'Activate'}
+                            >
+                              <Power className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete "${form.name}"?`)) {
+                                  try {
+                                    const response = await fetch('/api/forms/delete', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: form.id }),
+                                    })
+                                    const data = await response.json()
+                                    if (data.success) {
+                                      loadForms()
+                                    }
+                                  } catch (error) {
+                                    console.error('Error deleting form:', error)
+                                  }
+                                }
+                              }}
+                              className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {forms.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-luxury-gray-2">No forms created yet</p>
                   </div>
                 )}
               </div>
