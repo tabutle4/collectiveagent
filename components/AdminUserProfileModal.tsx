@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { normalizeSocialUrl } from '@/lib/socialLinks'
-import { formatNameToTitleCase, normalizeRoles } from '@/lib/nameFormatter'
+import { normalizeRoles } from '@/lib/nameFormatter'
 import HeadshotUpload from './HeadshotUpload'
 
 type Props = {
@@ -414,14 +414,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
     }
   }
 
-  const handleNameBlur = (field: string, value: string) => {
-    // Format name fields to proper case on blur
-    const nameFields = ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name']
-    if (nameFields.includes(field)) {
-      const formatted = formatNameToTitleCase(value)
-      setFormData((prev: any) => ({ ...prev, [field]: formatted }))
-    }
-  }
+  // Removed handleNameBlur - names are preserved exactly as typed by the user
 
   const handlePhoneChange = (field: string, value: string) => {
     const formatted = formatPhone(value)
@@ -446,15 +439,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
     setSaving(true)
     setError(null)
     try {
-      // Format names before validation
+      // Names are preserved exactly as typed by the user (no auto-formatting)
       const formattedData = {
         ...formData,
-        first_name: formatNameToTitleCase(formData.first_name || ''),
-        last_name: formatNameToTitleCase(formData.last_name || ''),
-        preferred_first_name: formatNameToTitleCase(formData.preferred_first_name || ''),
-        preferred_last_name: formatNameToTitleCase(formData.preferred_last_name || ''),
       }
-      setFormData(formattedData)
       
       // Validation for required fields
       if (!formattedData.email || !formattedData.first_name || !formattedData.last_name || !formattedData.preferred_first_name || !formattedData.preferred_last_name) {
@@ -781,7 +769,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.preferred_first_name}
                     onChange={(e) => handleInputChange('preferred_first_name', e.target.value)}
-                    onBlur={(e) => handleNameBlur('preferred_first_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -790,7 +777,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.preferred_last_name}
                     onChange={(e) => handleInputChange('preferred_last_name', e.target.value)}
-                    onBlur={(e) => handleNameBlur('preferred_last_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -799,7 +785,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.first_name}
                     onChange={(e) => handleInputChange('first_name', e.target.value)}
-                    onBlur={(e) => handleNameBlur('first_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -808,7 +793,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.last_name}
                     onChange={(e) => handleInputChange('last_name', e.target.value)}
-                    onBlur={(e) => handleNameBlur('last_name', e.target.value)}
                   />
                 </div>
                 <div>

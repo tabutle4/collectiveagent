@@ -37,8 +37,17 @@ export function formatNameToTitleCase(name: string): string {
       const lowerPart = part.toLowerCase()
       
       // Check for special cases
+      // Only match if prefix is the entire word OR followed by a space, hyphen, or apostrophe
       for (const [key, replacement] of Object.entries(specialCases)) {
-        if (lowerPart.startsWith(key)) {
+        if (lowerPart === key) {
+          // Entire word matches (e.g., "La" by itself)
+          return replacement
+        } else if (
+          lowerPart.startsWith(key + ' ') ||
+          lowerPart.startsWith(key + '-') ||
+          lowerPart.startsWith(key + "'")
+        ) {
+          // Prefix followed by space, hyphen, or apostrophe (e.g., "La Fontaine", "De-La-Cruz", "O'Brien")
           return replacement + lowerPart.slice(key.length).charAt(0).toUpperCase() + lowerPart.slice(key.length + 1)
         }
       }
