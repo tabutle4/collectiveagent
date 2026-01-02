@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .contains('roles', ['agent'])
+          .or('roles.cs.{agent},roles.cs.{Agent}')
           .limit(1)
         
         let agentData = null
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
             .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .contains('roles', ['agent'])
+            .or('roles.cs.{agent},roles.cs.{Agent}')
             .limit(1)
           
           if (agentsByLegal && agentsByLegal.length > 0) {

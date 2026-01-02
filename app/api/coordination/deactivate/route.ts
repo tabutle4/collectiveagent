@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     try {
       const listing = await getListingById(listing_id)
       if (listing) {
-        await archiveListingFolder(listing.property_address, listing_id)
+        await archiveListingFolder(listing.property_address, listing_id, listing.transaction_type || 'sale')
       }
     } catch (error) {
       console.error('Error archiving folder:', error)

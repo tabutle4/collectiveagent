@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
-import { Send, Mail, Trash2 } from 'lucide-react'
+import { Send, Mail, Trash2, Calendar, Clock, X } from 'lucide-react'
 
 interface CoordinationWithListing extends ListingCoordination {
   listing?: Listing
@@ -16,6 +16,13 @@ export default function AdminCoordinationDashboard() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active')
   const [activeTab, setActiveTab] = useState<'list' | 'emails'>('list')
+  const [showSendReportsModal, setShowSendReportsModal] = useState(false)
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [sendingReports, setSendingReports] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('18:00')
+  const [applyToAll, setApplyToAll] = useState(true)
   
   useEffect(() => {
     loadCoordinations()
@@ -88,6 +95,87 @@ export default function AdminCoordinationDashboard() {
     })
   }
   
+  const handleSendAllReports = async (sendNow: boolean) => {
+    setSendingReports(true)
+    try {
+      const userStr = localStorage.getItem('user')
+      if (!userStr) {
+        alert('You must be logged in')
+        return
+      }
+      
+      const user = JSON.parse(userStr)
+      
+      const response = await fetch('/api/coordination/send-all-weekly-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          send_now: sendNow,
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        alert(`Successfully ${sendNow ? 'sent' : 'scheduled'} ${data.sent || data.scheduled} report(s).`)
+        setShowSendReportsModal(false)
+        loadCoordinations()
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (error: any) {
+      console.error('Error sending reports:', error)
+      alert('Failed to send reports')
+    } finally {
+      setSendingReports(false)
+    }
+  }
+  
+  const handleScheduleEmails = async () => {
+    if (!scheduleDate || !scheduleTime) {
+      alert('Please select both date and time')
+      return
+    }
+    
+    setScheduling(true)
+    try {
+      const userStr = localStorage.getItem('user')
+      if (!userStr) {
+        alert('You must be logged in')
+        return
+      }
+      
+      const user = JSON.parse(userStr)
+      
+      const response = await fetch('/api/coordination/update-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          scheduleDate,
+          scheduleTime,
+          applyToAll,
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        alert(data.message || 'Schedule updated successfully')
+        setShowScheduleModal(false)
+        loadCoordinations()
+      } else {
+        alert(`Error: ${data.error}`)
+      }
+    } catch (error: any) {
+      console.error('Error scheduling emails:', error)
+      alert('Failed to schedule emails')
+    } finally {
+      setScheduling(false)
+    }
+  }
+  
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-7xl mx-auto">
@@ -96,23 +184,32 @@ export default function AdminCoordinationDashboard() {
             <h1 className="text-2xl font-light tracking-luxury mb-4 md:mb-0">
               Listing Coordination Management
             </h1>
-            <div className="flex gap-2">
-              <a
-                href="/agent/forms/pre-listing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setShowSendReportsModal(true)}
+                className="px-4 py-2 text-sm rounded transition-colors bg-blue-600 text-white hover:opacity-90 flex items-center gap-2"
               >
-                Pre-Listing Form
-              </a>
-              <a
-                href="/agent/forms/just-listed"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                <Send className="w-4 h-4" />
+                Send All Weekly Reports
+              </button>
+              <button
+                onClick={() => {
+                  const now = new Date()
+                  setScheduleDate(now.toISOString().split('T')[0])
+                  setScheduleTime('18:00')
+                  setShowScheduleModal(true)
+                }}
+                className="px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 flex items-center gap-2"
               >
-                Just Listed Form
-              </a>
+                <Calendar className="w-4 h-4" />
+                Schedule Emails
+              </button>
+              <button
+                onClick={() => router.push('/admin/coordination/activate')}
+                className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+              >
+                Activate Coordination
+              </button>
             </div>
           </div>
 
@@ -244,6 +341,21 @@ export default function AdminCoordinationDashboard() {
                         <p className="text-sm">{formatDate(coordination.last_email_sent_at)}</p>
                       </div>
                       <div>
+                        <p className="text-xs text-luxury-gray-2">Next Scheduled</p>
+                        <p className="text-sm">
+                          {coordination.next_email_scheduled_for ? (
+                            new Date(coordination.next_email_scheduled_for).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })
+                          ) : (
+                            <span className="text-luxury-gray-2">Not scheduled</span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
                         <p className="text-xs text-luxury-gray-2">Welcome Email</p>
                         <p className="text-sm">
                           {coordination.welcome_email_sent ? (
@@ -360,6 +472,105 @@ export default function AdminCoordinationDashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+        
+        {/* Send All Reports Modal */}
+        {showSendReportsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-medium">Send All Weekly Reports</h2>
+                <button
+                  onClick={() => setShowSendReportsModal(false)}
+                  className="text-luxury-gray-2 hover:text-luxury-black"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-sm text-luxury-gray-2 mb-6">
+                Choose when to send all weekly reports for active coordinations:
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleSendAllReports(true)}
+                  disabled={sendingReports}
+                  className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-blue-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingReports ? 'Sending...' : 'Send Now'}
+                </button>
+                <button
+                  onClick={() => handleSendAllReports(false)}
+                  disabled={sendingReports}
+                  className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {sendingReports ? 'Scheduling...' : 'Schedule for Next Monday'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Schedule Emails Modal */}
+        {showScheduleModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-medium">Schedule Emails</h2>
+                <button
+                  onClick={() => setShowScheduleModal(false)}
+                  className="text-luxury-gray-2 hover:text-luxury-black"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="input-luxury w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">Time</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="input-luxury w-full"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applyToAll}
+                      onChange={(e) => setApplyToAll(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm">Apply to all coordinations</span>
+                  </label>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowScheduleModal(false)}
+                    className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleScheduleEmails}
+                    disabled={scheduling}
+                    className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {scheduling ? 'Scheduling...' : 'Schedule'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

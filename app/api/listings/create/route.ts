@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .contains('roles', ['agent'])
+          .or('roles.cs.{agent},roles.cs.{Agent}')
           .limit(1)
         
         if (agentsByPreferred && agentsByPreferred.length > 0) {
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
             .select('id, first_name, last_name, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .contains('roles', ['agent'])
+            .or('roles.cs.{agent},roles.cs.{Agent}')
             .limit(1)
           
           if (agentsByLegal && agentsByLegal.length > 0) {
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
           client_phone: body.client_phone,
           client_email: body.client_email,
           transaction_type: body.transaction_type,
+          mls_type: body.mls_type,
           lead_source: body.lead_source,
           dotloop_file_created: body.dotloop_file_created,
           listing_input_requested: body.listing_input_requested,
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
           paymentDueDate = dueDate.toISOString().split('T')[0]
         }
         
-        const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id)
+        const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
         
         if (!agentIdForListing) {
           return NextResponse.json(
@@ -288,7 +289,7 @@ export async function POST(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .contains('roles', ['agent'])
+          .or('roles.cs.{agent},roles.cs.{Agent}')
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
@@ -299,7 +300,7 @@ export async function POST(request: NextRequest) {
             .select('id, first_name, last_name, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .contains('roles', ['agent'])
+            .or('roles.cs.{agent},roles.cs.{Agent}')
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {
@@ -342,6 +343,7 @@ export async function POST(request: NextRequest) {
         client_phone: body.client_phone,
         client_email: body.client_email,
         transaction_type: body.transaction_type,
+        mls_type: body.mls_type,
         lead_source: body.lead_source,
         dotloop_file_created: body.dotloop_file_created,
         listing_input_requested: body.listing_input_requested,
@@ -400,7 +402,7 @@ export async function POST(request: NextRequest) {
         paymentDueDate = dueDate.toISOString().split('T')[0]
       }
       
-      const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id)
+      const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
       
       // Use the listing's agent_id (from the selected agent in the form)
       // Only fallback to submitting user if they're an agent and no agent was found

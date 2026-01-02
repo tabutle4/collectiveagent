@@ -9,6 +9,7 @@ export interface Listing {
   client_email: string | null
   property_address: string
   transaction_type: 'sale' | 'lease'
+  mls_type: 'HAR' | 'NTREIS' | null
   mls_link: string | null
   mls_login_info: string | null
   estimated_launch_date: string | null
@@ -72,6 +73,7 @@ export interface CoordinationWeeklyReport {
   email_sent: boolean
   email_sent_at: string | null
   email_id: string | null
+  email_scheduled_for: string | null
   email_status: string | null
   sent_to: {
     seller: string
@@ -101,6 +103,7 @@ export interface ListingFormData {
   agent_name: string
   property_address: string
   transaction_type: 'sale' | 'lease'
+  mls_type?: 'HAR' | 'NTREIS'
   client_names: string
   client_phone: string
   client_email: string

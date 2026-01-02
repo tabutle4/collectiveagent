@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Listing } from '@/types/listing-coordination'
+import { supabase } from '@/lib/supabase'
 
 export default function ActivateCoordinationPage() {
   const router = useRouter()
@@ -15,7 +16,7 @@ export default function ActivateCoordinationPage() {
     seller_name: '',
     seller_email: '',
     listing_website_url: '',
-    payment_method: '' as 'client_direct' | 'agent_pays' | '',
+    payment_method: '' as 'client_direct' | 'agent_pays' | 'broker_listing' | '',
     custom_fee: '',
   })
   
@@ -35,18 +36,41 @@ export default function ActivateCoordinationPage() {
     }
   }
   
-  const handleListingSelect = (listingId: string) => {
+  const handleListingSelect = async (listingId: string) => {
     const listing = listings.find(l => l.id === listingId)
     setSelectedListing(listing || null)
     
     if (listing) {
+      // Check if agent is Courtney Okanlomo
+      let isCourtneyOkanlomo = false
+      if (listing.agent_name) {
+        const agentNameLower = listing.agent_name.toLowerCase()
+        isCourtneyOkanlomo = agentNameLower.includes('courtney okanlomo') || agentNameLower.includes('okanlomo')
+      } else if (listing.agent_id) {
+        // Fetch agent data to check name
+        try {
+          const { data: agentData } = await supabase
+            .from('users')
+            .select('preferred_first_name, preferred_last_name, first_name, last_name')
+            .eq('id', listing.agent_id)
+            .single()
+          
+          if (agentData) {
+            const agentName = `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
+            isCourtneyOkanlomo = agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
+          }
+        } catch (error) {
+          console.error('Error fetching agent data:', error)
+        }
+      }
+      
       setFormData({
         listing_id: listingId,
         seller_name: listing.client_names,
         seller_email: listing.client_email || '',
         listing_website_url: listing.listing_website_url || '',
-        payment_method: '',
-        custom_fee: '',
+        payment_method: isCourtneyOkanlomo ? 'broker_listing' : '',
+        custom_fee: isCourtneyOkanlomo ? '0' : '',
       })
     }
   }

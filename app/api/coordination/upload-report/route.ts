@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { uploadWeeklyReports } from '@/lib/microsoft-graph'
 import { getListingById } from '@/lib/db/listings'
+import { getAllActiveCoordinations } from '@/lib/db/coordination'
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,31 +39,53 @@ export async function POST(request: NextRequest) {
     const week_start_date = report_date
     const week_end_date = report_date
     
-    const file1 = formData.get('report_file_1') as File
-    const file2 = formData.get('report_file_2') as File
-    
-    if (!file1 || !file2) {
-      return NextResponse.json({ error: 'Both report files are required' }, { status: 400 })
-    }
-    
     const listing = await getListingById(listing_id)
     if (!listing) {
       return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
     
-    const file1Buffer = Buffer.from(await file1.arrayBuffer())
-    const file2Buffer = Buffer.from(await file2.arrayBuffer())
+    const file1 = formData.get('report_file_1') as File
+    const file2 = formData.get('report_file_2') as File | null
     
-    const uploadResult = await uploadWeeklyReports(
-      listing.property_address,
-      listing_id,
-      week_start_date,
-      week_end_date,
-      file1Buffer,
-      file1.name,
-      file2Buffer,
-      file2.name
-    )
+    if (!file1) {
+      return NextResponse.json({ error: 'Showing report file is required' }, { status: 400 })
+    }
+    
+    // Traffic report is only required for HAR listings
+    if (listing.mls_type !== 'NTREIS' && !file2) {
+      return NextResponse.json({ error: 'Traffic report file is required for HAR listings' }, { status: 400 })
+    }
+    if (!listing) {
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
+    }
+    
+    const file1Buffer = Buffer.from(await file1.arrayBuffer())
+    
+    let uploadResult
+    try {
+      // For NTREIS, only upload file1 (showing report)
+      const file2Buffer = file2 ? Buffer.from(await file2.arrayBuffer()) : Buffer.alloc(0)
+      const file2Name = file2 ? file2.name : ''
+      
+      uploadResult = await uploadWeeklyReports(
+        listing.property_address,
+        listing_id,
+        week_start_date,
+        week_end_date,
+        file1Buffer,
+        file1.name,
+        file2Buffer,
+        file2Name,
+        listing.transaction_type || 'sale',
+        listing.mls_type || 'HAR'
+      )
+    } catch (uploadError: any) {
+      console.error('Error uploading reports to OneDrive:', uploadError)
+      return NextResponse.json(
+        { error: `Failed to upload reports to OneDrive: ${uploadError.message || 'Unknown error'}` },
+        { status: 500 }
+      )
+    }
     
     const { data: report, error: reportError } = await supabase
       .from('coordination_weekly_reports')
@@ -72,8 +95,8 @@ export async function POST(request: NextRequest) {
         week_end_date,
         report_file_url: uploadResult.file1DownloadUrl,
         report_file_name: file1.name,
-        report_file_url_2: uploadResult.file2DownloadUrl,
-        report_file_name_2: file2.name,
+        report_file_url_2: uploadResult.file2DownloadUrl || null,
+        report_file_name_2: file2?.name || null,
         showings_count: null,
         mls_views: null,
         feedback: null,
@@ -86,6 +109,9 @@ export async function POST(request: NextRequest) {
       console.error('Error creating report record:', reportError)
       return NextResponse.json({ error: 'Failed to save report record' }, { status: 500 })
     }
+    
+    // Do not automatically send or schedule emails on upload
+    // Emails must be sent manually via the admin buttons
     
     return NextResponse.json({
       success: true,

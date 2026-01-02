@@ -117,8 +117,8 @@ export async function GET(
           work_preference
         )
       `)
-      .eq('status', 'active')
-      .contains('roles', ['agent'])
+      .eq('is_active', true)
+      .or('roles.cs.{agent},roles.cs.{Agent}')
       .eq('campaign_recipients.campaign_id', normalizedId)
 
     const agents = agentsData || []

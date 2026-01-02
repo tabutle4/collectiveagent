@@ -14,6 +14,25 @@ export async function createListing(data: ListingFormData, agentId: string | nul
     justListedToken = data.mls_link ? await generateFormToken('just-listed') : null
   }
   
+  // Check if agent is Courtney Okanlomo and mark listing_input_paid as true
+  let listingInputPaid = false
+  if (agentId) {
+    try {
+      const { data: agentData } = await supabase
+        .from('users')
+        .select('preferred_first_name, preferred_last_name, first_name, last_name')
+        .eq('id', agentId)
+        .single()
+      
+      if (agentData) {
+        const agentName = `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
+        listingInputPaid = agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
+      }
+    } catch (error) {
+      console.error('Error checking agent name for listing:', error)
+    }
+  }
+  
   const { data: listing, error } = await supabase
     .from('listings')
     .insert({
@@ -21,18 +40,19 @@ export async function createListing(data: ListingFormData, agentId: string | nul
       agent_name: data.agent_name,
       property_address: data.property_address,
       transaction_type: data.transaction_type,
+      mls_type: data.mls_type || null,
       client_names: data.client_names,
       client_phone: data.client_phone,
       client_email: data.client_email,
       lead_source: data.lead_source,
       mls_link: data.mls_link || null,
-      mls_login_info: data.mls_login_info || null,
       estimated_launch_date: data.estimated_launch_date || null,
       status: data.mls_link ? 'active' : 'pre-listing',
       pre_listing_form_completed: !data.mls_link,
       just_listed_form_completed: !!data.mls_link,
       dotloop_file_created: data.dotloop_file_created,
       listing_input_requested: data.listing_input_requested,
+      listing_input_paid: listingInputPaid,
       photography_requested: data.photography_requested,
       listing_input_fee: 50.00,
       pre_listing_token: preListingToken,
@@ -102,13 +122,44 @@ export async function getAllListings(): Promise<Listing[]> {
 export async function updateListing(id: string, updates: Partial<Listing>): Promise<boolean> {
   const supabase = createClient()
   
+  // Filter out undefined values and only include columns that exist in the database
+  // Remove columns that might not exist yet (they'll be added via migration)
+  const cleanUpdates: any = {}
+  const allowedColumns = [
+    'agent_id', 'agent_name', 'property_address', 'transaction_type', 'mls_type',
+    'client_names', 'client_phone', 'client_email', 'mls_link',
+    'estimated_launch_date', 'actual_launch_date', 'lead_source', 'status',
+    'listing_website_url', 'dotloop_file_created', 'photography_requested',
+    'listing_input_requested', 'co_listing_agent', 'is_broker_listing'
+  ]
+  
+  Object.keys(updates).forEach(key => {
+    if (updates[key as keyof Listing] !== undefined && allowedColumns.includes(key)) {
+      cleanUpdates[key] = updates[key as keyof Listing]
+    }
+  })
+  
   const { error } = await supabase
     .from('listings')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
     .eq('id', id)
   
   if (error) {
     console.error('Error updating listing:', error)
+    console.error('Update data:', cleanUpdates)
+    console.error('Error details:', JSON.stringify(error, null, 2))
+    console.error('Error message:', error.message)
+    console.error('Error code:', error.code)
+    console.error('Error hint:', error.hint)
+    
+    // If error mentions a column, log it specifically
+    if (error.message && error.message.includes('column')) {
+      const columnMatch = error.message.match(/column "([^"]+)"/)
+      if (columnMatch) {
+        console.error(`Missing column detected: ${columnMatch[1]}`)
+      }
+    }
+    
     return false
   }
   

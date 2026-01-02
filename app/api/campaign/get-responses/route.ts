@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
       .from('users')
       .select('id')
       .eq('campaign_token', token)
-      .eq('status', 'active')
+      .eq('is_active', true)
+      .or('roles.cs.{agent},roles.cs.{Agent}')
       .single()
 
     if (!user) {

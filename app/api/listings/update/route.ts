@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .contains('roles', ['agent'])
+          .or('roles.cs.{agent},roles.cs.{Agent}')
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
             .select('id, first_name, last_name, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .contains('roles', ['agent'])
+            .or('roles.cs.{agent},roles.cs.{Agent}')
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {
@@ -50,11 +50,63 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Check if listing exists first
+    const { data: existingListing, error: checkError } = await supabase
+      .from('listings')
+      .select('id')
+      .eq('id', listing_id)
+      .single()
+    
+    if (checkError || !existingListing) {
+      console.error('Listing not found:', checkError)
+      return NextResponse.json(
+        { error: `Listing not found: ${checkError?.message || 'Listing does not exist'}` },
+        { status: 404 }
+      )
+    }
+    
     const success = await updateListing(listing_id, updates)
     
     if (!success) {
+      // Try to get the actual error from Supabase by attempting a test update
+      const testUpdate: any = {}
+      // Try updating with just one field to see which column fails
+      if (updates.mls_type !== undefined) {
+        testUpdate.mls_type = updates.mls_type
+      } else if (updates.co_listing_agent !== undefined) {
+        testUpdate.co_listing_agent = updates.co_listing_agent
+      } else if (updates.is_broker_listing !== undefined) {
+        testUpdate.is_broker_listing = updates.is_broker_listing
+      }
+      
+      if (Object.keys(testUpdate).length > 0) {
+        const { error: testError } = await supabase
+          .from('listings')
+          .update(testUpdate)
+          .eq('id', listing_id)
+        
+        if (testError) {
+          const errorMsg = testError.message || 'Unknown error'
+          const missingColumn = errorMsg.match(/column "([^"]+)"/)?.[1]
+          
+          if (missingColumn) {
+            return NextResponse.json(
+              { 
+                error: `Database column "${missingColumn}" is missing. Please run the migration at /admin/migrations to add missing columns.`,
+                missingColumn,
+                migrationUrl: '/admin/migrations'
+              },
+              { status: 500 }
+            )
+          }
+        }
+      }
+      
       return NextResponse.json(
-        { error: 'Failed to update listing' },
+        { 
+          error: 'Failed to update listing. One or more database columns may be missing. Please check /admin/migrations for required migrations.',
+          migrationUrl: '/admin/migrations'
+        },
         { status: 500 }
       )
     }

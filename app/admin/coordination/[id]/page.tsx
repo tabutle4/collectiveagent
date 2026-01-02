@@ -67,7 +67,7 @@ export default function CoordinationDetailPage() {
     const { data, error } = await supabase
       .from('users')
       .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .or('roles.cs.{agent}')
+      .or('roles.cs.{agent},roles.cs.{Agent}')
     
     if (!error && data) {
       const agentsList = data.map(user => ({
@@ -301,6 +301,7 @@ export default function CoordinationDetailPage() {
       setSaving(false)
     }
   }
+
 
   const handleDeleteCoordination = async () => {
     if (!confirm('Are you sure you want to delete this coordination? This will permanently delete:\n\n- The coordination record\n- All email history\n- All weekly reports\n\nThis action cannot be undone.')) {
@@ -557,6 +558,21 @@ export default function CoordinationDetailPage() {
           <div className="card-section">
             <p className="text-xs text-luxury-gray-2 mb-1">Last Email</p>
             <p className="text-sm">{formatDate(coordination.last_email_sent_at)}</p>
+          </div>
+          <div className="card-section">
+            <p className="text-xs text-luxury-gray-2 mb-1">Next Scheduled</p>
+            <p className="text-sm">
+              {coordination.next_email_scheduled_for ? (
+                new Date(coordination.next_email_scheduled_for).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })
+              ) : (
+                <span className="text-luxury-gray-2">Not scheduled</span>
+              )}
+            </p>
           </div>
         </div>
         
@@ -1051,6 +1067,21 @@ export default function CoordinationDetailPage() {
                         {report.email_sent && (
                           <p className="text-xs text-green-600 mt-2">
                             ✓ Email sent on {report.email_sent_at ? new Date(report.email_sent_at).toLocaleDateString('en-US') : 'N/A'}
+                          </p>
+                        )}
+                        {!report.email_sent && report.email_scheduled_for && (
+                          <p className="text-xs text-blue-600 mt-2">
+                            📅 Scheduled for {new Date(report.email_scheduled_for).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        )}
+                        {!report.email_sent && !report.email_scheduled_for && (
+                          <p className="text-xs text-luxury-gray-2 mt-2">
+                            ⏳ Not scheduled
                           </p>
                         )}
                       </div>

@@ -184,16 +184,21 @@ class MicrosoftGraphClient {
   }> {
     const client = await this.initClient()
     
-    const uploadResponse = await client
-      .api(`/users/${this.config.userEmail}/drive/root:/${folderPath}/${fileName}:/content`)
-      .put(fileBuffer)
-    
-    // Create a sharing link for the file (view-only, organization scope)
-    const sharingLink = await this.createSharingLink(`${folderPath}/${fileName}`, 'view')
-    
-    return {
-      fileUrl: uploadResponse.webUrl,
-      downloadUrl: sharingLink, // Use sharing link instead of direct download URL
+    try {
+      const uploadResponse = await client
+        .api(`/users/${this.config.userEmail}/drive/root:/${folderPath}/${fileName}:/content`)
+        .put(fileBuffer)
+      
+      // Create a sharing link for the file (view-only, anonymous scope)
+      const sharingLink = await this.createSharingLink(`${folderPath}/${fileName}`, 'view')
+      
+      return {
+        fileUrl: uploadResponse.webUrl,
+        downloadUrl: sharingLink, // Use sharing link instead of direct download URL
+      }
+    } catch (error: any) {
+      console.error(`Error uploading file ${fileName} to ${folderPath}:`, error)
+      throw new Error(`Failed to upload file ${fileName}: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -236,18 +241,46 @@ class MicrosoftGraphClient {
       .api(`/users/${this.config.userEmail}/drive/items/${sourceFolder.id}`)
       .patch(update)
   }
+
+  async moveFile(sourcePath: string, destinationFolderPath: string, newFileName?: string): Promise<any> {
+    const client = await this.initClient()
+    
+    // Get the source file
+    const sourceFile = await client
+      .api(`/users/${this.config.userEmail}/drive/root:/${sourcePath}`)
+      .get()
+    
+    // Get the destination folder
+    const destFolder = await this.getFolder(destinationFolderPath)
+    
+    const update: any = {
+      parentReference: {
+        id: destFolder.id,
+      },
+    }
+    
+    // If newFileName is provided, rename the file
+    if (newFileName) {
+      update.name = newFileName
+    }
+    
+    return await client
+      .api(`/users/${this.config.userEmail}/drive/items/${sourceFile.id}`)
+      .patch(update)
+  }
 }
 
 export const graphClient = new MicrosoftGraphClient()
 
-export async function createListingFolder(propertyAddress: string, listingId: string): Promise<{
+export async function createListingFolder(propertyAddress: string, listingId: string, transactionType: 'sale' | 'lease' = 'sale'): Promise<{
   folderPath: string
   folderId: string
   sharingUrl: string
 }> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to handle same address with different sellers
-  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to handle same address with different sellers
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
+  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
   
   const folder = await graphClient.createFolder(folderPath)
   const sharingUrl = await graphClient.createSharingLink(folderPath, 'view')
@@ -259,31 +292,59 @@ export async function createListingFolder(propertyAddress: string, listingId: st
   }
 }
 
-export async function regenerateFolderSharingLink(propertyAddress: string, listingId: string): Promise<string> {
+export async function regenerateFolderSharingLink(propertyAddress: string, listingId: string, transactionType: 'sale' | 'lease' = 'sale'): Promise<string> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to match the folder path used during creation
-  const activePath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
-  const archivePath = `Listing Reports/Archive/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to match the folder path used during creation
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   
-  // Check if folder exists in Active location
-  let folderPath = activePath
+  // Always use new format (with transaction type) - this is where reports are being uploaded
+  const activePathNew = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
+  // Old format (without transaction type) - for reference only
+  const activePathOld = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
+  
+  const archivePathNew = `Listing Reports/Archive/${sanitizedAddress}-${transactionLabel}-${listingId}`
+  const archivePathOld = `Listing Reports/Archive/${sanitizedAddress}-${listingId}`
+  
+  // Always prefer new format - check if it exists, create if not
+  let folderPath = activePathNew
   try {
-    await graphClient.getFolder(activePath)
+    await graphClient.getFolder(activePathNew)
+    // New format folder exists - use it
   } catch (error: any) {
-    // Folder doesn't exist in Active, check Archive
+    // New format folder doesn't exist
     if (error.statusCode === 404 || error.code === 'itemNotFound') {
+      // Check if old format exists - if so, we'll still create new format (reports go there)
+      let oldFolderExists = false
       try {
-        await graphClient.getFolder(archivePath)
+        await graphClient.getFolder(activePathOld)
+        oldFolderExists = true
+      } catch (oldError: any) {
+        // Old folder doesn't exist either
+      }
+      
+      // Check Archive for new format
+      try {
+        await graphClient.getFolder(archivePathNew)
         // Folder exists in Archive, move it back to Active
-        console.log(`Folder found in Archive, moving back to Active...`)
-        await graphClient.moveFolder(archivePath, activePath)
-        folderPath = activePath
+        console.log(`Folder found in Archive (new format), moving back to Active...`)
+        await graphClient.moveFolder(archivePathNew, activePathNew)
       } catch (archiveError: any) {
-        // Folder doesn't exist in Archive either, create it in Active
         if (archiveError.statusCode === 404 || archiveError.code === 'itemNotFound') {
-          console.log(`Folder not found, creating new folder in Active...`)
-          await graphClient.createFolder(activePath)
-          folderPath = activePath
+          // Check Archive for old format
+          try {
+            await graphClient.getFolder(archivePathOld)
+            // Move old format from Archive to new format in Active
+            console.log(`Moving old format folder from Archive to new format in Active...`)
+            await graphClient.moveFolder(archivePathOld, activePathNew)
+          } catch (archiveError2: any) {
+            // Folder doesn't exist anywhere, create it in Active with new format
+            if (archiveError2.statusCode === 404 || archiveError2.code === 'itemNotFound') {
+              console.log(`Folder not found, creating new folder in Active with new format...`)
+              await graphClient.createFolder(activePathNew)
+            } else {
+              throw archiveError2
+            }
+          }
         } else {
           throw archiveError
         }
@@ -293,38 +354,44 @@ export async function regenerateFolderSharingLink(propertyAddress: string, listi
     }
   }
   
+  // Always use new format path - this ensures links point to where reports will be uploaded
+  folderPath = activePathNew
+  
   // Regenerate sharing link with anonymous scope
   const sharingUrl = await graphClient.createSharingLink(folderPath, 'view')
   
   return sharingUrl
 }
 
-export async function archiveListingFolder(propertyAddress: string, listingId: string): Promise<void> {
+export async function archiveListingFolder(propertyAddress: string, listingId: string, transactionType: 'sale' | 'lease' = 'sale'): Promise<void> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to match the folder path used during creation
-  const sourcePath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
-  const destPath = `Listing Reports/Archive/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to match the folder path used during creation
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
+  const sourcePath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
+  const destPath = `Listing Reports/Archive/${sanitizedAddress}-${transactionLabel}-${listingId}`
   
   await graphClient.moveFolder(sourcePath, destPath)
 }
 
-export async function unarchiveListingFolder(propertyAddress: string, listingId: string): Promise<void> {
+export async function unarchiveListingFolder(propertyAddress: string, listingId: string, transactionType: 'sale' | 'lease' = 'sale'): Promise<void> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to match the folder path used during creation
-  const sourcePath = `Listing Reports/Archive/${sanitizedAddress}-${listingId}`
-  const destPath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to match the folder path used during creation
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
+  const sourcePath = `Listing Reports/Archive/${sanitizedAddress}-${transactionLabel}-${listingId}`
+  const destPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
   
   await graphClient.moveFolder(sourcePath, destPath)
 }
 
-export async function getLatestListingReport(propertyAddress: string, listingId: string): Promise<{
+export async function getLatestListingReport(propertyAddress: string, listingId: string, transactionType: 'sale' | 'lease' = 'sale'): Promise<{
   fileName: string
   downloadUrl: string
   webUrl: string
 } | null> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to match the folder path used during creation
-  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to match the folder path used during creation
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
+  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
   
   const latestFile = await graphClient.getLatestFile(folderPath)
   
@@ -350,31 +417,50 @@ export async function uploadWeeklyReports(
   file1Buffer: Buffer,
   file1Name: string,
   file2Buffer: Buffer,
-  file2Name: string
+  file2Name: string,
+  transactionType: 'sale' | 'lease' = 'sale',
+  mlsType: 'HAR' | 'NTREIS' = 'HAR'
 ): Promise<{
   file1Url: string
   file1DownloadUrl: string
-  file2Url: string
-  file2DownloadUrl: string
+  file2Url: string | null
+  file2DownloadUrl: string | null
 }> {
   const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
-  // Include listing ID to match the folder path used during creation
-  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
+  // Include transaction type and listing ID to match the folder path used during creation
+  const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
+  const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
+  
+  // Ensure the folder exists before uploading (creates all parent folders if needed)
+  try {
+    await graphClient.createFolder(folderPath)
+  } catch (error: any) {
+    // If folder already exists, that's fine - continue with upload
+    if (error.statusCode !== 409 && error.code !== 'nameAlreadyExists') {
+      console.error('Error creating folder:', error)
+      throw error
+    }
+  }
   
   // Use just the Monday date for the filename
   const dateLabel = weekStart.replace(/[/\\?%*:|"<>]/g, '-')
   
   const file1NameWithDate = `Showing_Report_${dateLabel}_${file1Name}`
-  const file2NameWithDate = `Traffic_Report_${dateLabel}_${file2Name}`
   
   const file1Result = await graphClient.uploadFileToFolder(folderPath, file1NameWithDate, file1Buffer)
-  const file2Result = await graphClient.uploadFileToFolder(folderPath, file2NameWithDate, file2Buffer)
+  
+  // Only upload traffic report for HAR listings
+  let file2Result = null
+  if (mlsType === 'HAR' && file2Buffer.length > 0 && file2Name) {
+    const file2NameWithDate = `Traffic_Report_${dateLabel}_${file2Name}`
+    file2Result = await graphClient.uploadFileToFolder(folderPath, file2NameWithDate, file2Buffer)
+  }
   
   return {
     file1Url: file1Result.fileUrl,
     file1DownloadUrl: file1Result.downloadUrl,
-    file2Url: file2Result.fileUrl,
-    file2DownloadUrl: file2Result.downloadUrl,
+    file2Url: file2Result?.fileUrl || null,
+    file2DownloadUrl: file2Result?.downloadUrl || null,
   }
 }
 

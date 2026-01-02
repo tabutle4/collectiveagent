@@ -180,7 +180,11 @@ export default function SellerDashboard() {
         
         <div className="card-section mb-6">
           <h3 className="text-sm font-medium text-luxury-gold mb-3">Listing Status</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div>
+              <p className="text-xs text-luxury-gray-2 mb-1">Transaction Type</p>
+              <p className="text-base font-medium capitalize">{listing.transaction_type === 'lease' ? 'Lease' : 'Sale'}</p>
+            </div>
             <div>
               <p className="text-xs text-luxury-gray-2 mb-1">Current Status</p>
               <p className="text-base font-medium capitalize">{listing.status}</p>
@@ -189,6 +193,19 @@ export default function SellerDashboard() {
               <div>
                 <p className="text-xs text-luxury-gray-2 mb-1">Listed On</p>
                 <p className="text-sm">{formatDate(listing.actual_launch_date)}</p>
+              </div>
+            )}
+            {coordination.next_email_scheduled_for && (
+              <div>
+                <p className="text-xs text-luxury-gray-2 mb-1">Next Email Scheduled</p>
+                <p className="text-sm text-blue-600">
+                  {new Date(coordination.next_email_scheduled_for).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </p>
               </div>
             )}
             <div>
@@ -212,7 +229,7 @@ export default function SellerDashboard() {
                 rel="noopener noreferrer"
                 className="inline-block px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 mt-2 md:mt-0"
               >
-                View All Reports →
+                View Past Reports →
               </a>
             )}
           </div>
@@ -245,6 +262,19 @@ export default function SellerDashboard() {
                           <p className="text-sm">{formatDate(report.email_sent_at)}</p>
                         </div>
                       )}
+                      {!report.email_sent_at && report.email_scheduled_for && (
+                        <div>
+                          <p className="text-xs text-luxury-gray-2">Scheduled For</p>
+                          <p className="text-sm text-blue-600">
+                            {new Date(report.email_scheduled_for).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     
                     {report.feedback && (
@@ -266,7 +296,7 @@ export default function SellerDashboard() {
                             Download Showing Report
                           </a>
                         )}
-                        {report.report_file_url_2 && (
+                        {report.report_file_url_2 && listing.mls_type !== 'NTREIS' && (
                           <a
                             href={report.report_file_url_2}
                             target="_blank"

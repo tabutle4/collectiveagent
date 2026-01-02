@@ -127,8 +127,13 @@ export default function UploadWeeklyReportPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!file1 || !file2) {
-      alert('Please select both report files')
+    if (!file1) {
+      alert('Please select the showing report file')
+      return
+    }
+    
+    if (listing && listing.mls_type !== 'NTREIS' && !file2) {
+      alert('Please select the traffic report file')
       return
     }
     
@@ -152,7 +157,9 @@ export default function UploadWeeklyReportPage() {
         data.append('user_id', user.id)
         data.append('report_date', reportDate)
         data.append('report_file_1', file1)
-        data.append('report_file_2', file2)
+        if (file2) {
+          data.append('report_file_2', file2)
+        }
         
         const response = await fetch('/api/coordination/upload-report', {
           method: 'POST',
@@ -293,10 +300,11 @@ export default function UploadWeeklyReportPage() {
               </div>
             </div>
             
-            <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Traffic Report (PDF) <span className="text-red-500">*</span>
-              </label>
+            {listing && listing.mls_type !== 'NTREIS' && (
+              <div>
+                <label className="block text-sm mb-2 text-luxury-gray-1">
+                  Traffic Report (PDF) <span className="text-red-500">*</span>
+                </label>
               <div
                 onDragOver={(e) => handleDragOver(e, 2)}
                 onDragLeave={(e) => handleDragLeave(e, 2)}
@@ -343,6 +351,7 @@ export default function UploadWeeklyReportPage() {
                 )}
               </div>
             </div>
+            )}
             
             
             <div className="bg-luxury-light p-4 rounded">
@@ -365,9 +374,9 @@ export default function UploadWeeklyReportPage() {
               </button>
               <button
                 type="submit"
-                disabled={uploading || !file1 || !file2}
+                disabled={uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)}
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
-                  uploading || !file1 || !file2
+                  uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed'
                     : 'bg-luxury-black text-white hover:opacity-90'
                 }`}

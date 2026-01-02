@@ -48,8 +48,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Regenerate the sharing link with anonymous scope
-    const newSharingUrl = await regenerateFolderSharingLink(listing.property_address, listing.id)
+    // Regenerate the sharing link with anonymous scope (will find the correct folder format)
+    const newSharingUrl = await regenerateFolderSharingLink(
+      listing.property_address, 
+      listing.id, 
+      listing.transaction_type || 'sale'
+    )
 
     // Update the coordination with the new link
     await updateCoordination(coordinationId, {

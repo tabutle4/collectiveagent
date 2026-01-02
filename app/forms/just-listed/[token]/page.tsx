@@ -25,6 +25,7 @@ export default function PublicJustListedForm() {
     agent_name: '',
     property_address: '',
     transaction_type: 'sale' as 'sale' | 'lease',
+    mls_type: 'HAR' as 'HAR' | 'NTREIS',
     client_names: '',
     client_phone: '',
     client_email: '',
@@ -103,6 +104,10 @@ export default function PublicJustListedForm() {
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(agentSearch.toLowerCase())
   )
+  
+  // Check if selected agent is Courtney Okanlomo (case-insensitive)
+  const isCourtneyOkanlomo = selectedAgent?.name?.toLowerCase().includes('courtney okanlomo') || 
+                             selectedAgent?.name?.toLowerCase().includes('okanlomo') || false
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -312,6 +317,21 @@ export default function PublicJustListedForm() {
             
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
+                MLS <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.mls_type}
+                onChange={(e) => setFormData({...formData, mls_type: e.target.value as 'HAR' | 'NTREIS'})}
+                className="select-luxury"
+                required
+              >
+                <option value="HAR">HAR</option>
+                <option value="NTREIS">NTREIS</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm mb-2 text-luxury-gray-1">
                 Client Name or LLC <span className="text-red-500">*</span>
               </label>
               <input
@@ -365,7 +385,8 @@ export default function PublicJustListedForm() {
                     />
                     <div className="flex-1">
                       <p className="font-medium text-base mb-1">
-                        {coordinationConfig.service_name} - ${coordinationConfig.price} <span className="text-xs font-normal text-luxury-gray-2">(one time)</span>
+                        {coordinationConfig.service_name}
+                        {!isCourtneyOkanlomo && <span> - ${coordinationConfig.price} <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></span>}
                       </p>
                       {coordinationConfig.inclusions && coordinationConfig.inclusions.length > 0 && (
                         <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1 ml-4 mb-3">
@@ -395,9 +416,11 @@ export default function PublicJustListedForm() {
                           />
                           <div className="flex-1">
                             <p className="text-sm font-medium">Client Pays Directly (Before Service Starts)</p>
-                            <p className="text-xs text-luxury-gray-2">
-                              $250 fee included in listing agreement. Client pays brokerage before coordination begins.
-                            </p>
+                            {!isCourtneyOkanlomo && (
+                              <p className="text-xs text-luxury-gray-2">
+                                $250 fee included in listing agreement. Client pays brokerage before coordination begins.
+                              </p>
+                            )}
                           </div>
                         </label>
                         

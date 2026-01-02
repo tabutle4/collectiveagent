@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       if (coordination) {
         const listing = await getListingById(coordination.listing_id)
         if (listing) {
-          await unarchiveListingFolder(listing.property_address, listing.id)
+          await unarchiveListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
         }
       }
     } catch (error) {

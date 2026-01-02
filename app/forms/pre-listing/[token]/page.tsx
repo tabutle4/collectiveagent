@@ -25,6 +25,7 @@ export default function PublicPreListingForm() {
     agent_name: '',
     property_address: '',
     transaction_type: 'sale' as 'sale' | 'lease',
+    mls_type: 'HAR' as 'HAR' | 'NTREIS',
     client_names: '',
     client_phone: '',
     client_email: '',
@@ -106,6 +107,10 @@ export default function PublicPreListingForm() {
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(agentSearch.toLowerCase())
   )
+  
+  // Check if selected agent is Courtney Okanlomo (case-insensitive)
+  const isCourtneyOkanlomo = selectedAgent?.name?.toLowerCase().includes('courtney okanlomo') || 
+                             selectedAgent?.name?.toLowerCase().includes('okanlomo') || false
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -301,6 +306,21 @@ export default function PublicPreListingForm() {
             
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
+                MLS <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.mls_type}
+                onChange={(e) => setFormData({...formData, mls_type: e.target.value as 'HAR' | 'NTREIS'})}
+                className="select-luxury"
+                required
+              >
+                <option value="HAR">HAR</option>
+                <option value="NTREIS">NTREIS</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm mb-2 text-luxury-gray-1">
                 Client Name or LLC <span className="text-red-500">*</span>
               </label>
               <input
@@ -388,16 +408,21 @@ export default function PublicPreListingForm() {
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <p className="font-medium text-base mb-1">Request Initial Listing Input - $50 <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></p>
+                    <p className="font-medium text-base mb-1">
+                      Request Initial Listing Input
+                      {!isCourtneyOkanlomo && <span> - $50 <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></span>}
+                    </p>
                     <p className="text-xs text-luxury-gray-2 mb-2">
                       Includes listing the property in the MLS, as well as up to 2 additional edits.
                     </p>
-                    <div className="bg-white p-3 rounded border border-luxury-gray-5 mb-2">
-                      <p className="text-sm font-medium mb-1">Agent Pays (Due in 60 Days or at Closing)</p>
-                      <p className="text-xs text-luxury-gray-2">
-                        You pay $50 to brokerage within 60 days or at closing, whichever happens first. If not paid within 60 days, fee will be deducted from any commission.
-                      </p>
-                    </div>
+                    {!isCourtneyOkanlomo && (
+                      <div className="bg-white p-3 rounded border border-luxury-gray-5 mb-2">
+                        <p className="text-sm font-medium mb-1">Agent Pays (Due in 60 Days or at Closing)</p>
+                        <p className="text-xs text-luxury-gray-2">
+                          You pay $50 to brokerage within 60 days or at closing, whichever happens first. If not paid within 60 days, fee will be deducted from any commission.
+                        </p>
+                      </div>
+                    )}
                     {formData.listing_input_requested && (
                       <div className="mt-3 ml-7 pl-4 border-l-2 border-luxury-gray-5">
                         <p className="text-xs font-medium text-luxury-gray-1 mb-2">
@@ -456,7 +481,8 @@ export default function PublicPreListingForm() {
                     />
                     <div className="flex-1">
                       <p className="font-medium text-base mb-1">
-                        {coordinationConfig.service_name} - ${coordinationConfig.price} <span className="text-xs font-normal text-luxury-gray-2">(one time)</span>
+                        {coordinationConfig.service_name}
+                        {!isCourtneyOkanlomo && <span> - ${coordinationConfig.price} <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></span>}
                       </p>
                       {coordinationConfig.inclusions && coordinationConfig.inclusions.length > 0 && (
                         <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1 ml-4 mb-3">
@@ -486,9 +512,11 @@ export default function PublicPreListingForm() {
                           />
                           <div className="flex-1">
                             <p className="text-sm font-medium">Client Pays Directly (Before Service Starts)</p>
-                            <p className="text-xs text-luxury-gray-2">
-                              $250 fee included in listing agreement. Client pays brokerage before coordination begins.
-                            </p>
+                            {!isCourtneyOkanlomo && (
+                              <p className="text-xs text-luxury-gray-2">
+                                $250 fee included in listing agreement. Client pays brokerage before coordination begins.
+                              </p>
+                            )}
                           </div>
                         </label>
                         

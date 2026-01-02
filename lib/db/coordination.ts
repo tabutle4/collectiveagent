@@ -16,10 +16,27 @@ export async function createCoordination(data: {
   
   const magicLink = await generateMagicLink(data.listing_id, data.seller_email)
   
-  // Auto-mark broker listings as paid
+  // Check if agent is Courtney Okanlomo
+  let isCourtneyOkanlomo = false
+  try {
+    const { data: agentData } = await supabase
+      .from('users')
+      .select('preferred_first_name, preferred_last_name, first_name, last_name')
+      .eq('id', data.agent_id)
+      .single()
+    
+    if (agentData) {
+      const agentName = `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
+      isCourtneyOkanlomo = agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
+    }
+  } catch (error) {
+    console.error('Error checking agent name:', error)
+  }
+  
+  // Auto-mark broker listings and Courtney Okanlomo's deals as paid
   const isBrokerListing = data.payment_method === 'broker_listing'
-  const servicePaid = isBrokerListing ? true : false
-  const paymentDate = isBrokerListing ? new Date().toISOString().split('T')[0] : null
+  const servicePaid = isBrokerListing || isCourtneyOkanlomo ? true : false
+  const paymentDate = (isBrokerListing || isCourtneyOkanlomo) ? new Date().toISOString().split('T')[0] : null
   
   const { data: coordination, error } = await supabase
     .from('listing_coordination')

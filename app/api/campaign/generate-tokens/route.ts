@@ -10,8 +10,8 @@ export async function POST(request: NextRequest) {
     const { data: agents, error } = await supabase
       .from('users')
       .select('id, email, first_name, last_name')
-      .eq('status', 'active')
-      .contains('roles', ['agent'])
+      .eq('is_active', true)
+      .or('roles.cs.{agent},roles.cs.{Agent}')
       .is('campaign_token', null)
 
     if (error) throw error

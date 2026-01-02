@@ -130,6 +130,14 @@ export default function DynamicFormPage() {
   const [selectedAgent, setSelectedAgent] = useState<{id: string, name: string} | null>(null)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
   
+  // Property address selector for update mode
+  const [propertyAddressSearch, setPropertyAddressSearch] = useState('')
+  const [propertyAddressDropdownOpen, setPropertyAddressDropdownOpen] = useState(false)
+  const [availableListings, setAvailableListings] = useState<any[]>([])
+  const [selectedListing, setSelectedListing] = useState<any | null>(null)
+  const [loadingListings, setLoadingListings] = useState(false)
+  const propertyAddressDropdownRef = useRef<HTMLDivElement>(null)
+  
   // Additional agent fields (co-listing, intermediary, referral)
   const [coListingAgentSearch, setCoListingAgentSearch] = useState('')
   const [coListingAgentDropdownOpen, setCoListingAgentDropdownOpen] = useState(false)
@@ -155,6 +163,7 @@ export default function DynamicFormPage() {
     referral_agent_name: '',
     property_address: '',
     transaction_type: 'sale' as 'sale' | 'lease',
+    mls_type: 'HAR' as 'HAR' | 'NTREIS',
     client_names: '',
     client_phone: '',
     client_email: '',
@@ -214,6 +223,45 @@ export default function DynamicFormPage() {
       .catch(err => console.error('Error fetching agents:', err))
   }, [token, formType])
   
+  // Clear property address selector when switching to new mode
+  useEffect(() => {
+    if (submissionType === 'new') {
+      setPropertyAddressSearch('')
+      setSelectedListing(null)
+      setAvailableListings([])
+      setPropertyAddressDropdownOpen(false)
+    }
+  }, [submissionType])
+  
+  // Search for listings when agent is selected and address is typed (update mode only)
+  useEffect(() => {
+    if (submissionType === 'update' && selectedAgent && propertyAddressSearch.trim().length >= 2) {
+      const searchTimeout = setTimeout(() => {
+        setLoadingListings(true)
+        fetch(`/api/listings/search?agent_id=${selectedAgent.id}&address=${encodeURIComponent(propertyAddressSearch)}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setAvailableListings(data.listings || [])
+              setPropertyAddressDropdownOpen(true)
+            }
+          })
+          .catch(err => {
+            console.error('Error searching listings:', err)
+            setAvailableListings([])
+          })
+          .finally(() => {
+            setLoadingListings(false)
+          })
+      }, 300) // Debounce search
+      
+      return () => clearTimeout(searchTimeout)
+    } else {
+      setAvailableListings([])
+      setPropertyAddressDropdownOpen(false)
+    }
+  }, [submissionType, selectedAgent, propertyAddressSearch])
+  
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -222,6 +270,9 @@ export default function DynamicFormPage() {
       }
       if (coListingAgentDropdownRef.current && !coListingAgentDropdownRef.current.contains(event.target as Node)) {
         setCoListingAgentDropdownOpen(false)
+      }
+      if (propertyAddressDropdownRef.current && !propertyAddressDropdownRef.current.contains(event.target as Node)) {
+        setPropertyAddressDropdownOpen(false)
       }
     }
     
@@ -237,6 +288,39 @@ export default function DynamicFormPage() {
       ...formData,
       agent_id: agent.id,
       agent_name: agent.name,
+    })
+    // Clear property address when agent changes
+    if (submissionType === 'update') {
+      setPropertyAddressSearch('')
+      setSelectedListing(null)
+      setAvailableListings([])
+    }
+  }
+  
+  const handleListingSelect = (listing: any) => {
+    setSelectedListing(listing)
+    setPropertyAddressSearch(listing.property_address)
+    setPropertyAddressDropdownOpen(false)
+    
+    // Populate form with existing listing data
+    setFormData({
+      ...formData,
+      property_address: listing.property_address,
+      transaction_type: listing.transaction_type || 'sale',
+      mls_type: listing.mls_type || 'HAR',
+      client_names: listing.client_names || '',
+      client_phone: listing.client_phone || '',
+      client_email: listing.client_email || '',
+      estimated_launch_date: listing.estimated_launch_date ? listing.estimated_launch_date.split('T')[0] : '',
+      mls_link: listing.mls_link || '',
+      lead_source: listing.lead_source || '',
+      dotloop_file_created: listing.dotloop_file_created || false,
+      listing_input_requested: listing.listing_input_requested || false,
+      photography_requested: listing.photography_requested || false,
+      is_broker_listing: listing.is_broker_listing || false,
+      // Handle co-listing agent if it exists in the listing
+      co_listing_agent_id: listing.co_listing_agent_id || '',
+      co_listing_agent_name: listing.co_listing_agent_name || '',
     })
   }
   
@@ -367,7 +451,12 @@ export default function DynamicFormPage() {
               </div>
               {submissionType === 'update' && (
                 <p className="text-xs text-luxury-gray-2 mt-2">
-                  The system will find the existing transaction by matching the property address and agent you select below.
+                  Select the agent and property address below to load the existing transaction data.
+                </p>
+              )}
+              {submissionType === 'new' && (
+                <p className="text-xs text-luxury-gray-2 mt-2">
+                  This will create a new transaction.
                 </p>
               )}
             </div>
@@ -421,74 +510,148 @@ export default function DynamicFormPage() {
               )}
             </div>
             
-            {/* Co-Listing Agent Field */}
-            <div className="relative" ref={coListingAgentDropdownRef}>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Co-Listing Agent
-              </label>
-              <input
-                type="text"
-                value={coListingAgentSearch}
-                onChange={(e) => {
-                  setCoListingAgentSearch(e.target.value)
-                  setCoListingAgentDropdownOpen(true)
-                  if (!e.target.value) {
-                    setSelectedCoListingAgent(null)
-                    setFormData({...formData, co_listing_agent_id: '', co_listing_agent_name: ''})
-                  }
-                }}
-                onFocus={() => {
-                  if (coListingAgentSearch) {
-                    setCoListingAgentDropdownOpen(true)
-                  }
-                }}
-                className="input-luxury"
-                placeholder="Type to search for a co-listing agent..."
-                autoComplete="off"
-              />
-              {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
-                  {filteredAgents.map((agent) => (
-                    <button
-                      key={agent.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCoListingAgent(agent)
-                        setCoListingAgentSearch(agent.name)
-                        setCoListingAgentDropdownOpen(false)
-                        setFormData({
-                          ...formData,
-                          co_listing_agent_id: agent.id,
-                          co_listing_agent_name: agent.name,
-                        })
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-luxury-light transition-colors text-sm"
-                    >
-                      {agent.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length === 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
-                  No agents found
-                </div>
-              )}
-            </div>
+            {/* Property Address Selector (only for update mode) */}
+            {submissionType === 'update' && selectedAgent && (
+              <div className="relative" ref={propertyAddressDropdownRef}>
+                <label className="block text-sm mb-2 text-luxury-gray-1">
+                  Property Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={propertyAddressSearch}
+                  onChange={(e) => {
+                    setPropertyAddressSearch(e.target.value)
+                    if (e.target.value.trim().length >= 2) {
+                      setPropertyAddressDropdownOpen(true)
+                    } else {
+                      setPropertyAddressDropdownOpen(false)
+                      setSelectedListing(null)
+                      // Clear form data if address is cleared
+                      setFormData({
+                        ...formData,
+                        property_address: '',
+                      })
+                    }
+                  }}
+                  onFocus={() => {
+                    if (propertyAddressSearch.trim().length >= 2 && availableListings.length > 0) {
+                      setPropertyAddressDropdownOpen(true)
+                    }
+                  }}
+                  className="input-luxury"
+                  placeholder="Type to search for property address..."
+                  required={submissionType === 'update'}
+                  autoComplete="off"
+                />
+                {propertyAddressDropdownOpen && propertyAddressSearch.trim().length >= 2 && (
+                  <>
+                    {loadingListings ? (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
+                        Searching...
+                      </div>
+                    ) : availableListings.length > 0 ? (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
+                        {availableListings.map((listing) => (
+                          <button
+                            key={listing.id}
+                            type="button"
+                            onClick={() => handleListingSelect(listing)}
+                            className="w-full text-left px-4 py-2 hover:bg-luxury-light transition-colors text-sm"
+                          >
+                            <div className="font-medium">{listing.property_address}</div>
+                            <div className="text-xs text-luxury-gray-2">
+                              {listing.transaction_type === 'lease' ? 'Lease' : 'Sale'}
+                              {listing.client_names && ` • ${listing.client_names}`}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
+                        No transactions found
+                      </div>
+                    )}
+                  </>
+                )}
+                {selectedListing && (
+                  <input type="hidden" name="existing_listing_id" value={selectedListing.id} />
+                )}
+              </div>
+            )}
             
-            <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Property Address <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.property_address}
-                onChange={(e) => setFormData({...formData, property_address: e.target.value})}
-                className="input-luxury"
-                placeholder="123 Main St, Houston, TX 77001"
-                required
-              />
-            </div>
+            {/* Co-Listing Agent Field - Show for pre-listing and just-listed forms */}
+            {(formType === 'pre-listing' || formType === 'just-listed' || formDefinition?.form_type === 'pre-listing' || formDefinition?.form_type === 'just-listed') && (
+              <div className="relative" ref={coListingAgentDropdownRef}>
+                <label className="block text-sm mb-2 text-luxury-gray-1">
+                  Co-Listing Agent
+                </label>
+                <input
+                  type="text"
+                  value={coListingAgentSearch}
+                  onChange={(e) => {
+                    setCoListingAgentSearch(e.target.value)
+                    setCoListingAgentDropdownOpen(true)
+                    if (!e.target.value) {
+                      setSelectedCoListingAgent(null)
+                      setFormData({...formData, co_listing_agent_id: '', co_listing_agent_name: ''})
+                    }
+                  }}
+                  onFocus={() => {
+                    if (coListingAgentSearch) {
+                      setCoListingAgentDropdownOpen(true)
+                    }
+                  }}
+                  className="input-luxury"
+                  placeholder="Type to search for a co-listing agent..."
+                  autoComplete="off"
+                />
+                {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
+                    {filteredAgents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCoListingAgent(agent)
+                          setCoListingAgentSearch(agent.name)
+                          setCoListingAgentDropdownOpen(false)
+                          setFormData({
+                            ...formData,
+                            co_listing_agent_id: agent.id,
+                            co_listing_agent_name: agent.name,
+                          })
+                        }}
+                        className="w-full text-left px-4 py-2 hover:bg-luxury-light transition-colors text-sm"
+                      >
+                        {agent.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {coListingAgentDropdownOpen && coListingAgentSearch && filteredAgents.length === 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg px-4 py-2 text-sm text-luxury-gray-2">
+                    No agents found
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Property Address Field (only for new submissions) */}
+            {submissionType === 'new' && (
+              <div>
+                <label className="block text-sm mb-2 text-luxury-gray-1">
+                  Property Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.property_address}
+                  onChange={(e) => setFormData({...formData, property_address: e.target.value})}
+                  className="input-luxury"
+                  placeholder="123 Main St, Houston, TX 77001"
+                  required
+                />
+              </div>
+            )}
             
             {/* Render dynamic form fields from form_config */}
             {formDefinition?.form_config?.fields && formDefinition.form_config.fields.length > 0 && (

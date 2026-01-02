@@ -26,6 +26,11 @@ type AgentRecord = {
   linkedin_url: string | null
   facebook_url: string | null
   headshot_url: string | null
+  headshot_crop: {
+    offsetX: number
+    offsetY: number
+    scale: number
+  } | null
 }
 
 const escapeHtml = (str: string | null | undefined) =>
@@ -108,10 +113,10 @@ const buildSocialIcons = (agent: AgentRecord) => {
   }
 
   return Object.entries(links)
-    .filter(([, url]) => !!url)
+    .filter(([, url]) => !!url && url.trim().length > 0)
     .map(([key, url]) => {
       const label = key.charAt(0).toUpperCase() + key.slice(1)
-      return `<a href="${escapeAttr(url || '')}" target="_blank" rel="noopener noreferrer" class="social-icon" title="${escapeAttr(
+      return `<a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" class="social-icon" title="${escapeAttr(
         label
       )}">${icon(icons[key])}</a>`
     })
@@ -133,6 +138,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const division = agent.division || '-'
       const social = getSocialLinks(agent)
       const headshotUrl = agent.headshot_url || ''
+      const headshotCrop = agent.headshot_crop
       // Get initials for placeholder
       const firstName = agent.preferred_first_name || agent.first_name || ''
       const lastName = agent.preferred_last_name || agent.last_name || ''
@@ -140,8 +146,17 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const lastInitial = lastName.charAt(0)?.toUpperCase() || ''
       const initials = `${firstInitial}${lastInitial}` || '?'
       
+      // Build CSS transform for crop if available
+      let cropStyle = ''
+      if (headshotCrop && headshotUrl) {
+        const offsetX = headshotCrop.offsetX || 0
+        const offsetY = headshotCrop.offsetY || 0
+        const scale = headshotCrop.scale || 1
+        cropStyle = ` style="transform: translate(${offsetX}px, ${offsetY}px) scale(${scale}); transform-origin: center center;"`
+      }
+      
       const headshotImg = headshotUrl 
-        ? `<img src="${escapeAttr(headshotUrl)}" alt="${escapeAttr(fullName)}" class="agent-headshot" onerror="this.onerror=null; this.style.display='none'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display='flex';">`
+        ? `<img src="${escapeAttr(headshotUrl)}" alt="${escapeAttr(fullName)}" class="agent-headshot"${cropStyle} onerror="this.onerror=null; this.style.display='none'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display='flex';">`
         : ''
       const placeholderDiv = `<div class="agent-headshot-placeholder" style="background-color: #FFFFFF; color: #000000; display: ${headshotUrl ? 'none' : 'flex'}; align-items: center; justify-content: center; font-weight: 600; font-size: 18px;">${escapeHtml(initials)}</div>`
       const headshotDisplay = headshotUrl ? headshotImg + placeholderDiv : placeholderDiv
@@ -162,6 +177,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
         `                            data-youtube="${escapeAttr((social.youtube || '').toLowerCase())}"`,
         `                            data-linkedin="${escapeAttr((social.linkedin || '').toLowerCase())}"`,
         `                            data-facebook="${escapeAttr((social.facebook || '').toLowerCase())}"`,
+        `                            data-headshot-crop="${escapeAttr(headshotCrop ? JSON.stringify(headshotCrop) : '')}"`,
         '                        >',
         `                            <td class="index-col row-number">${index + 1}</td>`,
         `                            <td class="headshot-col">${headshotDisplay}</td>`,
@@ -337,6 +353,15 @@ export const buildRosterHtml = ({
     '                    const phone = row.getAttribute(\'data-phone\') || \'\';',
     '                    const birthday = row.getAttribute(\'data-birthday\') || \'\';',
     '                    const headshot = row.getAttribute(\'data-headshot\') || \'\';',
+    '                    const headshotCropStr = row.getAttribute(\'data-headshot-crop\') || \'\';',
+    '                    let headshotCrop = null;',
+    '                    if (headshotCropStr) {',
+    '                        try {',
+    '                            headshotCrop = JSON.parse(headshotCropStr);',
+    '                        } catch (e) {',
+    '                            headshotCrop = null;',
+    '                        }',
+    '                    }',
     '                    const role = row.cells[5]?.textContent?.trim() || \'\';',
     '                    const additionalRoles = row.cells[6]?.textContent?.trim() || \'-\';',
     '                    const socialMediaCell = row.cells[10];',
@@ -360,7 +385,14 @@ export const buildRosterHtml = ({
     '                    const firstInitial = firstName.charAt(0)?.toUpperCase() || \'\';',
     '                    const lastInitial = lastName.charAt(0)?.toUpperCase() || \'\';',
     '                    const initials = (firstInitial + lastInitial) || \'?\';',
-    '                    const headshotHTML = headshot ? \'<img src="\' + headshot + \'" alt="\' + displayName + \'" class="mobile-card-headshot" onerror="this.onerror=null; this.style.display=\\\'none\\\'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display=\\\'flex\\\';">\' : \'\';',
+    '                    let cropStyle = \'\';',
+    '                    if (headshotCrop && headshot) {',
+    '                        const offsetX = headshotCrop.offsetX || 0;',
+    '                        const offsetY = headshotCrop.offsetY || 0;',
+    '                        const scale = headshotCrop.scale || 1;',
+    '                        cropStyle = \' style="transform: translate(\' + offsetX + \'px, \' + offsetY + \'px) scale(\' + scale + \'); transform-origin: center center;"\';',
+    '                    }',
+    '                    const headshotHTML = headshot ? \'<img src="\' + headshot + \'" alt="\' + displayName + \'" class="mobile-card-headshot"\' + cropStyle + \' onerror="this.onerror=null; this.style.display=\\\'none\\\'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display=\\\'flex\\\';">\' : \'\';',
     '                    const placeholderHTML = \'<div class="mobile-card-headshot-placeholder" style="background-color: #FFFFFF; color: #000000; display: \' + (headshot ? \'none\' : \'flex\') + \'; align-items: center; justify-content: center; font-weight: 600; font-size: 32px;">\' + initials + \'</div>\';',
     '                    const headshotDisplay = headshotHTML + placeholderHTML;',
     '                    const cardHTML = \'<div class="mobile-card-header" onclick="toggleCard(\' + i + \')"><div class="mobile-card-header-left"><div class="mobile-card-name">\' + (displayName || \'Unknown Agent\') + \'</div><div class="mobile-card-title">\' + (displayTitle || \'\') + \'</div></div><div class="mobile-card-chevron" id="chevron-\' + i + \'"></div></div><div class="mobile-card-details" id="details-\' + i + \'"><div class="mobile-card-headshot-container">\' + headshotDisplay + \'</div>\' + (email ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">EMAIL:</div><div class="mobile-card-detail-value"><a href="mailto:\' + email + \'">\' + email + \'</a></div></div>\' : \'\') + (phone ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">PHONE:</div><div class="mobile-card-detail-value"><a href="tel:\' + phone + \'">\' + formatPhone(phone) + \'</a></div></div>\' : \'\') + (team ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">TEAM:</div><div class="mobile-card-detail-value">\' + team + \'</div></div>\' : \'\') + (birthday ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">BIRTHDAY:</div><div class="mobile-card-detail-value">\' + capitalizeFirst(birthday) + \'</div></div>\' : \'\') + (socialMediaHTML ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">SOCIAL MEDIA:</div><div class="mobile-card-detail-value">\' + socialMediaHTML + \'</div></div>\' : \'\') + (division && division !== \'-\' ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">DIVISION:</div><div class="mobile-card-detail-value">\' + division + \'</div></div>\' : \'\') + \'</div>\';',
@@ -584,7 +616,7 @@ export const regenerateRoster = async () => {
   const { data: agents, error } = await client
     .from('users')
     .select(
-      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url'
+      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
     )
     .eq('is_active', true)
     .contains('roles', ['agent'])

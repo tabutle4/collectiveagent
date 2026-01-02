@@ -323,6 +323,7 @@ function EmailPreview({ type }: { type: 'welcome' | 'weekly' }) {
     just_listed_token: null,
     status: 'active',
     transaction_type: 'sale',
+    mls_type: 'HAR',
     agent_name: 'Jane Agent',
     client_names: 'John Smith',
     client_phone: null,

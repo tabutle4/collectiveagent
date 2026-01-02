@@ -62,7 +62,7 @@ export default function CampaignDetailPage() {
         setStats(statsData[0])
       }
 
-      // Fetch all active agents with their progress
+      // Fetch all active agents (including those who haven't started the campaign)
       const { data: agentsData, error: agentsError } = await supabase
         .from('users')
         .select(`
@@ -73,13 +73,14 @@ export default function CampaignDetailPage() {
           preferred_last_name,
           email,
           campaign_token,
-          campaign_recipients!inner(
+          campaign_recipients(
             current_step,
             step_1_completed_at,
             step_2_completed_at,
             step_3_completed_at,
             step_4_completed_at,
-            fully_completed_at
+            fully_completed_at,
+            campaign_id
           ),
           campaign_responses(
             commission_plan_2026,
@@ -89,14 +90,21 @@ export default function CampaignDetailPage() {
             support_rating,
             support_improvements,
             work_preference,
-            profile_updates
+            profile_updates,
+            campaign_id
           )
         `)
-        .eq('status', 'active')
-        .contains('roles', ['agent'])
-        .eq('campaign_recipients.campaign_id', params.id)
+        .eq('is_active', true)
+        .or('roles.cs.{agent},roles.cs.{Agent}')
 
-      setAgents(agentsData || [])
+      // Filter campaign_recipients and campaign_responses to only this campaign
+      const agentsWithProgress = (agentsData || []).map(agent => ({
+        ...agent,
+        campaign_recipients: agent.campaign_recipients?.filter((cr: any) => cr.campaign_id === params.id) || [],
+        campaign_responses: agent.campaign_responses?.filter((cr: any) => cr.campaign_id === params.id) || [],
+      }))
+
+      setAgents(agentsWithProgress)
 
       // Fetch RSVPs (agents who responded to luncheon question)
       const { data: rsvpData } = await supabase
@@ -598,11 +606,11 @@ export default function CampaignDetailPage() {
 
       {/* Agent Progress List */}
       <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Agent Progress</h3>
+        <h3 className="text-lg font-medium mb-4 tracking-luxury">Agent Progress ({agents.length} agents)</h3>
         
         {agents.length === 0 ? (
           <p className="text-luxury-gray-2 text-center py-8">
-            No agents have started this campaign yet
+            No active agents found
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -618,10 +626,11 @@ export default function CampaignDetailPage() {
               </thead>
               <tbody>
                 {agents.map((agent) => {
-                  const recipient = agent.campaign_recipients?.[0]
-                  const response = agent.campaign_responses?.[0]
+                  const recipient = agent.campaign_recipients?.find((cr: any) => cr.campaign_id === params.id) || agent.campaign_recipients?.[0]
+                  const response = agent.campaign_responses?.find((cr: any) => cr.campaign_id === params.id) || agent.campaign_responses?.[0]
                   const progress = recipient?.current_step || 0
                   const isComplete = recipient?.fully_completed_at
+                  const hasStarted = !!recipient
 
                   return (
                     <tr key={agent.id} className="border-b border-luxury-gray-5 hover:bg-luxury-light">
@@ -630,17 +639,21 @@ export default function CampaignDetailPage() {
                         <p className="text-sm text-luxury-gray-2">{agent.email}</p>
                       </td>
                       <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-luxury-gray-5 rounded">
-                            <div
-                              className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-gold'}`}
-                              style={{ width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}` }}
-                            />
+                        {hasStarted ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-24 h-2 bg-luxury-gray-5 rounded">
+                              <div
+                                className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-gold'}`}
+                                style={{ width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}` }}
+                              />
+                            </div>
+                            <span className="text-sm">
+                              {isComplete ? '✓ Complete' : `Step ${progress}/4`}
+                            </span>
                           </div>
-                          <span className="text-sm">
-                            {isComplete ? '✓ Complete' : `Step ${progress}/4`}
-                          </span>
-                        </div>
+                        ) : (
+                          <span className="text-sm text-luxury-gray-3">Not Started</span>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-sm">
                         {response?.commission_plan_2026 || '-'}

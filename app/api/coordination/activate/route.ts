@@ -65,9 +65,9 @@ export async function POST(request: NextRequest) {
       paymentDueDate = dueDate.toISOString().split('T')[0]
     }
     
-    const { sharingUrl } = await createListingFolder(listing.property_address, listing_id)
+    const { sharingUrl } = await createListingFolder(listing.property_address, listing_id, listing.transaction_type || 'sale')
     
-    const coordination = await createCoordination({
+    let coordination = await createCoordination({
       listing_id,
       agent_id,
       seller_name,
@@ -94,13 +94,35 @@ export async function POST(request: NextRequest) {
       await updateListing(listing_id, { listing_website_url })
     }
     
+    // Check if there's a schedule preference (from body)
+    if (body.scheduleDate && body.scheduleTime) {
+      const scheduleDate = new Date(`${body.scheduleDate}T${body.scheduleTime}`)
+      if (!isNaN(scheduleDate.getTime())) {
+        await supabase
+          .from('listing_coordination')
+          .update({ next_email_scheduled_for: scheduleDate.toISOString() })
+          .eq('id', coordination.id)
+        
+        // Reload coordination to get updated schedule
+        const { data: updatedCoordination } = await supabase
+          .from('listing_coordination')
+          .select('*')
+          .eq('id', coordination.id)
+          .single()
+        
+        if (updatedCoordination) {
+          coordination = updatedCoordination as any
+        }
+      }
+    }
+    
     const { data: agentData } = await supabase
       .from('users')
       .select('*')
       .eq('id', agent_id)
       .single()
     
-    if (agentData) {
+    if (agentData && coordination) {
       const result = await sendWelcomeEmail(
         coordination,
         listing,

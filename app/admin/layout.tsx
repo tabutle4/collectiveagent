@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, CheckSquare, ClipboardList, Briefcase, FileCheck } from 'lucide-react'
+import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, CheckSquare, ClipboardList, Briefcase, FileCheck, Receipt } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -177,6 +177,7 @@ export default function AdminLayout({
     { href: '/admin/agent-roster', label: 'Agent Roster', icon: FileText },
     { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
     { href: '/admin/form-responses', label: 'Form Responses', icon: FileCheck },
+    { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
     { href: '/admin/users', label: 'Users', icon: UserCog },
   ]
 

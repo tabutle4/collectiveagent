@@ -56,8 +56,8 @@ function CampaignContent() {
         .from('users')
         .select('*')
         .eq('campaign_token', token)
-        .eq('status', 'active')
-        .contains('roles', ['agent'])
+        .eq('is_active', true)
+        .or('roles.cs.{agent},roles.cs.{Agent}')
         .single()
 
       if (userError || !userData) {

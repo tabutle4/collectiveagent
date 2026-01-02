@@ -120,7 +120,7 @@ export default function ProspectiveAgentForm() {
     <div className="min-h-screen bg-white">
       <LuxuryHeader />
       
-      <div className="max-w-3xl mx-auto px-6 py-12">
+      <div className="max-w-3xl mx-auto px-6 py-12" style={{ paddingTop: '100px' }}>
         <div className="text-center mb-8">
           <h2 className="text-2xl font-light mb-3 tracking-wide">
             Prospective Agent Form

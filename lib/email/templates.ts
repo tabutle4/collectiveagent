@@ -6,9 +6,25 @@ export function getWelcomeEmailHtml(
   listing: Listing,
   agentName: string,
   agentEmail: string,
-  agentPhone: string
+  agentPhone: string,
+  scheduledTime?: Date | string | null
 ): string {
   const magicLink = getMagicLinkUrl(coordination.seller_magic_link!)
+  
+  // Format the scheduled time for display
+  let scheduleText = 'every Monday at 6:00 PM' // default
+  if (scheduledTime) {
+    const scheduleDate = typeof scheduledTime === 'string' ? new Date(scheduledTime) : scheduledTime
+    if (!isNaN(scheduleDate.getTime())) {
+      const dayOfWeek = scheduleDate.toLocaleDateString('en-US', { weekday: 'long' })
+      const time = scheduleDate.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      })
+      scheduleText = `every ${dayOfWeek} at ${time}`
+    }
+  }
   
   return `
 <!DOCTYPE html>
@@ -109,7 +125,7 @@ export function getWelcomeEmailHtml(
     <div class="info-box">
       <h3>What to Expect</h3>
       <ul>
-        <li>Weekly email updates every Monday at 6:00 PM</li>
+        <li>Weekly email updates ${scheduleText}</li>
         <li>Showing activity and agent feedback</li>
         <li>MLS property views and engagement</li>
         <li>Your listing featured in our weekly email to 7,000+ buyers and agents</li>

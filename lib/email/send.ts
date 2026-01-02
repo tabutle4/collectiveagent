@@ -19,12 +19,16 @@ export async function sendWelcomeEmail(
   }
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
+    // Use the coordination's scheduled time for the welcome email text
+    const scheduledTime = coordination.next_email_scheduled_for || null
+    
     const html = getWelcomeEmailHtml(
       coordination,
       listing,
       agent.name,
       agent.email,
-      agent.phone
+      agent.phone,
+      scheduledTime
     )
     
     const { data, error } = await resend.emails.send({
@@ -49,13 +53,42 @@ export async function sendWelcomeEmail(
   }
 }
 
+/**
+ * Calculate the next Monday at 6:00 PM
+ */
+function getNextMonday6PM(): Date {
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
+  
+  // Calculate days until next Monday
+  let daysUntilMonday = (8 - dayOfWeek) % 7
+  if (daysUntilMonday === 0) {
+    // If it's Monday, check if it's before 6pm
+    const currentHour = now.getHours()
+    if (currentHour < 18) {
+      // Before 6pm today, schedule for today
+      daysUntilMonday = 0
+    } else {
+      // After 6pm, schedule for next Monday
+      daysUntilMonday = 7
+    }
+  }
+  
+  const nextMonday = new Date(now)
+  nextMonday.setDate(now.getDate() + daysUntilMonday)
+  nextMonday.setHours(18, 0, 0, 0) // 6:00 PM
+  
+  return nextMonday
+}
+
 export async function sendWeeklyReportEmail(
   coordination: ListingCoordination,
   listing: Listing,
   agentEmail: string,
   dateSent: string,
   reportDownloadUrl1?: string,
-  reportDownloadUrl2?: string
+  reportDownloadUrl2?: string,
+  scheduleFor?: Date
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
     const html = getWeeklyReportEmailHtml(
@@ -66,7 +99,7 @@ export async function sendWeeklyReportEmail(
       reportDownloadUrl2
     )
     
-    const { data, error } = await resend.emails.send({
+    const emailOptions: any = {
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
       to: coordination.seller_email,
       cc: [agentEmail],
@@ -74,7 +107,14 @@ export async function sendWeeklyReportEmail(
       replyTo: REPLY_TO,
       subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSent}`,
       html,
-    })
+    }
+    
+    // If scheduleFor is provided, schedule the email
+    if (scheduleFor) {
+      emailOptions.schedule = scheduleFor.toISOString()
+    }
+    
+    const { data, error } = await resend.emails.send(emailOptions)
     
     if (error) {
       console.error('Error sending weekly report email:', error)

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         const listing = await getListingById(coordination.listing_id)
         if (listing) {
           // Archive the OneDrive folder before deleting the coordination
-          await archiveListingFolder(listing.property_address, listing.id)
+          await archiveListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
         }
       } catch (error) {
         console.error('Error archiving OneDrive folder:', error)

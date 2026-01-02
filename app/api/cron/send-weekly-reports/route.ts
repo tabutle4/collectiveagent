@@ -6,6 +6,7 @@ import { sendWeeklyReportEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
+  let cronExecutionId: string | undefined
   try {
     const authHeader = request.headers.get('authorization')
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -33,6 +34,22 @@ export async function GET(request: NextRequest) {
       day: 'numeric', 
       year: 'numeric' 
     })
+    
+    // Log cron execution start
+    cronExecutionId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`
+    try {
+      await supabase
+        .from('cron_execution_logs')
+        .insert({
+          id: cronExecutionId,
+          cron_name: 'send-weekly-reports',
+          started_at: now.toISOString(),
+          status: 'running',
+          total_items: coordinations.length,
+        })
+    } catch (err) {
+      console.error('Error logging cron start:', err)
+    }
     
     for (const coordination of coordinations) {
       try {
@@ -146,6 +163,24 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // Log cron execution completion
+    if (cronExecutionId) {
+      try {
+        await supabase
+          .from('cron_execution_logs')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            success_count: results.sent,
+            failure_count: results.failed,
+            error_details: results.errors.length > 0 ? JSON.stringify(results.errors) : null,
+          })
+          .eq('id', cronExecutionId)
+      } catch (err) {
+        console.error('Error logging cron completion:', err)
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       results,
@@ -153,6 +188,24 @@ export async function GET(request: NextRequest) {
     
   } catch (error: any) {
     console.error('Error in weekly reports cron:', error)
+    
+    // Log cron execution failure
+    if (cronExecutionId) {
+      try {
+        const supabase = createClient()
+        await supabase
+          .from('cron_execution_logs')
+          .update({
+            status: 'failed',
+            completed_at: new Date().toISOString(),
+            error_details: error.message || 'Unknown error',
+          })
+          .eq('id', cronExecutionId)
+      } catch (err) {
+        console.error('Error logging cron failure:', err)
+      }
+    }
+    
     return NextResponse.json(
       { error: error.message || 'Failed to send weekly reports' },
       { status: 500 }

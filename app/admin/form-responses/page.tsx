@@ -36,11 +36,11 @@ interface ListingResponse {
   agent_name: string
   property_address: string
   transaction_type: 'sale' | 'lease'
+  mls_type: 'HAR' | 'NTREIS' | null
   client_names: string
   client_phone: string | null
   client_email: string | null
   mls_link: string | null
-  mls_login_info: string | null
   estimated_launch_date: string | null
   actual_launch_date: string | null
   lead_source: string | null
@@ -55,6 +55,10 @@ interface ListingResponse {
   listing_input_paid: boolean
   coordination_requested?: boolean
   coordination_payment_method?: string
+  is_broker_listing?: boolean
+  co_listing_agent?: string | null
+  co_listing_agent_id?: string | null
+  co_listing_agent_name?: string | null
 }
 
 export default function FormResponsesPage() {
@@ -81,6 +85,7 @@ export default function FormResponsesPage() {
     agent_name: '',
     property_address: '',
     transaction_type: 'sale' as 'sale' | 'lease',
+    mls_type: 'HAR' as 'HAR' | 'NTREIS',
     client_names: '',
     client_phone: '',
     client_email: '',
@@ -94,6 +99,9 @@ export default function FormResponsesPage() {
     coordination_payment_method: '' as 'client_direct' | 'agent_pays' | '',
     photography_requested: false,
     is_broker_listing: false,
+    co_listing_agent: '',
+    co_listing_agent_id: '',
+    co_listing_agent_name: '',
     status: 'pre-listing' as 'pre-listing' | 'active' | 'pending' | 'sold' | 'expired' | 'cancelled',
   })
   const [coordinationConfig, setCoordinationConfig] = useState<any>(null)
@@ -110,6 +118,7 @@ export default function FormResponsesPage() {
 
   useEffect(() => {
     loadData()
+    loadForms() // Load forms on initial page load
     // Load coordination config for the create form
     fetch('/api/service-config/get?type=listing_coordination')
       .then(res => res.json())
@@ -124,7 +133,7 @@ export default function FormResponsesPage() {
     supabase
       .from('users')
       .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .or('roles.cs.{agent}')
+      .or('roles.cs.{agent},roles.cs.{Agent}')
       .then(({ data, error }) => {
         if (!error && data) {
           const agentsList = data.map(user => ({
@@ -152,11 +161,11 @@ export default function FormResponsesPage() {
         agent_name: '',
         property_address: '',
         transaction_type: 'sale' as 'sale' | 'lease',
+        mls_type: 'HAR' as 'HAR' | 'NTREIS',
         client_names: '',
         client_phone: '',
         client_email: '',
         mls_link: '',
-        mls_login_info: '',
         estimated_launch_date: '',
         actual_launch_date: '',
         lead_source: '',
@@ -166,6 +175,9 @@ export default function FormResponsesPage() {
         coordination_payment_method: '' as 'client_direct' | 'agent_pays' | '',
         photography_requested: false,
         is_broker_listing: false,
+        co_listing_agent: '',
+        co_listing_agent_id: '',
+        co_listing_agent_name: '',
         status: activeTab === 'pre-listing' ? 'pre-listing' : 'active',
       })
     }
@@ -345,6 +357,26 @@ export default function FormResponsesPage() {
     setAgentDropdownOpen({...agentDropdownOpen, [fieldKey]: false})
   }
 
+  const selectCoListingAgent = (agent: {id: string, name: string}, fieldKey: string) => {
+    if (fieldKey === 'edit') {
+      setEditData({
+        ...editData,
+        co_listing_agent: agent.name,
+        co_listing_agent_id: agent.id,
+        co_listing_agent_name: agent.name
+      })
+    } else {
+      setNewFormData({
+        ...newFormData,
+        co_listing_agent: agent.name,
+        co_listing_agent_id: agent.id,
+        co_listing_agent_name: agent.name
+      })
+    }
+    setAgentSearch({...agentSearch, [`co_${fieldKey}`]: ''})
+    setAgentDropdownOpen({...agentDropdownOpen, [`co_${fieldKey}`]: false})
+  }
+
   const handleCreateSubmit = async () => {
     if (!newFormData.agent_name || !newFormData.property_address || !newFormData.client_names) {
       alert('Please fill in all required fields (Agent Name, Property Address, Client Name)')
@@ -409,6 +441,7 @@ export default function FormResponsesPage() {
               agent_name: editData.agent_name,
               property_address: editData.property_address,
               transaction_type: editData.transaction_type,
+              mls_type: editData.mls_type || 'HAR',
               client_names: editData.client_names,
               client_phone: editData.client_phone,
               client_email: editData.client_email,
@@ -421,6 +454,8 @@ export default function FormResponsesPage() {
               dotloop_file_created: editData.dotloop_file_created,
               photography_requested: editData.photography_requested,
               listing_input_requested: editData.listing_input_requested,
+              co_listing_agent: editData.co_listing_agent_name || editData.co_listing_agent || null,
+              is_broker_listing: editData.is_broker_listing || false,
             },
           }),
         })
@@ -508,17 +543,16 @@ export default function FormResponsesPage() {
       const data = await response.json()
       const dbForms = data.success && data.forms ? data.forms : []
       
-      // Add default forms if they don't exist in database
-      const defaultForms = [
+      // Default forms configuration
+      const defaultFormsConfig = [
         {
           id: 'prospective-agent',
           name: 'Prospective Agent Form',
           description: 'Public form for prospective agents to join the firm',
           form_type: 'prospective-agent',
           is_active: true,
-          shareable_link_url: '/prospective-agent-form',
+          shareable_link_url: 'https://agent.collectiverealtyco.com/prospective-agent-form',
           shareable_token: null,
-          created_at: new Date().toISOString(),
         },
         {
           id: 'pre-listing',
@@ -526,9 +560,6 @@ export default function FormResponsesPage() {
           description: 'Submit when you have executed a new listing agreement but the property is not yet active on the MLS',
           form_type: 'pre-listing',
           is_active: true,
-          shareable_link_url: null, // These use the old system, no shareable link yet
-          shareable_token: null,
-          created_at: new Date().toISOString(),
         },
         {
           id: 'just-listed',
@@ -536,19 +567,201 @@ export default function FormResponsesPage() {
           description: 'Submit when you have a new active listing that is already on the MLS',
           form_type: 'just-listed',
           is_active: true,
-          shareable_link_url: null, // These use the old system, no shareable link yet
-          shareable_token: null,
-          created_at: new Date().toISOString(),
         },
       ]
       
       // Merge: use database forms if they exist, otherwise use defaults
       const allForms = [...dbForms]
-      defaultForms.forEach(defaultForm => {
-        if (!dbForms.find((f: any) => f.form_type === defaultForm.form_type)) {
-          allForms.push(defaultForm)
+      
+      // Process default forms
+      for (const defaultFormConfig of defaultFormsConfig) {
+        const existingForm = dbForms.find((f: any) => f.form_type === defaultFormConfig.form_type)
+        
+        if (!existingForm) {
+          // Form doesn't exist in database, generate token and link
+          if (defaultFormConfig.form_type === 'prospective-agent') {
+            // Prospective agent uses a static link
+            allForms.push({
+              ...defaultFormConfig,
+              shareable_link_url: 'https://agent.collectiverealtyco.com/prospective-agent-form',
+              created_at: new Date().toISOString(),
+            })
+          } else {
+            // Generate token and link for pre-listing and just-listed
+            try {
+              const tokenResponse = await fetch('/api/forms/generate-generic-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ form_type: defaultFormConfig.form_type }),
+              })
+              
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json()
+                
+                // Create form in database with co-listing agent field in form_config
+                const formConfig = {
+                  fields: [
+                    {
+                      id: `co-listing-agent-${Date.now()}`,
+                      name: 'co_listing_agent',
+                      label: 'Co-Listing Agent',
+                      type: 'co-listing-agent',
+                      required: false,
+                      placeholder: 'Type to search for a co-listing agent...',
+                    },
+                  ],
+                }
+                
+                // Create the form in the database
+                const createResponse = await fetch('/api/forms/create', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name: defaultFormConfig.name,
+                    description: defaultFormConfig.description,
+                    form_type: defaultFormConfig.form_type,
+                    form_config: formConfig,
+                    shareable_token: tokenData.token,
+                    shareable_link_url: tokenData.link_url,
+                  }),
+                })
+                
+                if (createResponse.ok) {
+                  const createdForm = await createResponse.json()
+                  allForms.push(createdForm.form)
+                } else {
+                  // If creation fails, still add form without database entry
+                  allForms.push({
+                    ...defaultFormConfig,
+                    shareable_link_url: tokenData.link_url,
+                    shareable_token: tokenData.token,
+                    form_config: formConfig,
+                    created_at: new Date().toISOString(),
+                  })
+                }
+              } else {
+                // If token generation fails, still add form without link
+                allForms.push({
+                  ...defaultFormConfig,
+                  shareable_link_url: null,
+                  shareable_token: null,
+                  form_config: {
+                    fields: [
+                      {
+                        id: `co-listing-agent-${Date.now()}`,
+                        name: 'co_listing_agent',
+                        label: 'Co-Listing Agent',
+                        type: 'co-listing-agent',
+                        required: false,
+                        placeholder: 'Type to search for a co-listing agent...',
+                      },
+                    ],
+                  },
+                  created_at: new Date().toISOString(),
+                })
+              }
+            } catch (error) {
+              console.error(`Error generating token for ${defaultFormConfig.form_type}:`, error)
+              allForms.push({
+                ...defaultFormConfig,
+                shareable_link_url: null,
+                shareable_token: null,
+                form_config: {
+                  fields: [
+                    {
+                      id: `co-listing-agent-${Date.now()}`,
+                      name: 'co_listing_agent',
+                      label: 'Co-Listing Agent',
+                      type: 'co-listing-agent',
+                      required: false,
+                      placeholder: 'Type to search for a co-listing agent...',
+                    },
+                  ],
+                },
+                created_at: new Date().toISOString(),
+              })
+            }
+          }
+        } else {
+          // Form exists in database, but ensure it has a shareable link
+          if (!existingForm.shareable_link_url && existingForm.form_type !== 'prospective-agent') {
+            // Generate token and link for forms missing them
+            try {
+              const tokenResponse = await fetch('/api/forms/generate-generic-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ form_type: existingForm.form_type }),
+              })
+              
+              if (tokenResponse.ok) {
+                const tokenData = await tokenResponse.json()
+                // Update the form in the database
+                await fetch('/api/forms/update', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    id: existingForm.id,
+                    shareable_token: tokenData.token,
+                    shareable_link_url: tokenData.link_url,
+                  }),
+                })
+                existingForm.shareable_link_url = tokenData.link_url
+                existingForm.shareable_token = tokenData.token
+              }
+            } catch (error) {
+              console.error(`Error generating token for existing form ${existingForm.id}:`, error)
+            }
+          } else if (existingForm.form_type === 'prospective-agent' && !existingForm.shareable_link_url) {
+            existingForm.shareable_link_url = '/prospective-agent-form'
+          }
+          
+          // Ensure pre-listing and just-listed forms have co-listing agent field in form_config
+          if ((existingForm.form_type === 'pre-listing' || existingForm.form_type === 'just-listed')) {
+            const formConfig = existingForm.form_config || {}
+            const fields = formConfig.fields || []
+            
+            // Check if co-listing agent field exists
+            const hasCoListingAgent = fields.some((f: any) => 
+              f.type === 'co-listing-agent' || f.name === 'co_listing_agent'
+            )
+            
+            if (!hasCoListingAgent) {
+              // Add co-listing agent field to form_config
+              const coListingAgentField = {
+                id: `co-listing-agent-${Date.now()}`,
+                name: 'co_listing_agent',
+                label: 'Co-Listing Agent',
+                type: 'co-listing-agent',
+                required: false,
+                placeholder: 'Type to search for a co-listing agent...',
+              }
+              
+              fields.push(coListingAgentField)
+              
+              // Update form in database
+              try {
+                await fetch('/api/forms/update', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    id: existingForm.id,
+                    form_config: {
+                      ...formConfig,
+                      fields: fields,
+                    },
+                  }),
+                })
+                existingForm.form_config = {
+                  ...formConfig,
+                  fields: fields,
+                }
+              } catch (error) {
+                console.error(`Error updating form_config for ${existingForm.form_type}:`, error)
+              }
+            }
+          }
         }
-      })
+      }
       
       setForms(allForms)
     } catch (error) {
@@ -856,6 +1069,7 @@ export default function FormResponsesPage() {
       'Agent Name',
       'Property Address',
       'Transaction Type',
+      'MLS',
       'Client Names',
       'Client Phone',
       'Client Email',
@@ -866,7 +1080,9 @@ export default function FormResponsesPage() {
       'Listing Input Requested',
       'Photography Requested',
       'Coordination Requested',
-      'Coordination Payment Method'
+      'Coordination Payment Method',
+      'Co-Listing Agent',
+      'Is Broker Listing'
     ]
 
     exportToCSV(preListingForms, `pre-listing-forms-${new Date().toISOString().split('T')[0]}.csv`, headers, (listing) => [
@@ -874,6 +1090,7 @@ export default function FormResponsesPage() {
       listing.agent_name || '',
       listing.property_address || '',
       listing.transaction_type || '',
+      listing.mls_type || 'HAR',
       listing.client_names || '',
       listing.client_phone || '',
       listing.client_email || '',
@@ -884,7 +1101,9 @@ export default function FormResponsesPage() {
       listing.listing_input_requested ? 'Yes' : 'No',
       listing.photography_requested ? 'Yes' : 'No',
       listing.coordination_requested ? 'Yes' : 'No',
-      listing.coordination_payment_method || ''
+      listing.coordination_payment_method || '',
+      listing.co_listing_agent || '',
+      listing.is_broker_listing ? 'Yes' : 'No'
     ])
   }
 
@@ -894,6 +1113,7 @@ export default function FormResponsesPage() {
       'Agent Name',
       'Property Address',
       'Transaction Type',
+      'MLS',
       'Client Names',
       'Client Phone',
       'Client Email',
@@ -903,7 +1123,9 @@ export default function FormResponsesPage() {
       'Status',
       'Dotloop File Created',
       'Coordination Requested',
-      'Coordination Payment Method'
+      'Coordination Payment Method',
+      'Co-Listing Agent',
+      'Is Broker Listing'
     ]
 
     exportToCSV(justListedForms, `just-listed-forms-${new Date().toISOString().split('T')[0]}.csv`, headers, (listing) => [
@@ -911,6 +1133,7 @@ export default function FormResponsesPage() {
       listing.agent_name || '',
       listing.property_address || '',
       listing.transaction_type || '',
+      listing.mls_type || 'HAR',
       listing.client_names || '',
       listing.client_phone || '',
       listing.client_email || '',
@@ -920,7 +1143,9 @@ export default function FormResponsesPage() {
       listing.status || '',
       listing.dotloop_file_created ? 'Yes' : 'No',
       listing.coordination_requested ? 'Yes' : 'No',
-      listing.coordination_payment_method || ''
+      listing.coordination_payment_method || '',
+      listing.co_listing_agent || '',
+      listing.is_broker_listing ? 'Yes' : 'No'
     ])
   }
 
@@ -1941,6 +2166,21 @@ export default function FormResponsesPage() {
                         )}
                       </div>
                       <div>
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">MLS</label>
+                        {isEditing ? (
+                          <select
+                            value={editData.mls_type || 'HAR'}
+                            onChange={(e) => setEditData({...editData, mls_type: e.target.value})}
+                            className="select-luxury"
+                          >
+                            <option value="HAR">HAR</option>
+                            <option value="NTREIS">NTREIS</option>
+                          </select>
+                        ) : (
+                          <p className="text-sm">{selectedResponse.mls_type || 'HAR'}</p>
+                        )}
+                      </div>
+                      <div>
                         <label className="text-xs text-luxury-gray-2 mb-1 block">Status</label>
                         {isEditing ? (
                           <select
@@ -1983,6 +2223,46 @@ export default function FormResponsesPage() {
                           />
                         ) : (
                           <p className="text-sm">{selectedResponse.lead_source || 'N/A'}</p>
+                        )}
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">Co-Listing Agent</label>
+                        {isEditing ? (
+                          <div className="relative agent-selector">
+                            <input
+                              type="text"
+                              value={agentSearch['co_edit'] || editData.co_listing_agent_name || editData.co_listing_agent || ''}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAgentSearch({...agentSearch, co_edit: value})
+                                setEditData({
+                                  ...editData,
+                                  co_listing_agent: value,
+                                  co_listing_agent_name: value,
+                                  co_listing_agent_id: ''
+                                })
+                                setAgentDropdownOpen({...agentDropdownOpen, co_edit: true})
+                              }}
+                              onFocus={() => setAgentDropdownOpen({...agentDropdownOpen, co_edit: true})}
+                              className="input-luxury"
+                              placeholder="Search agents..."
+                            />
+                            {agentDropdownOpen['co_edit'] && filteredAgents('co_edit').length > 0 && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-y-auto">
+                                {filteredAgents('co_edit').map(agent => (
+                                  <div
+                                    key={agent.id}
+                                    onClick={() => selectCoListingAgent(agent, 'edit')}
+                                    className="px-4 py-2 hover:bg-luxury-light cursor-pointer text-sm"
+                                  >
+                                    {agent.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm">{selectedResponse.co_listing_agent || 'N/A'}</p>
                         )}
                       </div>
                     </div>
@@ -2165,6 +2445,21 @@ export default function FormResponsesPage() {
                         )}
                       </div>
                       <div>
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">MLS</label>
+                        {isEditing ? (
+                          <select
+                            value={editData.mls_type || 'HAR'}
+                            onChange={(e) => setEditData({...editData, mls_type: e.target.value})}
+                            className="select-luxury"
+                          >
+                            <option value="HAR">HAR</option>
+                            <option value="NTREIS">NTREIS</option>
+                          </select>
+                        ) : (
+                          <p className="text-sm">{selectedResponse.mls_type || 'HAR'}</p>
+                        )}
+                      </div>
+                      <div>
                         <label className="text-xs text-luxury-gray-2 mb-1 block">Status</label>
                         {isEditing ? (
                           <select
@@ -2227,6 +2522,46 @@ export default function FormResponsesPage() {
                           />
                         ) : (
                           <p className="text-sm">{selectedResponse.lead_source || 'N/A'}</p>
+                        )}
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">Co-Listing Agent</label>
+                        {isEditing ? (
+                          <div className="relative agent-selector">
+                            <input
+                              type="text"
+                              value={agentSearch['co_edit'] || editData.co_listing_agent_name || editData.co_listing_agent || ''}
+                              onChange={(e) => {
+                                const value = e.target.value
+                                setAgentSearch({...agentSearch, co_edit: value})
+                                setEditData({
+                                  ...editData,
+                                  co_listing_agent: value,
+                                  co_listing_agent_name: value,
+                                  co_listing_agent_id: ''
+                                })
+                                setAgentDropdownOpen({...agentDropdownOpen, co_edit: true})
+                              }}
+                              onFocus={() => setAgentDropdownOpen({...agentDropdownOpen, co_edit: true})}
+                              className="input-luxury"
+                              placeholder="Search agents..."
+                            />
+                            {agentDropdownOpen['co_edit'] && filteredAgents('co_edit').length > 0 && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-y-auto">
+                                {filteredAgents('co_edit').map(agent => (
+                                  <div
+                                    key={agent.id}
+                                    onClick={() => selectCoListingAgent(agent, 'edit')}
+                                    className="px-4 py-2 hover:bg-luxury-light cursor-pointer text-sm"
+                                  >
+                                    {agent.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm">{selectedResponse.co_listing_agent || 'N/A'}</p>
                         )}
                       </div>
                     </div>
