@@ -55,8 +55,8 @@ export default function AdminLayout({
     try {
       const userData = JSON.parse(userStr)
       
-      // Check for 'Admin' (capital A) to match database schema
-      if (!userData.roles || !userData.roles.includes('Admin')) {
+      // Check role (simple string, not array)
+      if (userData.role !== 'Admin') {
         router.push('/auth/login')
         return
       }

@@ -58,8 +58,8 @@ export default function OnboardingManagementPage() {
 
       const userData = JSON.parse(userStr)
 
-      // Check for 'Admin' (capital A) to match database schema
-      if (!userData?.roles?.includes('Admin')) {
+      // Check role (simple string, not array)
+      if (userData?.role !== 'Admin') {
         router.push('/admin/dashboard')
         return
       }
@@ -86,9 +86,9 @@ export default function OnboardingManagementPage() {
         throw new Error(`Failed to fetch users: ${usersError.message || 'Unknown error'}`)
       }
 
-      // Filter for users with 'agent' role in client-side (more reliable)
+      // Filter for users with 'Agent' role (simple string, not array)
       const agents = (usersData || []).filter((user: any) => 
-        user.roles && Array.isArray(user.roles) && user.roles.includes('agent')
+        user.role === 'Agent'
       )
       setUsers(agents as User[])
 

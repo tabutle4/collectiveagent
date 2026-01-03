@@ -13,10 +13,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email - explicitly select roles column (ARRAY type)
+    // Find user by email - select role column (TEXT type)
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, roles, is_active, password_hash, first_name, last_name, preferred_first_name, preferred_last_name, reset_token, reset_token_expires')
+      .select('id, email, role, is_active, password_hash, first_name, last_name, preferred_first_name, preferred_last_name, reset_token, reset_token_expires')
       .eq('email', email.toLowerCase())
       .single()
 

@@ -46,8 +46,8 @@ export default function ChecklistEditorPage() {
       const userData = JSON.parse(userStr)
       setCurrentUser(userData)
 
-      // Check if admin - Check for 'Admin' (capital A) to match database schema
-      if (!userData.roles?.includes('Admin')) {
+      // Check role (simple string, not array)
+      if (userData.role !== 'Admin') {
         router.push('/admin/dashboard')
         setLoading(false)
         return
@@ -163,8 +163,8 @@ export default function ChecklistEditorPage() {
     )
   }
 
-  // Check for 'Admin' (capital A) to match database schema
-  if (!currentUser || !currentUser.roles?.includes('Admin')) {
+  // Check role (simple string, not array)
+  if (!currentUser || currentUser.role !== 'Admin') {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>

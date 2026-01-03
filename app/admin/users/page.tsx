@@ -70,8 +70,8 @@ export default function AdminUsersPage() {
   const allRoles = useMemo(() => {
     const rolesSet = new Set<string>()
     users.forEach(user => {
-      if (user.roles && Array.isArray(user.roles)) {
-        user.roles.forEach((role: string) => rolesSet.add(role))
+      if (user.role) {
+        rolesSet.add(user.role)
       }
     })
     return Array.from(rolesSet).sort()
@@ -95,7 +95,7 @@ export default function AdminUsersPage() {
     // Role filter
     if (roleFilter !== 'all') {
       filtered = filtered.filter(user => 
-        user.roles && Array.isArray(user.roles) && user.roles.includes(roleFilter)
+        user.role === roleFilter
       )
     }
 
@@ -137,7 +137,7 @@ export default function AdminUsersPage() {
     const counts: Record<string, number> = { all: users.length }
     allRoles.forEach(role => {
       counts[role] = users.filter(user => 
-        user.roles && Array.isArray(user.roles) && user.roles.includes(role)
+        user.role === role
       ).length
     })
     return counts
@@ -363,14 +363,13 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {user.roles.map((role: string) => (
+                          {user.role && (
                             <span
-                              key={role}
                               className="inline-block px-2 py-1 text-xs tracking-wide rounded bg-luxury-dark-3 text-white"
                             >
-                              {role}
+                              {user.role}
                             </span>
-                          ))}
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -425,14 +424,13 @@ export default function AdminUsersPage() {
                 <div className="text-base text-luxury-gray-2 space-y-1">
                   <div>{user.email}</div>
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {user.roles.map((role: string) => (
+                    {user.role && (
                       <span
-                        key={role}
                         className="inline-block px-2 py-1 text-xs uppercase tracking-wide rounded bg-luxury-dark-3 text-white"
                       >
-                        {role}
+                        {user.role}
                       </span>
-                    ))}
+                    )}
                   </div>
                   <div className="text-base mt-2">
                     Created: {new Date(user.created_at).toLocaleDateString()}

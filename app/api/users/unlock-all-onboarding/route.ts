@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Filter for agents
+    // Filter for agents (simple string, not array)
     const agents = (users || []).filter((user: any) => 
-      user.roles && Array.isArray(user.roles) && user.roles.includes('agent')
+      user.role === 'Agent'
     )
 
     if (agents.length === 0) {

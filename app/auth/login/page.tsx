@@ -35,12 +35,11 @@ export default function LoginPage() {
       // Store user in localStorage
       localStorage.setItem('user', JSON.stringify(data.user))
       
-      // Redirect based on user role
-      const userRoles = data.user.roles || []
-      // Check for 'Admin' (capital A) to match database schema
-      if (userRoles.includes('Admin')) {
+      // Redirect based on user role (simple string, not array)
+      const userRole = data.user.role || ''
+      if (userRole === 'Admin') {
         router.push('/admin/dashboard')
-      } else if (userRoles.includes('Agent')) {
+      } else if (userRole === 'Agent') {
         router.push('/agent/checklist')
       } else {
         // Default to agent checklist for other roles

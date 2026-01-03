@@ -263,9 +263,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Allow both agents and admins to create listings
-    // Check for capitalized role names to match database schema
-    const isAdmin = userData.roles?.includes('Admin')
-    const isAgent = userData.roles?.includes('Agent')
+    // Check role (simple string, not array)
+    const isAdmin = userData.role === 'Admin'
+    const isAgent = userData.role === 'Agent'
 
     if (!isAdmin && !isAgent) {
       return NextResponse.json(

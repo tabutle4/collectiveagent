@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
                                  firstName.toLowerCase() === 'courtney' ||
                                  agentData?.preferred_first_name?.toLowerCase() === 'courtney' ||
                                  agentData?.first_name?.toLowerCase() === 'courtney') &&
-                                agentData?.roles?.includes('broker')
+                                agentData?.role === 'Broker'
         
         const phone = isCourtneyBroker 
           ? (agentData?.personal_phone || agentData?.business_phone || '')
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         const isCourtneyBroker = (agentData.email?.toLowerCase().includes('courtney') ||
                                  agentData.preferred_first_name?.toLowerCase() === 'courtney' ||
                                  agentData.first_name?.toLowerCase() === 'courtney') &&
-                                agentData.roles?.includes('broker')
+                                agentData.role === 'Broker'
         
         const phone = isCourtneyBroker
           ? (agentData.personal_phone || agentData.business_phone || '')

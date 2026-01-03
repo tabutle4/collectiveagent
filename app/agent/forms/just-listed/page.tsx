@@ -132,10 +132,8 @@ export default function JustListedForm() {
       
       if (data.success) {
         alert('Just Listed form submitted successfully!')
-        // Redirect to user's dashboard based on role
-        const userRoles = user.roles || []
-        // Check for 'Admin' (capital A) to match database schema
-        if (userRoles.includes('Admin')) {
+        // Redirect to user's dashboard based on role (simple string, not array)
+        if (user.role === 'Admin') {
           router.push('/admin/dashboard')
         } else {
           router.push('/onboarding-checklist')

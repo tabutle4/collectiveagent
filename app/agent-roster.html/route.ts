@@ -34,10 +34,9 @@ export async function GET() {
       throw fetchError
     }
 
-    // Filter for users with 'agent' role (case-insensitive)
+    // Filter for users with 'Agent' role (simple string, not array)
     const agents = (allUsers || []).filter(user => {
-      if (!user.roles || !Array.isArray(user.roles)) return false
-      return user.roles.some((role: string) => role.toLowerCase() === 'agent')
+      return user.role === 'Agent'
     })
 
     // Sort agents

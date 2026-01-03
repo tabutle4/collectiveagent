@@ -55,8 +55,8 @@ export default function AgentLayout({
       const userData = JSON.parse(userStr)
       
       // Allow agents (and admins can access agent pages too)
-      // Check for capitalized role names to match database schema
-      if (!userData.roles || (!userData.roles.includes('Agent') && !userData.roles.includes('Admin'))) {
+      // Check role (simple string, not array)
+      if (userData.role !== 'Agent' && userData.role !== 'Admin') {
         router.push('/auth/login')
         return
       }

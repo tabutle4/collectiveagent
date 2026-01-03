@@ -27,8 +27,8 @@ export async function POST(request: NextRequest) {
     const { data: allUsers } = await supabaseAdmin.from('users').select('id, email, roles')
 
     // Filter for admin users
-    // Check for 'Admin' (capital A) to match database schema
-    const adminUsers = (allUsers || []).filter((u: any) => u.roles?.includes('Admin'))
+    // Check role (simple string, not array)
+    const adminUsers = (allUsers || []).filter((u: any) => u.role === 'Admin')
 
     if (adminUsers.length === 0) {
       return NextResponse.json({ message: 'No admin users found' })
