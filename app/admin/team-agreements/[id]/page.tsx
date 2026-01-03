@@ -128,7 +128,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       }
       setUser(userData)
       loadAgents()
-      if (resolvedParams && resolvedParams.id !== 'new') {
+      if (!isNew) {
         loadAgreement()
       } else {
         setLoading(false)
@@ -137,7 +137,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       console.error('Error parsing user data:', error)
       router.push('/auth/login')
     }
-  }, [router, resolvedParams])
+  }, [router, params.id, isNew])
 
   const loadAgents = async () => {
     try {
@@ -155,12 +155,12 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     setLoading(true)
     setError(null)
     try {
-      if (!resolvedParams || !resolvedParams.id || resolvedParams.id === 'new') {
+      if (!params.id || params.id === 'new') {
         setLoading(false)
         return
       }
       
-      const response = await fetch(`/api/team-agreements/${resolvedParams.id}`)
+      const response = await fetch(`/api/team-agreements/${params.id}`)
       const data = await response.json()
       
       console.log('API Response:', { status: response.status, data })
@@ -719,7 +719,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           })),
       }
       
-      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${agreementId}`
+      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${params.id}`
       const method = isNew ? 'POST' : 'PUT'
       
       const response = await fetch(url, {
@@ -799,7 +799,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
               {formData.team_name || 'Team Agreement Details'}
             </h1>
             <Link
-              href={`/admin/team-agreements/${agreementId}?edit=true`}
+              href={`/admin/team-agreements/${params.id}?edit=true`}
               className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block"
             >
               Edit Agreement
