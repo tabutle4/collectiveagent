@@ -127,45 +127,65 @@ export async function POST(request: NextRequest) {
         )
       }
       
-      // Validate all sales plans (including custom)
+      // Helper function to check if a plan has any data
+      const planHasData = (planSplits: any): boolean => {
+        if (!planSplits) return false
+        return Object.values(planSplits).some((split: any) => {
+          if (!split || typeof split !== 'object') return false
+          const typedSplit = split as Split
+          return (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0) > 0
+        })
+      }
+
+      // Validate all sales plans (only validate custom if it has data)
       const salesPlans = ['new_agent', 'no_cap', 'cap', 'custom'] as const
       for (const plan of salesPlans) {
         const planSplits = member.splits.sales?.[plan]
-        if (planSplits) {
-          for (const [source, split] of Object.entries(planSplits)) {
-            if (split && typeof split === 'object') {
-              const typedSplit = split as Split
-              const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
-              if (Math.abs(total - 100) > 0.01) {
-                return NextResponse.json(
-                  {
-                    error: `Sales ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
-                  },
-                  { status: 400 }
-                )
-              }
+        if (!planSplits) continue
+        
+        // Skip validation for custom plans if they have no data
+        if (plan === 'custom' && !planHasData(planSplits)) {
+          continue
+        }
+        
+        for (const [source, split] of Object.entries(planSplits)) {
+          if (split && typeof split === 'object') {
+            const typedSplit = split as Split
+            const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
+            if (Math.abs(total - 100) > 0.01) {
+              return NextResponse.json(
+                {
+                  error: `Sales ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+                },
+                { status: 400 }
+              )
             }
           }
         }
       }
       
-      // Validate lease splits (standard and custom)
+      // Validate lease splits (only validate custom if it has data)
       const leasePlans = ['standard', 'custom'] as const
       for (const plan of leasePlans) {
         const planSplits = member.splits.lease?.[plan]
-        if (planSplits) {
-          for (const [source, split] of Object.entries(planSplits)) {
-            if (split && typeof split === 'object') {
-              const typedSplit = split as Split
-              const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
-              if (Math.abs(total - 100) > 0.01) {
-                return NextResponse.json(
-                  {
-                    error: `Lease ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
-                  },
-                  { status: 400 }
-                )
-              }
+        if (!planSplits) continue
+        
+        // Skip validation for custom plans if they have no data
+        if (plan === 'custom' && !planHasData(planSplits)) {
+          continue
+        }
+        
+        for (const [source, split] of Object.entries(planSplits)) {
+          if (split && typeof split === 'object') {
+            const typedSplit = split as Split
+            const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
+            if (Math.abs(total - 100) > 0.01) {
+              return NextResponse.json(
+                {
+                  error: `Lease ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+                },
+                { status: 400 }
+              )
             }
           }
         }
