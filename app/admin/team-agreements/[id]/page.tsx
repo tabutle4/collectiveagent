@@ -99,6 +99,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
   const [agents, setAgents] = useState<Agent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [agreementData, setAgreementData] = useState<any>(null) // Store full agreement data for view mode
   
   const [formData, setFormData] = useState({
     team_name: '',

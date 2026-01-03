@@ -16,36 +16,58 @@ export async function GET(
     const supabase = createClient()
     const { id } = await params
     
-    const { data, error } = await supabase
+    // Fetch team agreement with team lead
+    const { data: agreement, error: agreementError } = await supabase
       .from('team_agreements')
       .select(`
         *,
-        team_lead:users!team_agreements_team_lead_id_fkey(
+        team_lead:users!team_lead_id(
           id,
           preferred_first_name,
           preferred_last_name,
           first_name,
           last_name
-        ),
-        team_members(
-          *,
-          agent:users!team_members_agent_id_fkey(
-            id,
-            preferred_first_name,
-            preferred_last_name,
-            first_name,
-            last_name
-          )
         )
       `)
       .eq('id', id)
       .single()
     
-    if (error) {
-      throw error
+    if (agreementError) {
+      throw agreementError
     }
     
-    return NextResponse.json({ agreement: data })
+    // Fetch team members with agent names
+    const { data: members, error: membersError } = await supabase
+      .from('team_members')
+      .select(`
+        *,
+        agent:users!agent_id(
+          id,
+          preferred_first_name,
+          preferred_last_name,
+          first_name,
+          last_name
+        )
+      `)
+      .eq('team_agreement_id', id)
+    
+    if (membersError) {
+      throw membersError
+    }
+    
+    // Format team lead name
+    const team_lead_name = agreement.team_lead
+      ? `${agreement.team_lead.preferred_first_name || agreement.team_lead.first_name || ''} ${agreement.team_lead.preferred_last_name || agreement.team_lead.last_name || ''}`.trim()
+      : null
+    
+    // Return combined data
+    return NextResponse.json({
+      agreement: {
+        ...agreement,
+        team_lead_name,
+        team_members: members || []
+      }
+    })
   } catch (error: any) {
     console.error('Error fetching team agreement:', error)
     return NextResponse.json(
