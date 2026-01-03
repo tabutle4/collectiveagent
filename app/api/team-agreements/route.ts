@@ -215,6 +215,8 @@ export async function POST(request: NextRequest) {
       joined_date: member.joined_date || effective_date,
       left_date: member.left_date || null,
       splits: member.splits || null,
+      active_sales_plan: member.active_sales_plan || 'no_cap',
+      active_lease_plan: member.active_lease_plan || 'standard',
     }))
     
     const { error: membersError } = await supabase

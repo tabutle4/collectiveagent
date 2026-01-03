@@ -164,74 +164,26 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         
         // Format team members with new splits structure
         const members = (agreement.team_members || []).map((m: any) => {
-          // If splits exist, use them; otherwise initialize with defaults
-          let splits: SplitsData
-          if (m.splits) {
-            splits = m.splits as SplitsData
-            
-            // Migrate old lease structure to new structure if needed
-            if (splits.lease && !('standard' in splits.lease) && !('custom' in splits.lease)) {
-              // Old structure: lease is direct object, migrate to lease.standard
-              splits = {
-                ...splits,
-                lease: {
-                  standard: splits.lease as any,
-                  custom: splitTemplates.lease.custom,
-                },
-              }
+          // Use splits from database or initialize with defaults
+          let splits: SplitsData = m.splits || initializeSplits()
+          
+          // Ensure structure is complete (handle any missing plans)
+          if (!splits.sales?.custom) {
+            splits = {
+              ...splits,
+              sales: {
+                ...splits.sales,
+                custom: splitTemplates.sales.custom,
+              },
             }
-            // Ensure custom plans exist
-            if (!splits.sales?.custom) {
-              splits = {
-                ...splits,
-                sales: {
-                  ...splits.sales,
-                  custom: splitTemplates.sales.custom,
-                },
-              }
-            }
-            if (!splits.lease?.custom) {
-              splits = {
-                ...splits,
-                lease: {
-                  ...splits.lease,
-                  custom: splitTemplates.lease.custom,
-                },
-              }
-            }
-          } else {
-            // Migrate from old structure if needed
-            if (m.sales_split_from_team_lead || m.lease_split_from_team_lead) {
-              splits = {
-                sales: {
-                  new_agent: {
-                    team_lead: m.sales_split_from_team_lead || splitTemplates.sales.new_agent.team_lead,
-                    own: m.sales_split_from_own_lead || splitTemplates.sales.new_agent.own,
-                    firm: m.sales_split_from_firm_lead || splitTemplates.sales.new_agent.firm,
-                  },
-                  no_cap: {
-                    team_lead: m.sales_split_from_team_lead || splitTemplates.sales.no_cap.team_lead,
-                    own: m.sales_split_from_own_lead || splitTemplates.sales.no_cap.own,
-                    firm: m.sales_split_from_firm_lead || splitTemplates.sales.no_cap.firm,
-                  },
-                  cap: {
-                    team_lead: m.sales_split_from_team_lead || splitTemplates.sales.cap.team_lead,
-                    own: m.sales_split_from_own_lead || splitTemplates.sales.cap.own,
-                    firm: m.sales_split_from_firm_lead || splitTemplates.sales.cap.firm,
-                  },
-                  custom: splitTemplates.sales.custom,
-                },
-                lease: {
-                  standard: {
-                    team_lead: m.lease_split_from_team_lead || splitTemplates.lease.standard.team_lead,
-                    own: m.lease_split_from_own_lead || splitTemplates.lease.standard.own,
-                    firm: m.lease_split_from_firm_lead || splitTemplates.lease.standard.firm,
-                  },
-                  custom: splitTemplates.lease.custom,
-                },
-              }
-            } else {
-              splits = initializeSplits()
+          }
+          if (!splits.lease?.custom) {
+            splits = {
+              ...splits,
+              lease: {
+                ...splits.lease,
+                custom: splitTemplates.lease.custom,
+              },
             }
           }
           
@@ -245,8 +197,8 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
             splits: splits,
-            active_sales_plan: 'new_agent' as const,
-            active_lease_plan: 'standard' as const,
+            active_sales_plan: (m.active_sales_plan || 'no_cap') as 'new_agent' | 'no_cap' | 'cap' | 'custom',
+            active_lease_plan: (m.active_lease_plan || 'standard') as 'standard' | 'custom',
           }
         })
         setTeamMembers(members)
