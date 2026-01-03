@@ -328,6 +328,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       association: freshUser?.association || '',
       revenue_share: parseRevenueShare(freshUser?.revenue_share),
       referring_agent: freshUser?.referring_agent || '',
+      job_title: freshUser?.job_title || '',
       shirt_type: freshUser?.shirt_type || '',
       shirt_size: freshUser?.shirt_size || '',
       is_active: freshUser?.is_active ?? true,
