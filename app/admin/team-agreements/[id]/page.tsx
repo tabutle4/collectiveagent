@@ -168,6 +168,8 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           let splits: SplitsData | null = null
           if (m.splits) {
             splits = m.splits
+            if (!splits) return null // Type guard
+            
             // Migrate old lease structure to new structure if needed
             if (splits.lease && !('standard' in splits.lease) && !('custom' in splits.lease)) {
               // Old structure: lease is direct object, migrate to lease.standard
