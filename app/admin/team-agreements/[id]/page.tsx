@@ -105,6 +105,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [agreementData, setAgreementData] = useState<any>(null) // Store full agreement data for view mode
+  const [expandedMembers, setExpandedMembers] = useState<Record<number, boolean>>({}) // Track which team members are expanded in view mode
   
   const [formData, setFormData] = useState({
     team_name: '',
@@ -254,11 +255,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             active_sales_plan: (m.active_sales_plan || 'no_cap') as 'new_agent' | 'no_cap' | 'cap' | 'custom',
             active_lease_plan: (m.active_lease_plan || 'standard') as 'standard' | 'custom',
             expandedSections: {
-              sales_new_agent: true, // Default: expanded
+              sales_new_agent: false, // Default: collapsed
               sales_no_cap: false,
               sales_cap: false,
               sales_custom: false,
-              lease_standard: true, // Default: expanded
+              lease_standard: false, // Default: collapsed
               lease_custom: false,
             },
           }
@@ -895,37 +896,60 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           {teamMembers.length === 0 ? (
             <p className="text-sm text-luxury-gray-2">No team members</p>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-3">
               {teamMembers.map((member, index) => {
                 const agent = agents.find(a => a.id === member.agent_id)
+                const isExpanded = expandedMembers[index] || false
+                const joinedDate = member.joined_date 
+                  ? new Date(member.joined_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                  : 'N/A'
+                
                 return (
-                  <div key={index} className="border border-luxury-gray-5 rounded-lg p-4">
-                    <h3 className="text-base font-medium text-luxury-black mb-4">
-                      {agent?.displayName || 'Unknown Agent'}
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                      <div>
-                        <label className="text-luxury-gray-2">Joined Date</label>
-                        <p className="text-luxury-black">
-                          {member.joined_date 
-                            ? new Date(member.joined_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
-                            : 'N/A'}
-                        </p>
+                  <div key={index} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                    {/* Accordion Header */}
+                    <button
+                      onClick={() => setExpandedMembers(prev => ({ ...prev, [index]: !prev[index] }))}
+                      className="w-full flex items-center justify-between p-4 hover:bg-luxury-light transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronDown size={18} className="text-luxury-gray-2 flex-shrink-0" />
+                        ) : (
+                          <ChevronRight size={18} className="text-luxury-gray-2 flex-shrink-0" />
+                        )}
+                        <div>
+                          <h3 className="text-base font-medium text-luxury-black">
+                            {agent?.displayName || 'Unknown Agent'}
+                          </h3>
+                          <p className="text-sm text-luxury-gray-2 mt-0.5">
+                            Joined: {joinedDate}
+                          </p>
+                        </div>
                       </div>
-                      {member.left_date && (
-                      <div>
-                        <label className="text-luxury-gray-2">Left Date</label>
-                        <p className="text-luxury-black">
-                          {member.left_date 
-                            ? new Date(member.left_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
-                            : 'N/A'}
-                        </p>
-                      </div>
-                      )}
-                    </div>
-                    {/* Splits */}
-                    {member.splits && (
-                      <div className="space-y-4 border-t border-luxury-gray-5 pt-4">
+                    </button>
+                    
+                    {/* Accordion Content */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-luxury-gray-5">
+                        <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+                          <div>
+                            <label className="text-luxury-gray-2">Joined Date</label>
+                            <p className="text-luxury-black">{joinedDate}</p>
+                          </div>
+                          {member.left_date && (
+                            <div>
+                              <label className="text-luxury-gray-2">Left Date</label>
+                              <p className="text-luxury-black">
+                                {member.left_date 
+                                  ? new Date(member.left_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {/* Splits */}
+                        {member.splits && (
+                          <div className="space-y-4 mt-4">
                         {/* Sales Splits */}
                         <div>
                           <h4 className="text-sm font-medium text-luxury-black mb-3">Sales Commission Splits</h4>
@@ -1258,7 +1282,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                           { id: 'sales_cap', label: 'Sales - Cap (70/30)', plan: 'cap' as const, type: 'sales' as const },
                           { id: 'sales_custom', label: 'Sales - Custom Plan', plan: 'custom' as const, type: 'sales' as const },
                         ].map(({ id, label, plan, type }) => {
-                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? (id === 'sales_new_agent')
+                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? false
                           const planSplits = member.splits?.sales?.[plan] || splitTemplates.sales[plan]
                           const isValid = planIsValid(planSplits, plan, type)
                           const hasData = planHasData(planSplits)
