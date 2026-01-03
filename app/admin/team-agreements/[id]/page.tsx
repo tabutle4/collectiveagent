@@ -426,11 +426,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
       active_sales_plan: 'no_cap',
       active_lease_plan: 'standard',
       expandedSections: {
-        sales_new_agent: true, // Default: expanded
+        sales_new_agent: false, // Default: collapsed
         sales_no_cap: false,
         sales_cap: false,
         sales_custom: false,
-        lease_standard: true, // Default: expanded
+        lease_standard: false, // Default: collapsed
         lease_custom: false,
       },
     }])
