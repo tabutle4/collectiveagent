@@ -280,14 +280,14 @@ export default function TeamAgreementsPage() {
               <div className="flex gap-2 pt-4 border-t border-luxury-gray-5">
                 <Link
                   href={`/admin/team-agreements/${agreement.id}`}
-                  className="flex-1 btn-outline flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-flex items-center justify-center gap-2"
                 >
                   <Eye size={14} />
                   View Details
                 </Link>
                 <Link
                   href={`/admin/team-agreements/${agreement.id}?edit=true`}
-                  className="flex-1 btn-outline flex items-center justify-center gap-2 text-sm"
+                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-flex items-center justify-center gap-2"
                 >
                   <Edit size={14} />
                   Edit
@@ -297,7 +297,7 @@ export default function TeamAgreementsPage() {
                     href={agreement.agreement_document_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-outline flex items-center justify-center gap-2 text-sm px-3"
+                    className="px-3 py-2 text-xs md:text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-flex items-center justify-center gap-2"
                     title="View Document"
                   >
                     <FileText size={14} />

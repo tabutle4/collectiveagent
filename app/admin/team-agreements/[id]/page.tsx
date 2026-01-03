@@ -365,7 +365,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             </h1>
             <Link
               href={`/admin/team-agreements/${params.id}?edit=true`}
-              className="btn-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block"
             >
               Edit Agreement
             </Link>
@@ -668,7 +668,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             <button
               type="button"
               onClick={addTeamMember}
-              className="btn-outline flex items-center gap-2 text-sm"
+              className="px-3 py-2 text-xs md:text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-flex items-center gap-2"
             >
               <Plus size={16} />
               Add Team Member
@@ -920,14 +920,14 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         <div className="flex gap-4 justify-end">
           <Link
             href="/admin/team-agreements"
-            className="btn-outline"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-block"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={saving}
-            className="btn-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : isNew ? 'Create Agreement' : 'Save Changes'}
           </button>
