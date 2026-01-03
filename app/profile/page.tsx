@@ -96,7 +96,8 @@ export default function ProfilePage() {
 
   const preferredName = `${user.preferred_first_name} ${user.preferred_last_name}`
   const roles = Array.isArray(user.roles) ? user.roles : []
-  const isAdmin = roles.includes('admin')
+  // Check for 'Admin' (capital A) to match database schema
+  const isAdmin = roles.includes('Admin')
   const isAgent = roles.includes('agent')
 
   const [saving, setSaving] = useState(false)

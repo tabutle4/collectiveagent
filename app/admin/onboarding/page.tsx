@@ -58,7 +58,8 @@ export default function OnboardingManagementPage() {
 
       const userData = JSON.parse(userStr)
 
-      if (!userData?.roles?.includes('admin')) {
+      // Check for 'Admin' (capital A) to match database schema
+      if (!userData?.roles?.includes('Admin')) {
         router.push('/admin/dashboard')
         return
       }

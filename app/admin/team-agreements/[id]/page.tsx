@@ -128,7 +128,8 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
 
     try {
       const userData = JSON.parse(userStr)
-      if (!userData.roles || !userData.roles.includes('admin')) {
+      // Check for 'Admin' (capital A) to match database schema
+      if (!userData.roles || !userData.roles.includes('Admin')) {
         router.push('/auth/login')
         return
       }
@@ -873,7 +874,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               </div>
             )}
             {/* Team Documents - Only visible to admins and team lead */}
-            {(user?.roles?.includes('admin') || user?.id === agreementData?.team_lead_id) && 
+            {(user?.roles?.includes('Admin') || user?.id === agreementData?.team_lead_id) && 
              agreementData?.agreement_document_url && (
               <div className="md:col-span-2">
                 <label className="text-sm text-luxury-gray-2">Team Documents</label>

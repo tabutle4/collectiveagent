@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
       .eq('id', requestingUserId)
       .single()
 
-    if (userError || !userData?.roles?.includes('admin')) {
+    // Check for 'Admin' (capital A) to match database schema
+    if (userError || !userData?.roles?.includes('Admin')) {
       return NextResponse.json(
         { error: 'Forbidden - Admin access required' },
         { status: 403 }

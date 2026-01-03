@@ -305,8 +305,8 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
       let userDataToUse: User | null = null
       
       if (isPreviewMode && previewUserId) {
-        // Only allow admins to preview
-        if (!currentUserData.roles?.includes('admin')) {
+        // Only allow admins to preview - Check for 'Admin' (capital A) to match database schema
+        if (!currentUserData.roles?.includes('Admin')) {
           router.push('/auth/login')
           return
         }
@@ -329,8 +329,8 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
         userDataToUse = previewUserData as User
         setUser(userDataToUse)
       } else {
-        // Normal mode - redirect admins
-        if (currentUserData.roles?.includes('admin')) {
+        // Normal mode - redirect admins - Check for 'Admin' (capital A) to match database schema
+        if (currentUserData.roles?.includes('Admin')) {
           router.push('/admin/dashboard')
           return
         }
@@ -494,7 +494,8 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
       const userStr = localStorage.getItem('user')
       if (userStr) {
         const currentUser = JSON.parse(userStr)
-        if (currentUser.roles?.includes('admin') && previewUserId) {
+        // Check for 'Admin' (capital A) to match database schema
+        if (currentUser.roles?.includes('Admin') && previewUserId) {
           // Admin can update the preview user's checklist
           try {
             setChecklist(newChecklist)
@@ -626,7 +627,8 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
       const userStr = localStorage.getItem('user')
       if (userStr) {
         const currentUser = JSON.parse(userStr)
-        if (currentUser.roles?.includes('admin') && previewUserId) {
+        // Check for 'Admin' (capital A) to match database schema
+        if (currentUser.roles?.includes('Admin') && previewUserId) {
           // Admin can update the preview user's documents
           if (!user) return
           const updatedValue = !user[docKey as keyof User]
@@ -814,7 +816,8 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
   // In preview mode, check if current user is admin to allow edits
   const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null
   const currentUser = userStr ? JSON.parse(userStr) : null
-  const isAdminPreview = isPreviewMode && currentUser?.roles?.includes('admin')
+  // Check for 'Admin' (capital A) to match database schema
+  const isAdminPreview = isPreviewMode && currentUser?.roles?.includes('Admin')
   // Only read-only if preview mode but not admin
   const isReadOnly = isPreviewMode && !isAdminPreview
 

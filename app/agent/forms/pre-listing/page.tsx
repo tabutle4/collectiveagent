@@ -137,7 +137,8 @@ export default function PreListingForm() {
         alert('Pre-listing form submitted successfully!')
         // Redirect to user's dashboard based on role
         const userRoles = user.roles || []
-        if (userRoles.includes('admin')) {
+        // Check for 'Admin' (capital A) to match database schema
+        if (userRoles.includes('Admin')) {
           router.push('/admin/dashboard')
         } else {
           router.push('/onboarding-checklist')

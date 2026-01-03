@@ -58,7 +58,8 @@ export default function TeamAgreementsPage() {
 
     try {
       const userData = JSON.parse(userStr)
-      if (!userData.roles || !userData.roles.includes('admin')) {
+      // Check for 'Admin' (capital A) to match database schema
+      if (!userData.roles || !userData.roles.includes('Admin')) {
         router.push('/auth/login')
         return
       }
