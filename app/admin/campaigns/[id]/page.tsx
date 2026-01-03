@@ -73,6 +73,8 @@ export default function CampaignDetailPage() {
           preferred_last_name,
           email,
           campaign_token,
+          commission_plan,
+          commission_plan_other,
           campaign_recipients(
             current_step,
             step_1_completed_at,
@@ -92,15 +94,6 @@ export default function CampaignDetailPage() {
             work_preference,
             profile_updates,
             campaign_id
-          ),
-          team_members(
-            active_sales_plan,
-            active_lease_plan,
-            team_agreements!inner(
-              status,
-              effective_date,
-              expiration_date
-            )
           )
         `)
         .eq('is_active', true)
