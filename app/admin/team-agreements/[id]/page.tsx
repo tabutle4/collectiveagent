@@ -863,9 +863,6 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             <div className="space-y-6">
               {teamMembers.map((member, index) => {
                 const agent = agents.find(a => a.id === member.agent_id)
-                const teamLeadSplit = getSplitTotal(member.split_from_team_lead)
-                const ownLeadSplit = getSplitTotal(member.split_from_own_lead)
-                const firmLeadSplit = getSplitTotal(member.split_from_firm_lead)
                 
                 return (
                   <div key={index} className="border border-luxury-gray-5 rounded-lg p-4">
