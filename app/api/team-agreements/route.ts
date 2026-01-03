@@ -202,18 +202,6 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Get current user for created_by
-    const userStr = request.headers.get('x-user') // You may need to pass this from client
-    let created_by = null
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr)
-        created_by = user.id
-      } catch (e) {
-        // Ignore
-      }
-    }
-    
     // Create team agreement
     const { data: agreement, error: agreementError } = await supabase
       .from('team_agreements')
@@ -225,8 +213,6 @@ export async function POST(request: NextRequest) {
         status: status || 'active',
         agreement_document_url: agreement_document_url || null,
         notes: notes || null,
-        created_by,
-        updated_by: created_by,
       })
       .select()
       .single()

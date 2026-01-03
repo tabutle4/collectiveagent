@@ -186,18 +186,6 @@ export async function PUT(
       )
     }
     
-    // Get current user for updated_by
-    const userStr = request.headers.get('x-user')
-    let updated_by = null
-    if (userStr) {
-      try {
-        const user = JSON.parse(userStr)
-        updated_by = user.id
-      } catch (e) {
-        // Ignore
-      }
-    }
-    
     // Update team agreement
     const { error: agreementError } = await supabase
       .from('team_agreements')
@@ -209,7 +197,6 @@ export async function PUT(
         status: status || 'active',
         agreement_document_url: agreement_document_url || null,
         notes: notes || null,
-        updated_by,
       })
       .eq('id', id)
     
