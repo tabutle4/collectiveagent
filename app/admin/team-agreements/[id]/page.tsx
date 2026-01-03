@@ -907,7 +907,9 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                       <div>
                         <label className="text-luxury-gray-2">Joined Date</label>
                         <p className="text-luxury-black">
-                          {member.joined_date ? new Date(member.joined_date).toLocaleDateString() : 'N/A'}
+                          {member.joined_date 
+                            ? new Date(member.joined_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                            : 'N/A'}
                         </p>
                       </div>
                       {member.left_date && (
