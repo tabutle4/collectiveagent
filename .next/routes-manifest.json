@@ -253,6 +253,12 @@
       "namedRegex": "^/admin/services/coordination(?:/)?$"
     },
     {
+      "page": "/admin/transactions",
+      "regex": "^/admin/transactions(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/transactions(?:/)?$"
+    },
+    {
       "page": "/admin/users",
       "regex": "^/admin/users(?:/)?$",
       "routeKeys": {},
@@ -463,6 +469,12 @@
       "namedRegex": "^/api/coordination/delete\\-report(?:/)?$"
     },
     {
+      "page": "/api/coordination/fix-all-folder-links",
+      "regex": "^/api/coordination/fix\\-all\\-folder\\-links(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/coordination/fix\\-all\\-folder\\-links(?:/)?$"
+    },
+    {
       "page": "/api/coordination/get",
       "regex": "^/api/coordination/get(?:/)?$",
       "routeKeys": {},
@@ -475,6 +487,12 @@
       "namedRegex": "^/api/coordination/list(?:/)?$"
     },
     {
+      "page": "/api/coordination/move-files-to-new-folder",
+      "regex": "^/api/coordination/move\\-files\\-to\\-new\\-folder(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/coordination/move\\-files\\-to\\-new\\-folder(?:/)?$"
+    },
+    {
       "page": "/api/coordination/reactivate",
       "regex": "^/api/coordination/reactivate(?:/)?$",
       "routeKeys": {},
@@ -485,6 +503,18 @@
       "regex": "^/api/coordination/regenerate\\-folder\\-link(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/coordination/regenerate\\-folder\\-link(?:/)?$"
+    },
+    {
+      "page": "/api/coordination/schedule-existing-emails",
+      "regex": "^/api/coordination/schedule\\-existing\\-emails(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/coordination/schedule\\-existing\\-emails(?:/)?$"
+    },
+    {
+      "page": "/api/coordination/send-all-weekly-reports",
+      "regex": "^/api/coordination/send\\-all\\-weekly\\-reports(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/coordination/send\\-all\\-weekly\\-reports(?:/)?$"
     },
     {
       "page": "/api/coordination/send-weekly-email",
@@ -503,6 +533,12 @@
       "regex": "^/api/coordination/update(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/coordination/update(?:/)?$"
+    },
+    {
+      "page": "/api/coordination/update-schedule",
+      "regex": "^/api/coordination/update\\-schedule(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/coordination/update\\-schedule(?:/)?$"
     },
     {
       "page": "/api/coordination/upload-report",
@@ -539,6 +575,12 @@
       "regex": "^/api/forms/delete(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/forms/delete(?:/)?$"
+    },
+    {
+      "page": "/api/forms/generate-generic-token",
+      "regex": "^/api/forms/generate\\-generic\\-token(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/forms/generate\\-generic\\-token(?:/)?$"
     },
     {
       "page": "/api/forms/generate-token",
@@ -593,6 +635,12 @@
       "regex": "^/api/listings/request\\-update(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/listings/request\\-update(?:/)?$"
+    },
+    {
+      "page": "/api/listings/search",
+      "regex": "^/api/listings/search(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/listings/search(?:/)?$"
     },
     {
       "page": "/api/listings/update",

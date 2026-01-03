@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/collectiverealtyco./Desktop/collective-agent/app/page.tsx"],"sourcesContent":["import { redirect } from 'next/navigation'\n\nexport default function Home() {\n  // Redirect to prospective agent form as the main public page\n  redirect('/prospective-agent-form')\n}\n"],"names":[],"mappings":";;;;AAAA;AAAA;;AAEe,SAAS;IACtB,6DAA6D;IAC7D,IAAA,iMAAQ,EAAC;AACX"}}]
-}

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, CheckSquare, ClipboardList, Briefcase, FileCheck, Receipt } from 'lucide-react'
+import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, CheckSquare, ClipboardList, Briefcase, FileCheck, Receipt, UsersRound, BarChart3, DollarSign, Settings } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -167,18 +167,46 @@ export default function AdminLayout({
     return null
   }
 
-  const navItems = [
-    { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/admin/prospects', label: 'Prospects', icon: Users },
-    { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
-    { href: '/admin/onboarding', label: 'Onboarding', icon: CheckSquare },
-    { href: '/admin/checklist-editor', label: 'Checklist Editor', icon: ClipboardList },
-    { href: '/admin/email-templates', label: 'Email Templates', icon: Mail },
-    { href: '/admin/agent-roster', label: 'Agent Roster', icon: FileText },
-    { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
-    { href: '/admin/form-responses', label: 'Form Responses', icon: FileCheck },
-    { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
-    { href: '/admin/users', label: 'Users', icon: UserCog },
+  // Navigation structure with sections
+  const navSections = [
+    {
+      title: 'OVERVIEW',
+      items: [
+        { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
+        { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
+      ],
+    },
+    {
+      title: 'COMPANY',
+      items: [
+        { href: '/admin/users', label: 'Users', icon: UserCog },
+        { href: '/admin/team-agreements', label: 'Teams', icon: UsersRound },
+        { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
+      ],
+    },
+    {
+      title: 'ACTIVITY',
+      items: [
+        { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
+        { href: '/admin/form-responses', label: 'Form Responses', icon: FileCheck },
+        { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
+      ],
+    },
+    {
+      title: 'LIBRARY',
+      items: [
+        { href: '/admin/email-templates', label: 'Email Templates', icon: Mail },
+        { href: '/admin/agent-roster', label: 'Agent Roster', icon: FileText },
+        { href: '/admin/checklist-editor', label: 'Checklist Editor', icon: ClipboardList },
+      ],
+    },
+    {
+      title: 'SETTINGS',
+      items: [
+        { href: '/admin/settings', label: 'Company Settings', icon: Settings, disabled: true },
+      ],
+    },
   ]
 
   // Use default values that match server render, then update after mount
@@ -281,37 +309,80 @@ export default function AdminLayout({
 
         {/* Navigation - scrollable area */}
         <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-2" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => {
-                  // Close menu on mobile when nav item clicked
-                  if (typeof window !== 'undefined' && window.innerWidth < 768) {
-                    setMenuOpen(false)
-                  }
-                }}
-                className={`
-                  flex items-center px-3 py-2 mb-1 rounded transition-colors
-                  ${!menuOpen ? 'justify-center' : ''}
-                  ${isActive ? 'bg-gray-200' : 'hover:bg-gray-200'}
-                `}
-                title={!menuOpen ? item.label : undefined}
-              >
-                <Icon 
-                  size={16} 
-                  className="flex-shrink-0 text-luxury-black"
-                  strokeWidth={1.5}
-                />
-                {menuOpen && (
-                  <span className="ml-2 text-base text-luxury-gray-1 font-semibold" style={{ fontWeight: '600' }}>{item.label}</span>
-                )}
-              </Link>
-            )
-          })}
+          {navSections.map((section, sectionIndex) => (
+            <div key={section.title} className={sectionIndex > 0 ? 'mt-6' : ''}>
+              {/* Section Header */}
+              {menuOpen && (
+                <div className="px-3 mb-2">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                    {section.title}
+                  </h3>
+                </div>
+              )}
+              
+              {/* Section Items */}
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = !item.disabled && (pathname === item.href || pathname?.startsWith(item.href + '/'))
+                const isDisabled = item.disabled
+                
+                if (isDisabled) {
+                  return (
+                    <div
+                      key={item.href}
+                      className={`
+                        flex items-center px-3 py-2 mb-1 rounded
+                        ${!menuOpen ? 'justify-center' : ''}
+                        opacity-50 cursor-not-allowed
+                      `}
+                      title={!menuOpen ? item.label : undefined}
+                    >
+                      <Icon 
+                        size={16} 
+                        className="flex-shrink-0 text-luxury-gray-3"
+                        strokeWidth={1.5}
+                      />
+                      {menuOpen && (
+                        <span className="ml-2 text-base text-luxury-gray-3 font-semibold" style={{ fontWeight: '600' }}>
+                          {item.label}
+                        </span>
+                      )}
+                    </div>
+                  )
+                }
+                
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      // Close menu on mobile when nav item clicked
+                      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                        setMenuOpen(false)
+                      }
+                    }}
+                    className={`
+                      flex items-center px-3 py-2 mb-1 rounded transition-colors
+                      ${!menuOpen ? 'justify-center' : ''}
+                      ${isActive ? 'bg-gray-200' : 'hover:bg-gray-200'}
+                    `}
+                    title={!menuOpen ? item.label : undefined}
+                  >
+                    <Icon 
+                      size={16} 
+                      className={`flex-shrink-0 ${isActive ? 'text-luxury-black' : 'text-luxury-gray-1'}`}
+                      strokeWidth={1.5}
+                    />
+                    {menuOpen && (
+                      <span className={`ml-2 text-base font-semibold ${isActive ? 'text-luxury-black' : 'text-luxury-gray-1'}`} style={{ fontWeight: '600' }}>
+                        {item.label}
+                      </span>
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* User Info at Bottom - Fixed with flexbox */}

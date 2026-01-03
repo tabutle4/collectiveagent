@@ -1,0 +1,267 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+// GET - Get single team agreement
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createClient()
+    const { id } = params
+    
+    const { data, error } = await supabase
+      .from('team_agreements')
+      .select(`
+        *,
+        team_lead:users!team_agreements_team_lead_id_fkey(
+          id,
+          preferred_first_name,
+          preferred_last_name,
+          first_name,
+          last_name
+        ),
+        team_members(
+          *,
+          agent:users!team_members_agent_id_fkey(
+            id,
+            preferred_first_name,
+            preferred_last_name,
+            first_name,
+            last_name
+          )
+        )
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (error) {
+      throw error
+    }
+    
+    return NextResponse.json({ agreement: data })
+  } catch (error: any) {
+    console.error('Error fetching team agreement:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to fetch team agreement' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT - Update team agreement
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createClient()
+    const { id } = params
+    const body = await request.json()
+    
+    const {
+      team_name,
+      team_lead_id,
+      effective_date,
+      expiration_date,
+      status,
+      agreement_document_url,
+      notes,
+      team_members,
+    } = body
+    
+    // Validation (same as POST)
+    if (!team_name || !team_lead_id || !effective_date) {
+      return NextResponse.json(
+        { error: 'Team name, team lead, and effective date are required' },
+        { status: 400 }
+      )
+    }
+    
+    if (!team_members || team_members.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one team member is required' },
+        { status: 400 }
+      )
+    }
+    
+    // Check if team lead is in members
+    const teamLeadInMembers = team_members.some(
+      (m: any) => m.agent_id === team_lead_id
+    )
+    if (!teamLeadInMembers) {
+      return NextResponse.json(
+        { error: 'Team lead must be one of the team members' },
+        { status: 400 }
+      )
+    }
+    
+    // Validate splits
+    for (const member of team_members) {
+      const splits = [
+        member.split_from_team_lead,
+        member.split_from_own_lead,
+        member.split_from_firm_lead,
+      ]
+      
+      for (const split of splits) {
+        if (split) {
+          const total =
+            (split.agent_percent || 0) +
+            (split.team_lead_percent || 0) +
+            (split.firm_percent || 0)
+          if (Math.abs(total - 100) > 0.01) {
+            return NextResponse.json(
+              {
+                error: `Splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+              },
+              { status: 400 }
+            )
+          }
+        }
+      }
+    }
+    
+    // Check for duplicate agents
+    const agentIds = team_members.map((m: any) => m.agent_id)
+    const uniqueIds = new Set(agentIds)
+    if (agentIds.length !== uniqueIds.size) {
+      return NextResponse.json(
+        { error: 'Cannot have duplicate agents on the same team' },
+        { status: 400 }
+      )
+    }
+    
+    // Get current user for updated_by
+    const userStr = request.headers.get('x-user')
+    let updated_by = null
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr)
+        updated_by = user.id
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    // Update team agreement
+    const { error: agreementError } = await supabase
+      .from('team_agreements')
+      .update({
+        team_name,
+        team_lead_id,
+        effective_date,
+        expiration_date: expiration_date || null,
+        status: status || 'active',
+        agreement_document_url: agreement_document_url || null,
+        notes: notes || null,
+        updated_by,
+      })
+      .eq('id', id)
+    
+    if (agreementError) {
+      throw agreementError
+    }
+    
+    // Delete existing members
+    const { error: deleteError } = await supabase
+      .from('team_members')
+      .delete()
+      .eq('team_agreement_id', id)
+    
+    if (deleteError) {
+      throw deleteError
+    }
+    
+    // Insert updated members
+    const membersToInsert = team_members.map((member: any) => ({
+      team_agreement_id: id,
+      agent_id: member.agent_id,
+      is_team_lead: member.is_team_lead || false,
+      joined_date: member.joined_date || effective_date,
+      left_date: member.left_date || null,
+      split_from_team_lead: member.split_from_team_lead || null,
+      split_from_own_lead: member.split_from_own_lead || null,
+      split_from_firm_lead: member.split_from_firm_lead || null,
+    }))
+    
+    const { error: membersError } = await supabase
+      .from('team_members')
+      .insert(membersToInsert)
+    
+    if (membersError) {
+      throw membersError
+    }
+    
+    // Fetch complete agreement
+    const { data: completeAgreement, error: fetchError } = await supabase
+      .from('team_agreements')
+      .select(`
+        *,
+        team_lead:users!team_agreements_team_lead_id_fkey(
+          id,
+          preferred_first_name,
+          preferred_last_name,
+          first_name,
+          last_name
+        ),
+        team_members(
+          *,
+          agent:users!team_members_agent_id_fkey(
+            id,
+            preferred_first_name,
+            preferred_last_name,
+            first_name,
+            last_name
+          )
+        )
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (fetchError) {
+      throw fetchError
+    }
+    
+    return NextResponse.json({
+      success: true,
+      agreement: completeAgreement,
+    })
+  } catch (error: any) {
+    console.error('Error updating team agreement:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to update team agreement' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE - Delete team agreement
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const supabase = createClient()
+    const { id } = params
+    
+    // Delete will cascade to team_members
+    const { error } = await supabase
+      .from('team_agreements')
+      .delete()
+      .eq('id', id)
+    
+    if (error) {
+      throw error
+    }
+    
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Error deleting team agreement:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to delete team agreement' },
+      { status: 500 }
+    )
+  }
+}
+
