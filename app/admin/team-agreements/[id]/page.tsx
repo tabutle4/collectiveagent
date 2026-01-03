@@ -287,17 +287,29 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
   ) => {
     setTeamMembers(prev => {
       const updated = [...prev]
-      const splitKey = transactionType === 'sales' 
-        ? `sales_split_${source}` as keyof TeamMember
-        : `lease_split_${source}` as keyof TeamMember
+      const member = { ...updated[index] }
       
-      if (!updated[index][splitKey]) {
-        updated[index][splitKey] = { agent_percent: 0, team_lead_percent: 0, firm_percent: 0 }
+      if (transactionType === 'sales') {
+        const splitKey = `sales_split_${source}` as 'sales_split_from_team_lead' | 'sales_split_from_own_lead' | 'sales_split_from_firm_lead'
+        if (!member[splitKey]) {
+          member[splitKey] = { agent_percent: 0, team_lead_percent: 0, firm_percent: 0 }
+        }
+        member[splitKey] = {
+          ...(member[splitKey] || { agent_percent: 0, team_lead_percent: 0, firm_percent: 0 }),
+          [field]: value,
+        }
+      } else {
+        const splitKey = `lease_split_${source}` as 'lease_split_from_team_lead' | 'lease_split_from_own_lead' | 'lease_split_from_firm_lead'
+        if (!member[splitKey]) {
+          member[splitKey] = { agent_percent: 0, team_lead_percent: 0, firm_percent: 0 }
+        }
+        member[splitKey] = {
+          ...(member[splitKey] || { agent_percent: 0, team_lead_percent: 0, firm_percent: 0 }),
+          [field]: value,
+        }
       }
-      updated[index][splitKey] = {
-        ...(updated[index][splitKey] as Split),
-        [field]: value,
-      }
+      
+      updated[index] = member
       return updated
     })
     setError(null)
