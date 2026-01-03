@@ -169,7 +169,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           if (m.splits) {
             splits = m.splits
             // Migrate old lease structure to new structure if needed
-            if (splits && splits.lease && !splits.lease.standard && !splits.lease.custom) {
+            if (splits.lease && !('standard' in splits.lease) && !('custom' in splits.lease)) {
               // Old structure: lease is direct object, migrate to lease.standard
               splits = {
                 ...splits,
@@ -180,11 +180,23 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
               }
             }
             // Ensure custom plans exist
-            if (splits && !splits.sales?.custom) {
-              splits.sales = { ...splits.sales, custom: splitTemplates.sales.custom }
+            if (!splits.sales?.custom) {
+              splits = {
+                ...splits,
+                sales: {
+                  ...splits.sales,
+                  custom: splitTemplates.sales.custom,
+                },
+              }
             }
-            if (splits && !splits.lease?.custom) {
-              splits.lease = { ...splits.lease, custom: splitTemplates.lease.custom }
+            if (!splits.lease?.custom) {
+              splits = {
+                ...splits,
+                lease: {
+                  ...splits.lease,
+                  custom: splitTemplates.lease.custom,
+                },
+              }
             }
           } else {
             // Migrate from old structure if needed
