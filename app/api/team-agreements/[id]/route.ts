@@ -85,26 +85,27 @@ export async function PUT(
       )
     }
     
-    // Check if team lead is in members
+    // Check that team lead is NOT in members
     const teamLeadInMembers = team_members.some(
       (m: any) => m.agent_id === team_lead_id
     )
-    if (!teamLeadInMembers) {
+    if (teamLeadInMembers) {
       return NextResponse.json(
-        { error: 'Team lead must be one of the team members' },
+        { error: 'Team lead cannot be added as a team member. The team lead is separate from team members.' },
         { status: 400 }
       )
     }
     
     // Validate splits
     for (const member of team_members) {
-      const splits = [
-        member.split_from_team_lead,
-        member.split_from_own_lead,
-        member.split_from_firm_lead,
+      // Validate sales splits
+      const salesSplits = [
+        member.sales_split_from_team_lead,
+        member.sales_split_from_own_lead,
+        member.sales_split_from_firm_lead,
       ]
       
-      for (const split of splits) {
+      for (const split of salesSplits) {
         if (split) {
           const total =
             (split.agent_percent || 0) +
@@ -113,7 +114,31 @@ export async function PUT(
           if (Math.abs(total - 100) > 0.01) {
             return NextResponse.json(
               {
-                error: `Splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+                error: `Sales splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+              },
+              { status: 400 }
+            )
+          }
+        }
+      }
+      
+      // Validate lease splits
+      const leaseSplits = [
+        member.lease_split_from_team_lead,
+        member.lease_split_from_own_lead,
+        member.lease_split_from_firm_lead,
+      ]
+      
+      for (const split of leaseSplits) {
+        if (split) {
+          const total =
+            (split.agent_percent || 0) +
+            (split.team_lead_percent || 0) +
+            (split.firm_percent || 0)
+          if (Math.abs(total - 100) > 0.01) {
+            return NextResponse.json(
+              {
+                error: `Lease splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
               },
               { status: 400 }
             )
@@ -177,12 +202,16 @@ export async function PUT(
     const membersToInsert = team_members.map((member: any) => ({
       team_agreement_id: id,
       agent_id: member.agent_id,
-      is_team_lead: member.is_team_lead || false,
+      is_team_lead: false, // Team lead is separate, members are never team lead
       joined_date: member.joined_date || effective_date,
       left_date: member.left_date || null,
-      split_from_team_lead: member.split_from_team_lead || null,
-      split_from_own_lead: member.split_from_own_lead || null,
-      split_from_firm_lead: member.split_from_firm_lead || null,
+      sales_split_from_team_lead: member.sales_split_from_team_lead || null,
+      sales_split_from_own_lead: member.sales_split_from_own_lead || null,
+      sales_split_from_firm_lead: member.sales_split_from_firm_lead || null,
+      lease_split_from_team_lead: member.lease_split_from_team_lead || null,
+      lease_split_from_own_lead: member.lease_split_from_own_lead || null,
+      lease_split_from_firm_lead: member.lease_split_from_firm_lead || null,
+      commission_plan_template: member.commission_plan_template || null,
     }))
     
     const { error: membersError } = await supabase
