@@ -177,11 +177,23 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         console.log('Loaded agreement:', agreement)
         
         setAgreementData(agreement) // Store full agreement data for view mode
+        
+        // Parse dates - handle both ISO strings and date-only strings (YYYY-MM-DD)
+        const parseDate = (dateStr: string | null | undefined): string => {
+          if (!dateStr) return ''
+          // If it's already in YYYY-MM-DD format, use it directly
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            return dateStr
+          }
+          // Otherwise, try to parse ISO string and extract date part
+          return dateStr.split('T')[0]
+        }
+        
         setFormData({
           team_name: agreement.team_name || '',
           team_lead_id: sanitizeUUID(agreement.team_lead_id),
-          effective_date: agreement.effective_date ? agreement.effective_date.split('T')[0] : '',
-          expiration_date: agreement.expiration_date ? agreement.expiration_date.split('T')[0] : '',
+          effective_date: parseDate(agreement.effective_date),
+          expiration_date: parseDate(agreement.expiration_date),
           status: agreement.status || 'active',
           agreement_document_url: agreement.agreement_document_url || '',
           notes: agreement.notes || '',
