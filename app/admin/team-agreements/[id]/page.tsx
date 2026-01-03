@@ -58,10 +58,11 @@ interface TeamMember {
   id?: string
   agent_id: string
   agent_name?: string
-  is_team_lead: boolean
   joined_date: string
   left_date: string | null
   splits: SplitsData | null
+  active_sales_plan?: 'new_agent' | 'no_cap' | 'cap' | 'custom'
+  active_lease_plan?: 'standard' | 'custom'
   // UI state: which sections are expanded (accordion)
   expandedSections?: {
     sales_new_agent?: boolean
@@ -198,10 +199,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             agent_name: m.agent?.preferred_first_name && m.agent?.preferred_last_name
               ? `${m.agent.preferred_first_name} ${m.agent.preferred_last_name}`
               : `${m.agent?.first_name} ${m.agent?.last_name}`,
-            is_team_lead: m.is_team_lead || false,
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
             splits: splits,
+            active_sales_plan: (m.active_sales_plan || 'no_cap') as 'new_agent' | 'no_cap' | 'cap' | 'custom',
+            active_lease_plan: (m.active_lease_plan || 'standard') as 'standard' | 'custom',
             expandedSections: {
               sales_new_agent: true, // Default: expanded
               sales_no_cap: false,
@@ -367,10 +369,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
   const addTeamMember = () => {
     setTeamMembers(prev => [...prev, {
       agent_id: '',
-      is_team_lead: false,
       joined_date: formData.effective_date || new Date().toISOString().split('T')[0],
       left_date: null,
       splits: initializeSplits(),
+      active_sales_plan: 'no_cap',
+      active_lease_plan: 'standard',
       expandedSections: {
         sales_new_agent: true, // Default: expanded
         sales_no_cap: false,
@@ -658,10 +661,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         notes: formData.notes || null,
         team_members: teamMembers.map(m => ({
           agent_id: m.agent_id,
-          is_team_lead: false, // Team lead is separate, members are never team lead
           joined_date: m.joined_date || formData.effective_date,
           left_date: m.left_date || null,
           splits: m.splits || initializeSplits(),
+          active_sales_plan: m.active_sales_plan || 'no_cap',
+          active_lease_plan: m.active_lease_plan || 'standard',
         })),
       }
       

@@ -27,7 +27,6 @@ interface TeamAgreement {
   team_members: Array<{
     id: string
     agent_id: string
-    is_team_lead: boolean
     joined_date: string
     left_date: string | null
     agent: {

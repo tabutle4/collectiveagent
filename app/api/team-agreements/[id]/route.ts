@@ -218,10 +218,11 @@ export async function PUT(
     const membersToInsert = team_members.map((member: any) => ({
       team_agreement_id: id,
       agent_id: member.agent_id,
-      is_team_lead: false, // Team lead is separate, members are never team lead
       joined_date: member.joined_date || effective_date,
       left_date: member.left_date || null,
       splits: member.splits || null,
+      active_sales_plan: member.active_sales_plan || 'no_cap',
+      active_lease_plan: member.active_lease_plan || 'standard',
     }))
     
     const { error: membersError } = await supabase
