@@ -329,6 +329,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       revenue_share: parseRevenueShare(freshUser?.revenue_share),
       referring_agent: freshUser?.referring_agent || '',
       job_title: freshUser?.job_title || '',
+      onedrive_folder_url: freshUser?.onedrive_folder_url || '',
       shirt_type: freshUser?.shirt_type || '',
       shirt_size: freshUser?.shirt_size || '',
       is_active: freshUser?.is_active ?? true,
@@ -1220,6 +1221,32 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     readOnly={!isAdmin}
                     disabled={!isAdmin}
                   />
+                </div>
+                {/* Personal Documents Folder */}
+                <div className="md:col-span-2">
+                  <label className="text-sm text-luxury-gray-2 mb-1 block">
+                    Personal Documents Folder
+                  </label>
+                  {isAdmin ? (
+                    <input
+                      type="url"
+                      value={formData.onedrive_folder_url || ''}
+                      onChange={(e) => handleInputChange('onedrive_folder_url', e.target.value)}
+                      placeholder="https://collectiverealtyco-my.sharepoint.com/..."
+                      className="input-luxury"
+                    />
+                  ) : formData.onedrive_folder_url ? (
+                    <a
+                      href={formData.onedrive_folder_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-luxury-black underline inline-flex items-center gap-1"
+                    >
+                      📁 View My Documents
+                    </a>
+                  ) : (
+                    <p className="text-luxury-gray-2">No folder set</p>
+                  )}
                 </div>
               </div>
 
