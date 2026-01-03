@@ -153,12 +153,16 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
 
   const loadAgreement = async () => {
     setLoading(true)
+    setError(null)
     try {
       const response = await fetch(`/api/team-agreements/${params.id}`)
       const data = await response.json()
       
+      console.log('API Response:', { status: response.status, data })
+      
       if (response.ok && data.agreement) {
         const agreement = data.agreement
+        console.log('Loaded agreement:', agreement)
         setAgreementData(agreement) // Store full agreement data for view mode
         setFormData({
           team_name: agreement.team_name || '',
@@ -220,8 +224,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           }
         })
         setTeamMembers(members)
+        console.log('Loaded team members:', members)
       } else {
-        setError(data.error || 'Failed to load agreement')
+        const errorMsg = data.error || 'Failed to load agreement'
+        console.error('API Error:', errorMsg, data)
+        setError(errorMsg)
       }
     } catch (error: any) {
       console.error('Error loading agreement:', error)
