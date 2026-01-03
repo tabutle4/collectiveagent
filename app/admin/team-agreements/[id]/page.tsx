@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, X, AlertCircle, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
@@ -86,12 +86,17 @@ interface TeamAgreement {
   team_members: TeamMember[]
 }
 
-export default function TeamAgreementFormPage({ params }: { params: { id: string } }) {
+export default function TeamAgreementFormPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const isEdit = params.id !== 'new' && searchParams.get('edit') === 'true'
-  const isNew = params.id === 'new'
-  const isView = params.id !== 'new' && !isEdit
+  
+  // Handle both Promise and sync params (Next.js 15+ vs 14)
+  const resolvedParams = typeof params === 'object' && 'then' in params ? use(params) : params
+  const id = resolvedParams.id
+  
+  const isEdit = id !== 'new' && searchParams.get('edit') === 'true'
+  const isNew = id === 'new'
+  const isView = id !== 'new' && !isEdit
   
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -128,7 +133,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       }
       setUser(userData)
       loadAgents()
-      if (!isNew) {
+      if (id && id !== 'new') {
         loadAgreement()
       } else {
         setLoading(false)
@@ -137,7 +142,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       console.error('Error parsing user data:', error)
       router.push('/auth/login')
     }
-  }, [router, params.id, isNew])
+  }, [router, id, isNew])
 
   const loadAgents = async () => {
     try {
@@ -163,7 +168,12 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         return typeof value === 'string' ? value.trim() : String(value)
       }
       
-      const response = await fetch(`/api/team-agreements/${params.id}`)
+      if (!id || id === 'new') {
+        setLoading(false)
+        return
+      }
+      
+      const response = await fetch(`/api/team-agreements/${id}`)
       const data = await response.json()
       
       console.log('API Response:', { status: response.status, data })
@@ -723,7 +733,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           })),
       }
       
-      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${params.id}`
+      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${id}`
       const method = isNew ? 'POST' : 'PUT'
       
       const response = await fetch(url, {
@@ -803,7 +813,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
               {agreementData?.team_name || formData.team_name || 'Team Agreement Details'}
             </h1>
             <Link
-              href={`/admin/team-agreements/${params.id}?edit=true`}
+              href={`/admin/team-agreements/${id}?edit=true`}
               className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block"
             >
               Edit Agreement
@@ -814,6 +824,16 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         {/* Basic Info */}
         <div className="card-section mb-6">
           <h2 className="text-lg font-medium text-luxury-black mb-4">Basic Information</h2>
+          {(() => {
+            console.log('Rendering view, agreementData:', agreementData)
+            console.log('formData:', formData)
+            console.log('teamMembers:', teamMembers)
+            console.log('teamMembers.length:', teamMembers.length)
+            console.log('agreementData?.team_name:', agreementData?.team_name)
+            console.log('agreementData?.team_lead_name:', agreementData?.team_lead_name)
+            console.log('agreementData?.effective_date:', agreementData?.effective_date)
+            return null
+          })()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-luxury-gray-2">Team Name</label>
