@@ -913,12 +913,14 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                         </p>
                       </div>
                       {member.left_date && (
-                        <div>
-                          <label className="text-luxury-gray-2">Left Date</label>
-                          <p className="text-luxury-black">
-                            {new Date(member.left_date).toLocaleDateString()}
-                          </p>
-                        </div>
+                      <div>
+                        <label className="text-luxury-gray-2">Left Date</label>
+                        <p className="text-luxury-black">
+                          {member.left_date 
+                            ? new Date(member.left_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                            : 'N/A'}
+                        </p>
+                      </div>
                       )}
                     </div>
                     {/* Splits */}
