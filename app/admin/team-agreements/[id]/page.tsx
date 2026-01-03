@@ -623,10 +623,10 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     plan: 'new_agent' | 'no_cap' | 'cap' | 'custom' | 'standard' | null,
     source: 'team_lead' | 'own' | 'firm'
   ): number | undefined => {
-    if (transactionType === 'lease' && plan) {
+    if (transactionType === 'lease' && plan && (plan === 'standard' || plan === 'custom')) {
       return minFirmPercentages.lease[plan]?.[source]
     }
-    if (transactionType === 'sales' && plan) {
+    if (transactionType === 'sales' && plan && (plan === 'new_agent' || plan === 'no_cap' || plan === 'cap' || plan === 'custom')) {
       return minFirmPercentages.sales[plan]?.[source]
     }
     return undefined
