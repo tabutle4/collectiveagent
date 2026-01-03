@@ -128,7 +128,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       }
       setUser(userData)
       loadAgents()
-      if (!isNew) {
+      if (resolvedParams && resolvedParams.id !== 'new') {
         loadAgreement()
       } else {
         setLoading(false)
@@ -137,7 +137,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       console.error('Error parsing user data:', error)
       router.push('/auth/login')
     }
-  }, [router, params.id])
+  }, [router, resolvedParams])
 
   const loadAgents = async () => {
     try {
@@ -155,18 +155,36 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/team-agreements/${params.id}`)
+      if (!resolvedParams || !resolvedParams.id || resolvedParams.id === 'new') {
+        setLoading(false)
+        return
+      }
+      
+      const response = await fetch(`/api/team-agreements/${resolvedParams.id}`)
       const data = await response.json()
       
       console.log('API Response:', { status: response.status, data })
       
-      if (response.ok && data.agreement) {
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to load agreement: ${response.status}`)
+      }
+      
+      if (data.agreement) {
         const agreement = data.agreement
         console.log('Loaded agreement:', agreement)
+        
+        // Sanitize UUID values to prevent "undefined" string errors
+        const sanitizeUUID = (value: any): string => {
+          if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+            return ''
+          }
+          return typeof value === 'string' ? value.trim() : String(value)
+        }
+        
         setAgreementData(agreement) // Store full agreement data for view mode
         setFormData({
           team_name: agreement.team_name || '',
-          team_lead_id: agreement.team_lead_id || '',
+          team_lead_id: sanitizeUUID(agreement.team_lead_id),
           effective_date: agreement.effective_date ? agreement.effective_date.split('T')[0] : '',
           expiration_date: agreement.expiration_date ? agreement.expiration_date.split('T')[0] : '',
           status: agreement.status || 'active',
@@ -204,9 +222,17 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             ? `${m.agent.preferred_first_name || m.agent.first_name || ''} ${m.agent.preferred_last_name || m.agent.last_name || ''}`.trim()
             : ''
           
+          // Sanitize agent_id to prevent "undefined" string errors
+          const sanitizeUUID = (value: any): string => {
+            if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+              return ''
+            }
+            return typeof value === 'string' ? value.trim() : String(value)
+          }
+          
           return {
             id: m.id,
-            agent_id: m.agent_id,
+            agent_id: sanitizeUUID(m.agent_id),
             agent_name: agentName,
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
@@ -226,9 +252,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         setTeamMembers(members)
         console.log('Loaded team members:', members)
       } else {
-        const errorMsg = data.error || 'Failed to load agreement'
-        console.error('API Error:', errorMsg, data)
-        setError(errorMsg)
+        throw new Error('Agreement data not found in response')
       }
     } catch (error: any) {
       console.error('Error loading agreement:', error)
@@ -695,7 +719,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           })),
       }
       
-      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${params.id}`
+      const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${agreementId}`
       const method = isNew ? 'POST' : 'PUT'
       
       const response = await fetch(url, {
@@ -775,7 +799,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
               {formData.team_name || 'Team Agreement Details'}
             </h1>
             <Link
-              href={`/admin/team-agreements/${params.id}?edit=true`}
+              href={`/admin/team-agreements/${agreementId}?edit=true`}
               className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block"
             >
               Edit Agreement
