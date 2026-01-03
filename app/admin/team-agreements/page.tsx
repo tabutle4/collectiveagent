@@ -162,9 +162,9 @@ export default function TeamAgreementsPage() {
         </div>
         <Link
           href="/admin/team-agreements/new"
-          className="btn-black flex items-center gap-2"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-flex items-center gap-2"
         >
-          <Plus size={18} />
+          <Plus size={16} />
           Create New Team Agreement
         </Link>
       </div>
