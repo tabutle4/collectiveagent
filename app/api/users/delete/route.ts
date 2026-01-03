@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     // Verify requesting user is admin
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('roles')
+      .select('role')
       .eq('id', requestingUserId)
       .single()
 
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // Check if user is a prospect (has prospect_status)
     const { data: targetUser, error: targetError } = await supabase
       .from('users')
-      .select('prospect_status, roles')
+      .select('prospect_status, role')
       .eq('id', targetUserId)
       .single()
 

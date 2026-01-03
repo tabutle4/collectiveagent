@@ -70,6 +70,14 @@
       "namedRegex": "^/admin/prospects/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/admin/team-agreements/[id]",
+      "regex": "^/admin/team\\-agreements/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/admin/team\\-agreements/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/campaigns/[id]",
       "regex": "^/api/campaigns/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -100,6 +108,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/email\\-templates/(?<nxtPid>[^/]+?)/duplicate(?:/)?$"
+    },
+    {
+      "page": "/api/team-agreements/[id]",
+      "regex": "^/api/team\\-agreements/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/team\\-agreements/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
       "page": "/campaign/[slug]",
@@ -251,6 +267,18 @@
       "regex": "^/admin/services/coordination(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/admin/services/coordination(?:/)?$"
+    },
+    {
+      "page": "/admin/team-agreements",
+      "regex": "^/admin/team\\-agreements(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/team\\-agreements(?:/)?$"
+    },
+    {
+      "page": "/admin/team-agreements/new",
+      "regex": "^/admin/team\\-agreements/new(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/admin/team\\-agreements/new(?:/)?$"
     },
     {
       "page": "/admin/transactions",
@@ -683,6 +711,12 @@
       "regex": "^/api/service\\-config/update(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/service\\-config/update(?:/)?$"
+    },
+    {
+      "page": "/api/team-agreements",
+      "regex": "^/api/team\\-agreements(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/team\\-agreements(?:/)?$"
     },
     {
       "page": "/api/users/create",

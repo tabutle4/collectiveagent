@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
         // Try preferred name first (case-insensitive, any status, must have agent role)
         const { data: agentsByPreferred } = await supabase
           .from('users')
-          .select('id, preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone, roles')
+          .select('id, preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone, role')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
           .or('roles.cs.{agent},roles.cs.{Agent}')
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           // Try legal name (case-insensitive, any status, must have agent role)
           const { data: agentsByLegal } = await supabase
             .from('users')
-            .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, roles')
+            .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, role')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
             .or('roles.cs.{agent},roles.cs.{Agent}')
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
       // Fallback: if no agent_name in listing, try to get from agent_id
       const { data: agentData } = await supabase
         .from('users')
-        .select('first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, roles')
+        .select('first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, role')
         .eq('id', coordination.agent_id)
         .single()
       

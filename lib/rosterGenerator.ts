@@ -18,7 +18,7 @@ type AgentRecord = {
   office: string | null
   team_name: string | null
   division: string | null
-  roles: string[] | null
+  role: string | null
   job_title: string | null
   instagram_handle: string | null
   tiktok_handle: string | null
@@ -129,13 +129,10 @@ export const buildTableRows = (agents: AgentRecord[]) =>
     .map((agent, index) => {
       const fullName = formatName(agent)
       const officeDisplay = agent.office || 'N/A'
-      const roles = agent.roles || ['Agent']
-      const roleLabel = formatRole(roles[0] || 'Agent')
-      // Filter out 'admin' and 'agent' from additional roles
-      const filteredAdditionalRoles = roles.slice(1).filter(r => {
-        const lowerRole = r.toLowerCase()
-        return lowerRole !== 'admin' && lowerRole !== 'agent'
-      }).map(r => formatRole(r))
+      const role = agent.role || 'Agent'
+      const roleLabel = formatRole(role)
+      // No additional roles with simple role string
+      const filteredAdditionalRoles: string[] = []
       
       // Combine additional roles with job title
       const roleParts: string[] = []
@@ -635,10 +632,10 @@ export const regenerateRoster = async () => {
   const { data: agents, error } = await client
     .from('users')
     .select(
-      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, roles, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
+      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, role, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
     )
     .eq('is_active', true)
-    .contains('roles', ['agent'])
+    .eq('role', 'Agent')
     .order('preferred_first_name', { ascending: true })
     .order('preferred_last_name', { ascending: true })
 
