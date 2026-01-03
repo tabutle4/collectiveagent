@@ -659,15 +659,27 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     setSaving(true)
     
     try {
+      // Helper function to sanitize UUID values
+      const sanitizeUUID = (value: string | null | undefined): string | null => {
+        if (!value || value === 'undefined' || value === '' || value.trim() === '') {
+          return null
+        }
+        return value.trim()
+      }
+      
       const payload = {
         ...formData,
+        team_lead_id: sanitizeUUID(formData.team_lead_id),
         expiration_date: formData.expiration_date || null,
         agreement_document_url: formData.agreement_document_url || null,
         notes: formData.notes || null,
         team_members: teamMembers
-          .filter(m => m.agent_id && m.agent_id.trim() !== '') // Filter out members without agent_id
+          .filter(m => {
+            const agentId = sanitizeUUID(m.agent_id)
+            return agentId !== null && agentId !== 'undefined'
+          })
           .map(m => ({
-            agent_id: m.agent_id,
+            agent_id: sanitizeUUID(m.agent_id)!,
             joined_date: m.joined_date || formData.effective_date,
             left_date: m.left_date || null,
             splits: m.splits || initializeSplits(),

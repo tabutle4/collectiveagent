@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     
     const {
       team_name,
-      team_lead_id,
+      team_lead_id: raw_team_lead_id,
       effective_date,
       expiration_date,
       status,
@@ -93,6 +93,16 @@ export async function POST(request: NextRequest) {
       notes,
       team_members,
     } = body
+    
+    // Sanitize UUID values - convert "undefined" string to null
+    const sanitizeUUID = (value: any): string | null => {
+      if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+        return null
+      }
+      return typeof value === 'string' ? value.trim() : value
+    }
+    
+    const team_lead_id = sanitizeUUID(raw_team_lead_id)
     
     // Validation
     if (!team_name || !team_lead_id || !effective_date) {
@@ -225,7 +235,11 @@ export async function POST(request: NextRequest) {
     
     // Create team members
     const membersToInsert = team_members
-      .filter((member: any) => member.agent_id) // Filter out members without agent_id
+      .map((member: any) => ({
+        ...member,
+        agent_id: sanitizeUUID(member.agent_id),
+      }))
+      .filter((member: any) => member.agent_id !== null && member.agent_id !== 'undefined') // Filter out members without valid agent_id
       .map((member: any) => ({
         team_agreement_id: agreement.id,
         agent_id: member.agent_id,
