@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface Split {
+  agent: number
+  team_lead: number
+  firm: number
+}
+
 // GET - List all team agreements
 export async function GET(request: NextRequest) {
   try {
@@ -127,8 +133,9 @@ export async function POST(request: NextRequest) {
         const planSplits = member.splits.sales?.[plan]
         if (planSplits) {
           for (const [source, split] of Object.entries(planSplits)) {
-            if (split) {
-              const total = (split.agent || 0) + (split.team_lead || 0) + (split.firm || 0)
+            if (split && typeof split === 'object') {
+              const typedSplit = split as Split
+              const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
               if (Math.abs(total - 100) > 0.01) {
                 return NextResponse.json(
                   {
@@ -148,8 +155,9 @@ export async function POST(request: NextRequest) {
         const planSplits = member.splits.lease?.[plan]
         if (planSplits) {
           for (const [source, split] of Object.entries(planSplits)) {
-            if (split) {
-              const total = (split.agent || 0) + (split.team_lead || 0) + (split.firm || 0)
+            if (split && typeof split === 'object') {
+              const typedSplit = split as Split
+              const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
               if (Math.abs(total - 100) > 0.01) {
                 return NextResponse.json(
                   {
