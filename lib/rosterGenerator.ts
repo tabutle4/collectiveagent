@@ -132,10 +132,20 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const roles = agent.roles || ['Agent']
       const roleLabel = formatRole(roles[0] || 'Agent')
       // Filter out 'admin' and 'agent' from additional roles
-      const additionalRoles = roles.slice(1).filter(r => {
+      const filteredAdditionalRoles = roles.slice(1).filter(r => {
         const lowerRole = r.toLowerCase()
         return lowerRole !== 'admin' && lowerRole !== 'agent'
-      }).map(r => formatRole(r)).join(', ') || '-'
+      }).map(r => formatRole(r))
+      
+      // Combine additional roles with job title
+      const roleParts: string[] = []
+      if (filteredAdditionalRoles.length > 0) {
+        roleParts.push(filteredAdditionalRoles.join(', '))
+      }
+      if (agent.job_title && agent.job_title.trim()) {
+        roleParts.push(agent.job_title.trim())
+      }
+      const additionalRoles = roleParts.length > 0 ? roleParts.join(' • ') : '-'
       const team = agent.team_name || '-'
       const phoneDigits = cleanPhone(agent.personal_phone || agent.business_phone)
       const formattedPhone = formatPhone(agent.personal_phone || agent.business_phone)
