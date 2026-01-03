@@ -866,25 +866,27 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                 {formData.expiration_date ? new Date(formData.expiration_date).toLocaleDateString() : 'N/A'}
               </p>
             </div>
-            {formData.agreement_document_url && (
-              <div className="md:col-span-2">
-                <label className="text-sm text-luxury-gray-2">Agreement Document</label>
-                <p>
-                  <a
-                    href={formData.agreement_document_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-luxury-black underline"
-                  >
-                    View Document
-                  </a>
-                </p>
-              </div>
-            )}
             {formData.notes && (
               <div className="md:col-span-2">
                 <label className="text-sm text-luxury-gray-2">Notes</label>
                 <p className="text-luxury-black whitespace-pre-wrap">{formData.notes}</p>
+              </div>
+            )}
+            {/* Team Documents - Only visible to admins and team lead */}
+            {(user?.roles?.includes('admin') || user?.id === agreementData?.team_lead_id) && 
+             agreementData?.agreement_document_url && (
+              <div className="md:col-span-2">
+                <label className="text-sm text-luxury-gray-2">Team Documents</label>
+                <p>
+                  <a
+                    href={agreementData.agreement_document_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-luxury-black underline inline-flex items-center gap-1"
+                  >
+                    📁 View Team Documents
+                  </a>
+                </p>
               </div>
             )}
           </div>
