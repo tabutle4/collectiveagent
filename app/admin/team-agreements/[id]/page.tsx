@@ -795,7 +795,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           </Link>
           <div className="flex items-center justify-between">
             <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
-              {formData.team_name || 'Team Agreement Details'}
+              {agreementData?.team_name || formData.team_name || 'Team Agreement Details'}
             </h1>
             <Link
               href={`/admin/team-agreements/${params.id}?edit=true`}
