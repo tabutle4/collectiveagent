@@ -98,50 +98,51 @@ export async function PUT(
     
     // Validate splits
     for (const member of team_members) {
-      // Validate sales splits
-      const salesSplits = [
-        member.sales_split_from_team_lead,
-        member.sales_split_from_own_lead,
-        member.sales_split_from_firm_lead,
-      ]
+      if (!member.splits) {
+        return NextResponse.json(
+          { error: `Splits are required for team member ${member.agent_id}` },
+          { status: 400 }
+        )
+      }
       
-      for (const split of salesSplits) {
-        if (split) {
-          const total =
-            (split.agent_percent || 0) +
-            (split.team_lead_percent || 0) +
-            (split.firm_percent || 0)
-          if (Math.abs(total - 100) > 0.01) {
-            return NextResponse.json(
-              {
-                error: `Sales splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
-              },
-              { status: 400 }
-            )
+      // Validate all sales plans (including custom)
+      const salesPlans = ['new_agent', 'no_cap', 'cap', 'custom'] as const
+      for (const plan of salesPlans) {
+        const planSplits = member.splits.sales?.[plan]
+        if (planSplits) {
+          for (const [source, split] of Object.entries(planSplits)) {
+            if (split) {
+              const total = (split.agent || 0) + (split.team_lead || 0) + (split.firm || 0)
+              if (Math.abs(total - 100) > 0.01) {
+                return NextResponse.json(
+                  {
+                    error: `Sales ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+                  },
+                  { status: 400 }
+                )
+              }
+            }
           }
         }
       }
       
-      // Validate lease splits
-      const leaseSplits = [
-        member.lease_split_from_team_lead,
-        member.lease_split_from_own_lead,
-        member.lease_split_from_firm_lead,
-      ]
-      
-      for (const split of leaseSplits) {
-        if (split) {
-          const total =
-            (split.agent_percent || 0) +
-            (split.team_lead_percent || 0) +
-            (split.firm_percent || 0)
-          if (Math.abs(total - 100) > 0.01) {
-            return NextResponse.json(
-              {
-                error: `Lease splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
-              },
-              { status: 400 }
-            )
+      // Validate lease splits (standard and custom)
+      const leasePlans = ['standard', 'custom'] as const
+      for (const plan of leasePlans) {
+        const planSplits = member.splits.lease?.[plan]
+        if (planSplits) {
+          for (const [source, split] of Object.entries(planSplits)) {
+            if (split) {
+              const total = (split.agent || 0) + (split.team_lead || 0) + (split.firm || 0)
+              if (Math.abs(total - 100) > 0.01) {
+                return NextResponse.json(
+                  {
+                    error: `Lease ${plan} - ${source} splits must total 100% for ${member.agent_id}. Current total: ${total}%`,
+                  },
+                  { status: 400 }
+                )
+              }
+            }
           }
         }
       }
@@ -205,13 +206,7 @@ export async function PUT(
       is_team_lead: false, // Team lead is separate, members are never team lead
       joined_date: member.joined_date || effective_date,
       left_date: member.left_date || null,
-      sales_split_from_team_lead: member.sales_split_from_team_lead || null,
-      sales_split_from_own_lead: member.sales_split_from_own_lead || null,
-      sales_split_from_firm_lead: member.sales_split_from_firm_lead || null,
-      lease_split_from_team_lead: member.lease_split_from_team_lead || null,
-      lease_split_from_own_lead: member.lease_split_from_own_lead || null,
-      lease_split_from_firm_lead: member.lease_split_from_firm_lead || null,
-      commission_plan_template: member.commission_plan_template || null,
+      splits: member.splits || null,
     }))
     
     const { error: membersError } = await supabase
