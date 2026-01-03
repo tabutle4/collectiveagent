@@ -950,9 +950,9 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                         {/* Splits */}
                         {member.splits && (
                           <div className="space-y-4 mt-4">
-                        {/* Sales Splits */}
-                        <div>
-                          <h4 className="text-sm font-medium text-luxury-black mb-3">Sales Commission Splits</h4>
+                            {/* Sales Splits */}
+                            <div>
+                              <h4 className="text-sm font-medium text-luxury-black mb-3">Sales Commission Splits</h4>
                           {(['new_agent', 'no_cap', 'cap', 'custom'] as const).map(plan => {
                             const planLabel = plan === 'new_agent' ? 'New Agent (70/30)' : plan === 'no_cap' ? 'No Cap (85/15)' : plan === 'cap' ? 'Cap (70/30)' : 'Custom Plan'
                             const planSplits = member.splits?.sales?.[plan]
@@ -983,13 +983,13 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                 })}
                               </div>
                             )
-                          })}
-                        </div>
+                              })}
+                            </div>
 
-                        {/* Lease Splits */}
-                        {member.splits.lease && (
-                          <div>
-                            <h4 className="text-sm font-medium text-luxury-black mb-3">Lease Commission Splits</h4>
+                            {/* Lease Splits */}
+                            {member.splits.lease && (
+                              <div>
+                                <h4 className="text-sm font-medium text-luxury-black mb-3">Lease Commission Splits</h4>
                             {(['standard', 'custom'] as const).map(plan => {
                               const planLabel = plan === 'standard' ? 'Standard (85/15)' : 'Custom Plan'
                               const planSplits = member.splits?.lease?.[plan]
@@ -1020,7 +1020,9 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   })}
                                 </div>
                               )
-                            })}
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
