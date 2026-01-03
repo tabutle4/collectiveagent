@@ -664,14 +664,16 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         expiration_date: formData.expiration_date || null,
         agreement_document_url: formData.agreement_document_url || null,
         notes: formData.notes || null,
-        team_members: teamMembers.map(m => ({
-          agent_id: m.agent_id,
-          joined_date: m.joined_date || formData.effective_date,
-          left_date: m.left_date || null,
-          splits: m.splits || initializeSplits(),
-          active_sales_plan: m.active_sales_plan || 'no_cap',
-          active_lease_plan: m.active_lease_plan || 'standard',
-        })),
+        team_members: teamMembers
+          .filter(m => m.agent_id && m.agent_id.trim() !== '') // Filter out members without agent_id
+          .map(m => ({
+            agent_id: m.agent_id,
+            joined_date: m.joined_date || formData.effective_date,
+            left_date: m.left_date || null,
+            splits: m.splits || initializeSplits(),
+            active_sales_plan: m.active_sales_plan || 'no_cap',
+            active_lease_plan: m.active_lease_plan || 'standard',
+          })),
       }
       
       const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${params.id}`

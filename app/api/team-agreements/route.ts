@@ -224,15 +224,25 @@ export async function POST(request: NextRequest) {
     }
     
     // Create team members
-    const membersToInsert = team_members.map((member: any) => ({
-      team_agreement_id: agreement.id,
-      agent_id: member.agent_id,
-      joined_date: member.joined_date || effective_date,
-      left_date: member.left_date || null,
-      splits: member.splits || null,
-      active_sales_plan: member.active_sales_plan || 'no_cap',
-      active_lease_plan: member.active_lease_plan || 'standard',
-    }))
+    const membersToInsert = team_members
+      .filter((member: any) => member.agent_id) // Filter out members without agent_id
+      .map((member: any) => ({
+        team_agreement_id: agreement.id,
+        agent_id: member.agent_id,
+        joined_date: member.joined_date || effective_date,
+        left_date: member.left_date || null,
+        splits: member.splits || null,
+        active_sales_plan: member.active_sales_plan || 'no_cap',
+        active_lease_plan: member.active_lease_plan || 'standard',
+      }))
+    
+    // Validate that we have members to insert
+    if (membersToInsert.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one team member with a valid agent ID is required' },
+        { status: 400 }
+      )
+    }
     
     const { error: membersError } = await supabase
       .from('team_members')
