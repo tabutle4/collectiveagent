@@ -155,9 +155,12 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     setLoading(true)
     setError(null)
     try {
-      if (!params.id || params.id === 'new') {
-        setLoading(false)
-        return
+      // Sanitize UUID helper function
+      const sanitizeUUID = (value: any): string => {
+        if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+          return ''
+        }
+        return typeof value === 'string' ? value.trim() : String(value)
       }
       
       const response = await fetch(`/api/team-agreements/${params.id}`)
@@ -172,14 +175,6 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       if (data.agreement) {
         const agreement = data.agreement
         console.log('Loaded agreement:', agreement)
-        
-        // Sanitize UUID values to prevent "undefined" string errors
-        const sanitizeUUID = (value: any): string => {
-          if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
-            return ''
-          }
-          return typeof value === 'string' ? value.trim() : String(value)
-        }
         
         setAgreementData(agreement) // Store full agreement data for view mode
         setFormData({
@@ -221,14 +216,6 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           const agentName = m.agent
             ? `${m.agent.preferred_first_name || m.agent.first_name || ''} ${m.agent.preferred_last_name || m.agent.last_name || ''}`.trim()
             : ''
-          
-          // Sanitize agent_id to prevent "undefined" string errors
-          const sanitizeUUID = (value: any): string => {
-            if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
-              return ''
-            }
-            return typeof value === 'string' ? value.trim() : String(value)
-          }
           
           return {
             id: m.id,
