@@ -858,15 +858,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-luxury-gray-2">Referring Agent</label>
-                  <input
-                    className="input-luxury"
-                    value={formData.referring_agent}
-                    onChange={(e) => handleInputChange('referring_agent', e.target.value)}
-                    placeholder="Name of agent who referred them"
-                  />
-                </div>
-                <div>
                   <label className="text-sm text-luxury-gray-2">Birth Month</label>
                   <select
                     className="select-luxury"
@@ -1205,6 +1196,17 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                   </div>
                 )}
+                <div>
+                  <label className="text-sm text-luxury-gray-2">Referring Agent</label>
+                  <input
+                    className="input-luxury"
+                    value={formData.referring_agent}
+                    onChange={(e) => handleInputChange('referring_agent', e.target.value)}
+                    placeholder="Name of agent who referred them"
+                    readOnly={!isAdmin}
+                    disabled={!isAdmin}
+                  />
+                </div>
               </div>
 
               <div className="border-t border-luxury-gray-5 pt-4">
