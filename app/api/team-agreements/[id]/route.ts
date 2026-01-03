@@ -4,11 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 // GET - Get single team agreement
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     const { data, error } = await supabase
       .from('team_agreements')
@@ -52,11 +52,11 @@ export async function GET(
 // PUT - Update team agreement
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     
     const {
@@ -239,11 +239,11 @@ export async function PUT(
 // DELETE - Delete team agreement
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     
     // Delete will cascade to team_members
     const { error } = await supabase
