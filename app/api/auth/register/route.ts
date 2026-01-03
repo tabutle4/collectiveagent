@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         last_name,
         preferred_first_name,
         preferred_last_name,
-        roles: ['admin'], // First user gets admin role
+        roles: ['Admin'], // First user gets Admin role (capital A to match database schema)
         is_active: true,
       })
       .select()

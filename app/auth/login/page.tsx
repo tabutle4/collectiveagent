@@ -37,9 +37,10 @@ export default function LoginPage() {
       
       // Redirect based on user role
       const userRoles = data.user.roles || []
-      if (userRoles.includes('admin')) {
+      // Check for 'Admin' (capital A) to match database schema
+      if (userRoles.includes('Admin')) {
         router.push('/admin/dashboard')
-      } else if (userRoles.includes('agent')) {
+      } else if (userRoles.includes('Agent')) {
         router.push('/agent/checklist')
       } else {
         // Default to agent checklist for other roles
