@@ -800,7 +800,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-luxury-gray-2">Team Name</label>
-              <p className="text-luxury-black">{formData.team_name}</p>
+              <p className="text-luxury-black">{agreementData?.team_name || formData.team_name || 'N/A'}</p>
             </div>
             <div>
               <label className="text-sm text-luxury-gray-2">Status</label>
@@ -815,7 +815,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             <div>
               <label className="text-sm text-luxury-gray-2">Effective Date</label>
               <p className="text-luxury-black">
-                {formData.effective_date ? new Date(formData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }) : 'N/A'}
+                {agreementData?.effective_date 
+                  ? new Date(agreementData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                  : formData.effective_date 
+                    ? new Date(formData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                    : 'N/A'}
               </p>
             </div>
             <div>
