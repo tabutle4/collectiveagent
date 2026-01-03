@@ -177,6 +177,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         console.log('Loaded agreement:', agreement)
         
         setAgreementData(agreement) // Store full agreement data for view mode
+        console.log('agreementData set to:', agreement)
+        console.log('team_name:', agreement.team_name)
+        console.log('team_lead_name:', agreement.team_lead_name)
+        console.log('effective_date:', agreement.effective_date)
+        console.log('team_members count:', agreement.team_members?.length || 0)
         
         // Parse dates - handle both ISO strings and date-only strings (YYYY-MM-DD)
         const parseDate = (dateStr: string | null | undefined): string => {
