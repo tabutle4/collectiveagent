@@ -658,7 +658,23 @@ export default function CampaignDetailPage() {
                         )}
                       </td>
                       <td className="py-4 px-4 text-sm">
-                        {response?.commission_plan_2026 || '-'}
+                        {(() => {
+                          // Priority: campaign response > user's current commission plan
+                          if (response?.commission_plan_2026) {
+                            return response.commission_plan_2026
+                          }
+                          
+                          // Get current commission plan from user record
+                          if (agent.commission_plan) {
+                            // Format: "new_agent" -> "New Agent", "no_cap" -> "No Cap", etc.
+                            const plan = agent.commission_plan
+                            return plan.split('_').map((word: string) => 
+                              word.charAt(0).toUpperCase() + word.slice(1)
+                            ).join(' ')
+                          }
+                          
+                          return '-'
+                        })()}
                       </td>
                       <td className="py-4 px-4">
                         {response?.attending_luncheon === true && (
