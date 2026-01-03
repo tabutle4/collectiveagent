@@ -165,10 +165,9 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         // Format team members with new splits structure
         const members = (agreement.team_members || []).map((m: any) => {
           // If splits exist, use them; otherwise initialize with defaults
-          let splits: SplitsData | null = null
+          let splits: SplitsData
           if (m.splits) {
-            splits = m.splits
-            if (!splits) return null // Type guard
+            splits = m.splits as SplitsData
             
             // Migrate old lease structure to new structure if needed
             if (splits.lease && !('standard' in splits.lease) && !('custom' in splits.lease)) {
@@ -306,7 +305,18 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
   }
 
   // Minimum firm percentages for validation (custom plans have no minimums)
-  const minFirmPercentages = {
+  const minFirmPercentages: {
+    sales: {
+      new_agent: { team_lead: number; own: number; firm: number }
+      no_cap: { team_lead: number; own: number; firm: number }
+      cap: { team_lead: number; own: number; firm: number }
+      custom: { team_lead: number; own: number; firm: number }
+    }
+    lease: {
+      standard: { team_lead: number; own: number; firm: number }
+      custom: { team_lead: number; own: number; firm: number }
+    }
+  } = {
     sales: {
       new_agent: {
         team_lead: 20,
@@ -324,9 +334,9 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         firm: 45,
       },
       custom: {
-        team_lead: undefined, // No minimum for custom
-        own: undefined,
-        firm: undefined,
+        team_lead: 0, // No minimum for custom
+        own: 0,
+        firm: 0,
       },
     },
     lease: {
@@ -336,9 +346,9 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
         firm: 25,
       },
       custom: {
-        team_lead: undefined, // No minimum for custom
-        own: undefined,
-        firm: undefined,
+        team_lead: 0, // No minimum for custom
+        own: 0,
+        firm: 0,
       },
     },
   }
