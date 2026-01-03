@@ -521,6 +521,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           commission_plan_other: toNullableString(formData.commission_plan_other),
           revenue_share: stringifyRevenueShare(formData.revenue_share),
           referring_agent: toNullableString(formData.referring_agent),
+          job_title: toNullableString(formData.job_title),
           shirt_type: toNullableString(formData.shirt_type),
           shirt_size: toNullableString(formData.shirt_size),
         }
@@ -592,6 +593,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           commission_plan_other: toNullableString(formData.commission_plan_other),
           revenue_share: stringifyRevenueShare(formData.revenue_share),
           referring_agent: toNullableString(formData.referring_agent),
+          job_title: toNullableString(formData.job_title),
           shirt_type: toNullableString(formData.shirt_type),
           shirt_size: toNullableString(formData.shirt_size),
           roles: normalizeRoles(formData.roles || []),
@@ -1197,6 +1199,17 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                   </div>
                 )}
+                <div>
+                  <label className="text-sm text-luxury-gray-2">Job Title</label>
+                  <input
+                    className="input-luxury"
+                    value={formData.job_title}
+                    onChange={(e) => handleInputChange('job_title', e.target.value)}
+                    placeholder="e.g., Senior Agent, Team Lead, etc."
+                    readOnly={!isAdmin}
+                    disabled={!isAdmin}
+                  />
+                </div>
                 <div>
                   <label className="text-sm text-luxury-gray-2">Referring Agent</label>
                   <input

@@ -19,6 +19,7 @@ type AgentRecord = {
   team_name: string | null
   division: string | null
   roles: string[] | null
+  job_title: string | null
   instagram_handle: string | null
   tiktok_handle: string | null
   threads_handle: string | null
@@ -171,6 +172,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
         `                            data-division="${escapeAttr((division || '').trim().toLowerCase())}"`,
         `                            data-phone="${escapeAttr(phoneDigits)}"`,
         `                            data-birthday="${escapeAttr(birthday.toLowerCase())}"`,
+        `                            data-job-title="${escapeAttr(agent.job_title || '')}"`,
         `                            data-headshot="${escapeAttr(headshotUrl)}"`,
         `                            data-ig="${escapeAttr((social.instagram || '').toLowerCase())}"`,
         `                            data-tiktok="${escapeAttr((social.tiktok || '').toLowerCase())}"`,
@@ -617,7 +619,7 @@ export const regenerateRoster = async () => {
   const { data: agents, error } = await client
     .from('users')
     .select(
-      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
+      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, roles, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
     )
     .eq('is_active', true)
     .contains('roles', ['agent'])
