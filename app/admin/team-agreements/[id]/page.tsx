@@ -158,6 +158,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       
       if (response.ok && data.agreement) {
         const agreement = data.agreement
+        setAgreementData(agreement) // Store full agreement data for view mode
         setFormData({
           team_name: agreement.team_name || '',
           team_lead_id: agreement.team_lead_id || '',
@@ -193,12 +194,15 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             }
           }
           
+          // Get agent name from the agent relation
+          const agentName = m.agent
+            ? `${m.agent.preferred_first_name || m.agent.first_name || ''} ${m.agent.preferred_last_name || m.agent.last_name || ''}`.trim()
+            : ''
+          
           return {
             id: m.id,
             agent_id: m.agent_id,
-            agent_name: m.agent?.preferred_first_name && m.agent?.preferred_last_name
-              ? `${m.agent.preferred_first_name} ${m.agent.preferred_last_name}`
-              : `${m.agent?.first_name} ${m.agent?.last_name}`,
+            agent_name: agentName,
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
             splits: splits,
@@ -772,13 +776,13 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             <div>
               <label className="text-sm text-luxury-gray-2">Team Lead</label>
               <p className="text-luxury-black">
-                {agents.find(a => a.id === formData.team_lead_id)?.displayName || 'N/A'}
+                {agreementData?.team_lead_name || agents.find(a => a.id === formData.team_lead_id)?.displayName || 'N/A'}
               </p>
             </div>
             <div>
               <label className="text-sm text-luxury-gray-2">Effective Date</label>
               <p className="text-luxury-black">
-                {formData.effective_date ? new Date(formData.effective_date).toLocaleDateString() : 'N/A'}
+                {formData.effective_date ? new Date(formData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }) : 'N/A'}
               </p>
             </div>
             <div>
