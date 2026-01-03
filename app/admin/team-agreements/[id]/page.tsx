@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, X, AlertCircle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Plus, X, AlertCircle, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 
 interface Agent {
@@ -62,10 +62,15 @@ interface TeamMember {
   joined_date: string
   left_date: string | null
   splits: SplitsData | null
-  // UI state: which sales plan is currently active for this agent
-  active_sales_plan?: 'new_agent' | 'no_cap' | 'cap' | 'custom'
-  // UI state: which lease plan is currently active for this agent
-  active_lease_plan?: 'standard' | 'custom'
+  // UI state: which sections are expanded (accordion)
+  expandedSections?: {
+    sales_new_agent?: boolean
+    sales_no_cap?: boolean
+    sales_cap?: boolean
+    sales_custom?: boolean
+    lease_standard?: boolean
+    lease_custom?: boolean
+  }
 }
 
 interface TeamAgreement {
@@ -197,8 +202,14 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
             splits: splits,
-            active_sales_plan: (m.active_sales_plan || 'no_cap') as 'new_agent' | 'no_cap' | 'cap' | 'custom',
-            active_lease_plan: (m.active_lease_plan || 'standard') as 'standard' | 'custom',
+            expandedSections: {
+              sales_new_agent: true, // Default: expanded
+              sales_no_cap: false,
+              sales_cap: false,
+              sales_custom: false,
+              lease_standard: true, // Default: expanded
+              lease_custom: false,
+            },
           }
         })
         setTeamMembers(members)
@@ -360,8 +371,14 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       joined_date: formData.effective_date || new Date().toISOString().split('T')[0],
       left_date: null,
       splits: initializeSplits(),
-      active_sales_plan: 'new_agent',
-      active_lease_plan: 'standard',
+      expandedSections: {
+        sales_new_agent: true, // Default: expanded
+        sales_no_cap: false,
+        sales_cap: false,
+        sales_custom: false,
+        lease_standard: true, // Default: expanded
+        lease_custom: false,
+      },
     }])
   }
 
@@ -376,6 +393,29 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       return updated
     })
     setError(null)
+  }
+
+  const toggleSection = (index: number, section: string) => {
+    setTeamMembers(prev => {
+      const updated = [...prev]
+      const member = { ...updated[index] }
+      if (!member.expandedSections) {
+        member.expandedSections = {
+          sales_new_agent: true,
+          sales_no_cap: false,
+          sales_cap: false,
+          sales_custom: false,
+          lease_standard: true,
+          lease_custom: false,
+        }
+      }
+      member.expandedSections = {
+        ...member.expandedSections,
+        [section]: !member.expandedSections[section as keyof typeof member.expandedSections],
+      }
+      updated[index] = member
+      return updated
+    })
   }
 
   const updateSplit = (
@@ -430,12 +470,48 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     setError(null)
   }
 
+  // Check if a plan has any non-zero data
+  const planHasData = (planSplits: any): boolean => {
+    if (!planSplits) return false
+    return Object.values(planSplits).some((split: any) => {
+      if (!split || typeof split !== 'object') return false
+      return (split.agent || 0) + (split.team_lead || 0) + (split.firm || 0) > 0
+    })
+  }
+
+  // Check if a plan is valid (all splits total 100%)
+  const planIsValid = (planSplits: any, plan: string, transactionType: 'sales' | 'lease'): boolean => {
+    if (!planSplits) return true // Empty plans are valid
+    
+    const sources: Array<'team_lead' | 'own' | 'firm'> = ['team_lead', 'own', 'firm']
+    
+    for (const source of sources) {
+      const split = planSplits[source]
+      if (!split) continue
+      
+      const total = getSplitTotal(split)
+      if (Math.abs(total - 100) > 0.01) {
+        return false
+      }
+      
+      // Check minimum firm percentage (skip for custom plans)
+      if (plan !== 'custom') {
+        const minFirm = getMinFirmPercent(transactionType, plan as any, source)
+        if (minFirm !== undefined && split.firm < minFirm) {
+          return false
+        }
+      }
+    }
+    
+    return true
+  }
+
   const validateSplits = (member: TeamMember): string | null => {
     if (!member.splits) {
       return 'Splits must be initialized for all team members'
     }
     
-    // Validate all sales plans (including custom)
+    // Validate all sales plans (only validate custom if it has data)
     const salesPlans: Array<{ plan: 'new_agent' | 'no_cap' | 'cap' | 'custom', label: string }> = [
       { plan: 'new_agent', label: 'Sales - New Agent (70/30)' },
       { plan: 'no_cap', label: 'Sales - No Cap (85/15)' },
@@ -446,6 +522,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     for (const { plan, label } of salesPlans) {
       const planSplits = member.splits.sales?.[plan]
       if (!planSplits) continue
+      
+      // Skip validation for custom plans if they have no data
+      if (plan === 'custom' && !planHasData(planSplits)) {
+        continue
+      }
       
       const sources: Array<{ source: 'team_lead' | 'own' | 'firm', label: string }> = [
         { source: 'team_lead', label: 'Lead from Team Lead' },
@@ -470,7 +551,7 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
       }
     }
     
-    // Validate lease splits (standard and custom)
+    // Validate lease splits (only validate custom if it has data)
     const leasePlans: Array<{ plan: 'standard' | 'custom', label: string }> = [
       { plan: 'standard', label: 'Lease - Standard (85/15)' },
       { plan: 'custom', label: 'Lease - Custom Plan' },
@@ -479,6 +560,11 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
     for (const { plan, label } of leasePlans) {
       const planSplits = member.splits.lease?.[plan]
       if (!planSplits) continue
+      
+      // Skip validation for custom plans if they have no data
+      if (plan === 'custom' && !planHasData(planSplits)) {
+        continue
+      }
       
       const sources: Array<{ source: 'team_lead' | 'own' | 'firm', label: string }> = [
         { source: 'team_lead', label: 'Lead from Team Lead' },
@@ -1076,222 +1162,258 @@ export default function TeamAgreementFormPage({ params }: { params: { id: string
                       </div>
                     </div>
 
-                    {/* Commission Splits with Tabs */}
+                    {/* Commission Splits with Accordion */}
                     <div className="border-t border-luxury-gray-5 pt-6">
-                      {/* Tab Navigation */}
-                      <div className="flex flex-wrap gap-2 mb-6 border-b border-luxury-gray-5">
-                        {/* Sales Tabs */}
+                      <div className="space-y-2">
+                        {/* Sales Plans Accordion */}
                         {[
                           { id: 'sales_new_agent', label: 'Sales - New Agent (70/30)', plan: 'new_agent' as const, type: 'sales' as const },
                           { id: 'sales_no_cap', label: 'Sales - No Cap (85/15)', plan: 'no_cap' as const, type: 'sales' as const },
                           { id: 'sales_cap', label: 'Sales - Cap (70/30)', plan: 'cap' as const, type: 'sales' as const },
                           { id: 'sales_custom', label: 'Sales - Custom Plan', plan: 'custom' as const, type: 'sales' as const },
-                        ].map(tab => {
-                          const currentActive = member.active_sales_plan || 'new_agent'
-                          const isActive = tab.plan === currentActive && member.active_lease_plan === undefined
+                        ].map(({ id, label, plan, type }) => {
+                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? (id === 'sales_new_agent')
+                          const planSplits = member.splits?.sales?.[plan] || splitTemplates.sales[plan]
+                          const isValid = planIsValid(planSplits, plan, type)
+                          const hasData = planHasData(planSplits)
+                          const isCustom = plan === 'custom'
+                          
                           return (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => {
-                                updateTeamMember(index, 'active_sales_plan', tab.plan)
-                                updateTeamMember(index, 'active_lease_plan', undefined)
-                              }}
-                              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                                isActive
-                                  ? 'border-luxury-black text-luxury-black'
-                                  : 'border-transparent text-luxury-gray-2 hover:text-luxury-black'
-                              }`}
-                            >
-                              {tab.label}
-                            </button>
+                            <div key={id} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                              {/* Accordion Header */}
+                              <button
+                                type="button"
+                                onClick={() => toggleSection(index, id)}
+                                className="w-full flex items-center justify-between p-4 bg-white hover:bg-luxury-light transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {isExpanded ? (
+                                    <ChevronDown size={18} className="text-luxury-gray-2" />
+                                  ) : (
+                                    <ChevronRight size={18} className="text-luxury-gray-2" />
+                                  )}
+                                  <span className="text-sm font-medium text-luxury-black">{label}</span>
+                                  {hasData && (
+                                    isValid ? (
+                                      <CheckCircle size={16} className="text-green-600" />
+                                    ) : (
+                                      <X size={16} className="text-red-600" />
+                                    )
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!isCustom) {
+                                      applySalesTemplate(index, plan)
+                                    }
+                                  }}
+                                  disabled={isCustom}
+                                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                    isCustom
+                                      ? 'bg-luxury-gray-5 text-luxury-gray-3 cursor-not-allowed'
+                                      : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                                  }`}
+                                >
+                                  Auto-fill
+                                </button>
+                              </button>
+                              
+                              {/* Accordion Content */}
+                              {isExpanded && (
+                                <div className="p-4 bg-luxury-light border-t border-luxury-gray-5 space-y-4">
+                                  {(['team_lead', 'own', 'firm'] as const).map(source => {
+                                    const split = planSplits[source]
+                                    const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
+                                    const minFirm = getMinFirmPercent(type, plan, source)
+                                    const splitTotal = getSplitTotal(split)
+                                    const splitStatus = getSplitStatus(splitTotal)
+                                    
+                                    return (
+                                      <div key={source} className="bg-white p-4 rounded border border-luxury-gray-5">
+                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
+                                        <div className="grid grid-cols-3 gap-3">
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.agent || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'agent', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.team_lead || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'team_lead', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Firm % {minFirm && !isCustom && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min={minFirm || 0}
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.firm || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'firm', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}>
+                                          <span>Total: {splitTotal.toFixed(1)}%</span>
+                                          {splitStatus.valid ? (
+                                            <CheckCircle size={14} className="text-green-600" />
+                                          ) : (
+                                            <X size={14} className="text-red-600" />
+                                          )}
+                                          {!splitStatus.valid && <span>(Must equal 100%)</span>}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           )
                         })}
-                        {/* Lease Tabs */}
+
+                        {/* Lease Plans Accordion */}
                         {[
                           { id: 'lease_standard', label: 'Leases - Standard (85/15)', plan: 'standard' as const, type: 'lease' as const },
                           { id: 'lease_custom', label: 'Leases - Custom Plan', plan: 'custom' as const, type: 'lease' as const },
-                        ].map(tab => {
-                          const currentActive = member.active_lease_plan || 'standard'
-                          const isActive = tab.plan === currentActive
+                        ].map(({ id, label, plan, type }) => {
+                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? (id === 'lease_standard')
+                          const planSplits = member.splits?.lease?.[plan] || splitTemplates.lease[plan]
+                          const isValid = planIsValid(planSplits, plan, type)
+                          const hasData = planHasData(planSplits)
+                          const isCustom = plan === 'custom'
+                          
                           return (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => {
-                                updateTeamMember(index, 'active_lease_plan', tab.plan)
-                                updateTeamMember(index, 'active_sales_plan', undefined)
-                              }}
-                              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-                                isActive
-                                  ? 'border-luxury-black text-luxury-black'
-                                  : 'border-transparent text-luxury-gray-2 hover:text-luxury-black'
-                              }`}
-                            >
-                              {tab.label}
-                            </button>
+                            <div key={id} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                              {/* Accordion Header */}
+                              <button
+                                type="button"
+                                onClick={() => toggleSection(index, id)}
+                                className="w-full flex items-center justify-between p-4 bg-white hover:bg-luxury-light transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  {isExpanded ? (
+                                    <ChevronDown size={18} className="text-luxury-gray-2" />
+                                  ) : (
+                                    <ChevronRight size={18} className="text-luxury-gray-2" />
+                                  )}
+                                  <span className="text-sm font-medium text-luxury-black">{label}</span>
+                                  {hasData && (
+                                    isValid ? (
+                                      <CheckCircle size={16} className="text-green-600" />
+                                    ) : (
+                                      <X size={16} className="text-red-600" />
+                                    )
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (!isCustom) {
+                                      applyLeaseTemplate(index, plan)
+                                    }
+                                  }}
+                                  disabled={isCustom}
+                                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                    isCustom
+                                      ? 'bg-luxury-gray-5 text-luxury-gray-3 cursor-not-allowed'
+                                      : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                                  }`}
+                                >
+                                  Auto-fill
+                                </button>
+                              </button>
+                              
+                              {/* Accordion Content */}
+                              {isExpanded && (
+                                <div className="p-4 bg-luxury-light border-t border-luxury-gray-5 space-y-4">
+                                  {(['team_lead', 'own', 'firm'] as const).map(source => {
+                                    const split = planSplits[source]
+                                    const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
+                                    const minFirm = getMinFirmPercent(type, plan, source)
+                                    const splitTotal = getSplitTotal(split)
+                                    const splitStatus = getSplitStatus(splitTotal)
+                                    
+                                    return (
+                                      <div key={source} className="bg-white p-4 rounded border border-luxury-gray-5">
+                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
+                                        <div className="grid grid-cols-3 gap-3">
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.agent || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'agent', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.team_lead || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'team_lead', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Firm % {minFirm && !isCustom && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
+                                            </label>
+                                            <input
+                                              type="number"
+                                              min={minFirm || 0}
+                                              max="100"
+                                              step="0.1"
+                                              value={split?.firm || 0}
+                                              onChange={(e) => updateSplit(index, type, plan, source, 'firm', parseFloat(e.target.value) || 0)}
+                                              className="input-luxury text-sm"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}>
+                                          <span>Total: {splitTotal.toFixed(1)}%</span>
+                                          {splitStatus.valid ? (
+                                            <CheckCircle size={14} className="text-green-600" />
+                                          ) : (
+                                            <X size={14} className="text-red-600" />
+                                          )}
+                                          {!splitStatus.valid && <span>(Must equal 100%)</span>}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           )
                         })}
-                      </div>
-
-                      {/* Auto-fill Button (only for non-custom plans) */}
-                      {(() => {
-                        const currentSalesPlan = member.active_sales_plan
-                        const currentLeasePlan = member.active_lease_plan
-                        const isCustom = currentSalesPlan === 'custom' || currentLeasePlan === 'custom'
-                        const isSales = currentSalesPlan && currentSalesPlan !== 'custom'
-                        const isLease = currentLeasePlan && currentLeasePlan !== 'custom'
-                        
-                        if (isCustom) return null
-                        
-                        return (
-                          <div className="mb-4">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isSales && currentSalesPlan) {
-                                  applySalesTemplate(index, currentSalesPlan)
-                                } else if (isLease && currentLeasePlan) {
-                                  applyLeaseTemplate(index, currentLeasePlan)
-                                }
-                              }}
-                              className="px-3 py-2 text-xs md:text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
-                            >
-                              Auto-fill {isSales ? `Sales - ${currentSalesPlan === 'new_agent' ? 'New Agent' : currentSalesPlan === 'no_cap' ? 'No Cap' : 'Cap'}` : 'Lease - Standard'} Splits
-                            </button>
-                          </div>
-                        )
-                      })()}
-
-                      {/* Tab Content */}
-                      <div className="space-y-4">
-                        {(() => {
-                          const currentSalesPlan = member.active_sales_plan
-                          const currentLeasePlan = member.active_lease_plan
-                          
-                          if (currentLeasePlan) {
-                            // Lease splits
-                            const splits = member.splits?.lease?.[currentLeasePlan] || splitTemplates.lease[currentLeasePlan]
-                            return (
-                              <>
-                                {(['team_lead', 'own', 'firm'] as const).map(source => {
-                                  const split = splits[source]
-                                  const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
-                                  const minFirm = getMinFirmPercent('lease', currentLeasePlan, source)
-                                  return (
-                                    <div key={source} className="bg-luxury-light p-4 rounded border border-luxury-gray-5">
-                                      <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
-                                      <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.agent || 0}
-                                            onChange={(e) => updateSplit(index, 'lease', currentLeasePlan, source, 'agent', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.team_lead || 0}
-                                            onChange={(e) => updateSplit(index, 'lease', currentLeasePlan, source, 'team_lead', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">
-                                            Firm % {minFirm && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min={minFirm || 0}
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.firm || 0}
-                                            onChange={(e) => updateSplit(index, 'lease', currentLeasePlan, source, 'firm', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className={`text-xs mt-2 ${getSplitStatus(getSplitTotal(split)).className}`}>
-                                        Total: {getSplitTotal(split).toFixed(1)}% {!getSplitStatus(getSplitTotal(split)).valid && '(Must equal 100%)'}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </>
-                            )
-                          } else if (currentSalesPlan) {
-                            // Sales splits for current plan
-                            const splits = member.splits?.sales?.[currentSalesPlan] || splitTemplates.sales[currentSalesPlan]
-                            return (
-                              <>
-                                {(['team_lead', 'own', 'firm'] as const).map(source => {
-                                  const split = splits[source]
-                                  const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
-                                  const minFirm = getMinFirmPercent('sales', currentSalesPlan, source)
-                                  return (
-                                    <div key={source} className="bg-luxury-light p-4 rounded border border-luxury-gray-5">
-                                      <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
-                                      <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.agent || 0}
-                                            onChange={(e) => updateSplit(index, 'sales', currentSalesPlan, source, 'agent', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.team_lead || 0}
-                                            onChange={(e) => updateSplit(index, 'sales', currentSalesPlan, source, 'team_lead', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs text-luxury-gray-2 mb-1">
-                                            Firm % {minFirm && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min={minFirm || 0}
-                                            max="100"
-                                            step="0.1"
-                                            value={split?.firm || 0}
-                                            onChange={(e) => updateSplit(index, 'sales', currentSalesPlan, source, 'firm', parseFloat(e.target.value) || 0)}
-                                            className="input-luxury text-sm"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className={`text-xs mt-2 ${getSplitStatus(getSplitTotal(split)).className}`}>
-                                        Total: {getSplitTotal(split).toFixed(1)}% {!getSplitStatus(getSplitTotal(split)).valid && '(Must equal 100%)'}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </>
-                            )
-                          }
-                          return null
-                        })()}
                       </div>
                     </div>
                   </div>
