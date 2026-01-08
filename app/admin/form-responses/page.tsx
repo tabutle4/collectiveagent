@@ -61,6 +61,197 @@ interface ListingResponse {
   co_listing_agent_name?: string | null
 }
 
+// Internal/system fields that should never appear in Additional Fields section
+// These are metadata, IDs, tokens, or system flags that aren't user-facing form data
+const INTERNAL_FIELD_KEYS = [
+  'id',
+  'created_at',
+  'updated_at',
+  'formType',
+  'form_type',
+  'listing_id',
+  'user_id',
+  'agent_id',
+  'pre_listing_token',
+  'just_listed_token',
+  'pre_listing_form_completed',
+  'just_listed_form_completed',
+  'notes',
+  'metadata',
+  'raw_data',
+  'source',
+  'version',
+]
+
+// Known fields for Prospective Agent form responses
+// These fields are already displayed in dedicated sections above
+// When adding new fields to the Prospective Agent form, add them here to prevent duplicates in Additional Fields
+const PROSPECT_KNOWN_KEYS = [
+  'first_name',
+  'last_name',
+  'preferred_first_name',
+  'preferred_last_name',
+  'email',
+  'phone',
+  'location',
+  'instagram_handle',
+  'mls_choice',
+  'association_status_on_join',
+  'previous_brokerage',
+  'expectations',
+  'accountability',
+  'lead_generation',
+  'additional_info',
+  'how_heard',
+  'how_heard_other',
+  'referring_agent',
+  'joining_team',
+  'prospect_status',
+]
+
+// Known fields for Pre-Listing form responses
+// These fields are already displayed in dedicated sections above
+// When adding new fields to the Pre-Listing form, add them here to prevent duplicates in Additional Fields
+const PRE_LISTING_KNOWN_KEYS = [
+  'agent_name',
+  'property_address',
+  'transaction_type',
+  'mls_type',
+  'status',
+  'estimated_launch_date',
+  'actual_launch_date',
+  'lead_source',
+  'mls_link',
+  'client_names',
+  'client_phone',
+  'client_email',
+  'dotloop_file_created',
+  'listing_input_requested',
+  'listing_input_paid',
+  'photography_requested',
+  'coordination_requested',
+  'coordination_payment_method',
+  'is_broker_listing',
+  'co_listing_agent',
+  'co_listing_agent_id',
+  'co_listing_agent_name',
+]
+
+// Known fields for Just Listed form responses
+// These fields are already displayed in dedicated sections above
+// When adding new fields to the Just Listed form, add them here to prevent duplicates in Additional Fields
+const JUST_LISTED_KNOWN_KEYS = [
+  'agent_name',
+  'property_address',
+  'transaction_type',
+  'mls_type',
+  'status',
+  'actual_launch_date',
+  'lead_source',
+  'mls_link',
+  'client_names',
+  'client_phone',
+  'client_email',
+  'dotloop_file_created',
+  'co_listing_agent',
+  'co_listing_agent_id',
+  'co_listing_agent_name',
+]
+
+// Common acronyms that should remain uppercase in field labels
+const ACRONYMS = new Set(['MLS', 'LLC', 'ID', 'URL', 'HAR', 'IABS', 'NTREIS'])
+
+function formatFieldLabel(key: string): string {
+  const withSpaces = key
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+
+  return withSpaces
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => {
+      const upperWord = word.toUpperCase()
+      // If the word matches a known acronym, keep it uppercase
+      if (ACRONYMS.has(upperWord)) {
+        return upperWord
+      }
+      // Otherwise, capitalize first letter only
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+    .join(' ')
+}
+
+function renderFieldValue(value: any): React.ReactNode {
+  if (value === null || value === undefined || value === '') {
+    return '—'
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No'
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return String(value)
+    }
+  }
+
+  const str = String(value)
+
+  if (/^https?:\/\//i.test(str)) {
+    return (
+      <a href={str} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+        {str}
+      </a>
+    )
+  }
+
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(str)) {
+    return (
+      <a href={`mailto:${str}`} className="text-blue-600 hover:underline">
+        {str}
+      </a>
+    )
+  }
+
+  return str
+}
+
+function getAdditionalFields(selected: any, formType: string): Array<[string, any]> {
+  if (!selected) return []
+
+  const baseSkip = new Set(INTERNAL_FIELD_KEYS)
+  let typeSkip: string[] = []
+
+  if (formType === 'prospective-agent') {
+    typeSkip = PROSPECT_KNOWN_KEYS
+  } else if (formType === 'pre-listing') {
+    typeSkip = PRE_LISTING_KNOWN_KEYS
+  } else if (formType === 'just-listed') {
+    typeSkip = JUST_LISTED_KNOWN_KEYS
+  }
+
+  const skip = new Set<string>([...baseSkip, ...typeSkip])
+
+  return Object.entries(selected).filter(([key]) => {
+    // Skip if in known lists
+    if (skip.has(key)) return false
+    
+    // Skip fields ending in _token (system tokens)
+    if (key.endsWith('_token')) return false
+    
+    // Skip fields ending in _id (foreign key references)
+    if (key.endsWith('_id')) return false
+    
+    // Skip fields starting with is_ (boolean flags, usually already handled)
+    if (key.startsWith('is_')) return false
+    
+    return true
+  })
+}
+
 export default function FormResponsesPage() {
   const router = useRouter()
   const [prospects, setProspects] = useState<ProspectResponse[]>([])
@@ -2115,6 +2306,23 @@ export default function FormResponsesPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
+                  <div className="border-t border-luxury-gray-5 pt-4">
+                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
+                    <div className="space-y-2">
+                      {getAdditionalFields(selectedResponse, 'prospective-agent').length === 0 ? (
+                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
+                      ) : (
+                        getAdditionalFields(selectedResponse, 'prospective-agent').map(([key, value]) => (
+                          <div key={key} className="flex justify-between gap-4">
+                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
+                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2370,6 +2578,23 @@ export default function FormResponsesPage() {
                           </>
                         )}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
+                  <div className="border-t border-luxury-gray-5 pt-4">
+                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
+                    <div className="space-y-2">
+                      {getAdditionalFields(selectedResponse, 'pre-listing').length === 0 ? (
+                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
+                      ) : (
+                        getAdditionalFields(selectedResponse, 'pre-listing').map(([key, value]) => (
+                          <div key={key} className="flex justify-between gap-4">
+                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
+                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2761,6 +2986,23 @@ export default function FormResponsesPage() {
             </div>
           </div>
         </div>
+                  
+                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
+                  <div className="border-t border-luxury-gray-5 pt-4">
+                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
+                    <div className="space-y-2">
+                      {getAdditionalFields(selectedResponse, 'just-listed').length === 0 ? (
+                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
+                      ) : (
+                        getAdditionalFields(selectedResponse, 'just-listed').map(([key, value]) => (
+                          <div key={key} className="flex justify-between gap-4">
+                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
+                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
       )}
 
       {/* Create New Form Modal */}
