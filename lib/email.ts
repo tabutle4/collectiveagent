@@ -507,3 +507,92 @@ export async function sendContactEmail({
     html,
   })
 }
+
+export async function sendFormSubmissionNotification({
+  formName,
+  formType,
+  submissionData,
+  responseId,
+  notificationEmail,
+}: {
+  formName: string
+  formType: string
+  submissionData: Record<string, any>
+  responseId?: string
+  notificationEmail: string
+}) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const submissionDate = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
+  
+  // Format field labels and values
+  const formatFieldLabel = (key: string): string => {
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }
+  
+  const formatFieldValue = (value: any): string => {
+    if (value === null || value === undefined || value === '') {
+      return 'N/A'
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'Yes' : 'No'
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value, null, 2)
+    }
+    return String(value)
+  }
+  
+  // Build form fields HTML
+  const fieldsHtml = Object.entries(submissionData)
+    .filter(([key]) => !['id', 'created_at', 'updated_at', 'formType', 'form_type', 'listing_id', 'user_id', 'agent_id'].includes(key))
+    .map(([key, value]) => {
+      const label = formatFieldLabel(key)
+      const formattedValue = formatFieldValue(value)
+      return `
+        <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e0e0e0;">
+          <p style="margin: 0 0 4px 0; font-weight: 600; color: #000; font-size: 14px;">${label}</p>
+          <p style="margin: 0; color: #666; font-size: 14px; white-space: pre-wrap;">${formattedValue}</p>
+        </div>
+      `
+    })
+    .join('')
+  
+  const viewResponseLink = responseId 
+    ? `${appUrl}/admin/form-responses?tab=${formType === 'pre-listing' ? 'pre-listing' : formType === 'just-listed' ? 'just-listed' : 'prospects'}`
+    : null
+  
+  const html = getLuxuryEmailTemplate({
+    greeting: 'New Form Submission',
+    content: `
+      <p class="intro-text">A new submission has been received for <strong>${formName}</strong>.</p>
+      
+      <div class="section-box">
+        <h3 style="margin-top: 0; color: #000; margin-bottom: 20px;">SUBMISSION DETAILS</h3>
+        <p style="margin: 8px 0; color: #666;"><strong>Form:</strong> ${formName}</p>
+        <p style="margin: 8px 0; color: #666;"><strong>Submitted:</strong> ${submissionDate}</p>
+        
+        <h3 style="margin-top: 25px; color: #000; margin-bottom: 20px;">FORM DATA</h3>
+        ${fieldsHtml}
+      </div>
+      
+      ${viewResponseLink ? `
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${viewResponseLink}" class="btn btn-black">View Response in Dashboard</a>
+        </div>
+      ` : ''}
+    `,
+    closing: `
+      <p style="text-align: center; color: #666; font-size: 14px; font-style: italic;">Collective Realty Co. Form Notification</p>
+    `,
+  })
+
+  return resend.emails.send({
+    from: FROM_EMAILS.notifications,
+    to: notificationEmail,
+    subject: `New ${formName} Submission`,
+    html,
+  })
+}

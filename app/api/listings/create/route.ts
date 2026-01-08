@@ -4,6 +4,7 @@ import { createCoordination } from '@/lib/db/coordination'
 import { getServiceConfig } from '@/lib/db/service-config'
 import { createListingFolder } from '@/lib/microsoft-graph'
 import { sendWelcomeEmail } from '@/lib/email/send'
+import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
 
@@ -108,6 +109,21 @@ export async function POST(request: NextRequest) {
         )
       }
       
+      // Fetch form record to get notification_email
+      let formRecord = null
+      try {
+        const { data: form } = await supabase
+          .from('forms')
+          .select('id, name, form_type, notification_email')
+          .eq('shareable_token', body.form_token)
+          .single()
+        
+        formRecord = form
+      } catch (error) {
+        console.error('Error fetching form record:', error)
+        // Continue even if form record not found (for legacy tokens)
+      }
+      
       // If updating, update existing listing
       if (isUpdate && existingListing) {
         const updateData: any = {
@@ -135,6 +151,27 @@ export async function POST(request: NextRequest) {
         
         await updateListing(existingListing.id, updateData)
         
+        // Send notification email if form has notification_email set
+        if (formRecord?.notification_email) {
+          try {
+            await sendFormSubmissionNotification({
+              formName: formRecord.name || `${validation.formType} Form`,
+              formType: validation.formType,
+              submissionData: {
+                ...body,
+                listing_id: existingListing.id,
+                agent_name: body.agent_name,
+                submission_type: 'update',
+              },
+              responseId: existingListing.id,
+              notificationEmail: formRecord.notification_email,
+            })
+          } catch (emailError) {
+            console.error('Error sending form notification email:', emailError)
+            // Don't fail the submission if email fails
+          }
+        }
+        
         return NextResponse.json({
           success: true,
           listing: { ...existingListing, ...updateData },
@@ -150,6 +187,26 @@ export async function POST(request: NextRequest) {
           { error: 'Failed to create listing' },
           { status: 500 }
         )
+      }
+      
+      // Send notification email if form has notification_email set
+      if (formRecord?.notification_email) {
+        try {
+          await sendFormSubmissionNotification({
+            formName: formRecord.name || `${validation.formType} Form`,
+            formType: validation.formType,
+            submissionData: {
+              ...body,
+              listing_id: listing.id,
+              agent_name: body.agent_name,
+            },
+            responseId: listing.id,
+            notificationEmail: formRecord.notification_email,
+          })
+        } catch (emailError) {
+          console.error('Error sending form notification email:', emailError)
+          // Don't fail the submission if email fails
+        }
       }
       
       // Handle coordination if requested (same logic as authenticated flow)

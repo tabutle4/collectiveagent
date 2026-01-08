@@ -30,6 +30,7 @@ export default function FormBuilderPage() {
   const [formName, setFormName] = useState('')
   const [formDescription, setFormDescription] = useState('')
   const [formType, setFormType] = useState('pre-listing')
+  const [notificationEmail, setNotificationEmail] = useState('')
   const [formConfig, setFormConfig] = useState<FormConfig>({
     fields: [],
     submissionType: true,
@@ -59,7 +60,22 @@ export default function FormBuilderPage() {
         setFormName(data.form.name)
         setFormDescription(data.form.description || '')
         setFormType(data.form.form_type)
-        setFormConfig(data.form.form_config || { fields: [], submissionType: true, agentSelector: true })
+        setNotificationEmail(data.form.notification_email || '')
+        
+        // Ensure form_config is properly structured with initialized fields
+        const loadedConfig = data.form.form_config || { fields: [], submissionType: true, agentSelector: true }
+        const initializedFields = (loadedConfig.fields || []).map((field: any) => ({
+          ...field,
+          options: field.options || (field.type === 'select' || field.type === 'radio' ? [] : undefined),
+          validation: field.validation || {},
+        }))
+        
+        setFormConfig({
+          ...loadedConfig,
+          fields: initializedFields,
+          submissionType: loadedConfig.submissionType !== undefined ? loadedConfig.submissionType : true,
+          agentSelector: loadedConfig.agentSelector !== undefined ? loadedConfig.agentSelector : true,
+        })
       }
     } catch (error) {
       console.error('Error loading form:', error)
@@ -73,20 +89,34 @@ export default function FormBuilderPage() {
       id: `field_${Date.now()}`,
       type: 'text',
       label: 'New Field',
+      placeholder: '',
       required: false,
+      validation: {},
     }
     setFormConfig({
       ...formConfig,
-      fields: [...formConfig.fields, newField],
+      fields: [...(formConfig.fields || []), newField],
     })
   }
 
   const updateField = (fieldId: string, updates: Partial<FormField>) => {
     setFormConfig({
       ...formConfig,
-      fields: formConfig.fields.map(field =>
-        field.id === fieldId ? { ...field, ...updates } : field
-      ),
+      fields: (formConfig.fields || []).map(field => {
+        if (field.id === fieldId) {
+          const updated = { ...field, ...updates }
+          // If changing to/from select or radio, ensure options array exists
+          if ((updates.type === 'select' || updates.type === 'radio') && !updated.options) {
+            updated.options = []
+          }
+          // If changing away from select/radio, remove options
+          if (updates.type && updates.type !== 'select' && updates.type !== 'radio' && updated.options) {
+            delete updated.options
+          }
+          return updated
+        }
+        return field
+      }),
     })
   }
 
@@ -100,7 +130,7 @@ export default function FormBuilderPage() {
   const addOption = (fieldId: string) => {
     setFormConfig({
       ...formConfig,
-      fields: formConfig.fields.map(field =>
+      fields: (formConfig.fields || []).map(field =>
         field.id === fieldId
           ? { ...field, options: [...(field.options || []), 'New Option'] }
           : field
@@ -111,11 +141,11 @@ export default function FormBuilderPage() {
   const updateOption = (fieldId: string, optionIndex: number, value: string) => {
     setFormConfig({
       ...formConfig,
-      fields: formConfig.fields.map(field =>
+      fields: (formConfig.fields || []).map(field =>
         field.id === fieldId
           ? {
               ...field,
-              options: field.options?.map((opt, idx) => idx === optionIndex ? value : opt),
+              options: (field.options || []).map((opt, idx) => idx === optionIndex ? value : opt),
             }
           : field
       ),
@@ -125,11 +155,11 @@ export default function FormBuilderPage() {
   const deleteOption = (fieldId: string, optionIndex: number) => {
     setFormConfig({
       ...formConfig,
-      fields: formConfig.fields.map(field =>
+      fields: (formConfig.fields || []).map(field =>
         field.id === fieldId
           ? {
               ...field,
-              options: field.options?.filter((_, idx) => idx !== optionIndex),
+              options: (field.options || []).filter((_, idx) => idx !== optionIndex),
             }
           : field
       ),
@@ -153,6 +183,7 @@ export default function FormBuilderPage() {
           name: formName,
           description: formDescription,
           form_type: formType,
+          notification_email: notificationEmail || null,
           form_config: formConfig,
         }),
       })
@@ -269,26 +300,44 @@ export default function FormBuilderPage() {
                 <h3 className="text-lg font-medium text-luxury-gray-1">Form Settings</h3>
               </div>
               
-              <div className="space-y-3">
-                <label className="flex items-center space-x-3 cursor-pointer">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm mb-2 text-luxury-gray-1">
+                    Notification Email
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={formConfig.submissionType}
-                    onChange={(e) => setFormConfig({ ...formConfig, submissionType: e.target.checked })}
-                    className="mt-0.5"
+                    type="email"
+                    value={notificationEmail}
+                    onChange={(e) => setNotificationEmail(e.target.value)}
+                    className="input-luxury"
+                    placeholder="email@example.com"
                   />
-                  <span className="text-sm">Show "New or Update" question</span>
-                </label>
+                  <p className="text-xs text-luxury-gray-2 mt-1">
+                    Email address to receive form submissions (optional)
+                  </p>
+                </div>
                 
-                <label className="flex items-center space-x-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formConfig.agentSelector}
-                    onChange={(e) => setFormConfig({ ...formConfig, agentSelector: e.target.checked })}
-                    className="mt-0.5"
-                  />
-                  <span className="text-sm">Show agent selector</span>
-                </label>
+                <div className="space-y-3">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formConfig.submissionType}
+                      onChange={(e) => setFormConfig({ ...formConfig, submissionType: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">Show "New or Update" question</span>
+                  </label>
+                  
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formConfig.agentSelector}
+                      onChange={(e) => setFormConfig({ ...formConfig, agentSelector: e.target.checked })}
+                      className="mt-0.5"
+                    />
+                    <span className="text-sm">Show agent selector</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -307,7 +356,7 @@ export default function FormBuilderPage() {
           </div>
 
           <div className="space-y-4">
-            {formConfig.fields.map((field, index) => (
+            {(formConfig.fields || []).map((field, index) => (
               <div key={field.id} className="border border-luxury-gray-5 rounded p-4">
                 <div className="flex items-start gap-4">
                   <div className="pt-2 text-luxury-gray-2">
@@ -385,7 +434,7 @@ export default function FormBuilderPage() {
                       <div>
                         <label className="block text-xs mb-2 text-luxury-gray-2">Options</label>
                         <div className="space-y-2">
-                          {field.options?.map((option, optIndex) => (
+                          {(field.options || []).map((option, optIndex) => (
                             <div key={optIndex} className="flex items-center gap-2">
                               <input
                                 type="text"
@@ -409,6 +458,9 @@ export default function FormBuilderPage() {
                           >
                             + Add Option
                           </button>
+                          {(!field.options || field.options.length === 0) && (
+                            <p className="text-xs text-luxury-gray-2 italic">No options added yet. Click "+ Add Option" to add options.</p>
+                          )}
                         </div>
                       </div>
                     )}
