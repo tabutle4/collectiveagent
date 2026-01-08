@@ -64,7 +64,7 @@ export default function EmailTemplatesPage() {
             </p>
             <div className="flex items-center gap-4 text-xs text-luxury-gray-3 mb-3">
               <span className="capitalize">Listing Coordination</span>
-              <Badge variant="success" size="sm">Active</Badge>
+              <Badge variant="success" size="md">Active</Badge>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <p className="text-xs text-luxury-gray-3 mb-1">Email Details:</p>
@@ -101,7 +101,7 @@ export default function EmailTemplatesPage() {
             </p>
             <div className="flex items-center gap-4 text-xs text-luxury-gray-3 mb-3">
               <span className="capitalize">Listing Coordination</span>
-              <Badge variant="success" size="sm">Active</Badge>
+              <Badge variant="success" size="md">Active</Badge>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <p className="text-xs text-luxury-gray-3 mb-1">Email Details:</p>
@@ -158,7 +158,7 @@ export default function EmailTemplatesPage() {
                     {template.name}
                   </h3>
                   {template.is_default && (
-                    <Badge variant="default" size="sm" className="ml-2 bg-luxury-gold text-white">
+                    <Badge variant="default" size="md" className="ml-2 bg-luxury-gold text-white">
                       Default
                     </Badge>
                   )}
@@ -171,10 +171,10 @@ export default function EmailTemplatesPage() {
               <div className="flex items-center gap-4 text-xs text-luxury-gray-3">
                 <span className="capitalize">{template.category}</span>
                 {template.is_active === false && (
-                  <Badge variant="error" size="sm">Inactive</Badge>
+                  <Badge variant="error" size="md">Inactive</Badge>
                 )}
                 {template.is_active === true && (
-                  <Badge variant="success" size="sm">Active</Badge>
+                  <Badge variant="success" size="md">Active</Badge>
                 )}
               </div>
               {template.variables && template.variables.length > 0 && (
