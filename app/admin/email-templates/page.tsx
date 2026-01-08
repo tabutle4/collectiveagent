@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { Eye } from 'lucide-react'
 import { getWelcomeEmailHtml, getWeeklyReportEmailHtml } from '@/lib/email/templates'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
+import { Card, Button, Badge } from '@/components/ui'
 
 export default function EmailTemplatesPage() {
   const [templates, setTemplates] = useState<any[]>([])
@@ -40,8 +41,10 @@ export default function EmailTemplatesPage() {
     <div>
       <div className="flex items-center justify-between mb-5 md:mb-8">
         <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>Email Templates</h2>
-        <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block">
-          New Template
+        <Link href="/admin/email-templates/new">
+          <Button variant="primary" size="md">
+            New Template
+          </Button>
         </Link>
       </div>
 
@@ -50,7 +53,7 @@ export default function EmailTemplatesPage() {
         <h3 className="text-lg font-medium mb-4">Listing Coordination Emails</h3>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {/* Welcome Email */}
-          <div className="card-section hover:shadow-md transition-shadow relative group">
+          <Card className="hover:shadow-md transition-shadow relative group">
             <div className="flex items-start justify-between mb-3">
               <h3 className="text-lg font-medium tracking-luxury flex-1">
                 Welcome Email
@@ -61,7 +64,7 @@ export default function EmailTemplatesPage() {
             </p>
             <div className="flex items-center gap-4 text-xs text-luxury-gray-3 mb-3">
               <span className="capitalize">Listing Coordination</span>
-              <span className="text-green-600">Active</span>
+              <Badge variant="success" size="sm">Active</Badge>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <p className="text-xs text-luxury-gray-3 mb-1">Email Details:</p>
@@ -74,18 +77,20 @@ export default function EmailTemplatesPage() {
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPreviewEmail('welcome')}
-                className="w-full px-3 py-2 text-xs rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center justify-center gap-2"
+                className="w-full flex items-center justify-center gap-2"
               >
                 <Eye className="w-3 h-3" />
                 Preview
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
 
           {/* Weekly Report Email */}
-          <div className="card-section hover:shadow-md transition-shadow relative group">
+          <Card className="hover:shadow-md transition-shadow relative group">
             <div className="flex items-start justify-between mb-3">
               <h3 className="text-lg font-medium tracking-luxury flex-1">
                 Weekly Report Email
@@ -96,7 +101,7 @@ export default function EmailTemplatesPage() {
             </p>
             <div className="flex items-center gap-4 text-xs text-luxury-gray-3 mb-3">
               <span className="capitalize">Listing Coordination</span>
-              <span className="text-green-600">Active</span>
+              <Badge variant="success" size="sm">Active</Badge>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <p className="text-xs text-luxury-gray-3 mb-1">Email Details:</p>
@@ -109,15 +114,17 @@ export default function EmailTemplatesPage() {
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setPreviewEmail('weekly')}
-                className="w-full px-3 py-2 text-xs rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center justify-center gap-2"
+                className="w-full flex items-center justify-center gap-2"
               >
                 <Eye className="w-3 h-3" />
                 Preview
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
 
@@ -127,18 +134,20 @@ export default function EmailTemplatesPage() {
       </div>
 
       {templates.length === 0 ? (
-        <div className="card-section text-center py-12">
+        <Card className="text-center py-12">
           <p className="text-luxury-gray-2 mb-6">No email templates found</p>
-          <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 inline-block">
-            New Template
+          <Link href="/admin/email-templates/new">
+            <Button variant="primary" size="md">
+              New Template
+            </Button>
           </Link>
-        </div>
+        </Card>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {templates.map((template) => (
-            <div
+            <Card
               key={template.id}
-              className="card-section hover:shadow-md transition-shadow relative group"
+              className="hover:shadow-md transition-shadow relative group"
             >
               <Link
                 href={`/admin/email-templates/${template.id}`}
@@ -149,9 +158,9 @@ export default function EmailTemplatesPage() {
                     {template.name}
                   </h3>
                   {template.is_default && (
-                    <span className="ml-2 px-2 py-1 text-xs bg-luxury-gold text-white rounded">
+                    <Badge variant="default" size="sm" className="ml-2 bg-luxury-gold text-white">
                       Default
-                    </span>
+                    </Badge>
                   )}
                 </div>
               {template.description && (
@@ -162,10 +171,10 @@ export default function EmailTemplatesPage() {
               <div className="flex items-center gap-4 text-xs text-luxury-gray-3">
                 <span className="capitalize">{template.category}</span>
                 {template.is_active === false && (
-                  <span className="text-red-500">Inactive</span>
+                  <Badge variant="error" size="sm">Inactive</Badge>
                 )}
                 {template.is_active === true && (
-                  <span className="text-green-600">Active</span>
+                  <Badge variant="success" size="sm">Active</Badge>
                 )}
               </div>
               {template.variables && template.variables.length > 0 && (
@@ -192,7 +201,9 @@ export default function EmailTemplatesPage() {
               
               {/* Action Buttons */}
               <div className="mt-3 pt-3 border-t border-luxury-gray-5 flex gap-2">
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -211,12 +222,14 @@ export default function EmailTemplatesPage() {
                       alert(error.message || 'Failed to duplicate template')
                     }
                   }}
-                  className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
                 >
                   📋 Duplicate
-                </button>
+                </Button>
                 
-                <button
+                <Button
+                  variant={template.is_default ? "secondary" : "danger"}
+                  size="sm"
+                  disabled={template.is_default}
                   onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -244,17 +257,11 @@ export default function EmailTemplatesPage() {
                       alert(error.message || 'Failed to delete template')
                     }
                   }}
-                  disabled={template.is_default}
-                  className={`px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center ${
-                    template.is_default
-                      ? 'text-luxury-gray-3 cursor-not-allowed bg-luxury-light border border-luxury-gray-5'
-                      : 'bg-white border border-red-600 text-red-600 hover:bg-red-50'
-                  }`}
                 >
                   {template.is_default ? 'Cannot Delete (Default)' : '🗑️ Delete'}
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
