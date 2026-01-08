@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, GripVertical, Save } from 'lucide-react'
 
+interface FieldConditional {
+  field: string
+  // Can be a single value (e.g. "yes") or an array of values (e.g. ["yes", "partially"])
+  value: string | string[]
+}
+
 interface FormField {
   id: string
   type: 'text' | 'textarea' | 'select' | 'checkbox' | 'radio' | 'date' | 'email' | 'phone' | 'number' | 'co-listing-agent' | 'intermediary-agent' | 'referral-agent'
@@ -16,6 +22,7 @@ interface FormField {
     max?: number
     pattern?: string
   }
+  conditional?: FieldConditional
 }
 
 interface FormConfig {
@@ -399,6 +406,203 @@ export default function FormBuilderPage() {
                           <span className="text-xs">Required field</span>
                         </label>
                       </div>
+                    </div>
+
+                    {/* Conditional logic (show/hide based on another field) */}
+                    <div className="mt-3 border-t border-luxury-gray-5 pt-3">
+                      {(() => {
+                        const availableConditionFields = (formConfig.fields || [])
+                          .slice(0, index)
+                          .filter(f =>
+                            f.type === 'radio' ||
+                            f.type === 'select' ||
+                            f.type === 'checkbox'
+                          )
+
+                        const hasConditionSource = availableConditionFields.length > 0
+                        const currentConditional = field.conditional
+                        const selectedSource = currentConditional
+                          ? availableConditionFields.find(f => f.id === currentConditional.field) || availableConditionFields[0]
+                          : undefined
+
+                        const normalizeToArray = (val: string | string[] | undefined): string[] => {
+                          if (!val) return []
+                          return Array.isArray(val) ? val : [val]
+                        }
+
+                        const selectedValues = normalizeToArray(currentConditional?.value)
+
+                        const toggleMultiValue = (optionValue: string, checked: boolean) => {
+                          const current = normalizeToArray(field.conditional?.value)
+                          let next: string[]
+                          if (checked) {
+                            next = Array.from(new Set([...current, optionValue]))
+                          } else {
+                            next = current.filter(v => v !== optionValue)
+                          }
+
+                          // Store as array when multiple, or single string when only one
+                          let finalValue: string | string[] | undefined
+                          if (next.length === 0) {
+                            finalValue = []
+                          } else if (next.length === 1) {
+                            finalValue = next[0]
+                          } else {
+                            finalValue = next
+                          }
+
+                          updateField(field.id, {
+                            conditional: {
+                              field: (field.conditional?.field || selectedSource?.id) ?? '',
+                              value: finalValue as any,
+                            },
+                          })
+                        }
+
+                        return (
+                          <div className="space-y-2">
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={!hasConditionSource}
+                                checked={!!currentConditional}
+                                onChange={(e) => {
+                                  if (!e.target.checked) {
+                                    updateField(field.id, { conditional: undefined })
+                                    return
+                                  }
+
+                                  if (!hasConditionSource) return
+
+                                  const source = availableConditionFields[0]
+                                  let defaultValue: string | string[] | undefined
+
+                                  if ((source.type === 'select' || source.type === 'radio') && source.options && source.options.length > 0) {
+                                    defaultValue = source.options[0]
+                                  } else if (source.type === 'checkbox') {
+                                    defaultValue = 'true'
+                                  }
+
+                                  updateField(field.id, {
+                                    conditional: {
+                                      field: source.id,
+                                      value: defaultValue ?? '',
+                                    },
+                                  })
+                                }}
+                                className="mt-0.5"
+                              />
+                              <span className="text-xs text-luxury-gray-1">
+                                Show this field conditionally
+                              </span>
+                            </label>
+
+                            {!hasConditionSource && (
+                              <p className="text-[11px] text-luxury-gray-3">
+                                Add a radio, select, or checkbox field above this one to use as a condition.
+                              </p>
+                            )}
+
+                            {currentConditional && hasConditionSource && selectedSource && (
+                              <div className="mt-2 space-y-2">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-[11px] mb-1 text-luxury-gray-2">
+                                      Show when this field...
+                                    </label>
+                                    <select
+                                      value={selectedSource.id}
+                                      onChange={(e) => {
+                                        const nextSource = availableConditionFields.find(f => f.id === e.target.value)
+                                        if (!nextSource) return
+
+                                        let defaultValue: string | string[] | undefined
+
+                                        if ((nextSource.type === 'select' || nextSource.type === 'radio') && nextSource.options && nextSource.options.length > 0) {
+                                          defaultValue = nextSource.options[0]
+                                        } else if (nextSource.type === 'checkbox') {
+                                          defaultValue = 'true'
+                                        }
+
+                                        updateField(field.id, {
+                                          conditional: {
+                                            field: nextSource.id,
+                                            value: defaultValue ?? '',
+                                          },
+                                        })
+                                      }}
+                                      className="select-luxury text-xs"
+                                    >
+                                      {availableConditionFields.map(sourceField => (
+                                        <option key={sourceField.id} value={sourceField.id}>
+                                          {sourceField.label || sourceField.id}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[11px] mb-1 text-luxury-gray-2">
+                                      equals...
+                                    </label>
+
+                                    {(selectedSource.type === 'select' || selectedSource.type === 'radio') && (
+                                      <div className="border border-luxury-gray-5 rounded p-2 max-h-32 overflow-auto bg-luxury-light/40">
+                                        {(selectedSource.options || []).length === 0 && (
+                                          <p className="text-[11px] text-luxury-gray-3">
+                                            Add options to this source field to configure conditions.
+                                          </p>
+                                        )}
+                                        {(selectedSource.options || []).map(optionValue => (
+                                          <label
+                                            key={optionValue}
+                                            className="flex items-center space-x-2 text-[11px] mb-1 cursor-pointer"
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedValues.includes(optionValue)}
+                                              onChange={(e) => toggleMultiValue(optionValue, e.target.checked)}
+                                              className="mt-0.5"
+                                            />
+                                            <span>{optionValue}</span>
+                                          </label>
+                                        ))}
+                                        {(selectedSource.options || []).length > 0 && (
+                                          <p className="text-[11px] text-luxury-gray-3 mt-1">
+                                            Select one or more values (e.g., &quot;yes&quot; OR &quot;partially&quot;).
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {selectedSource.type === 'checkbox' && (
+                                      <select
+                                        value={
+                                          Array.isArray(currentConditional.value)
+                                            ? (currentConditional.value[0] || 'true')
+                                            : (currentConditional.value || 'true')
+                                        }
+                                        onChange={(e) =>
+                                          updateField(field.id, {
+                                            conditional: {
+                                              field: selectedSource.id,
+                                              value: e.target.value,
+                                            },
+                                          })
+                                        }
+                                        className="select-luxury text-xs"
+                                      >
+                                        <option value="true">Checked (true)</option>
+                                        <option value="false">Unchecked (false)</option>
+                                      </select>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     <div>
