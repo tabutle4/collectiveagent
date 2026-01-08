@@ -113,6 +113,7 @@ const PROSPECT_KNOWN_KEYS = [
 // These fields are already displayed in dedicated sections above
 // When adding new fields to the Pre-Listing form, add them here to prevent duplicates in Additional Fields
 const PRE_LISTING_KNOWN_KEYS = [
+  'submission_type',
   'agent_name',
   'property_address',
   'transaction_type',
@@ -127,10 +128,12 @@ const PRE_LISTING_KNOWN_KEYS = [
   'client_email',
   'dotloop_file_created',
   'listing_input_requested',
+  'listing_input_payment_method',
   'listing_input_paid',
   'photography_requested',
   'coordination_requested',
   'coordination_payment_method',
+  'coordination_payment_type',
   'is_broker_listing',
   'co_listing_agent',
   'co_listing_agent_id',
@@ -141,6 +144,7 @@ const PRE_LISTING_KNOWN_KEYS = [
 // These fields are already displayed in dedicated sections above
 // When adding new fields to the Just Listed form, add them here to prevent duplicates in Additional Fields
 const JUST_LISTED_KNOWN_KEYS = [
+  'submission_type',
   'agent_name',
   'property_address',
   'transaction_type',
@@ -153,6 +157,10 @@ const JUST_LISTED_KNOWN_KEYS = [
   'client_phone',
   'client_email',
   'dotloop_file_created',
+  'coordination_requested',
+  'coordination_payment_method',
+  'coordination_payment_type',
+  'is_broker_listing',
   'co_listing_agent',
   'co_listing_agent_id',
   'co_listing_agent_name',
@@ -2307,22 +2315,6 @@ export default function FormResponsesPage() {
                     </div>
                   </div>
 
-                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
-                  <div className="border-t border-luxury-gray-5 pt-4">
-                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
-                    <div className="space-y-2">
-                      {getAdditionalFields(selectedResponse, 'prospective-agent').length === 0 ? (
-                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
-                      ) : (
-                        getAdditionalFields(selectedResponse, 'prospective-agent').map(([key, value]) => (
-                          <div key={key} className="flex justify-between gap-4">
-                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
-                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
                 </div>
               )}
 
@@ -2332,6 +2324,21 @@ export default function FormResponsesPage() {
                   <div className="border-t border-luxury-gray-5 pt-4">
                     <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Listing Information</h3>
                     <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">Submission Type</label>
+                        {isEditing ? (
+                          <select
+                            value={editData.submission_type || 'new'}
+                            onChange={(e) => setEditData({...editData, submission_type: e.target.value})}
+                            className="select-luxury"
+                          >
+                            <option value="new">New Submission</option>
+                            <option value="update">Update Existing Transaction</option>
+                          </select>
+                        ) : (
+                          <p className="text-sm capitalize">{selectedResponse.submission_type || 'New Submission'}</p>
+                        )}
+                      </div>
                       <div>
                         <label className="text-xs text-luxury-gray-2 mb-1 block">Agent Name</label>
                         {isEditing ? (
@@ -2560,6 +2567,24 @@ export default function FormResponsesPage() {
                           </>
                         )}
                       </div>
+                      {(editData?.listing_input_requested || selectedResponse?.listing_input_requested) && (
+                        <div>
+                          <label className="text-xs text-luxury-gray-2 mb-1 block">Listing Input Payment Method</label>
+                          {isEditing ? (
+                            <select
+                              value={editData.listing_input_payment_method || ''}
+                              onChange={(e) => setEditData({...editData, listing_input_payment_method: e.target.value})}
+                              className="select-luxury"
+                            >
+                              <option value="">Select payment method</option>
+                              <option value="zelle">Zelle</option>
+                              <option value="invoice">Invoice</option>
+                            </select>
+                          ) : (
+                            <p className="text-sm capitalize">{selectedResponse.listing_input_payment_method || 'N/A'}</p>
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-center space-x-2">
                         {isEditing ? (
                           <>
@@ -2578,22 +2603,43 @@ export default function FormResponsesPage() {
                           </>
                         )}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
-                  <div className="border-t border-luxury-gray-5 pt-4">
-                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
-                    <div className="space-y-2">
-                      {getAdditionalFields(selectedResponse, 'pre-listing').length === 0 ? (
-                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
-                      ) : (
-                        getAdditionalFields(selectedResponse, 'pre-listing').map(([key, value]) => (
-                          <div key={key} className="flex justify-between gap-4">
-                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
-                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
+                      {(editData?.coordination_requested || selectedResponse?.coordination_requested) && (
+                        <>
+                          <div>
+                            <label className="text-xs text-luxury-gray-2 mb-1 block">Coordination Payment Type</label>
+                            {isEditing ? (
+                              <select
+                                value={editData.coordination_payment_type || ''}
+                                onChange={(e) => setEditData({...editData, coordination_payment_type: e.target.value})}
+                                className="select-luxury"
+                              >
+                                <option value="">Select payment type</option>
+                                <option value="zelle">Zelle</option>
+                                <option value="invoice">Invoice</option>
+                              </select>
+                            ) : (
+                              <p className="text-sm capitalize">{selectedResponse.coordination_payment_type || 'N/A'}</p>
+                            )}
                           </div>
-                        ))
+                          <div className="flex items-center space-x-2">
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="checkbox"
+                                  checked={editData.is_broker_listing || false}
+                                  onChange={(e) => setEditData({...editData, is_broker_listing: e.target.checked})}
+                                  className="w-4 h-4"
+                                />
+                                <span className="text-sm">Is Broker Listing</span>
+                              </>
+                            ) : (
+                              <>
+                                <input type="checkbox" checked={selectedResponse.is_broker_listing || false} readOnly className="w-4 h-4" />
+                                <span className="text-sm">Is Broker Listing</span>
+                              </>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -2606,6 +2652,21 @@ export default function FormResponsesPage() {
                   <div className="border-t border-luxury-gray-5 pt-4">
                     <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Listing Information</h3>
                     <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-luxury-gray-2 mb-1 block">Submission Type</label>
+                        {isEditing ? (
+                          <select
+                            value={editData.submission_type || 'new'}
+                            onChange={(e) => setEditData({...editData, submission_type: e.target.value})}
+                            className="select-luxury"
+                          >
+                            <option value="new">New Submission</option>
+                            <option value="update">Update Existing Transaction</option>
+                          </select>
+                        ) : (
+                          <p className="text-sm capitalize">{selectedResponse.submission_type || 'New Submission'}</p>
+                        )}
+                      </div>
                       <div>
                         <label className="text-xs text-luxury-gray-2 mb-1 block">Agent Name</label>
                         {isEditing ? (
@@ -2858,129 +2919,89 @@ export default function FormResponsesPage() {
                           </>
                         )}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Coordination Details Section */}
-                  {(editData?.coordination_requested || selectedResponse?.coordination_requested) && (
-                    <div className="border-t border-luxury-gray-5 pt-4">
-                      <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Coordination Service</h3>
-                      <div className="space-y-4">
+                      <div className="flex items-center space-x-2">
                         {isEditing ? (
                           <>
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={editData.coordination_requested || false}
-                                onChange={(e) => setEditData({...editData, coordination_requested: e.target.checked})}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm">Coordination requested</span>
-                            </div>
-                            
-                            {editData.coordination_requested && (
-                              <div className="ml-6 space-y-3">
-                                <div>
-                                  <label className="flex items-start space-x-3 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={editData.is_broker_listing || false}
-                                      onChange={(e) => {
-                                        const isBroker = e.target.checked
-                                        setEditData({
-                                          ...editData,
-                                          is_broker_listing: isBroker,
-                                          coordination_payment_method: isBroker ? 'broker_listing' : (editData.coordination_payment_method || 'client_direct'),
-                                        })
-                                      }}
-                                      className="mt-1"
-                                    />
-                                    <div className="flex-1">
-                                      <p className="text-sm font-medium">Broker/Owner Listing</p>
-                                      <p className="text-xs text-luxury-gray-2">
-                                        Check this if this is a broker or owner listing. Fee will be set to $0.
-                                      </p>
-                                    </div>
-                                  </label>
-                                </div>
-                                
-                                {!editData.is_broker_listing && (
-                                  <div>
-                                    <label className="text-xs font-medium text-luxury-gray-1 mb-2 block">
-                                      Payment Method <span className="text-red-500">*</span>
-                                    </label>
-                                    <div className="space-y-2">
-                                      <label className="flex items-start space-x-3 cursor-pointer">
-                                        <input
-                                          type="radio"
-                                          name="coordination_payment_method_edit_jl"
-                                          value="client_direct"
-                                          checked={editData.coordination_payment_method === 'client_direct'}
-                                          onChange={(e) => setEditData({...editData, coordination_payment_method: e.target.value})}
-                                          className="mt-0.5"
-                                        />
-                                        <div className="flex-1">
-                                          <p className="text-sm font-medium">Client Pays Directly</p>
-                                          <p className="text-xs text-luxury-gray-2">
-                                            Client pays $250 before service starts. Must be in listing agreement.
-                                          </p>
-                                        </div>
-                                      </label>
-                                      <label className="flex items-start space-x-3 cursor-pointer">
-                                        <input
-                                          type="radio"
-                                          name="coordination_payment_method_edit_jl"
-                                          value="agent_pays"
-                                          checked={editData.coordination_payment_method === 'agent_pays'}
-                                          onChange={(e) => setEditData({...editData, coordination_payment_method: e.target.value})}
-                                          className="mt-0.5"
-                                        />
-                                        <div className="flex-1">
-                                          <p className="text-sm font-medium">Agent Pays</p>
-                                          <p className="text-xs text-luxury-gray-2">
-                                            You pay $250 to brokerage within 60 days or at closing, whichever happens first. If not paid within 60 days, fee will be deducted from any commission.
-                                          </p>
-                                        </div>
-                                      </label>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {editData.service_fee !== undefined && (
-                                  <div>
-                                    <label className="text-xs text-luxury-gray-2 mb-1 block">Service Fee</label>
-                                    <p className="text-sm font-medium">
-                                      ${editData.is_broker_listing ? '0.00' : (editData.service_fee?.toFixed(2) || '250.00')}
-                                      {editData.is_broker_listing ? ' (Broker Listing)' : ' (one time)'}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            <input
+                              type="checkbox"
+                              checked={editData.coordination_requested || false}
+                              onChange={(e) => setEditData({...editData, coordination_requested: e.target.checked})}
+                              className="w-4 h-4"
+                            />
+                            <span className="text-sm">Coordination requested</span>
                           </>
                         ) : (
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <input type="checkbox" checked={selectedResponse.coordination_requested || false} readOnly className="w-4 h-4" />
-                              <span className="text-sm">Coordination requested</span>
-                            </div>
-                            {selectedResponse.coordination_payment_method && (
-                              <div className="ml-6">
-                                <p className="text-xs text-luxury-gray-2 mb-1">Payment Method</p>
-                                <p className="text-sm capitalize">
-                                  {selectedResponse.coordination_payment_method === 'broker_listing' 
-                                    ? 'Broker Listing ($0)' 
-                                    : selectedResponse.coordination_payment_method === 'client_direct'
-                                    ? 'Client Pays Directly'
-                                    : 'Agent Pays'}
-                                </p>
-                              </div>
-                            )}
-                          </div>
+                          <>
+                            <input type="checkbox" checked={selectedResponse.coordination_requested || false} readOnly className="w-4 h-4" />
+                            <span className="text-sm">Coordination requested</span>
+                          </>
                         )}
                       </div>
+                      {(editData?.coordination_requested || selectedResponse?.coordination_requested) && (
+                        <>
+                          <div>
+                            <label className="text-xs text-luxury-gray-2 mb-1 block">Coordination Payment Method</label>
+                            {isEditing ? (
+                              <select
+                                value={editData.coordination_payment_method || ''}
+                                onChange={(e) => setEditData({...editData, coordination_payment_method: e.target.value})}
+                                className="select-luxury"
+                              >
+                                <option value="">Select payment method</option>
+                                <option value="client_direct">Client Pays Directly</option>
+                                <option value="agent_pays">Agent Pays</option>
+                                <option value="broker_listing">Broker Listing</option>
+                              </select>
+                            ) : (
+                              <p className="text-sm capitalize">
+                                {selectedResponse.coordination_payment_method === 'broker_listing' 
+                                  ? 'Broker Listing ($0)' 
+                                  : selectedResponse.coordination_payment_method === 'client_direct'
+                                  ? 'Client Pays Directly'
+                                  : selectedResponse.coordination_payment_method === 'agent_pays'
+                                  ? 'Agent Pays'
+                                  : selectedResponse.coordination_payment_method || 'N/A'}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-xs text-luxury-gray-2 mb-1 block">Coordination Payment Type</label>
+                            {isEditing ? (
+                              <select
+                                value={editData.coordination_payment_type || ''}
+                                onChange={(e) => setEditData({...editData, coordination_payment_type: e.target.value})}
+                                className="select-luxury"
+                              >
+                                <option value="">Select payment type</option>
+                                <option value="zelle">Zelle</option>
+                                <option value="invoice">Invoice</option>
+                              </select>
+                            ) : (
+                              <p className="text-sm capitalize">{selectedResponse.coordination_payment_type || 'N/A'}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {isEditing ? (
+                              <>
+                                <input
+                                  type="checkbox"
+                                  checked={editData.is_broker_listing || false}
+                                  onChange={(e) => setEditData({...editData, is_broker_listing: e.target.checked})}
+                                  className="w-4 h-4"
+                                />
+                                <span className="text-sm">Is Broker Listing</span>
+                              </>
+                            ) : (
+                              <>
+                                <input type="checkbox" checked={selectedResponse.is_broker_listing || false} readOnly className="w-4 h-4" />
+                                <span className="text-sm">Is Broker Listing</span>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
