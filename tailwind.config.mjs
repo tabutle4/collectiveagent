@@ -27,8 +27,8 @@ const config = {
         sans: ['Montserrat', 'Trebuchet MS', 'Arial', 'sans-serif'],
       },
       fontSize: {
-        'xs': '10px',      // was 12px (0.75rem)
-        'sm': '12px',       // was 14px (0.875rem)
+        'xs': '12px',      // was 12px (0.75rem)
+        'sm': '13px',       // was 14px (0.875rem)
         'base': '14px',     // was 16px (1rem)
         'lg': '16px',       // was 18px (1.125rem)
         'xl': '18px',       // was 20px (1.25rem)
