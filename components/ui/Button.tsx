@@ -19,12 +19,12 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = 'primary', size = 'md', loading = false, disabled, className, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center rounded transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
+    const baseStyles = 'inline-flex items-center justify-center rounded transition-colors font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
     
     const variants = {
-      primary: 'bg-luxury-black text-white hover:opacity-90 focus:ring-luxury-black',
+      primary: 'bg-luxury-black text-white hover:opacity-90 focus:ring-luxury-black shadow-sm',
       secondary: 'bg-luxury-gray-5 text-luxury-gray-1 hover:bg-luxury-gray-4 focus:ring-luxury-gray-3',
-      outline: 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black focus:ring-luxury-black',
+      outline: 'bg-white border-2 border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black focus:ring-luxury-black',
       ghost: 'bg-transparent text-luxury-gray-1 hover:bg-luxury-light focus:ring-luxury-gray-3',
       danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
     }

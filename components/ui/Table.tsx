@@ -41,11 +41,11 @@ function Table<T extends Record<string, any>>({
     <div className={cn('overflow-x-auto', className)} {...props}>
       <table className="w-full">
         <thead>
-          <tr className="border-b border-luxury-gray-5">
+          <tr className="border-b border-luxury-gray-5 bg-gray-50">
             {columns.map((column) => (
               <th
                 key={column.key}
-                className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1"
+                className="text-left py-3 px-4 text-sm font-semibold text-luxury-gray-1"
               >
                 {column.label}
               </th>
@@ -67,8 +67,8 @@ function Table<T extends Record<string, any>>({
               <tr
                 key={rowIndex}
                 className={cn(
-                  'border-b border-luxury-gray-5 transition-colors',
-                  onRowClick && 'cursor-pointer hover:bg-luxury-light'
+                  'border-b border-luxury-gray-5 transition-colors font-medium',
+                  onRowClick && 'cursor-pointer hover:bg-gray-50'
                 )}
                 onClick={() => onRowClick?.(row)}
               >

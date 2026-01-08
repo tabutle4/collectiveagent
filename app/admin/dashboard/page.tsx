@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Card, Button } from '@/components/ui'
 
 export default function AdminDashboard() {
   const [prospects, setProspects] = useState<any[]>([])
@@ -43,36 +44,36 @@ export default function AdminDashboard() {
 
       {/* Stats */}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
+        <Card className="p-5 text-center">
           <div className="text-2xl md:text-3xl font-light mb-1" style={{ color: '#C9A961' }}>
             {stats.new}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
             New Prospects
           </div>
-        </div>
+        </Card>
         
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
+        <Card className="p-5 text-center">
           <div className="text-2xl md:text-3xl font-light mb-1" style={{ color: '#C9A961' }}>
             {stats.contacted}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
             Contacted
           </div>
-        </div>
+        </Card>
         
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
+        <Card className="p-5 text-center">
           <div className="text-2xl md:text-3xl font-light mb-1" style={{ color: '#C9A961' }}>
             {stats.total}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
             Total Prospects
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white border border-luxury-gray-5 rounded shadow-sm p-6">
+      <Card className="p-6">
         <h3 className="text-base font-medium mb-4 tracking-wide text-luxury-gray-2 border-b border-luxury-gray-5 pb-2">
           Recent Activity
         </h3>
@@ -108,11 +109,13 @@ export default function AdminDashboard() {
         )}
         
         <div className="text-center mt-6">
-          <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black inline-block">
-            View All Prospects
+          <Link href="/admin/prospects">
+            <Button variant="outline" size="md">
+              View All Prospects
+            </Button>
           </Link>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
