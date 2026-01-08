@@ -233,7 +233,7 @@ function getAdditionalFields(selected: any, formType: string): Array<[string, an
     typeSkip = JUST_LISTED_KNOWN_KEYS
   }
 
-  const skip = new Set<string>([...baseSkip, ...typeSkip])
+  const skip = new Set<string>([...Array.from(baseSkip), ...typeSkip])
 
   return Object.entries(selected).filter(([key]) => {
     // Skip if in known lists
@@ -2986,23 +2986,6 @@ export default function FormResponsesPage() {
             </div>
           </div>
         </div>
-                  
-                  {/* Additional Fields - dynamic, shows any extra responses not already mapped above */}
-                  <div className="border-t border-luxury-gray-5 pt-4">
-                    <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Fields</h3>
-                    <div className="space-y-2">
-                      {getAdditionalFields(selectedResponse, 'just-listed').length === 0 ? (
-                        <p className="text-sm text-luxury-gray-2">No additional fields</p>
-                      ) : (
-                        getAdditionalFields(selectedResponse, 'just-listed').map(([key, value]) => (
-                          <div key={key} className="flex justify-between gap-4">
-                            <p className="text-xs text-luxury-gray-2">{formatFieldLabel(key)}</p>
-                            <div className="text-sm text-right break-words">{renderFieldValue(value)}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
       )}
 
       {/* Create New Form Modal */}

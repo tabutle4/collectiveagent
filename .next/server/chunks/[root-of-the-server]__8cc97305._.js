@@ -78,11 +78,11 @@ module.exports=[93695,(e,t,r)=>{t.exports=e.x("next/dist/shared/lib/no-fallback-
       </div>
       
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://agent.collectiverealtyco.com/admin/prospects/${t.id}" class="btn btn-black">View in Dashboard</a>
+        <a href="http://localhost:3000/admin/prospects/${t.id}" class="btn btn-black">View in Dashboard</a>
       </div>
     `,closing:`
       <p style="text-align: center; color: #666; font-size: 14px; font-style: italic;">Collective Realty Co. Admin Notification</p>
-    `}),a=[n,...e];return r.emails.send({from:"Collective Notifications <notifications@coachingbrokeragetools.com>",to:a,subject:`New Prospective Agent: ${t.preferred_first_name} ${t.preferred_last_name}`,html:o})}async function s(e,t,a){let i=`https://agent.collectiverealtyco.com/auth/reset-password?token=${t}`,s=l({greeting:`Hi ${a},`,content:`
+    `}),a=[n,...e];return r.emails.send({from:"Collective Notifications <notifications@coachingbrokeragetools.com>",to:a,subject:`New Prospective Agent: ${t.preferred_first_name} ${t.preferred_last_name}`,html:o})}async function s(e,t,a){let i=`http://localhost:3000/auth/reset-password?token=${t}`,s=l({greeting:`Hi ${a},`,content:`
       <p class="intro-text">We received a request to reset your password for your Collective Realty Co. admin account.</p>
       
       <div class="section-box">
