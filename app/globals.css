@@ -16,6 +16,7 @@
   }
   
   body {
+    font-size: 14px;
     @apply bg-white text-luxury-gray-1 font-sans;
     margin: 0;
     padding: 0;
@@ -157,5 +158,13 @@
   
   .header-subtitle {
     @apply text-white/70;
+  }
+}
+
+/* Global font size overrides - prevent text from being too small */
+@layer base {
+  .text-xs {
+    font-size: 0.8125rem; /* 13px instead of 12px */
+    line-height: 1.25rem;
   }
 }
