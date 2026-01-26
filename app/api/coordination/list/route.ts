@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       .from('listing_coordination')
       .select(`
         *,
-        listing:listings(*)
+        listing:transactions(*)
       `)
       .order('created_at', { ascending: false })
     

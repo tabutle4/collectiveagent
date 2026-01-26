@@ -26,14 +26,14 @@ export async function POST(request: NextRequest) {
     // Note: This endpoint can be called from authenticated pages
     // Authentication is handled by the calling page (agent/admin dashboards)
     
-    // Verify listing exists
-    const { data: listing, error: listingError } = await supabase
-      .from('listings')
+    // Verify transaction exists
+    const { data: transaction, error: transactionError } = await supabase
+      .from('transactions')
       .select('id')
       .eq('id', listing_id)
       .single()
     
-    if (listingError || !listing) {
+    if (transactionError || !transaction) {
       return NextResponse.json(
         { error: 'Listing not found' },
         { status: 404 }
@@ -43,15 +43,15 @@ export async function POST(request: NextRequest) {
     // Generate token
     const token = await generateFormToken(form_type)
     
-    // Update listing with token
+    // Update transaction with token
     const tokenField = form_type === 'pre-listing' ? 'pre_listing_token' : 'just_listed_token'
     const { error: updateError } = await supabase
-      .from('listings')
+      .from('transactions')
       .update({ [tokenField]: token })
       .eq('id', listing_id)
     
     if (updateError) {
-      console.error('Error updating listing with token:', updateError)
+      console.error('Error updating transaction with token:', updateError)
       return NextResponse.json(
         { error: 'Failed to save token' },
         { status: 500 }
@@ -74,4 +74,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -25,6 +25,7 @@
   "/admin/team-agreements/[id]/page": "/admin/team-agreements/[id]",
   "/admin/team-agreements/new/page": "/admin/team-agreements/new",
   "/admin/team-agreements/page": "/admin/team-agreements",
+  "/admin/transactions/[id]/page": "/admin/transactions/[id]",
   "/admin/transactions/page": "/admin/transactions",
   "/admin/users/page": "/admin/users",
   "/agent-fee-info/page": "/agent-fee-info",

@@ -246,11 +246,11 @@ export function ProfileStep({
             className="select-luxury"
             required={isRequired}
           >
-            <option value="">Select a plan</option>
-            <option value="no_cap_plan">No Cap Plan 85/15</option>
-            <option value="cap_plan">Cap Plan 70/30 $18,000 Cap</option>
+            <option value="">Select plan...</option>
+            <option value="85_15_no_cap">No Cap Plan 85/15</option>
+            <option value="70_30_cap">Cap Plan 70/30 $18,000 Cap</option>
+            <option value="70_30_new">New Agent Plan (must remain until 5 sales completed)</option>
             <option value="no_change">No Change</option>
-            <option value="new_agent_plan">I have not completed (5) sales within the last 12 months and must remain on the New Agent Plan.</option>
             <option value="other">Other</option>
           </select>
         </div>

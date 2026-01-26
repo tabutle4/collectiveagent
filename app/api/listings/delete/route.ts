@@ -54,14 +54,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Delete the listing
+    // Delete the transaction (cascade will delete related records)
     const { error: deleteError } = await supabase
-      .from('listings')
+      .from('transactions')
       .delete()
       .eq('id', listingId)
 
     if (deleteError) {
-      console.error('Error deleting listing:', deleteError)
+      console.error('Error deleting transaction:', deleteError)
       return NextResponse.json(
         { error: 'Failed to delete listing' },
         { status: 500 }
@@ -81,4 +81,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

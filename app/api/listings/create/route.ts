@@ -14,20 +14,32 @@ async function findExistingTransaction(
   propertyAddress: string,
   agentId: string
 ): Promise<any | null> {
-  const { data: existingListing, error } = await supabase
-    .from('listings')
+  // First get transaction IDs for this agent
+  const { data: agentTransactions, error: agentError } = await supabase
+    .from('transaction_internal_agents')
+    .select('transaction_id')
+    .eq('agent_id', agentId)
+  
+  if (agentError || !agentTransactions?.length) {
+    return null
+  }
+  
+  const transactionIds = agentTransactions.map((t: any) => t.transaction_id)
+  
+  const { data: existingTransaction, error } = await supabase
+    .from('transactions')
     .select('*')
     .eq('property_address', propertyAddress)
-    .eq('agent_id', agentId)
+    .in('id', transactionIds)
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
   
-  if (error || !existingListing) {
+  if (error || !existingTransaction) {
     return null
   }
   
-  return existingListing
+  return existingTransaction
 }
 
 export async function POST(request: NextRequest) {
@@ -127,29 +139,58 @@ export async function POST(request: NextRequest) {
       // If updating, update existing listing
       if (isUpdate && existingListing) {
         const updateData: any = {
-          client_names: body.client_names,
-          client_phone: body.client_phone,
-          client_email: body.client_email,
           transaction_type: body.transaction_type,
           mls_type: body.mls_type,
           lead_source: body.lead_source,
           dotloop_file_created: body.dotloop_file_created,
           listing_input_requested: body.listing_input_requested,
           photography_requested: body.photography_requested,
-          is_broker_listing: body.is_broker_listing,
         }
         
         if (validation.formType === 'pre-listing') {
-          updateData.estimated_launch_date = body.estimated_launch_date
+          updateData.listing_date = body.estimated_launch_date
           updateData.pre_listing_form_completed = true
         } else {
           updateData.mls_link = body.mls_link
           updateData.status = body.status || 'active'
-          updateData.actual_launch_date = body.actual_launch_date || new Date().toISOString().split('T')[0]
           updateData.just_listed_form_completed = true
         }
         
         await updateListing(existingListing.id, updateData)
+        
+        // Update contact info in transaction_contacts
+        if (body.client_names || body.client_phone || body.client_email) {
+          const contactType = body.transaction_type === 'lease' ? 'landlord' : 'seller'
+          
+          // Check if contact exists
+          const { data: existingContact } = await supabase
+            .from('transaction_contacts')
+            .select('id')
+            .eq('transaction_id', existingListing.id)
+            .eq('contact_type', contactType)
+            .single()
+          
+          if (existingContact) {
+            await supabase
+              .from('transaction_contacts')
+              .update({
+                name: body.client_names || null,
+                phone: body.client_phone || null,
+                email: body.client_email || null,
+              })
+              .eq('id', existingContact.id)
+          } else {
+            await supabase
+              .from('transaction_contacts')
+              .insert({
+                transaction_id: existingListing.id,
+                contact_type: contactType,
+                name: body.client_names || null,
+                phone: body.client_phone || null,
+                email: body.client_email || null,
+              })
+          }
+        }
         
         // Send notification email if form has notification_email set
         if (formRecord?.notification_email) {
@@ -397,31 +438,60 @@ export async function POST(request: NextRequest) {
       
       // Update existing listing
       const updateData: any = {
-        client_names: body.client_names,
-        client_phone: body.client_phone,
-        client_email: body.client_email,
         transaction_type: body.transaction_type,
         mls_type: body.mls_type,
         lead_source: body.lead_source,
         dotloop_file_created: body.dotloop_file_created,
         listing_input_requested: body.listing_input_requested,
         photography_requested: body.photography_requested,
-        is_broker_listing: body.is_broker_listing,
       }
       
       if (body.mls_link) {
         // Just Listed form
         updateData.mls_link = body.mls_link
         updateData.status = body.status || 'active'
-        updateData.actual_launch_date = body.actual_launch_date || new Date().toISOString().split('T')[0]
         updateData.just_listed_form_completed = true
       } else {
         // Pre-listing form
-        updateData.estimated_launch_date = body.estimated_launch_date
+        updateData.listing_date = body.estimated_launch_date
         updateData.pre_listing_form_completed = true
       }
       
       await updateListing(existingListingAuth.id, updateData)
+      
+      // Update contact info in transaction_contacts
+      if (body.client_names || body.client_phone || body.client_email) {
+        const contactType = body.transaction_type === 'lease' ? 'landlord' : 'seller'
+        
+        // Check if contact exists
+        const { data: existingContact } = await supabase
+          .from('transaction_contacts')
+          .select('id')
+          .eq('transaction_id', existingListingAuth.id)
+          .eq('contact_type', contactType)
+          .single()
+        
+        if (existingContact) {
+          await supabase
+            .from('transaction_contacts')
+            .update({
+              name: body.client_names || null,
+              phone: body.client_phone || null,
+              email: body.client_email || null,
+            })
+            .eq('id', existingContact.id)
+        } else {
+          await supabase
+            .from('transaction_contacts')
+            .insert({
+              transaction_id: existingListingAuth.id,
+              contact_type: contactType,
+              name: body.client_names || null,
+              phone: body.client_phone || null,
+              email: body.client_email || null,
+            })
+        }
+      }
       
       return NextResponse.json({
         success: true,
@@ -464,7 +534,7 @@ export async function POST(request: NextRequest) {
       
       // Use the listing's agent_id (from the selected agent in the form)
       // Only fallback to submitting user if they're an agent and no agent was found
-      const coordinationAgentId = listing.agent_id || (isAgent ? userId : null)
+      const coordinationAgentId = finalAgentId || (isAgent ? userId : null)
       
       if (!coordinationAgentId) {
         return NextResponse.json(
@@ -502,11 +572,11 @@ export async function POST(request: NextRequest) {
         }
         
         // If we found an agent, use their info instead
-        if (agentIdForListing) {
+        if (finalAgentId) {
           const { data: actualAgent } = await supabase
             .from('users')
             .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
-            .eq('id', agentIdForListing)
+            .eq('id', finalAgentId)
             .single()
           
           if (actualAgent) {
@@ -550,5 +620,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-

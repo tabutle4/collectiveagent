@@ -62,7 +62,7 @@ export default function AgentFormResponsesPage() {
     try {
       // Load listings where agent_id matches the logged-in user
       const { data: listingsData, error: listingsError } = await supabase
-        .from('listings')
+        .from('transactions')
         .select('*')
         .eq('agent_id', userId)
         .order('created_at', { ascending: false })

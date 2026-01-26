@@ -25,6 +25,7 @@
   "/admin/team-agreements/[id]/page": "app/admin/team-agreements/[id]/page.js",
   "/admin/team-agreements/new/page": "app/admin/team-agreements/new/page.js",
   "/admin/team-agreements/page": "app/admin/team-agreements/page.js",
+  "/admin/transactions/[id]/page": "app/admin/transactions/[id]/page.js",
   "/admin/transactions/page": "app/admin/transactions/page.js",
   "/admin/users/page": "app/admin/users/page.js",
   "/agent-fee-info/page": "app/agent-fee-info/page.js",

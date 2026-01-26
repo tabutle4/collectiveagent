@@ -119,17 +119,17 @@ export async function POST(request: NextRequest) {
         next_email_scheduled_for: scheduledDateTime.toISOString(),
       })
       
-      // Get coordination data
+      // Get coordination data with transaction
       const { data: coordinationData } = await supabase
         .from('listing_coordination')
-        .select('*, listings(*)')
+        .select('*, transactions(*)')
         .eq('id', coordinationId)
         .single()
       
       let scheduled = 0
       
       if (coordinationData) {
-        const listing = coordinationData.listings as any
+        const listing = coordinationData.transactions as any
         const { data: agentData } = await supabase
           .from('users')
           .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
@@ -196,4 +196,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

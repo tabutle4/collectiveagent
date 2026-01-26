@@ -44,13 +44,13 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    const { data: listing, error: listingError } = await supabase
-      .from('listings')
+    const { data: transaction, error: transactionError } = await supabase
+      .from('transactions')
       .select('*')
       .eq('id', coordination.listing_id)
       .single()
     
-    if (listingError || !listing) {
+    if (transactionError || !transaction) {
       return NextResponse.json(
         { error: 'Listing not found' },
         { status: 404 }
@@ -64,75 +64,24 @@ export async function GET(request: NextRequest) {
       .order('week_start_date', { ascending: false })
       .limit(4)
     
-    // Use agent_name from listing (synced with form responses) as the primary source
-    // Try to find the agent by name to get contact info
+    // Get agent info from transaction_internal_agents
     let agentInfo = null
-    if (listing.agent_name) {
-      // Try to find agent by name to get contact info
-      const agentNameParts = listing.agent_name.trim().split(/\s+/)
-      if (agentNameParts.length >= 2) {
-        const firstName = agentNameParts[0].trim()
-        const lastName = agentNameParts.slice(1).join(' ').trim()
-        
-        // Try preferred name first (case-insensitive, any status, must have agent role)
-        const { data: agentsByPreferred } = await supabase
-          .from('users')
-          .select('id, preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone, role')
-          .ilike('preferred_first_name', firstName)
-          .ilike('preferred_last_name', lastName)
-          .or('roles.cs.{agent},roles.cs.{Agent}')
-          .limit(1)
-        
-        let agentData = null
-        if (agentsByPreferred && agentsByPreferred.length > 0) {
-          agentData = agentsByPreferred[0]
-        } else {
-          // Try legal name (case-insensitive, any status, must have agent role)
-          const { data: agentsByLegal } = await supabase
-            .from('users')
-            .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, role')
-            .ilike('first_name', firstName)
-            .ilike('last_name', lastName)
-            .or('roles.cs.{agent},roles.cs.{Agent}')
-            .limit(1)
-          
-          if (agentsByLegal && agentsByLegal.length > 0) {
-            agentData = agentsByLegal[0]
-          }
-        }
-        
-        // Use listing.agent_name (synced with form responses) as the name
-        // Use found agent's contact info if available
-        // For Courtney (broker only), use personal phone; for others, use business phone
-        const isCourtneyBroker = (agentData?.email?.toLowerCase().includes('courtney') || 
-                                 firstName.toLowerCase() === 'courtney' ||
-                                 agentData?.preferred_first_name?.toLowerCase() === 'courtney' ||
-                                 agentData?.first_name?.toLowerCase() === 'courtney') &&
-                                agentData?.role === 'Broker'
-        
-        const phone = isCourtneyBroker 
-          ? (agentData?.personal_phone || agentData?.business_phone || '')
-          : (agentData?.business_phone || agentData?.personal_phone || '')
-        
-        agentInfo = {
-          name: listing.agent_name, // Always use the name from listing (synced with form responses)
-          email: agentData?.email || '',
-          phone: phone,
-        }
-      } else {
-        // If name can't be parsed, just use the listing agent_name
-        agentInfo = {
-          name: listing.agent_name,
-          email: '',
-          phone: '',
-        }
-      }
-    } else if (coordination.agent_id) {
-      // Fallback: if no agent_name in listing, try to get from agent_id
+    
+    // First try to get agent from transaction_internal_agents
+    const { data: transactionAgent } = await supabase
+      .from('transaction_internal_agents')
+      .select('agent_id')
+      .eq('transaction_id', transaction.id)
+      .eq('agent_role', 'listing_agent')
+      .single()
+    
+    const agentIdToUse = transactionAgent?.agent_id || coordination.agent_id
+    
+    if (agentIdToUse) {
       const { data: agentData } = await supabase
         .from('users')
         .select('first_name, last_name, preferred_first_name, preferred_last_name, email, business_phone, personal_phone, role')
-        .eq('id', coordination.agent_id)
+        .eq('id', agentIdToUse)
         .single()
       
       if (agentData) {
@@ -159,7 +108,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       coordination,
-      listing,
+      listing: transaction,
       reports: reports || [],
       agent: agentInfo,
     })
@@ -172,4 +121,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

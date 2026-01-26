@@ -24,6 +24,9 @@ export default function AdminLayout({
   const [isPWA, setIsPWA] = useState(false)
   const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
+  // Check if we're on a transaction detail page (has UUID in path)
+  const isTransactionDetailPage = pathname?.match(/^\/admin\/transactions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+
   useEffect(() => {
     setMounted(true)
     
@@ -48,7 +51,9 @@ export default function AdminLayout({
     
     const userStr = localStorage.getItem('user')
     if (!userStr) {
-      router.push('/auth/login')
+      // Redirect to login with current path as redirect param
+      const currentPath = window.location.pathname + window.location.search
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
       return
     }
 
@@ -57,14 +62,17 @@ export default function AdminLayout({
       
       // Check role (simple string, not array)
       if (userData.role !== 'Admin') {
-        router.push('/auth/login')
+        // Redirect to login with current path as redirect param
+        const currentPath = window.location.pathname + window.location.search
+        router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
         return
       }
 
       setUser(userData)
     } catch (error) {
       console.error('Error parsing user data:', error)
-      router.push('/auth/login')
+      const currentPath = window.location.pathname + window.location.search
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
     }
   }, [router, user])
 
@@ -75,7 +83,7 @@ export default function AdminLayout({
     if (typeof window !== 'undefined') {
       const isMobile = window.innerWidth < 768
       
-      if (menuOpen && isMobile) {
+      if (menuOpen && isMobile && !isTransactionDetailPage) {
         // Prevent scroll when menu is open on mobile
         // Save current scroll position
         const scrollY = window.scrollY
@@ -130,7 +138,7 @@ export default function AdminLayout({
         wakeLockRef.current = null
       }
     }
-  }, [menuOpen, mounted])
+  }, [menuOpen, mounted, isTransactionDetailPage])
 
   const handleLogout = () => {
     localStorage.removeItem('user')
@@ -221,6 +229,63 @@ export default function AdminLayout({
       : (menuOpen ? '3rem' : '24px')
   const mainPaddingTop = !mounted ? '12px' : (isMobile ? '8px' : '12px')
 
+  // If on transaction detail page, render without sidebar
+  if (isTransactionDetailPage) {
+    return (
+      <div className="fixed inset-0 bg-white" style={{ margin: 0, padding: 0 }}>
+        {/* BLACK HEADER - Fixed at top */}
+        <header className="fixed left-0 right-0 bg-black border-b border-gray-800 z-50 flex items-center justify-between px-3 md:px-4" style={{ height: headerOffset, top: 0, margin: 0, padding: (!mounted || !isMobile) ? '0 1rem' : '0 0.75rem' }} suppressHydrationWarning>
+          {/* Left: Logo + Title */}
+          <Link href="/admin/dashboard" className="flex items-center space-x-2 md:space-x-4">
+            <img 
+              src="/logo-white.png" 
+              alt="Collective Realty Co." 
+              className="md:hidden"
+              style={{ width: '60px', height: '60px', objectFit: 'contain' }}
+            />
+            <img 
+              src="/logo-white.png" 
+              alt="Collective Realty Co." 
+              className="hidden md:block"
+              style={{ width: '120px', height: '120px', objectFit: 'contain' }}
+            />
+            <span className="text-white text-sm md:text-lg tracking-[0.2em] md:tracking-[0.25em]" style={{ fontFamily: 'Inter, Arial, sans-serif', fontWeight: '600' }}>
+              COLLECTIVE AGENT
+            </span>
+          </Link>
+
+          {/* Right: Training Center link */}
+          <a 
+            href="https://office.collectiverealtyco.com" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] md:text-sm text-gray-300 hover:text-white transition-colors font-semibold"
+            style={{ fontWeight: '600' }}
+          >
+            Training Center
+          </a>
+        </header>
+
+        {/* Main Content - Full width, no sidebar */}
+        <main 
+          className="overflow-y-auto"
+          style={{ 
+            position: 'fixed',
+            top: headerOffset,
+            bottom: '0',
+            left: '0',
+            right: '0',
+            WebkitOverflowScrolling: 'touch',
+          }}
+          suppressHydrationWarning
+        >
+          {children}
+        </main>
+      </div>
+    )
+  }
+
+  // Normal layout with sidebar
   return (
     <div className="fixed inset-0 bg-white" style={{ margin: 0, padding: 0 }}>
       {/* BLACK HEADER - Fixed at top */}

@@ -15,14 +15,16 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // If agent_name is being updated, try to find the agent and update agent_id
+    // If agent_name is being updated, find the agent and update transaction_internal_agents
     if (updates.agent_name) {
       const agentNameParts = updates.agent_name.trim().split(/\s+/)
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
         const lastName = agentNameParts.slice(1).join(' ').trim()
         
-        // Try preferred name first (case-insensitive, any status, must have agent role)
+        let newAgentId = null
+        
+        // Try preferred name first
         const { data: agentsByPreferred, error: preferredError } = await supabase
           .from('users')
           .select('id, preferred_first_name, preferred_last_name, roles')
@@ -32,9 +34,9 @@ export async function POST(request: NextRequest) {
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
-          updates.agent_id = agentsByPreferred[0].id
+          newAgentId = agentsByPreferred[0].id
         } else {
-          // Try legal name (case-insensitive, any status, must have agent role)
+          // Try legal name
           const { data: agentsByLegal, error: legalError } = await supabase
             .from('users')
             .select('id, first_name, last_name, roles')
@@ -44,71 +46,114 @@ export async function POST(request: NextRequest) {
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {
-            updates.agent_id = agentsByLegal[0].id
+            newAgentId = agentsByLegal[0].id
+          }
+        }
+        
+        // Update the agent in transaction_internal_agents
+        if (newAgentId) {
+          // Find existing listing_agent record for this transaction
+          const { data: existingAgent } = await supabase
+            .from('transaction_internal_agents')
+            .select('id')
+            .eq('transaction_id', listing_id)
+            .eq('agent_role', 'listing_agent')
+            .single()
+          
+          if (existingAgent) {
+            await supabase
+              .from('transaction_internal_agents')
+              .update({ agent_id: newAgentId })
+              .eq('id', existingAgent.id)
+          } else {
+            await supabase
+              .from('transaction_internal_agents')
+              .insert({
+                transaction_id: listing_id,
+                agent_id: newAgentId,
+                agent_role: 'listing_agent',
+                payment_status: 'pending',
+              })
           }
         }
       }
+      
+      // Remove agent_name and agent_id from updates since they don't exist on transactions table
+      delete updates.agent_name
+      delete updates.agent_id
     }
     
-    // Check if listing exists first
-    const { data: existingListing, error: checkError } = await supabase
-      .from('listings')
+    // Handle client info updates - move to transaction_contacts
+    if (updates.client_names || updates.client_phone || updates.client_email) {
+      // Get transaction type to determine contact type
+      const { data: transaction } = await supabase
+        .from('transactions')
+        .select('transaction_type')
+        .eq('id', listing_id)
+        .single()
+      
+      const contactType = transaction?.transaction_type === 'lease' ? 'landlord' : 'seller'
+      
+      // Check if contact exists
+      const { data: existingContact } = await supabase
+        .from('transaction_contacts')
+        .select('id')
+        .eq('transaction_id', listing_id)
+        .eq('contact_type', contactType)
+        .single()
+      
+      if (existingContact) {
+        await supabase
+          .from('transaction_contacts')
+          .update({
+            name: updates.client_names || null,
+            phone: updates.client_phone || null,
+            email: updates.client_email || null,
+          })
+          .eq('id', existingContact.id)
+      } else {
+        await supabase
+          .from('transaction_contacts')
+          .insert({
+            transaction_id: listing_id,
+            contact_type: contactType,
+            name: updates.client_names || null,
+            phone: updates.client_phone || null,
+            email: updates.client_email || null,
+          })
+      }
+      
+      // Remove from updates since they don't exist on transactions table
+      delete updates.client_names
+      delete updates.client_phone
+      delete updates.client_email
+    }
+    
+    // Check if transaction exists first
+    const { data: existingTransaction, error: checkError } = await supabase
+      .from('transactions')
       .select('id')
       .eq('id', listing_id)
       .single()
     
-    if (checkError || !existingListing) {
-      console.error('Listing not found:', checkError)
+    if (checkError || !existingTransaction) {
+      console.error('Transaction not found:', checkError)
       return NextResponse.json(
-        { error: `Listing not found: ${checkError?.message || 'Listing does not exist'}` },
+        { error: `Transaction not found: ${checkError?.message || 'Transaction does not exist'}` },
         { status: 404 }
       )
     }
     
-    const success = await updateListing(listing_id, updates)
-    
-    if (!success) {
-      // Try to get the actual error from Supabase by attempting a test update
-      const testUpdate: any = {}
-      // Try updating with just one field to see which column fails
-      if (updates.mls_type !== undefined) {
-        testUpdate.mls_type = updates.mls_type
-      } else if (updates.co_listing_agent !== undefined) {
-        testUpdate.co_listing_agent = updates.co_listing_agent
-      } else if (updates.is_broker_listing !== undefined) {
-        testUpdate.is_broker_listing = updates.is_broker_listing
-      }
+    // Only call updateListing if there are still updates for the transactions table
+    if (Object.keys(updates).length > 0) {
+      const success = await updateListing(listing_id, updates)
       
-      if (Object.keys(testUpdate).length > 0) {
-        const { error: testError } = await supabase
-          .from('listings')
-          .update(testUpdate)
-          .eq('id', listing_id)
-        
-        if (testError) {
-          const errorMsg = testError.message || 'Unknown error'
-          const missingColumn = errorMsg.match(/column "([^"]+)"/)?.[1]
-          
-          if (missingColumn) {
-            return NextResponse.json(
-              { 
-                error: `Database column "${missingColumn}" is missing. Please run the migration at /admin/migrations to add missing columns.`,
-                missingColumn,
-                migrationUrl: '/admin/migrations'
-              },
-              { status: 500 }
-            )
-          }
-        }
+      if (!success) {
+        return NextResponse.json(
+          { error: 'Failed to update transaction.' },
+          { status: 500 }
+        )
       }
-      
-      return NextResponse.json(
-        { 
-          error: 'Failed to update listing. One or more database columns may be missing. Please check /admin/migrations for required migrations.',
-          migrationUrl: '/admin/migrations'
-        },
-        { status: 500 }
-      )
     }
     
     return NextResponse.json({
@@ -124,4 +169,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

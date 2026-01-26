@@ -400,7 +400,7 @@ export default function FormResponsesPage() {
 
       // Load listings
       const { data: listingsData, error: listingsError } = await supabase
-        .from('listings')
+        .from('transactions')
         .select('*')
         .order('created_at', { ascending: false })
 
@@ -421,7 +421,7 @@ export default function FormResponsesPage() {
     let freshResponse = response
     if (formType === 'pre-listing' || formType === 'just-listed') {
       const { data: freshListing } = await supabase
-        .from('listings')
+        .from('transactions')
         .select('*')
         .eq('id', response.id)
         .single()

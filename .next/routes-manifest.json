@@ -78,6 +78,14 @@
       "namedRegex": "^/admin/team\\-agreements/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/admin/transactions/[id]",
+      "regex": "^/admin/transactions/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/admin/transactions/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
       "page": "/api/campaigns/[id]",
       "regex": "^/api/campaigns/([^/]+?)(?:/)?$",
       "routeKeys": {

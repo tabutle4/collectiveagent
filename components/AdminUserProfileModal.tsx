@@ -66,14 +66,10 @@ const shirtSizeOptions = [
 
 const commissionPlans = [
   { value: '', label: 'Select plan...' },
-  { value: 'no_cap_plan', label: 'No Cap Plan 85/15' },
-  { value: 'cap_plan', label: 'Cap Plan 70/30 $18,000 Cap' },
-  { value: 'no_change', label: 'No Change' },
-  {
-    value: 'new_agent_plan',
-    label: 'I have not completed (5) sales within the last 12 months and must remain on the New Agent Plan.',
-  },
-  { value: 'other', label: 'Other' },
+  { value: '70_30_new', label: 'New Agent Plan' },
+  { value: '85_15_no_cap', label: 'No Cap Plan 85/15' },
+  { value: '70_30_cap', label: 'Cap Plan 70/30 $18,000 Cap' },
+  { value: '85_15_lease', label: 'Apartment and Lease' },
 ]
 
 const toDateInput = (value?: string | null) => {
@@ -284,7 +280,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
     }
   }, [user?.id])
 
-  const isAdmin = currentUser?.roles?.includes('admin') || false
+  // Check if current user is admin (case-insensitive)
+  const isAdmin = currentUser?.roles?.some((r: string) => r.toLowerCase() === 'admin') || 
+                  currentUser?.role?.toLowerCase() === 'admin' || 
+                  false
 
   const isNewUser = !user
 
@@ -1052,7 +1051,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="select-luxury"
                     value={formData.status}
                     onChange={(e) => handleInputChange('status', e.target.value)}
-                    disabled={!isAdmin}
                   >
                     {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1068,8 +1066,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.join_date}
                     onChange={(e) => handleInputChange('join_date', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1078,7 +1074,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="select-luxury"
                     value={formData.office}
                     onChange={(e) => handleInputChange('office', e.target.value)}
-                    disabled={!isAdmin}
                   >
                     {officeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1093,8 +1088,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.team_name}
                     onChange={(e) => handleInputChange('team_name', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1103,8 +1096,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.team_lead}
                     onChange={(e) => handleInputChange('team_lead', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1113,8 +1104,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.division}
                     onChange={(e) => handleInputChange('division', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1123,8 +1112,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.license_number}
                     onChange={(e) => handleInputChange('license_number', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1134,8 +1121,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.license_expiration}
                     onChange={(e) => handleInputChange('license_expiration', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1144,8 +1129,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.nrds_id}
                     onChange={(e) => handleInputChange('nrds_id', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1154,8 +1137,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     value={formData.mls_id}
                     onChange={(e) => handleInputChange('mls_id', e.target.value)}
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1164,7 +1145,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="select-luxury"
                     value={formData.association}
                     onChange={(e) => handleInputChange('association', e.target.value)}
-                    disabled={!isAdmin}
                   >
                     {associationOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1179,7 +1159,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="select-luxury"
                     value={formData.commission_plan}
                     onChange={(e) => handleInputChange('commission_plan', e.target.value)}
-                    disabled={!isAdmin}
                   >
                     {commissionPlans.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1188,18 +1167,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     ))}
                   </select>
                 </div>
-                {formData.commission_plan === 'other' && (
-                  <div>
-                    <label className="text-sm text-luxury-gray-2">Other Details</label>
-                    <input
-                      className="input-luxury"
-                      value={formData.commission_plan_other}
-                      onChange={(e) => handleInputChange('commission_plan_other', e.target.value)}
-                      readOnly={!isAdmin}
-                      disabled={!isAdmin}
-                    />
-                  </div>
-                )}
                 <div>
                   <label className="text-sm text-luxury-gray-2">Job Title</label>
                   <input
@@ -1207,8 +1174,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     value={formData.job_title}
                     onChange={(e) => handleInputChange('job_title', e.target.value)}
                     placeholder="e.g., Senior Agent, Team Lead, etc."
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 <div>
@@ -1218,8 +1183,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     value={formData.referring_agent}
                     onChange={(e) => handleInputChange('referring_agent', e.target.value)}
                     placeholder="Name of agent who referred them"
-                    readOnly={!isAdmin}
-                    disabled={!isAdmin}
                   />
                 </div>
                 {/* Personal Documents Folder */}
@@ -1227,26 +1190,13 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <label className="text-sm text-luxury-gray-2 mb-1 block">
                     Personal Documents Folder
                   </label>
-                  {isAdmin ? (
-                    <input
-                      type="url"
-                      value={formData.onedrive_folder_url || ''}
-                      onChange={(e) => handleInputChange('onedrive_folder_url', e.target.value)}
-                      placeholder="https://collectiverealtyco-my.sharepoint.com/..."
-                      className="input-luxury"
-                    />
-                  ) : formData.onedrive_folder_url ? (
-                    <a
-                      href={formData.onedrive_folder_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-luxury-black underline inline-flex items-center gap-1"
-                    >
-                      📁 View My Documents
-                    </a>
-                  ) : (
-                    <p className="text-luxury-gray-2">No folder set</p>
-                  )}
+                  <input
+                    type="url"
+                    value={formData.onedrive_folder_url || ''}
+                    onChange={(e) => handleInputChange('onedrive_folder_url', e.target.value)}
+                    placeholder="https://collectiverealtyco-my.sharepoint.com/..."
+                    className="input-luxury"
+                  />
                 </div>
               </div>
 
@@ -1258,62 +1208,50 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   onSelect={handleRevenueShareSelect}
                   onRemove={handleRevenueShareRemove}
                   allUsers={allUsers}
-                  disabled={!isAdmin}
                 />
               </div>
 
               <div className="border-t border-luxury-gray-5 pt-4">
                 <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Roles</h4>
-                {isAdmin ? (
-                  <div className="space-y-2">
-                    {['admin', 'agent', 'tc'].map((role) => (
-                      <label key={role} className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.roles?.includes(role) || false}
-                          onChange={(e) => {
-                            const currentRoles = formData.roles || []
-                            if (e.target.checked) {
-                              // Add role if not already present
-                              if (!currentRoles.includes(role)) {
-                                setFormData({ ...formData, roles: [...currentRoles, role] })
-                              }
-                            } else {
-                              // Remove role
-                              setFormData({ ...formData, roles: currentRoles.filter((r: string) => r !== role) })
+                <div className="space-y-2">
+                  {['admin', 'agent', 'tc'].map((role) => (
+                    <label key={role} className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.roles?.some((r: string) => r.toLowerCase() === role) || false}
+                        onChange={(e) => {
+                          const currentRoles = formData.roles || []
+                          if (e.target.checked) {
+                            // Add role if not already present (case-insensitive check)
+                            if (!currentRoles.some((r: string) => r.toLowerCase() === role)) {
+                              setFormData({ ...formData, roles: [...currentRoles, role] })
                             }
-                          }}
-                          className="w-4 h-4"
-                        />
-                        <span className="text-sm capitalize">{role}</span>
-                      </label>
-                    ))}
-                    {/* Display any additional roles that aren't in the standard list */}
-                    {formData.roles?.filter((r: string) => !['admin', 'agent', 'tc'].includes(r)).length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-luxury-gray-5">
-                        <p className="text-xs text-luxury-gray-2 mb-2">Additional Roles:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {formData.roles
-                            .filter((r: string) => !['admin', 'agent', 'tc'].includes(r))
-                            .map((role: string) => (
-                              <span key={role} className="px-2 py-1 rounded bg-luxury-gray-5 text-luxury-gray-1 text-xs">
-                                {role}
-                              </span>
-                            ))}
-                        </div>
+                          } else {
+                            // Remove role (case-insensitive)
+                            setFormData({ ...formData, roles: currentRoles.filter((r: string) => r.toLowerCase() !== role) })
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm capitalize">{role}</span>
+                    </label>
+                  ))}
+                  {/* Display any additional roles that aren't in the standard list */}
+                  {formData.roles?.filter((r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase())).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-luxury-gray-5">
+                      <p className="text-xs text-luxury-gray-2 mb-2">Additional Roles:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.roles
+                          .filter((r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase()))
+                          .map((role: string) => (
+                            <span key={role} className="px-2 py-1 rounded bg-luxury-gray-5 text-luxury-gray-1 text-xs">
+                              {role}
+                            </span>
+                          ))}
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {roles.length === 0 && <span className="text-sm text-luxury-gray-3">No roles assigned</span>}
-                    {roles.map((role: string) => (
-                      <span key={role} className="px-3 py-1 rounded bg-luxury-dark-3 text-white text-xs tracking-wide">
-                        {role}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

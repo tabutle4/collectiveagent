@@ -21,12 +21,6 @@ export default function ProspectiveAgentForm() {
     location: '',
     instagram_handle: '',
     
-    // License Status
-    is_licensed: '',
-    license_number: '',
-    courses_completed: '',
-    exam_date: '',
-    
     // MLS Information
     mls_choice: '',
     association_status: '',
@@ -67,26 +61,6 @@ export default function ProspectiveAgentForm() {
     if (name === 'how_heard' && value !== 'Other') {
       setFormData(prev => ({ ...prev, how_heard_other: '' }))
     }
-    
-    // Clear license_number if switching from "yes" to "no"
-    if (name === 'is_licensed' && value === 'no') {
-      setFormData(prev => ({ ...prev, license_number: '', courses_completed: '', exam_date: '' }))
-    }
-    
-    // Clear license_number if switching from "no" to "yes"
-    if (name === 'is_licensed' && value === 'yes') {
-      setFormData(prev => ({ ...prev, license_number: '', courses_completed: '', exam_date: '' }))
-    }
-    
-    // Clear exam_date if courses_completed changes to "no"
-    if (name === 'courses_completed' && value === 'no') {
-      setFormData(prev => ({ ...prev, exam_date: '' }))
-    }
-    
-    // Clear exam_date if courses_completed is cleared
-    if (name === 'courses_completed' && value === '') {
-      setFormData(prev => ({ ...prev, exam_date: '' }))
-    }
   }
 
   const handleNameBlur = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -115,23 +89,6 @@ export default function ProspectiveAgentForm() {
     if (phoneDigits.length !== 10) {
       setError('Phone number must be exactly 10 digits')
       return
-    }
-    
-    // Validate conditional fields based on is_licensed
-    if (formData.is_licensed === 'yes' && !formData.license_number.trim()) {
-      setError('License number is required when you are currently licensed')
-      return
-    }
-    
-    if (formData.is_licensed === 'no') {
-      if (!formData.courses_completed) {
-        setError('Please indicate if you have completed the required courses')
-        return
-      }
-      if ((formData.courses_completed === 'yes' || formData.courses_completed === 'partially') && !formData.exam_date) {
-        setError('Exam date is required when courses are completed or partially completed')
-        return
-      }
     }
     
     setLoading(true)
@@ -340,127 +297,6 @@ export default function ProspectiveAgentForm() {
                 placeholder="@yourhandle"
               />
             </div>
-          </div>
-          
-          {/* License Status */}
-          <div className="card-section">
-            <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">
-              License Status
-            </h3>
-            
-            <div>
-              <label className="block text-sm mb-3 text-luxury-gray-1">
-                Are You Currently Licensed? *
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="is_licensed"
-                    value="yes"
-                    checked={formData.is_licensed === 'yes'}
-                    onChange={handleChange}
-                    className="mr-3"
-                    required
-                  />
-                  <span>Yes</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="is_licensed"
-                    value="no"
-                    checked={formData.is_licensed === 'no'}
-                    onChange={handleChange}
-                    className="mr-3"
-                    required
-                  />
-                  <span>No</span>
-                </label>
-              </div>
-            </div>
-            
-            {formData.is_licensed === 'yes' && (
-              <div className="mt-6">
-                <label htmlFor="license_number" className="block text-sm mb-2 text-luxury-gray-1">
-                  License Number *
-                </label>
-                <input
-                  id="license_number"
-                  name="license_number"
-                  type="text"
-                  value={formData.license_number}
-                  onChange={handleChange}
-                  className="input-luxury"
-                  required={formData.is_licensed === 'yes'}
-                />
-              </div>
-            )}
-            
-            {formData.is_licensed === 'no' && (
-              <>
-                <div className="mt-6">
-                  <label className="block text-sm mb-3 text-luxury-gray-1">
-                    Have you completed the required courses? *
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="courses_completed"
-                        value="yes"
-                        checked={formData.courses_completed === 'yes'}
-                        onChange={handleChange}
-                        className="mr-3"
-                        required={formData.is_licensed === 'no'}
-                      />
-                      <span>Yes</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="courses_completed"
-                        value="partially"
-                        checked={formData.courses_completed === 'partially'}
-                        onChange={handleChange}
-                        className="mr-3"
-                        required={formData.is_licensed === 'no'}
-                      />
-                      <span>Partially</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="radio"
-                        name="courses_completed"
-                        value="no"
-                        checked={formData.courses_completed === 'no'}
-                        onChange={handleChange}
-                        className="mr-3"
-                        required={formData.is_licensed === 'no'}
-                      />
-                      <span>No</span>
-                    </label>
-                  </div>
-                </div>
-                
-                {(formData.courses_completed === 'yes' || formData.courses_completed === 'partially') && (
-                  <div className="mt-6">
-                    <label htmlFor="exam_date" className="block text-sm mb-2 text-luxury-gray-1">
-                      Exam Date *
-                    </label>
-                    <input
-                      id="exam_date"
-                      name="exam_date"
-                      type="date"
-                      value={formData.exam_date}
-                      onChange={handleChange}
-                      className="input-luxury"
-                      required={formData.is_licensed === 'no' && (formData.courses_completed === 'yes' || formData.courses_completed === 'partially')}
-                    />
-                  </div>
-                )}
-              </>
-            )}
           </div>
           
           {/* MLS Information */}

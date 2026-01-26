@@ -22,15 +22,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the agent_id matches the requesting user
-    // (This is already verified client-side, but double-check for security)
-    const { data: listing } = await supabase
-      .from('listings')
-      .select('agent_id')
-      .eq('id', listing_id)
+    // Verify the agent_id is associated with this transaction
+    const { data: agentOnTransaction } = await supabase
+      .from('transaction_internal_agents')
+      .select('id')
+      .eq('transaction_id', listing_id)
+      .eq('agent_id', agent_id)
       .single()
 
-    if (!listing || listing.agent_id !== agent_id) {
+    if (!agentOnTransaction) {
       return NextResponse.json(
         { error: 'Unauthorized - You can only request updates for your own listings' },
         { status: 403 }
@@ -105,4 +105,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

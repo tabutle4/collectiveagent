@@ -144,8 +144,8 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       }
       const additionalRoles = roleParts.length > 0 ? roleParts.join(' • ') : '-'
       const team = agent.team_name || '-'
-      const phoneDigits = cleanPhone(agent.personal_phone || agent.business_phone)
-      const formattedPhone = formatPhone(agent.personal_phone || agent.business_phone)
+      const phoneDigits = cleanPhone(agent.business_phone || agent.personal_phone)
+      const formattedPhone = formatPhone(agent.business_phone || agent.personal_phone)
       const birthday = getBirthdayLabel(agent) || '-'
       const division = agent.division || '-'
       const social = getSocialLinks(agent)
