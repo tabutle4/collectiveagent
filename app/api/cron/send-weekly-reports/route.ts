@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
         const emailResult = await sendWeeklyReportEmail(
           coordination,
           listing!,
-          agentData.email,
+          agentData!.email,
           dateSentStr,
           reportFile1Url,
           reportFile2Url
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
         if (emailResult.success) {
           await updateCoordination(coordination.id, {
             last_email_sent_at: new Date().toISOString(),
-            total_emails_sent: coordination.total_emails_sent + 1,
+            total_emails_sent: (coordination as any).total_emails_sent + 1,
           })
 
           // Mark the report as sent if we used one
@@ -131,8 +131,8 @@ export async function GET(request: NextRequest) {
             .insert({
               coordination_id: coordination.id,
               email_type: 'weekly_report',
-              recipient_email: coordination.seller_email,
-              recipient_name: coordination.seller_name,
+              recipient_email: (coordination as any).seller_email,
+              recipient_name: (coordination as any).seller_name,
               subject: `Collective Realty Co. - Weekly Report - ${listing!.property_address} | ${dateSentStr}`,
               resend_email_id: emailResult.emailId || null,
               status: 'sent',
@@ -148,8 +148,8 @@ export async function GET(request: NextRequest) {
             .insert({
               coordination_id: coordination.id,
               email_type: 'weekly_report',
-              recipient_email: coordination.seller_email,
-              recipient_name: coordination.seller_name,
+              recipient_email: (coordination as any).seller_email,
+              recipient_name: (coordination as any).seller_name,
               subject: `Collective Realty Co. - Weekly Report - ${listing!.property_address} | ${dateSentStr}`,
               status: 'failed',
               error_message: emailResult.error || 'Unknown error',
