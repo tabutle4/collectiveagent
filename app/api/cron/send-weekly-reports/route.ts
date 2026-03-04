@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
       )
     }
     const supabase = createClient()
-    return NextResponse.json({ success: true, results: { total: 0, sent: 0, failed: 0, errors: [] } })
+
+    // Auto-send disabled - use manual send button in listing coordination instead
+    // To re-enable, remove the return line below
+    return NextResponse.json({ success: true, results: { total: 0, sent: 0, failed: 0, errors: [], message: 'Auto-send disabled' } })
     
     const coordinations = await getAllActiveCoordinations()
     
@@ -97,7 +100,7 @@ export async function GET(request: NextRequest) {
         
         const emailResult = await sendWeeklyReportEmail(
           coordination,
-          listing,
+          listing!,
           agentData.email,
           dateSentStr,
           reportFile1Url,
@@ -130,7 +133,7 @@ export async function GET(request: NextRequest) {
               email_type: 'weekly_report',
               recipient_email: coordination.seller_email,
               recipient_name: coordination.seller_name,
-              subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
+              subject: `Collective Realty Co. - Weekly Report - ${listing!.property_address} | ${dateSentStr}`,
               resend_email_id: emailResult.emailId || null,
               status: 'sent',
               sent_at: new Date().toISOString(),
@@ -147,13 +150,13 @@ export async function GET(request: NextRequest) {
               email_type: 'weekly_report',
               recipient_email: coordination.seller_email,
               recipient_name: coordination.seller_name,
-              subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
+              subject: `Collective Realty Co. - Weekly Report - ${listing!.property_address} | ${dateSentStr}`,
               status: 'failed',
               error_message: emailResult.error || 'Unknown error',
               sent_at: new Date().toISOString(),
             })
 
-          results.errors.push(`Failed to send email for ${listing.property_address}: ${emailResult.error}`)
+          results.errors.push(`Failed to send email for ${listing!.property_address}: ${emailResult.error}`)
           results.failed++
         }
         
@@ -212,4 +215,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
