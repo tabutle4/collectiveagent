@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
             reportFile2Url = latestReport.report_file_url_2 || undefined
           }
         } catch (error) {
-          console.error(`Error getting report for ${listing.property_address}:`, error)
+          console.error(`Error getting report for ${listing?.property_address}:`, error)
         }
         
         const emailResult = await sendWeeklyReportEmail(
