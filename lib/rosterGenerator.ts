@@ -635,7 +635,7 @@ export const regenerateRoster = async () => {
       'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, role, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
     )
     .eq('is_active', true)
-    .eq('role', 'Agent')
+    .contains('roles', ['agent'])
     .order('preferred_first_name', { ascending: true })
     .order('preferred_last_name', { ascending: true })
 
