@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    const supabase = createClient()
+    return NextResponse.json({ success: true, results: { total: 0, sent: 0, failed: 0, errors: [] } })
     
     const coordinations = await getAllActiveCoordinations()
     

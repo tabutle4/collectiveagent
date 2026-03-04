@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
         last_name,
         preferred_first_name,
         preferred_last_name,
-        roles: roles || [],
+        roles: (roles || ['agent']).map((r: string) => r.toLowerCase()),
+        role: (roles || ['agent']).some((r: string) => r.toLowerCase() === 'admin') ? 'Admin' : 'Agent',
         is_active: is_active !== undefined ? is_active : true,
       })
       .select()
