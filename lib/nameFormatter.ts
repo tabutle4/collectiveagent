@@ -110,12 +110,7 @@ export function normalizeRoles(roles: string[]): string[] {
   if (!roles || !Array.isArray(roles)) return []
   
   return roles
-    .map(role => {
-      // Replace underscores with spaces
-      const normalized = role.replace(/_/g, ' ').trim()
-      // Format using formatRole
-      return formatRole(normalized)
-    })
+    .map(role => role.replace(/_/g, ' ').trim().toLowerCase())
     .filter(role => role && role.trim().length > 0)
 }
 
