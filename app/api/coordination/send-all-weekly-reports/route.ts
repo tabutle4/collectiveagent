@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       scheduleDate.setHours(18, 0, 0, 0)
     }
     
-    const dateSentStr = (scheduleDate || now).toLocaleDateString('en-US', { 
+    const dateSentStr = now.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'long', 
       day: 'numeric', 
