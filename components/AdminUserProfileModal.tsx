@@ -730,35 +730,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     initialCrop={(freshUser || user).headshot_crop || null}
                     onUploadComplete={(url) => {
                       setHeadshotUrl(url)
-                      // Refresh user data to get updated headshot
-                      if (onSaved) {
-                        setTimeout(() => {
-                          supabase
-                            .from('users')
-                            .select('*')
-                            .eq('id', (freshUser || user).id)
-                            .single()
-                            .then(({ data }) => {
-                              if (data) onSaved(data)
-                            })
-                        }, 500)
-                      }
                     }}
                     onRemove={() => {
                       setHeadshotUrl(null)
-                      // Refresh user data
-                      if (onSaved) {
-                        setTimeout(() => {
-                          supabase
-                            .from('users')
-                            .select('*')
-                            .eq('id', (freshUser || user).id)
-                            .single()
-                            .then(({ data }) => {
-                              if (data) onSaved(data)
-                            })
-                        }, 500)
-                      }
                     }}
                     size="large"
                   />
