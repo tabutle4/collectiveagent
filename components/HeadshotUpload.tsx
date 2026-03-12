@@ -46,7 +46,12 @@ export default function HeadshotUpload({
     offsetX: number
     offsetY: number
     scale: number
-  }>(() => initialCrop || { offsetX: 0, offsetY: 0, scale: 1 })
+  }>(() => {
+  if (initialCrop && typeof initialCrop.offsetX === 'number') {
+    return initialCrop
+  }
+  return { offsetX: 0, offsetY: 0, scale: 1 }
+})
   const [dragging, setDragging] = useState(false)
   const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null)
 
@@ -205,12 +210,20 @@ export default function HeadshotUpload({
         onWheel={handleWheel}
       >
         <div
-          className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 flex items-center justify-center ${
-            sizeClasses[size]
-          }`}
-          onMouseDown={handleMouseDown}
-          style={{ cursor: editingCrop ? (dragging ? 'grabbing' : 'grab') : 'default' }}
-        >
+  className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 flex items-center justify-center ${
+    sizeClasses[size]
+  }`}
+  onMouseDown={handleMouseDown}
+  style={{ 
+    cursor: editingCrop ? (dragging ? 'grabbing' : 'grab') : 'default',
+    width: `${circleSizePx}px`,
+    height: `${circleSizePx}px`,
+    minWidth: `${circleSizePx}px`,
+    minHeight: `${circleSizePx}px`,
+    maxWidth: `${circleSizePx}px`,
+    maxHeight: `${circleSizePx}px`,
+  }}
+>
           {displayUrl ? (
             <img
               src={displayUrl}
