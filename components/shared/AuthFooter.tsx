@@ -9,7 +9,7 @@ export default function AuthFooter() {
   return (
     <>
       <div className="px-8 pb-6 flex items-center gap-4">
-        
+        <a
           href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/"
           target="_blank"
           rel="noopener noreferrer"
@@ -19,6 +19,7 @@ export default function AuthFooter() {
         </a>
         <span className="text-luxury-gray-5 text-xs">·</span>
         
+          <a 
           href="https://coachingbrokeragetools.com/privacy-policy"
           target="_blank"
           rel="noopener noreferrer"
@@ -28,6 +29,7 @@ export default function AuthFooter() {
         </a>
         <span className="text-luxury-gray-5 text-xs">·</span>
         
+          <a
           href="https://coachingbrokeragetools.com/"
           target="_blank"
           rel="noopener noreferrer"
