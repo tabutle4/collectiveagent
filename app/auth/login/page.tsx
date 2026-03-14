@@ -111,12 +111,6 @@ function LoginForm() {
         >
           Forgot your password?
         </Link>
-        <Link
-          href="/auth/register"
-          className="block text-sm text-luxury-gray-2 hover:text-luxury-black transition-colors"
-        >
-          Create first admin account
-        </Link>
       </div>
     </form>
   )
