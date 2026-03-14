@@ -127,7 +127,7 @@ export default function LoginPage() {
     <PageContainer>
 
       
-      <div className="max-w-md mx-auto px-6 py-16" style={{ paddingTop: '120px' }}>
+      <div className="max-w-md mx-auto py-16">
         <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 tracking-luxury" >
           <span className="border-b-2 border-luxury-accent pb-1">Sign In</span>
         </h2>

@@ -44,7 +44,7 @@ export default function ForgotPasswordPage() {
     <PageContainer>
 
       
-      <div className="max-w-md mx-auto px-6 py-16">
+      <div className="max-w-md mx-auto py-16">
         <h2 className="text-2xl font-light text-center mb-4 tracking-luxury">
           Reset Password
         </h2>
