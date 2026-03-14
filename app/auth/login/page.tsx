@@ -3,7 +3,6 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import PageContainer from '@/components/shared/PageContainer'
 
 function LoginForm() {
   const router = useRouter()
@@ -35,23 +34,17 @@ function LoginForm() {
         return
       }
 
-      // Store user in localStorage
       localStorage.setItem('user', JSON.stringify(data.user))
       
-      // If there's a redirect URL, use it (but validate it's a local path)
       if (redirectTo && redirectTo.startsWith('/')) {
         router.push(redirectTo)
         return
       }
       
-      // Default redirect based on user role
       const userRole = data.user.role || ''
       if (userRole === 'Admin') {
         router.push('/admin/dashboard')
-      } else if (userRole === 'Agent') {
-        router.push('/profile')
       } else {
-        // Default to agent checklist for other roles
         router.push('/profile')
       }
     } catch (err) {
@@ -61,15 +54,15 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded text-sm">
           {error}
         </div>
       )}
       
       <div>
-        <label htmlFor="email" className="block text-sm mb-2 text-luxury-gray-1">
+        <label htmlFor="email" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">
           Email
         </label>
         <input
@@ -78,14 +71,23 @@ function LoginForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="input-luxury"
+          placeholder="you@collectiverealtyco.com"
           required
         />
       </div>
       
       <div>
-        <label htmlFor="password" className="block text-sm mb-2 text-luxury-gray-1">
-          Password
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label htmlFor="password" className="text-sm text-luxury-gray-2 font-medium">
+            Password
+          </label>
+          <Link
+            href="/auth/forgot-password"
+            className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
           id="password"
           type="password"
@@ -99,37 +101,82 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="btn btn-primary w-full"
+        className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Signing In...' : 'Sign In'}
+        {loading ? 'Signing in...' : 'Sign in'}
       </button>
-      
-      <div className="text-center space-y-2">
-        <Link
-          href="/auth/forgot-password"
-          className="block text-sm text-luxury-gray-2 hover:text-luxury-black transition-colors"
-        >
-          Forgot your password?
-        </Link>
-      </div>
     </form>
   )
 }
 
 export default function LoginPage() {
   return (
-    <PageContainer>
-
-      
-      <div className="max-w-md mx-auto py-16">
-        <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 tracking-luxury" >
-          <span className="border-b-2 border-luxury-accent pb-1">Sign In</span>
-        </h2>
-        
-        <Suspense fallback={<div className="text-center">Loading...</div>}>
-          <LoginForm />
-        </Suspense>
+    <div className="min-h-screen bg-luxury-light flex flex-col">
+      {/* Logo - top left */}
+      <div className="px-8 pt-8">
+        <img 
+          src="/logo.png" 
+          alt="Collective Realty Co." 
+          className="w-10 h-10 object-contain"
+        />
       </div>
-    </PageContainer>
+
+      {/* Form card - centered */}
+      <div className="flex-1 flex items-center justify-center px-4 -mt-16">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-8">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-1">
+              Sign in to Collective Agent
+            </h1>
+            <p className="text-sm text-luxury-gray-3 mb-8">
+              Welcome back
+            </p>
+            
+            <Suspense fallback={<div className="text-center text-sm text-luxury-gray-3">Loading...</div>}>
+              <LoginForm />
+            </Suspense>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer links - bottom left */}
+      <div className="px-8 pb-6 flex items-center gap-4">
+        <a 
+          href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
+          Training Center
+        </a>
+        <span className="text-luxury-gray-5 text-xs">·</span>
+        <a 
+          href="https://coachingbrokeragetools.com/privacy-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
+          Privacy Policy
+        </a>
+        <span className="text-luxury-gray-5 text-xs">·</span>
+        <a 
+          href="https://coachingbrokeragetools.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
+          Tools Home
+        </a>
+        <span className="text-luxury-gray-5 text-xs">·</span>
+        <a 
+          href="https://coachingbrokeragetools.com/contact"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
+          Contact
+        </a>
+      </div>
+    </div>
   )
 }
