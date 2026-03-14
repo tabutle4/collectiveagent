@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { message,
-      subject, userName, userEmail, subject } = body
+      subject, userName, userEmail } = body
 
     if (!message || !userName || !userEmail) {
       return NextResponse.json(
