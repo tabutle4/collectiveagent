@@ -10,12 +10,61 @@ export default function ProfilePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [personalForm, setPersonalForm] = useState({
+    preferred_first_name: "",
+    preferred_last_name: "",
+    personal_email: "",
+    personal_phone: "",
+    instagram_handle: "",
+    tiktok_handle: "",
+    threads_handle: "",
+    youtube_url: "",
+    linkedin_url: "",
+    facebook_url: "",
+    shipping_address_line1: "",
+    shipping_address_line2: "",
+    shipping_city: "",
+    shipping_state: "",
+    shipping_zip: "",
+    birth_month: "",
+    date_of_birth: "",
+    shirt_type: "",
+    shirt_size: "",
+  })
   const [headshotUrl, setHeadshotUrl] = useState<string | null>(null)
 
   useEffect(() => {
     checkAuthAndLoadUser()
   }, [])
 
+  useEffect(() => {
+    if (user) {
+      setPersonalForm({
+        preferred_first_name: user.preferred_first_name || "",
+        preferred_last_name: user.preferred_last_name || "",
+        personal_email: user.personal_email || "",
+        personal_phone: user.personal_phone || "",
+        instagram_handle: user.instagram_handle || "",
+        tiktok_handle: user.tiktok_handle || "",
+        threads_handle: user.threads_handle || "",
+        youtube_url: user.youtube_url || "",
+        linkedin_url: user.linkedin_url || "",
+        facebook_url: user.facebook_url || "",
+        shipping_address_line1: user.shipping_address_line1 || "",
+        shipping_address_line2: user.shipping_address_line2 || "",
+        shipping_city: user.shipping_city || "",
+        shipping_state: user.shipping_state || "",
+        shipping_zip: user.shipping_zip || "",
+        birth_month: user.birth_month || "",
+        date_of_birth: user.date_of_birth || "",
+        shirt_type: user.shirt_type || "",
+        shirt_size: user.shirt_size || "",
+      })
+    }
+  }, [user])
   const formatDateForDisplay = (value: string | null) => {
     if (!value) return ''
     const date = new Date(value)
@@ -94,31 +143,7 @@ export default function ProfilePage() {
   const isAdmin = user.role === 'Admin'
   const isAgent = user.role === 'Agent'
 
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
-  const [personalForm, setPersonalForm] = useState({
-    preferred_first_name: user.preferred_first_name || '',
-    preferred_last_name: user.preferred_last_name || '',
-    personal_email: user.personal_email || '',
-    personal_phone: user.personal_phone || '',
-    instagram_handle: user.instagram_handle || '',
-    tiktok_handle: user.tiktok_handle || '',
-    threads_handle: user.threads_handle || '',
-    youtube_url: user.youtube_url || '',
-    linkedin_url: user.linkedin_url || '',
-    facebook_url: user.facebook_url || '',
-    shipping_address_line1: user.shipping_address_line1 || '',
-    shipping_address_line2: user.shipping_address_line2 || '',
-    shipping_city: user.shipping_city || '',
-    shipping_state: user.shipping_state || '',
-    shipping_zip: user.shipping_zip || '',
-    birth_month: user.birth_month || '',
-    date_of_birth: user.date_of_birth || '',
-    shirt_type: user.shirt_type || '',
-    shirt_size: user.shirt_size || '',
-  })
 
   const handlePersonalChange = (field: keyof typeof personalForm, value: string) => {
     setPersonalForm(prev => ({ ...prev, [field]: value }))
