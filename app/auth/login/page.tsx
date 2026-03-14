@@ -3,12 +3,13 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import AuthFooter from '@/components/shared/AuthFooter'
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect')
-  
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -35,12 +36,12 @@ function LoginForm() {
       }
 
       localStorage.setItem('user', JSON.stringify(data.user))
-      
+
       if (redirectTo && redirectTo.startsWith('/')) {
         router.push(redirectTo)
         return
       }
-      
+
       const userRole = data.user.role || ''
       if (userRole === 'Admin') {
         router.push('/admin/dashboard')
@@ -60,7 +61,7 @@ function LoginForm() {
           {error}
         </div>
       )}
-      
+
       <div>
         <label htmlFor="email" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">
           Email
@@ -75,7 +76,7 @@ function LoginForm() {
           required
         />
       </div>
-      
+
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label htmlFor="password" className="text-sm text-luxury-gray-2 font-medium">
@@ -97,7 +98,7 @@ function LoginForm() {
           required
         />
       </div>
-      
+
       <button
         type="submit"
         disabled={loading}
@@ -112,18 +113,16 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="min-h-screen bg-luxury-light flex flex-col">
-      {/* Logo - top left */}
       <div className="px-8 pt-8">
-        <img 
-          src="/logo.png" 
-          alt="Collective Realty Co." 
-          className="w-10 h-10 object-contain"
+        <img
+          src="/logo.png"
+          alt="Collective Realty Co."
+          className="w-20 h-20 object-contain"
         />
       </div>
 
-      {/* Form card - centered */}
       <div className="flex-1 flex items-center justify-center px-4 -mt-16">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-8">
             <h1 className="text-xl font-semibold text-luxury-gray-1 mb-1">
               Sign in to Collective Agent
@@ -131,7 +130,7 @@ export default function LoginPage() {
             <p className="text-sm text-luxury-gray-3 mb-8">
               Welcome back
             </p>
-            
+
             <Suspense fallback={<div className="text-center text-sm text-luxury-gray-3">Loading...</div>}>
               <LoginForm />
             </Suspense>
@@ -139,44 +138,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Footer links - bottom left */}
-      <div className="px-8 pb-6 flex items-center gap-4">
-        <a 
-          href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-        >
-          Training Center
-        </a>
-        <span className="text-luxury-gray-5 text-xs">·</span>
-        <a 
-          href="https://coachingbrokeragetools.com/privacy-policy"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-        >
-          Privacy Policy
-        </a>
-        <span className="text-luxury-gray-5 text-xs">·</span>
-        <a 
-          href="https://coachingbrokeragetools.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-        >
-          Tools Home
-        </a>
-        <span className="text-luxury-gray-5 text-xs">·</span>
-        <a 
-          href="https://coachingbrokeragetools.com/contact"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-        >
-          Contact
-        </a>
-      </div>
+      <AuthFooter />
     </div>
   )
 }
