@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { PanelLeft, CheckSquare, FileText, Briefcase, LogOut } from 'lucide-react'
+import { PanelLeft, FileText, Briefcase, LogOut } from 'lucide-react'
 
 export default function AgentLayout({
   children,

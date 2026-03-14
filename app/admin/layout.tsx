@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, CheckSquare, ClipboardList, Briefcase, FileCheck, Receipt, UsersRound, BarChart3, DollarSign, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, UserCog, PanelLeft, Calendar, Mail, FileText, Briefcase, FileCheck, Receipt, UsersRound, BarChart3, DollarSign, Settings } from 'lucide-react'
 
 export default function AdminLayout({
   children,
@@ -207,7 +207,6 @@ export default function AdminLayout({
       items: [
         { href: '/admin/email-templates', label: 'Email Templates', icon: Mail },
         { href: '/admin/agent-roster', label: 'Agent Roster', icon: FileText },
-        { href: '/admin/checklist-editor', label: 'Checklist Editor', icon: ClipboardList },
       ],
     },
     {
