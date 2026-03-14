@@ -576,16 +576,6 @@ export default function OnboardingManagementPage() {
                             {unlocking === user.id ? 'Locking...' : 'Lock Checklist'}
                           </button>
                         )}
-                        <a
-                          href={`/onboarding-checklist?preview=${user.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="px-3 py-1.5 text-xs rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center gap-2"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          View Checklist
-                        </a>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()

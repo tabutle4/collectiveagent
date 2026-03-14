@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import PageContainer from '@/components/shared/PageContainer'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 

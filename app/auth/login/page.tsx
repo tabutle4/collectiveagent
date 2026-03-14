@@ -49,10 +49,10 @@ function LoginForm() {
       if (userRole === 'Admin') {
         router.push('/admin/dashboard')
       } else if (userRole === 'Agent') {
-        router.push('/agent/checklist')
+        router.push('/profile')
       } else {
         // Default to agent checklist for other roles
-        router.push('/agent/checklist')
+        router.push('/profile')
       }
     } catch (err) {
       setError('An error occurred. Please try again.')

@@ -169,7 +169,6 @@ export default function AgentLayout({
   }
 
   const navItems = [
-    { href: '/agent/checklist', label: 'Checklist', icon: CheckSquare },
     { href: '/agent/forms', label: 'Forms', icon: FileText },
     { href: '/agent/form-responses', label: 'Transactions', icon: Briefcase },
   ]
@@ -190,7 +189,6 @@ export default function AgentLayout({
       {/* BLACK HEADER - Fixed at top */}
       <header className="fixed left-0 right-0 bg-black border-b border-gray-800 z-50 flex items-center justify-between px-3 md:px-4" style={{ height: headerOffset, top: 0, margin: 0, padding: (!mounted || !isMobile) ? '0 1rem' : '0 0.75rem' }} suppressHydrationWarning>
         {/* Left: Logo + Title */}
-        <Link href="/agent/checklist" className="flex items-center space-x-2 md:space-x-4">
           <img 
             src="/logo-white.png" 
             alt="Collective Realty Co." 

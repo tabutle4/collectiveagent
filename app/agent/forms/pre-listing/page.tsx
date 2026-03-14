@@ -139,7 +139,7 @@ export default function PreListingForm() {
         if (user.role === 'Admin') {
           router.push('/admin/dashboard')
         } else {
-          router.push('/onboarding-checklist')
+          router.push('/forms/success')
         }
       } else {
         alert(`Error: ${data.error || 'Failed to submit form'}`)

@@ -136,7 +136,7 @@ export default function JustListedForm() {
         if (user.role === 'Admin') {
           router.push('/admin/dashboard')
         } else {
-          router.push('/onboarding-checklist')
+          router.push('/forms/success')
         }
       } else {
         alert(`Error: ${data.error || 'Failed to submit form'}`)

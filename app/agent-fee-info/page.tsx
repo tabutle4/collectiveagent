@@ -135,7 +135,7 @@ export default function AgentFeeInfoPage() {
       // TODO: In production, redirect to payment processor (Stripe Checkout, etc.)
       // For now, mark as paid and redirect
       // Redirect back to onboarding checklist
-      router.push('/onboarding-checklist')
+      router.push('/forms/success')
     } catch (error: any) {
       console.error('Error processing payment:', error)
       alert('Failed to process payment: ' + (error.message || 'Please try again.'))
