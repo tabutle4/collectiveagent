@@ -113,7 +113,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div className="min-h-screen bg-luxury-light flex flex-col">
-      <div className="px-8 pt-8">
+      <div className="px-8 pt-4">
         <img
           src="/logo.png"
           alt="Collective Realty Co."
