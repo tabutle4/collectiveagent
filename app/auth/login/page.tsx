@@ -99,7 +99,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="btn btn-black w-full"
+        className="btn btn-primary w-full"
       >
         {loading ? 'Signing In...' : 'Sign In'}
       </button>

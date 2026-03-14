@@ -128,7 +128,7 @@ export default function ProfilePage() {
           <p className="text-red-600">Failed to load profile. Please try again.</p>
           <button
             onClick={() => router.push('/auth/login')}
-            className="mt-4 px-4 py-2 text-sm rounded transition-colors text-center btn-black"
+            className="mt-4 px-4 py-2 text-sm rounded transition-colors text-center btn-primary"
           >
             Go to Login
           </button>
@@ -421,7 +421,7 @@ export default function ProfilePage() {
             <button
               onClick={handleSavePersonal}
               disabled={saving}
-              className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm rounded transition-colors btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving...' : 'Save Personal Info'}
             </button>

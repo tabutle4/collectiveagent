@@ -224,7 +224,7 @@ export default function FormBuilderPage() {
             <p className="text-luxury-gray-2">No form selected</p>
             <button
               onClick={() => router.push('/admin/form-responses?tab=forms')}
-              className="mt-4 px-4 py-2 text-sm rounded transition-colors btn-black"
+              className="mt-4 px-4 py-2 text-sm rounded transition-colors btn-primary"
             >
               Back to Forms
             </button>
@@ -348,7 +348,7 @@ export default function FormBuilderPage() {
             <h3 className="text-lg font-medium text-luxury-gray-1">Form Fields</h3>
             <button
               onClick={addField}
-              className="px-4 py-2 text-sm rounded transition-colors btn-black flex items-center gap-2"
+              className="px-4 py-2 text-sm rounded transition-colors btn-primary flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Add Field
@@ -511,7 +511,7 @@ export default function FormBuilderPage() {
                 <p className="text-luxury-gray-2 mb-4">No fields added yet</p>
                 <button
                   onClick={addField}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-black"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-primary"
                 >
                   Add Your First Field
                 </button>
@@ -523,7 +523,7 @@ export default function FormBuilderPage() {
             <button
               onClick={handleSave}
               disabled={saving || !formName}
-              className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50 flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
               {saving ? 'Saving...' : 'Save Form'}

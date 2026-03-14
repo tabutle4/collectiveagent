@@ -198,14 +198,14 @@ export default function CoordinationServiceConfig() {
                     <button
                       onClick={() => moveInclusion(index, 'up')}
                       disabled={index === 0}
-                      className="px-2 py-1 text-xs rounded transition-colors btn-white disabled:opacity-30"
+                      className="px-2 py-1 text-xs rounded transition-colors btn-secondary disabled:opacity-30"
                     >
                       ↑
                     </button>
                     <button
                       onClick={() => moveInclusion(index, 'down')}
                       disabled={index === formData.inclusions.length - 1}
-                      className="px-2 py-1 text-xs rounded transition-colors btn-white disabled:opacity-30"
+                      className="px-2 py-1 text-xs rounded transition-colors btn-secondary disabled:opacity-30"
                     >
                       ↓
                     </button>
@@ -230,7 +230,7 @@ export default function CoordinationServiceConfig() {
                 />
                 <button
                   onClick={addInclusion}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-black"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-primary"
                 >
                   Add
                 </button>
@@ -273,14 +273,14 @@ export default function CoordinationServiceConfig() {
             <div className="flex justify-end gap-4 pt-6 border-t border-luxury-gray-5">
               <button
                 onClick={() => router.push('/admin/coordination')}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save Configuration'}
               </button>

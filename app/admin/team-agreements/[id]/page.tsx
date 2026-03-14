@@ -816,7 +816,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             </h1>
             <Link
               href={`/admin/team-agreements/${id}?edit=true`}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black inline-block"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary inline-block"
             >
               Edit Agreement
             </Link>
@@ -1186,7 +1186,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             <button
               type="button"
               onClick={addTeamMember}
-              className="px-3 py-2 text-xs md:text-sm rounded transition-colors btn-white inline-flex items-center gap-2"
+              className="px-3 py-2 text-xs md:text-sm rounded transition-colors btn-secondary inline-flex items-center gap-2"
             >
               <Plus size={16} />
               Add Team Member
@@ -1328,7 +1328,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   className={`px-3 py-1.5 text-xs rounded transition-colors ${
                                     isCustom
                                       ? 'bg-luxury-gray-5 text-luxury-gray-3 cursor-not-allowed'
-                                      : 'btn-white'
+                                      : 'btn-secondary'
                                   }`}
                                 >
                                   Auto-fill
@@ -1452,7 +1452,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   className={`px-3 py-1.5 text-xs rounded transition-colors ${
                                     isCustom
                                       ? 'bg-luxury-gray-5 text-luxury-gray-3 cursor-not-allowed'
-                                      : 'btn-white'
+                                      : 'btn-secondary'
                                   }`}
                                 >
                                   Auto-fill
@@ -1542,14 +1542,14 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         <div className="flex gap-4 justify-end">
           <Link
             href="/admin/team-agreements"
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={saving}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : isNew ? 'Create Agreement' : 'Save Changes'}
           </button>

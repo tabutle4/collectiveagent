@@ -61,7 +61,7 @@ function SuccessContent() {
         <div className="text-center mt-12">
           <a
             href="https://coachingbrokerage.com"
-            className="btn btn-outline"
+            className="btn btn-secondary"
           >
             Return to Home
           </a>

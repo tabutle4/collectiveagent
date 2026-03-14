@@ -40,7 +40,7 @@ export default function EmailTemplatesPage() {
     <div>
       <div className="flex items-center justify-between mb-5 md:mb-8">
         <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >Email Templates</h2>
-        <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black inline-block">
+        <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary inline-block">
           New Template
         </Link>
       </div>
@@ -76,7 +76,7 @@ export default function EmailTemplatesPage() {
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <button
                 onClick={() => setPreviewEmail('welcome')}
-                className="w-full px-3 py-2 text-xs rounded transition-colors btn-white flex items-center justify-center gap-2"
+                className="w-full px-3 py-2 text-xs rounded transition-colors btn-secondary flex items-center justify-center gap-2"
               >
                 <Eye className="w-3 h-3" />
                 Preview
@@ -111,7 +111,7 @@ export default function EmailTemplatesPage() {
             <div className="mt-3 pt-3 border-t border-luxury-gray-5">
               <button
                 onClick={() => setPreviewEmail('weekly')}
-                className="w-full px-3 py-2 text-xs rounded transition-colors btn-white flex items-center justify-center gap-2"
+                className="w-full px-3 py-2 text-xs rounded transition-colors btn-secondary flex items-center justify-center gap-2"
               >
                 <Eye className="w-3 h-3" />
                 Preview
@@ -129,7 +129,7 @@ export default function EmailTemplatesPage() {
       {templates.length === 0 ? (
         <div className="card-section text-center py-12">
           <p className="text-luxury-gray-2 mb-6">No email templates found</p>
-          <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black inline-block">
+          <Link href="/admin/email-templates/new" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary inline-block">
             New Template
           </Link>
         </div>
@@ -211,7 +211,7 @@ export default function EmailTemplatesPage() {
                       alert(error.message || 'Failed to duplicate template')
                     }
                   }}
-                  className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
+                  className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
                 >
                   📋 Duplicate
                 </button>

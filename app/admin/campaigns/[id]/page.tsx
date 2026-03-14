@@ -218,7 +218,7 @@ export default function CampaignDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Campaign not found</p>
-        <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+        <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
           Back to Campaigns
         </Link>
       </div>
@@ -244,7 +244,7 @@ export default function CampaignDetailPage() {
           </h2>
           <Link
             href={`/admin/campaigns/builder/${params.id}`}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Edit Campaign Design
           </Link>
@@ -266,7 +266,7 @@ export default function CampaignDetailPage() {
               </p>
               <button
                 onClick={() => setEditingDeadline(true)}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary"
               >
                 Edit Deadline
               </button>
@@ -318,7 +318,7 @@ export default function CampaignDetailPage() {
                   }
                 }}
                 disabled={savingDeadline}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingDeadline ? 'Saving...' : 'Save'}
               </button>
@@ -333,7 +333,7 @@ export default function CampaignDetailPage() {
                   }
                 }}
                 disabled={savingDeadline}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -370,7 +370,7 @@ export default function CampaignDetailPage() {
                 alert(error.message || 'Failed to duplicate campaign')
               }
             }}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
           >
             📋 Duplicate for Next Year
           </button>
@@ -451,13 +451,13 @@ export default function CampaignDetailPage() {
             placeholder="event@venue.com"
             className="input-luxury flex-1"
           />
-          <button onClick={saveEventStaffEmail} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white">
+          <button onClick={saveEventStaffEmail} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary">
             Save Email
           </button>
           <button
             onClick={sendRsvpList}
             disabled={sendingRsvp || !eventStaffEmail}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sendingRsvp ? 'Sending...' : 'Send RSVP List'}
           </button>
@@ -477,7 +477,7 @@ export default function CampaignDetailPage() {
           
           <button
             onClick={() => setEmailModalOpen(true)}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Preview & Send Emails
           </button>
@@ -525,7 +525,7 @@ export default function CampaignDetailPage() {
       {/* Token Generator */}
       <div className="card-section mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-luxury">Campaign Tokens</h3>
-        <button onClick={generateTokens} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black">
+        <button onClick={generateTokens} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary">
           Generate Tokens for All Active Agents
         </button>
         <p className="text-xs text-luxury-gray-2 mt-2">
@@ -708,7 +708,7 @@ export default function CampaignDetailPage() {
                               setSelectedAgent(agent)
                               setResponseModalOpen(true)
                             }}
-                            className="text-sm px-3 py-1 rounded transition-colors text-center btn-black"
+                            className="text-sm px-3 py-1 rounded transition-colors text-center btn-primary"
                           >
                             View Responses
                           </button>

@@ -206,7 +206,7 @@ export default function AgentFormsPage() {
                 {form.formType === 'pre-listing' || form.formType === 'just-listed' ? (
                   <Link
                     href={form.formType === 'pre-listing' ? '/agent/forms/pre-listing' : '/agent/forms/just-listed'}
-                    className="px-4 py-2 text-sm rounded transition-colors btn-black flex items-center gap-2"
+                    className="px-4 py-2 text-sm rounded transition-colors btn-primary flex items-center gap-2"
                   >
                     Open Form
                     <ExternalLink className="w-4 h-4" />
@@ -216,7 +216,7 @@ export default function AgentFormsPage() {
                     href={form.shareableLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-4 py-2 text-sm rounded transition-colors btn-black flex items-center gap-2"
+                    className="px-4 py-2 text-sm rounded transition-colors btn-primary flex items-center gap-2"
                   >
                     Open Form
                     <ExternalLink className="w-4 h-4" />
@@ -236,13 +236,13 @@ export default function AgentFormsPage() {
         <div className="flex flex-col sm:flex-row gap-3">
           <a
             href="mailto:office@collectiverealtyco.com"
-            className="px-4 py-2 text-sm rounded transition-colors btn-white"
+            className="px-4 py-2 text-sm rounded transition-colors btn-secondary"
           >
             Email Office
           </a>
           <a
             href="tel:281-638-9407"
-            className="px-4 py-2 text-sm rounded transition-colors btn-white"
+            className="px-4 py-2 text-sm rounded transition-colors btn-secondary"
           >
             Call Office
           </a>

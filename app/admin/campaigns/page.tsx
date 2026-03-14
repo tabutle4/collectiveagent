@@ -80,7 +80,7 @@ export default function AdminCampaignsPage() {
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-5 md:mb-8 gap-4">
         <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >Campaigns</h2>
-        <Link href="/admin/campaigns/builder" className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-black w-full md:w-auto inline-block">
+        <Link href="/admin/campaigns/builder" className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary w-full md:w-auto inline-block">
           Create New Campaign
         </Link>
       </div>
@@ -88,7 +88,7 @@ export default function AdminCampaignsPage() {
       {campaigns.length === 0 ? (
         <div className="card-section text-center py-12">
           <p className="text-luxury-gray-2 mb-6">No campaigns found</p>
-          <Link href="/admin/campaigns/builder" className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-black inline-block">
+          <Link href="/admin/campaigns/builder" className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary inline-block">
             Create Your First Campaign
           </Link>
         </div>

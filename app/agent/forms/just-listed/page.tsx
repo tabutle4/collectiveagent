@@ -471,7 +471,7 @@ export default function JustListedForm() {
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
               >
                 Cancel
               </button>
@@ -481,7 +481,7 @@ export default function JustListedForm() {
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   loading 
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed' 
-                    : 'btn-black'
+                    : 'btn-primary'
                 }`}
               >
                 {loading ? (

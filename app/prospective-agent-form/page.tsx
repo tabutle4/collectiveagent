@@ -539,7 +539,7 @@ export default function ProspectiveAgentForm() {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-black px-16"
+              className="btn btn-primary px-16"
             >
               {loading ? 'Submitting...' : 'Submit Form'}
             </button>

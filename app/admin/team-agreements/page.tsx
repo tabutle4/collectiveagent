@@ -162,7 +162,7 @@ export default function TeamAgreementsPage() {
         </div>
         <Link
           href="/admin/team-agreements/new"
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black inline-flex items-center gap-2"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary inline-flex items-center gap-2"
         >
           <Plus size={16} />
           Create New Team Agreement
@@ -280,14 +280,14 @@ export default function TeamAgreementsPage() {
               <div className="flex gap-2 pt-4 border-t border-luxury-gray-5">
                 <Link
                   href={`/admin/team-agreements/${agreement.id}`}
-                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors btn-white inline-flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors btn-secondary inline-flex items-center justify-center gap-2"
                 >
                   <Eye size={14} />
                   View Details
                 </Link>
                 <Link
                   href={`/admin/team-agreements/${agreement.id}?edit=true`}
-                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors btn-white inline-flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-2 text-xs md:text-sm rounded transition-colors btn-secondary inline-flex items-center justify-center gap-2"
                 >
                   <Edit size={14} />
                   Edit
@@ -297,7 +297,7 @@ export default function TeamAgreementsPage() {
                     href={agreement.agreement_document_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-2 text-xs md:text-sm rounded transition-colors btn-white inline-flex items-center justify-center gap-2"
+                    className="px-3 py-2 text-xs md:text-sm rounded transition-colors btn-secondary inline-flex items-center justify-center gap-2"
                     title="View Document"
                   >
                     <FileText size={14} />

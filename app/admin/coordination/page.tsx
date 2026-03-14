@@ -206,7 +206,7 @@ export default function AdminCoordinationDashboard() {
               </button>
               <button
                 onClick={() => router.push('/admin/coordination/activate')}
-                className="px-4 py-2 text-sm rounded transition-colors btn-black"
+                className="px-4 py-2 text-sm rounded transition-colors btn-primary"
               >
                 Activate Coordination
               </button>
@@ -284,7 +284,7 @@ export default function AdminCoordinationDashboard() {
             {filter === 'active' && (
               <button
                 onClick={() => router.push('/admin/coordination/activate')}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-black"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-primary"
               >
                 Activate First Coordination
               </button>
@@ -371,7 +371,7 @@ export default function AdminCoordinationDashboard() {
                   <div className="mt-4 md:mt-0 md:ml-4 flex flex-col space-y-2">
                     <button
                       onClick={() => router.push(`/admin/coordination/${coordination.id}`)}
-                      className="px-4 py-2 text-sm rounded transition-colors btn-black"
+                      className="px-4 py-2 text-sm rounded transition-colors btn-primary"
                     >
                       Manage
                     </button>

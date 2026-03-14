@@ -270,14 +270,14 @@ export default function ActivateCoordinationPage() {
               <button
                 type="button"
                 onClick={() => router.push('/admin/coordination')}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedListing}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50"
               >
                 {loading ? 'Activating...' : 'Activate Coordination'}
               </button>

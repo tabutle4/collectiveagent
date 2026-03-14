@@ -108,7 +108,7 @@ export default function AdminDashboard() {
         )}
         
         <div className="text-center mt-6">
-          <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+          <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
             View All Prospects
           </Link>
         </div>

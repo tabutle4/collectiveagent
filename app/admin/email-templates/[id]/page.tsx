@@ -84,7 +84,7 @@ export default function EditEmailTemplatePage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Template not found</p>
-        <Link href="/admin/email-templates" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+        <Link href="/admin/email-templates" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
           Back to Templates
         </Link>
       </div>
