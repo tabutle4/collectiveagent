@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LuxuryHeader from '@/components/LuxuryHeader'
+import PageContainer from '@/components/PageContainer'
 import HeadshotUpload from '@/components/HeadshotUpload'
 
 export default function ProfilePage() {
@@ -64,33 +65,27 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <LuxuryHeader />
-        <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-          <div className="card-section text-center py-12">
-            <p className="text-luxury-gray-2">Loading your profile...</p>
-          </div>
+      <PageContainer>
+        <div className="card-section text-center py-12">
+          <p className="text-luxury-gray-2">Loading your profile...</p>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-white">
-        <LuxuryHeader />
-        <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-          <div className="card-section text-center py-12">
-            <p className="text-red-600">Failed to load profile. Please try again.</p>
-            <button
-              onClick={() => router.push('/auth/login')}
-              className="mt-4 px-4 py-2 text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
-            >
-              Go to Login
-            </button>
-          </div>
+      <PageContainer>
+        <div className="card-section text-center py-12">
+          <p className="text-red-600">Failed to load profile. Please try again.</p>
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="mt-4 px-4 py-2 text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+          >
+            Go to Login
+          </button>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
@@ -182,9 +177,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
-      <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
+    <PageContainer>
         <div className="mb-8">
           <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
             My Profile

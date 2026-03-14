@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import LuxuryHeader from '@/components/LuxuryHeader'
+import PageContainer from '@/components/PageContainer'
 import { supabase } from '@/lib/supabase'
 import { Edit, Copy, Mail, CheckCircle2 } from 'lucide-react'
 
@@ -152,14 +153,11 @@ export default function AgentFeeInfoPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <LuxuryHeader />
-        <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-          <div className="card-section text-center py-12">
-            <p className="text-luxury-gray-2">Loading...</p>
-          </div>
+      <PageContainer>
+        <div className="card-section text-center py-12">
+          <p className="text-luxury-gray-2">Loading...</p>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
@@ -168,18 +166,15 @@ export default function AgentFeeInfoPage() {
   const hasProrated = breakdown.prorated > 0
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+      <div className="mb-8">
+        <h1 className="text-3xl font-light mb-2 tracking-luxury">Agent Onboarding Fees</h1>
+        <p className="text-luxury-gray-2">Review your fee breakdown</p>
+      </div>
 
-      <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-        <div className="mb-8">
-          <h1 className="text-3xl font-light mb-2 tracking-luxury">Agent Onboarding Fees</h1>
-          <p className="text-luxury-gray-2">Review your fee breakdown</p>
-        </div>
-
-        <div className="card-section mb-6">
-          {/* One-Time Onboarding Fee */}
-          <div className="flex items-center justify-between py-4 border-b border-luxury-gray-5">
+      <div className="card-section mb-6">
+        {/* One-Time Onboarding Fee */}
+        <div className="flex-between-border">
             <div className="flex items-center gap-2">
               <label className="text-base font-medium text-luxury-gray-1">One-Time Onboarding Fee</label>
               <button
@@ -212,7 +207,7 @@ export default function AgentFeeInfoPage() {
           </div>
 
           {/* Monthly Fee */}
-          <div className="flex items-center justify-between py-4 border-b border-luxury-gray-5">
+          <div className="flex-between-border">
             <div className="flex items-center gap-2">
               <label className="text-base font-medium text-luxury-gray-1">Monthly Fee</label>
               <button
@@ -331,8 +326,7 @@ export default function AgentFeeInfoPage() {
             Click "Pay" above to process your payment of {formatCurrency(total)}. Your payment will be processed securely and you'll receive a confirmation email. Once payment is confirmed, you can continue with your onboarding checklist.
           </p>
         </div>
-      </div>
-    </div>
+    </PageContainer>
   )
 }
 

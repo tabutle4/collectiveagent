@@ -128,6 +128,11 @@
     @apply bg-luxury-dark-3 p-6 text-white rounded;
   }
   
+  /* frequently‑used row with border and spacing */
+  .flex-between-border {
+    @apply flex items-center justify-between py-4 border-b border-luxury-gray-5;
+  }
+  
   /* Clean Header - Works in dark mode */
   .header-luxury {
     @apply bg-luxury-dark-3 text-white py-8 px-6 text-center;

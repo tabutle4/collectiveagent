@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import PageContainer from '@/components/PageContainer'
 import { supabase } from '@/lib/supabase'
 
 export default function PublicRosterPage() {
@@ -197,9 +198,9 @@ export default function PublicRosterPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <PageContainer includeHeader={false} className="flex items-center justify-center">
         <p className="text-gray-500">Loading agent roster...</p>
-      </div>
+      </PageContainer>
     )
   }
 

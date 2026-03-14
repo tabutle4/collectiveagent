@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Edit, Plus, Save, X, Trash2, AlertCircle } from 'lucide-react'
+import PageContainer from '@/components/PageContainer'
 
 interface ChecklistItem {
   id: string
@@ -153,36 +154,31 @@ export default function ChecklistEditorPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-          <div className="card-section text-center py-12">
-            <p className="text-luxury-gray-2">Loading...</p>
-          </div>
+      <PageContainer>
+        <div className="card-section text-center py-12">
+          <p className="text-luxury-gray-2">Loading...</p>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   // Check role (simple string, not array)
   if (!currentUser || currentUser.role !== 'Admin') {
     return (
-      <div className="min-h-screen bg-white">
-        <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-          <div className="card-section">
-            <div className="flex items-center gap-3 text-amber-600">
-              <AlertCircle className="w-5 h-5" />
-              <p>Access denied. This page is only available to administrators.</p>
-            </div>
+      <PageContainer>
+        <div className="card-section">
+          <div className="flex items-center gap-3 text-amber-600">
+            <AlertCircle className="w-5 h-5" />
+            <p>Access denied. This page is only available to administrators.</p>
           </div>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
     <>
-      <div className="min-h-screen bg-white">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 pb-8" style={{ paddingTop: '104px' }}>
+      <PageContainer className="max-w-5xl mx-auto px-3 sm:px-4 pb-8" includeHeader>
           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-6">
             <div className="text-center sm:text-left space-y-1 sm:space-y-2 flex-1">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-luxury-gray-1">Checklist Editor</h1>
@@ -241,8 +237,7 @@ export default function ChecklistEditorPage() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
+</PageContainer>
 
       {/* Edit Modal */}
       {editingItem && (

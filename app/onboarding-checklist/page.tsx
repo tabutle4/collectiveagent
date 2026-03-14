@@ -726,22 +726,19 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
     if (insideAgentLayout) {
       // Within agent layout, keep it simple (layout already provides chrome)
       return (
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-8">
+        <PageContainer className="max-w-5xl mx-auto px-3 sm:px-4 pb-8">
           <div className="card-section text-center py-12">
             <p className="text-luxury-gray-2">Loading your onboarding checklist...</p>
           </div>
-        </div>
+        </PageContainer>
       )
     } else {
       return (
-        <div className="min-h-screen bg-white">
-          <LuxuryHeader />
-          <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-            <div className="card-section text-center py-12">
-              <p className="text-luxury-gray-2">Loading your onboarding checklist...</p>
-            </div>
+        <PageContainer>
+          <div className="card-section text-center py-12">
+            <p className="text-luxury-gray-2">Loading your onboarding checklist...</p>
           </div>
-        </div>
+        </PageContainer>
       )
     }
   }
@@ -749,7 +746,7 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
   if (error) {
     if (insideAgentLayout) {
       return (
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-8">
+        <PageContainer className="max-w-5xl mx-auto px-3 sm:px-4 pb-8">
           <div className="card-section">
             <div className="flex items-center gap-3 text-red-600">
               <AlertCircle className="w-5 h-5" />
@@ -767,32 +764,29 @@ function AgentOnboardingPageContent({ insideAgentLayout = false }: { insideAgent
               </div>
             </div>
           </div>
-        </div>
+        </PageContainer>
       )
     } else {
       return (
-        <div className="min-h-screen bg-white">
-          <LuxuryHeader />
-          <div className="max-w-4xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-            <div className="card-section">
-              <div className="flex items-center gap-3 text-red-600">
-                <AlertCircle className="w-5 h-5" />
-                <div>
-                  <p className="font-medium">{error}</p>
-                  <button
-                    onClick={() => {
-                      setLoading(true)
-                      loadUserData()
-                    }}
-                    className="text-sm text-blue-600 hover:underline mt-2"
-                  >
-                    Try Again
-                  </button>
-                </div>
+        <PageContainer>
+          <div className="card-section">
+            <div className="flex items-center gap-3 text-red-600">
+              <AlertCircle className="w-5 h-5" />
+              <div>
+                <p className="font-medium">{error}</p>
+                <button
+                  onClick={() => {
+                    setLoading(true)
+                    loadUserData()
+                  }}
+                  className="text-sm text-blue-600 hover:underline mt-2"
+                >
+                  Try Again
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        </PageContainer>
       )
     }
   }
