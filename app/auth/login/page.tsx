@@ -55,7 +55,7 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded text-sm">
           {error}
@@ -117,17 +117,17 @@ export default function LoginPage() {
         <img
           src="/logo.png"
           alt="Collective Realty Co."
-          className="w-20 h-20 object-contain"
+          className="w-32 h-32 object-contain"
         />
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 -mt-16">
-        <div className="w-full max-w-md">
-          <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-8">
-            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-1">
+        <div className="w-full max-w-lg">
+          <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-10">
+            <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-1">
               Sign in to Collective Agent
             </h1>
-            <p className="text-sm text-luxury-gray-3 mb-8">
+            <p className="text-sm text-luxury-gray-3 mb-10">
               Welcome back
             </p>
 
