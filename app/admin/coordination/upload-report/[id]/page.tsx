@@ -203,7 +203,7 @@ export default function UploadWeeklyReportPage() {
             <p className="text-luxury-gray-2 mb-4">Coordination not found</p>
             <button
               onClick={() => router.push('/admin/coordination')}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-black"
             >
               Back to Dashboard
             </button>
@@ -291,7 +291,7 @@ export default function UploadWeeklyReportPage() {
                     />
                     <label
                       htmlFor="file1-input"
-                      className="inline-block px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 cursor-pointer"
+                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-black cursor-pointer"
                     >
                       Choose File
                     </label>
@@ -343,7 +343,7 @@ export default function UploadWeeklyReportPage() {
                     />
                     <label
                       htmlFor="file2-input"
-                      className="inline-block px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 cursor-pointer"
+                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-black cursor-pointer"
                     >
                       Choose File
                     </label>
@@ -368,7 +368,7 @@ export default function UploadWeeklyReportPage() {
               <button
                 type="button"
                 onClick={() => router.push(`/admin/coordination/${coordinationId}`)}
-                className="px-6 py-2.5 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
               >
                 Cancel
               </button>
@@ -378,7 +378,7 @@ export default function UploadWeeklyReportPage() {
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed'
-                    : 'bg-luxury-black text-white hover:opacity-90'
+                    : 'btn-black'
                 }`}
               >
                 {uploading ? (

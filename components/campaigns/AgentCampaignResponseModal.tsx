@@ -290,7 +290,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
         <div className="flex justify-end px-6 py-4 border-t border-luxury-gray-5">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+            className="px-4 py-2 text-sm rounded transition-colors text-center btn-black"
           >
             Close
           </button>

@@ -618,12 +618,12 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
             <button 
               onClick={() => setCurrentStep(currentStep - 1)} 
               disabled={currentStep === 1}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
               style={{ display: currentStep === 1 ? 'none' : 'block' }}
             >
               ← Back
             </button>
-            <button onClick={handleNext} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90">
+            <button onClick={handleNext} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black">
               Next: Update My Profile →
             </button>
           </div>
@@ -1141,14 +1141,14 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
           <div className="text-center flex justify-center gap-4">
             <button
               onClick={() => setCurrentStep(currentStep - 1)}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
             >
               ← Back
             </button>
             <button
               onClick={handleNext}
               disabled={loading}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
             >
               {loading ? 'Saving...' : 'Next: Luncheon RSVP →'}
             </button>
@@ -1215,7 +1215,7 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
             <div className="mt-4 text-center">
               <button
                 onClick={() => setShowFlyerModal(true)}
-                className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
               >
                 View Event Flyer
               </button>
@@ -1270,14 +1270,14 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
           <div className="text-center flex justify-center gap-4">
             <button
               onClick={() => setCurrentStep(currentStep - 1)}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
             >
               ← Back
             </button>
             <button
               onClick={handleNext}
               disabled={loading}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
             >
               {loading ? 'Saving...' : 'Next: Feedback Survey →'}
             </button>
@@ -1408,14 +1408,14 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
           <div className="mt-8 text-center flex justify-center gap-4">
             <button
               onClick={() => setCurrentStep(currentStep - 1)}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
             >
               ← Back
             </button>
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 md:px-12"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black md:px-12"
             >
               {loading ? 'Submitting...' : 'Submit'}
             </button>
@@ -1450,7 +1450,7 @@ export default function CampaignForm({ campaignId, userId, userData, token, camp
                 setIsComplete(false)
                 setCurrentStep(1)
               }}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
             >
               Edit Responses
             </button>

@@ -421,25 +421,25 @@ export default function AgentRosterPage() {
           <div className="grid grid-cols-2 md:flex md:flex-row gap-2 md:gap-2">
         <button
           onClick={exportHTML}
-              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
         >
           Export HTML
         </button>
         <button
           onClick={exportExcel}
-              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
         >
           Export Excel
         </button>
         <button
           onClick={exportPDF}
-              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
         >
           Export PDF
         </button>
         <button
           onClick={sharePublicLink}
-              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+              className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
         >
               Share Link
         </button>

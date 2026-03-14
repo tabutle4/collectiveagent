@@ -302,7 +302,7 @@ export default function AgentFeeInfoPage() {
             <button
               onClick={handlePay}
               disabled={processing || !joinDate}
-              className="w-full px-6 py-4 text-base rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full px-6 py-4 text-base rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {processing ? (
                 <>

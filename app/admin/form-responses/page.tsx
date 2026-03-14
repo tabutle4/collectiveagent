@@ -1359,7 +1359,7 @@ export default function FormResponsesPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setCreateFormModalOpen(true)}
-                className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 flex items-center gap-2"
+                className="px-4 py-2 text-sm rounded transition-colors btn-black flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Create New Form
@@ -1367,7 +1367,7 @@ export default function FormResponsesPage() {
               {(activeTab === 'pre-listing' || activeTab === 'just-listed') && (
                 <button
                   onClick={handleCreateNew}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center gap-2"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   Create New Response
@@ -1376,7 +1376,7 @@ export default function FormResponsesPage() {
               {activeTab === 'prospects' && (
                 <button
                   onClick={handleExportProspects}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center gap-2"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1385,7 +1385,7 @@ export default function FormResponsesPage() {
               {activeTab === 'pre-listing' && (
                 <button
                   onClick={handleExportPreListing}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center gap-2"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1394,7 +1394,7 @@ export default function FormResponsesPage() {
               {activeTab === 'just-listed' && (
                 <button
                   onClick={handleExportJustListed}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black flex items-center gap-2"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1993,7 +1993,7 @@ export default function FormResponsesPage() {
                 {!isEditing ? (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+                    className="px-4 py-2 text-sm rounded transition-colors btn-black"
                   >
                     Edit
                   </button>
@@ -2004,7 +2004,7 @@ export default function FormResponsesPage() {
                         setIsEditing(false)
                         setEditData({ ...selectedResponse })
                       }}
-                      className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                      className="px-4 py-2 text-sm rounded transition-colors btn-white"
                       disabled={saving}
                     >
                       Cancel
@@ -2012,7 +2012,7 @@ export default function FormResponsesPage() {
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+                      className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save'}
                     </button>
@@ -3344,7 +3344,7 @@ export default function FormResponsesPage() {
               <div className="flex justify-end gap-4 pt-6 border-t border-luxury-gray-5">
                 <button
                   onClick={() => setCreateModalOpen(false)}
-                  className="px-6 py-2.5 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                  className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
                   disabled={creating}
                 >
                   Cancel
@@ -3352,7 +3352,7 @@ export default function FormResponsesPage() {
                 <button
                   onClick={handleCreateSubmit}
                   disabled={creating}
-                  className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+                  className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
                 >
                   {creating ? 'Creating...' : 'Create Form Response'}
                 </button>
@@ -3443,7 +3443,7 @@ export default function FormResponsesPage() {
                     setCreateFormModalOpen(false)
                     setNewFormDefinition({ name: '', description: '', form_type: 'pre-listing' })
                   }}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-white"
                   disabled={creatingForm}
                 >
                   Cancel
@@ -3451,7 +3451,7 @@ export default function FormResponsesPage() {
                 <button
                   onClick={editingForm ? handleUpdateForm : handleCreateForm}
                   disabled={creatingForm || !newFormDefinition.name || !newFormDefinition.form_type}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50"
                 >
                   {creatingForm 
                     ? (editingForm ? 'Updating...' : 'Creating...') 

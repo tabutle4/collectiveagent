@@ -796,7 +796,7 @@ export default function DynamicFormPage() {
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   loading || !selectedAgent
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed' 
-                    : 'bg-luxury-black text-white hover:opacity-90'
+                    : 'btn-black'
                 }`}
               >
                 {loading ? (

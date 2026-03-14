@@ -171,7 +171,7 @@ export default function SellerDashboard() {
               href={listing.listing_website_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+              className="inline-block px-6 py-2.5 text-sm rounded transition-colors btn-black"
             >
               Visit Listing Website →
             </a>
@@ -227,7 +227,7 @@ export default function SellerDashboard() {
                 href={coordination.onedrive_folder_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-block px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 mt-2 md:mt-0"
+                className="inline-block px-4 py-2 text-sm rounded transition-colors btn-black mt-2 md:mt-0"
               >
                 View Past Reports →
               </a>
@@ -291,7 +291,7 @@ export default function SellerDashboard() {
                             href={report.report_file_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors btn-black"
                           >
                             Download Showing Report
                           </a>
@@ -301,7 +301,7 @@ export default function SellerDashboard() {
                             href={report.report_file_url_2}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors btn-black"
                           >
                             Download Traffic Report
                           </a>

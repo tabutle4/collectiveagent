@@ -175,7 +175,7 @@ export default function AdminUsersPage() {
             setSelectedUser(null)
             setModalOpen(true)
           }}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
         >
           + Create User
         </button>
@@ -206,7 +206,7 @@ export default function AdminUsersPage() {
               className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium ${
                 roleFilter === 'all'
                   ? 'bg-luxury-black text-white'
-                  : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                  : 'btn-white'
               }`}
             >
               <span>All</span>
@@ -219,7 +219,7 @@ export default function AdminUsersPage() {
                 className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium capitalize ${
                   roleFilter === role
                     ? 'bg-luxury-black text-white'
-                    : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                    : 'btn-white'
                 }`}
               >
                 <span>{role}</span>
@@ -243,7 +243,7 @@ export default function AdminUsersPage() {
                   className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium ${
                     isActive
                       ? 'bg-luxury-black text-white'
-                      : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                      : 'btn-white'
                   }`}
                 >
                   <span>{label}</span>
@@ -269,7 +269,7 @@ export default function AdminUsersPage() {
               className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1 ${
                 sortBy === option.value
                   ? 'bg-luxury-black text-white'
-                  : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                  : 'btn-white'
               }`}
             >
               <span>{option.label}</span>
@@ -386,7 +386,7 @@ export default function AdminUsersPage() {
                       <td className="px-6 py-4">
                         <button
                           onClick={() => handleEditUser(user)}
-                          className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+                          className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
                         >
                           Edit
                         </button>
@@ -438,7 +438,7 @@ export default function AdminUsersPage() {
                   <div className="mt-3">
                     <button
                       onClick={() => handleEditUser(user)}
-                      className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black w-full"
+                      className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white w-full"
                     >
                       Edit
                     </button>

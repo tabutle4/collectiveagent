@@ -62,7 +62,7 @@ export default function ProspectsPage() {
                 className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium ${
                   isActive
                 ? 'bg-luxury-black text-white'
-                : 'bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
+                : 'btn-white'
             }`}
           >
                 <span className="capitalize">{label}</span>

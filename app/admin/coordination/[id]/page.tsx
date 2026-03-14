@@ -492,7 +492,7 @@ export default function CoordinationDetailPage() {
             <p className="text-luxury-gray-2 mb-4">Coordination not found</p>
             <button
               onClick={() => router.push('/admin/coordination')}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-black"
             >
               Back to Dashboard
             </button>
@@ -873,7 +873,7 @@ export default function CoordinationDetailPage() {
                   type="button"
                   onClick={handleRegenerateFolderLink}
                   disabled={saving}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   title="Regenerate anonymous sharing link"
                 >
                   {saving ? 'Regenerating...' : 'Regenerate Link'}
@@ -906,7 +906,7 @@ export default function CoordinationDetailPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
@@ -930,7 +930,7 @@ export default function CoordinationDetailPage() {
                     navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://agent.collectiverealtyco.com'}/seller/${coordination.seller_magic_link}`)
                     alert('Link copied to clipboard!')
                   }}
-                  className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-black"
                 >
                   Copy
                 </button>
@@ -948,7 +948,7 @@ export default function CoordinationDetailPage() {
               className={`px-6 py-2.5 text-sm rounded transition-colors ${
                 (coordination.welcome_email_sent || hasWelcomeEmailInHistory) 
                   ? 'bg-green-600 text-white hover:bg-green-700' 
-                  : 'bg-luxury-black text-white hover:opacity-90'
+                  : 'btn-black'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {sendingEmail === 'welcome' ? 'Sending...' : (coordination.welcome_email_sent || hasWelcomeEmailInHistory) ? '✓ Resend Welcome Email' : 'Send Welcome Email'}
@@ -956,7 +956,7 @@ export default function CoordinationDetailPage() {
             <button
               onClick={handleSendWeeklyEmail}
               disabled={sendingEmail !== null}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sendingEmail === 'weekly' ? 'Sending...' : 'Send Weekly Report Email'}
             </button>
@@ -1113,7 +1113,7 @@ export default function CoordinationDetailPage() {
           <div className="flex flex-col space-y-3">
             <button
               onClick={() => router.push(`/admin/coordination/upload-report/${coordinationId}`)}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-black"
             >
               Upload Weekly Report
             </button>

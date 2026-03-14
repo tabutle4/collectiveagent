@@ -518,7 +518,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
         <div className="flex items-center justify-end gap-4 p-6 border-t border-luxury-gray-5">
           <button
             onClick={onClose}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={sending}
           >
             Cancel
@@ -526,7 +526,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
           <button
             onClick={handleSend}
             disabled={sending || !selectedTemplate}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? 'Sending...' : 'Send Emails'}
           </button>

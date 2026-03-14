@@ -278,7 +278,7 @@ export default function HeadshotUpload({
               type="button"
               onClick={() => setEditingCrop((prev) => !prev)}
               disabled={disabled || uploading}
-              className="px-3 py-1.5 text-xs rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <Move className="w-3 h-3" />
               {editingCrop ? 'Done Adjusting' : 'Adjust Position'}
@@ -328,7 +328,7 @@ export default function HeadshotUpload({
             type="button"
             onClick={handleSaveCrop}
             disabled={savingCrop}
-            className="mt-1 px-3 py-1.5 text-xs rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            className="mt-1 px-3 py-1.5 text-xs rounded transition-colors btn-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
           >
             {savingCrop ? (
               <>

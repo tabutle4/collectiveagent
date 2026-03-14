@@ -162,14 +162,14 @@ export function InfoStep({
         {currentStep > 1 && (
           <button 
             onClick={onBack}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
           >
             ← Back
           </button>
         )}
         <button 
           onClick={onNext}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
         >
           {buttonText || content.buttonText || 'Next →'}
         </button>
@@ -483,14 +483,14 @@ export function ProfileStep({
         <div className="mt-8 flex justify-center gap-4">
           <button
             onClick={onBack}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
           >
             ← Back
           </button>
           <button
             onClick={onNext}
             disabled={loading}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50"
           >
             {loading ? 'Saving...' : 'Next →'}
           </button>
@@ -600,7 +600,7 @@ export function RsvpStep({
           <div className="mt-4 text-center">
             <button
               onClick={() => setShowFlyerModal(true)}
-              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
             >
               View Event Flyer
             </button>
@@ -658,14 +658,14 @@ export function RsvpStep({
       <div className="text-center flex justify-center gap-4">
         <button
           onClick={onBack}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
           disabled={loading || (rsvpData.attending === null && rsvpData.attending_luncheon === null)}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Next →'}
         </button>
@@ -858,14 +858,14 @@ export function SurveyStep({
       <div className="text-center flex justify-center gap-4 mt-8">
         <button
           onClick={onBack}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-white border border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
         >
           ← Back
         </button>
         <button
           onClick={onNext}
           disabled={loading}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50"
         >
           {loading ? 'Submitting...' : 'Submit'}
         </button>
