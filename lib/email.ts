@@ -470,10 +470,12 @@ function getLuxuryEmailTemplate({
 
 export async function sendContactEmail({
   message,
+  subject,
   userName,
   userEmail,
 }: {
   message: string
+  subject?: string
   userName: string
   userEmail: string
 }) {
@@ -486,6 +488,7 @@ export async function sendContactEmail({
       
       <div class="section-box">
         <h3 style="margin-top: 0; color: #000;">YOUR MESSAGE</h3>
+        ${subject ? `<p style="margin-bottom: 10px; font-weight: bold; color: #333;">Subject: ${subject}</p>` : ""}
         <div style="background: #f8f8f8; padding: 15px; border-left: 3px solid #C9A961; margin-top: 10px;">
           <p style="margin: 0; color: #333; white-space: pre-wrap;">${message}</p>
         </div>
@@ -503,7 +506,7 @@ export async function sendContactEmail({
     from: FROM_EMAILS.support,
     to: userEmail,
     cc: 'office@collectiverealtyco.com',
-    subject: `Support Request Received`,
+    subject: subject ? `Support Request: ${subject}` : `Support Request Received`,
     html,
   })
 }
