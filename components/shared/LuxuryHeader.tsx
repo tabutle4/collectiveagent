@@ -23,7 +23,7 @@ export default function LuxuryHeader() {
         target="_blank"
         rel="noopener noreferrer"
         className="text-[11px] md:text-sm text-gray-300 hover:text-white transition-colors font-semibold"
-        style={{ fontWeight: '600' }}
+        
       >
         Training Center
       </a>

@@ -324,7 +324,7 @@ export default function OnboardingManagementPage() {
     <div className="min-h-screen bg-white">
       <div className="max-w-6xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
         <div className="mb-8">
-          <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
+          <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
             Onboarding Checklist Management
           </h2>
 
@@ -332,25 +332,25 @@ export default function OnboardingManagementPage() {
           <div className="grid md:grid-cols-4 gap-4 mb-6">
             <div className="card-section text-center">
               <p className="text-xs text-luxury-gray-2 mb-1">Total Agents</p>
-              <p className="text-3xl font-light" style={{ color: '#C9A961' }}>
+              <p className="text-3xl font-light" className="text-luxury-accent">
                 {stats.total}
               </p>
             </div>
             <div className="card-section text-center">
               <p className="text-xs text-luxury-gray-2 mb-1">Locked</p>
-              <p className="text-3xl font-light" style={{ color: '#C9A961' }}>
+              <p className="text-3xl font-light" className="text-luxury-accent">
                 {stats.locked}
               </p>
             </div>
             <div className="card-section text-center">
               <p className="text-xs text-luxury-gray-2 mb-1">In Progress</p>
-              <p className="text-3xl font-light" style={{ color: '#C9A961' }}>
+              <p className="text-3xl font-light" className="text-luxury-accent">
                 {stats.unlocked}
               </p>
             </div>
             <div className="card-section text-center">
               <p className="text-xs text-luxury-gray-2 mb-1">Complete</p>
-              <p className="text-3xl font-light" style={{ color: '#C9A961' }}>
+              <p className="text-3xl font-light" className="text-luxury-accent">
                 {stats.complete}
               </p>
             </div>

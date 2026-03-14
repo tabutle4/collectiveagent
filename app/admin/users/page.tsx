@@ -167,7 +167,7 @@ export default function AdminUsersPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5 md:mb-8">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
           Users ({filteredAndSortedUsers.length}{filteredAndSortedUsers.length !== users.length ? ` of ${users.length}` : ''})
         </h2>
         <button

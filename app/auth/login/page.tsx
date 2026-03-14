@@ -128,8 +128,8 @@ export default function LoginPage() {
       <LuxuryHeader />
       
       <div className="max-w-md mx-auto px-6 py-16" style={{ paddingTop: '120px' }}>
-        <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 tracking-luxury" style={{ fontWeight: '600' }}>
-          <span style={{ borderBottom: '2px solid #C9A961', paddingBottom: '4px' }}>Sign In</span>
+        <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 tracking-luxury" >
+          <span className="border-b-2 border-luxury-accent pb-1">Sign In</span>
         </h2>
         
         <Suspense fallback={<div className="text-center">Loading...</div>}>

@@ -412,7 +412,7 @@ export default function AgentRosterPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5 md:mb-8">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>Agent Roster</h2>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >Agent Roster</h2>
       </div>
 
       {/* Export Buttons */}

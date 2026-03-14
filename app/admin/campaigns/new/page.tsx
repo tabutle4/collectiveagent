@@ -245,7 +245,7 @@ export default function NewCampaignPage() {
           ← Back to Campaigns
         </Link>
         
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" style={{ fontWeight: '600' }}>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" >
           Create New Campaign
         </h2>
       </div>

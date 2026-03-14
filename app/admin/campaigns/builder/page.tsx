@@ -329,7 +329,7 @@ function CampaignBuilderContent() {
           </Link>
           
           <div className="flex items-center justify-between">
-            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>
+            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
               {campaignId ? 'Edit Campaign' : 'Create New Campaign'}
             </h2>
             <div className="flex gap-3">

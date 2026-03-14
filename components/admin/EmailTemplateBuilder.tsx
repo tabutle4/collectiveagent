@@ -133,18 +133,18 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
     const editableScript = `
       <style>
         .editable-text {
-          outline: 1px dashed #C9A961 !important;
+          outline: 1px dashed #C5A278 !important;
           outline-offset: 2px !important;
           min-height: 1em !important;
           display: inline-block !important;
           cursor: text !important;
         }
         .editable-text:hover {
-          outline: 2px solid #C9A961 !important;
+          outline: 2px solid #C5A278 !important;
           background-color: rgba(201, 169, 97, 0.1) !important;
         }
         .editable-text:focus {
-          outline: 2px solid #C9A961 !important;
+          outline: 2px solid #C5A278 !important;
           background-color: rgba(201, 169, 97, 0.15) !important;
         }
       </style>

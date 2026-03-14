@@ -87,7 +87,7 @@ export default function ProspectDetailPage() {
         
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
+            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
               {prospect.preferred_first_name} {prospect.preferred_last_name}
             </h2>
             <p className="text-luxury-gray-2">

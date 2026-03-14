@@ -178,7 +178,7 @@ export default function ProfilePage() {
   return (
     <PageContainer>
         <div className="mb-8">
-          <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
+          <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
             My Profile
           </h2>
         </div>

@@ -38,7 +38,7 @@ export default function NewEmailTemplatePage() {
         >
           ← Back to Templates
         </Link>
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" style={{ fontWeight: '600' }}>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" >
           Create New Email Template
         </h2>
       </div>

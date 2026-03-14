@@ -259,7 +259,7 @@ export default function AdminLayout({
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] md:text-sm text-gray-300 hover:text-white transition-colors font-semibold"
-            style={{ fontWeight: '600' }}
+            
           >
             Training Center
           </a>
@@ -314,7 +314,7 @@ export default function AdminLayout({
           target="_blank"
           rel="noopener noreferrer"
           className="text-[11px] md:text-sm text-gray-300 hover:text-white transition-colors font-semibold"
-          style={{ fontWeight: '600' }}
+          
         >
           Training Center
         </a>
@@ -349,7 +349,7 @@ export default function AdminLayout({
         <div className="bg-luxury-light border-b border-luxury-gray-5 flex items-center justify-between px-3 flex-shrink-0" style={{ height: '48px', display: !menuOpen ? 'none' : 'flex' }}>
           {menuOpen && (
             <p className="text-base text-luxury-black">
-              Welcome back, <span style={{ color: '#C9A961' }}>{user.preferred_first_name}</span>
+              Welcome back, <span className="text-luxury-accent">{user.preferred_first_name}</span>
             </p>
           )}
           <button
@@ -408,7 +408,7 @@ export default function AdminLayout({
                         strokeWidth={1.5}
                       />
                       {menuOpen && (
-                        <span className="ml-2 text-base text-luxury-gray-3 font-semibold" style={{ fontWeight: '600' }}>
+                        <span className="ml-2 text-base text-luxury-gray-3 font-semibold" >
                           {item.label}
                         </span>
                       )}
@@ -439,7 +439,7 @@ export default function AdminLayout({
                       strokeWidth={1.5}
                     />
                     {menuOpen && (
-                      <span className={`ml-2 text-base font-semibold ${isActive ? 'text-luxury-black' : 'text-luxury-gray-1'}`} style={{ fontWeight: '600' }}>
+                      <span className={`ml-2 text-base font-semibold ${isActive ? 'text-luxury-black' : 'text-luxury-gray-1'}`} >
                         {item.label}
                       </span>
                     )}
@@ -457,7 +457,7 @@ export default function AdminLayout({
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className="flex items-center space-x-2 w-full hover:bg-gray-200 rounded p-1 transition-colors"
             >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0" style={{ backgroundColor: '#C9A961' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0 bg-luxury-accent">
                 {user.preferred_first_name?.[0]}{user.preferred_last_name?.[0]}
               </div>
               <div className="flex-1 min-w-0 text-left">
@@ -518,7 +518,7 @@ export default function AdminLayout({
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium mx-auto hover:opacity-80 transition-opacity"
-              style={{ backgroundColor: '#C9A961' }}
+              className="bg-luxury-accent"
             >
               {user.preferred_first_name?.[0]}{user.preferred_last_name?.[0]}
             </button>

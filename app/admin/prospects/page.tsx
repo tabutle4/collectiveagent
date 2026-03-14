@@ -44,7 +44,7 @@ export default function ProspectsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5 md:mb-8">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
           Prospects
         </h2>
       </div>

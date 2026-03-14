@@ -100,7 +100,7 @@ export default function EditEmailTemplatePage() {
         >
           ← Back to Templates
         </Link>
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
           Edit: {template.name}
         </h2>
       </div>

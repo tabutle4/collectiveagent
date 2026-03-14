@@ -98,7 +98,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
           if (parent && parent instanceof Element && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
             const span = iframeDoc.createElement('span')
             span.contentEditable = 'true'
-            span.style.outline = '1px dashed #C9A961'
+            span.style.outline = '1px dashed #C5A278'
             span.style.outlineOffset = '2px'
             span.style.cursor = 'text'
             span.textContent = textNode.textContent

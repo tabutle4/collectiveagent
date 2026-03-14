@@ -101,7 +101,7 @@ function ResetPasswordContent() {
           <p className="text-red-600 mb-4">{error}</p>
           <button
             onClick={() => router.push('/auth/forgot-password')}
-            className="w-full bg-[#C9A961] text-white py-2 px-4 rounded hover:bg-[#b89851] transition-colors"
+            className="w-full bg-luxury-accent text-white py-2 px-4 rounded hover:bg-[#b89851] transition-colors"
           >
             Request New Reset Link
           </button>
@@ -131,7 +131,7 @@ function ResetPasswordContent() {
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A961]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-luxury-accent"
               required
               minLength={6}
             />
@@ -146,7 +146,7 @@ function ResetPasswordContent() {
               id="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A961]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-luxury-accent"
               required
               minLength={6}
             />
@@ -155,7 +155,7 @@ function ResetPasswordContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#C9A961] text-white py-2 px-4 rounded hover:bg-[#b89851] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-luxury-accent text-white py-2 px-4 rounded hover:bg-[#b89851] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Updating...' : 'Update Password'}
           </button>
@@ -164,7 +164,7 @@ function ResetPasswordContent() {
         <div className="mt-4 text-center">
           <button
             onClick={() => router.push('/auth/login')}
-            className="text-[#C9A961] hover:underline text-sm"
+            className="text-luxury-accent hover:underline text-sm"
           >
             Back to Login
           </button>

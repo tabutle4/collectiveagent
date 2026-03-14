@@ -79,7 +79,7 @@ export default function AdminCampaignsPage() {
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-5 md:mb-8 gap-4">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" style={{ fontWeight: '600' }}>Campaigns</h2>
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >Campaigns</h2>
         <Link href="/admin/campaigns/builder" className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-black w-full md:w-auto inline-block">
           Create New Campaign
         </Link>
@@ -120,7 +120,7 @@ export default function AdminCampaignsPage() {
                 </div>
                 <div className="text-left md:text-right border-t md:border-t-0 md:border-l border-luxury-gray-5 pt-4 md:pt-0 md:pl-6 md:pr-0">
                   <p className="text-xs md:text-sm text-luxury-gray-2 mb-1">Completed</p>
-                  <p className="text-xl md:text-2xl font-light" style={{ color: '#C9A961' }}>
+                  <p className="text-xl md:text-2xl font-light" className="text-luxury-accent">
                     {campaign.completed_count || 0}
                   </p>
 </div>
