@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export default function ProspectiveAgentForm() {
@@ -117,8 +117,8 @@ export default function ProspectiveAgentForm() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+
       
       <div className="max-w-3xl mx-auto px-6 py-12" style={{ paddingTop: '100px' }}>
         <div className="text-center mb-8">
@@ -552,6 +552,6 @@ export default function ProspectiveAgentForm() {
           © 2025 Collective Realty Co. All rights reserved.
         </p>
       </div>
-    </div>
+    </PageContainer>
   )
 }

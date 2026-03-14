@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -41,8 +41,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+
       
       <div className="max-w-md mx-auto px-6 py-16">
         <h2 className="text-2xl font-light text-center mb-4 tracking-luxury">
@@ -97,6 +97,6 @@ export default function ForgotPasswordPage() {
           </div>
         </form>
       </div>
-    </div>
+    </PageContainer>
   )
 }

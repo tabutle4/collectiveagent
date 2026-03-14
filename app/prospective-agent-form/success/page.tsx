@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 
 function SuccessContent() {
   const searchParams = useSearchParams()
@@ -10,8 +10,8 @@ function SuccessContent() {
   const email = searchParams.get('email') || ''
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+
       
       <div className="max-w-2xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
@@ -73,7 +73,7 @@ function SuccessContent() {
           Welcome to Collective Realty Co. - Where Excellence Meets Opportunity
         </p>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

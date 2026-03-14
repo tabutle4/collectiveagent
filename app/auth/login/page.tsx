@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 
 function LoginForm() {
   const router = useRouter()
@@ -124,8 +124,8 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+
       
       <div className="max-w-md mx-auto px-6 py-16" style={{ paddingTop: '120px' }}>
         <h2 className="text-xl md:text-2xl font-semibold text-center mb-8 tracking-luxury" >
@@ -136,6 +136,6 @@ export default function LoginPage() {
           <LoginForm />
         </Suspense>
       </div>
-    </div>
+    </PageContainer>
   )
 }

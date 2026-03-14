@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export default function RegisterPage() {
@@ -94,8 +94,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <LuxuryHeader />
+    <PageContainer>
+
       
       <div className="max-w-md mx-auto px-6 py-16">
         <h2 className="text-2xl font-light text-center mb-4 tracking-luxury">
@@ -239,6 +239,6 @@ export default function RegisterPage() {
           </div>
         </form>
       </div>
-    </div>
+    </PageContainer>
   )
 }
