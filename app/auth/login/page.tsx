@@ -117,7 +117,7 @@ export default function LoginPage() {
         <img
           src="/logo.png"
           alt="Collective Realty Co."
-          className="w-32 h-32 object-contain"
+          className="w-48 h-48 object-contain"
         />
       </div>
 

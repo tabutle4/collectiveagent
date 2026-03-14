@@ -63,7 +63,7 @@ export default function ContactDrawer({ open, onClose }: ContactDrawerProps) {
         />
       )}
       <div
-        className={`fixed bottom-0 right-0 z-50 bg-white rounded-tl-2xl shadow-2xl border-t border-l border-luxury-gray-5 ${
+        className={`fixed bottom-0 left-0 z-50 bg-white rounded-tr-2xl shadow-2xl border-t border-r border-luxury-gray-5 ${
           open ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{
