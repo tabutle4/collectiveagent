@@ -14,7 +14,7 @@ export default function LuxuryHeader() {
           className="hidden md:block"
           style={{ width: '120px', height: '120px', objectFit: 'contain' }}
         />
-        <span className="text-white text-sm md:text-lg tracking-[0.2em] md:tracking-[0.25em]" style={{ fontFamily: 'Inter, Arial, sans-serif', fontWeight: '600' }}>
+        <span className="text-white text-sm md:text-lg tracking-[0.2em] md:tracking-[0.25em] font-semibold">
           COLLECTIVE AGENT
         </span>
       </div>
