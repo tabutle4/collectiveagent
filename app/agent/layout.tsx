@@ -380,8 +380,7 @@ export default function AgentLayout({
           <div className="hidden md:block absolute bottom-0 left-0 right-0 border-t border-luxury-gray-5 bg-luxury-light p-3">
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium mx-auto hover:opacity-80 transition-opacity"
-              className="bg-luxury-accent"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium mx-auto hover:opacity-80 transition-opacity bg-luxury-accent"
             >
               {user.preferred_first_name?.[0]}{user.preferred_last_name?.[0]}
             </button>
