@@ -17,7 +17,7 @@ export default function AuthFooter() {
         >
           Training Center
         </a>
-        <span className="text-luxury-gray-5 text-xs">&middot;</span>
+        <span className="text-luxury-gray-5 text-xs">·</span>
         
           href="https://coachingbrokeragetools.com/privacy-policy"
           target="_blank"
@@ -26,7 +26,7 @@ export default function AuthFooter() {
         >
           Privacy Policy
         </a>
-        <span className="text-luxury-gray-5 text-xs">&middot;</span>
+        <span className="text-luxury-gray-5 text-xs">·</span>
         
           href="https://coachingbrokeragetools.com/"
           target="_blank"
@@ -35,7 +35,7 @@ export default function AuthFooter() {
         >
           Tools Home
         </a>
-        <span className="text-luxury-gray-5 text-xs">&middot;</span>
+        <span className="text-luxury-gray-5 text-xs">·</span>
         <button
           onClick={() => setContactOpen(true)}
           className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
