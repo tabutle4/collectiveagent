@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle2, ExternalLink, Lock, Info, ShoppingCart, Circle, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
-import PageContainer from '@/components/PageContainer'
+import PageContainer from '@/components/shared/PageContainer'
 
 interface ChecklistItem {
   id: string

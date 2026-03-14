@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 
 function LoginForm() {
   const router = useRouter()

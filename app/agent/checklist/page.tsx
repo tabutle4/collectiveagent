@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense } from 'react'
-import PageContainer from '@/components/PageContainer'
+import PageContainer from '@/components/shared/PageContainer'
 import { AgentOnboardingPageContent } from '@/app/onboarding-checklist/page'
 
 export default function AgentChecklistPage() {

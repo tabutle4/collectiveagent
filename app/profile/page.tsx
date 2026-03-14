@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import LuxuryHeader from '@/components/LuxuryHeader'
-import PageContainer from '@/components/PageContainer'
-import HeadshotUpload from '@/components/HeadshotUpload'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
+import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 
 export default function ProfilePage() {
   const router = useRouter()

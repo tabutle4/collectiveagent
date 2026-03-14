@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 
 function SuccessContent() {
   const searchParams = useSearchParams()

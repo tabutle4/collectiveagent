@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { normalizeSocialUrl } from '@/lib/socialLinks'
 import { normalizeRoles } from '@/lib/nameFormatter'
-import HeadshotUpload from './HeadshotUpload'
+import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 
 type Props = {
   user?: any // Optional for creating new users

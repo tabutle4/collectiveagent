@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export default function ProspectiveAgentForm() {

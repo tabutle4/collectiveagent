@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import AdminUserProfileModal from '@/components/AdminUserProfileModal'
+import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
 import { Search, ChevronDown } from 'lucide-react'
 
 export default function AdminUsersPage() {

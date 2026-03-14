@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export default function RegisterPage() {

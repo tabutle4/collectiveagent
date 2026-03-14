@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import LuxuryHeader from '@/components/LuxuryHeader'
-import PageContainer from '@/components/PageContainer'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import PageContainer from '@/components/shared/PageContainer'
 import { supabase } from '@/lib/supabase'
 import { Edit, Copy, Mail, CheckCircle2 } from 'lucide-react'
 

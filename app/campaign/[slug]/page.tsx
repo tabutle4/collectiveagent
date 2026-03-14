@@ -2,8 +2,8 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
-import CampaignForm from '@/components/CampaignForm'
-import LuxuryHeader from '@/components/LuxuryHeader'
+import CampaignForm from '@/components/campaigns/CampaignForm'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import { supabase } from '@/lib/supabase'
 
 function CampaignContent() {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import EmailTemplateBuilder from '@/components/EmailTemplateBuilder'
+import EmailTemplateBuilder from '@/components/admin/EmailTemplateBuilder'
 
 export default function EditEmailTemplatePage() {
   const params = useParams()

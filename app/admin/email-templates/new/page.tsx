@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import EmailTemplateBuilder from '@/components/EmailTemplateBuilder'
+import EmailTemplateBuilder from '@/components/admin/EmailTemplateBuilder'
 
 export default function NewEmailTemplatePage() {
   const router = useRouter()

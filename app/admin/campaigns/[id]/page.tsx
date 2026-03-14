@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import CampaignEmailModal from '@/components/CampaignEmailModal'
-import AgentCampaignResponseModal from '@/components/AgentCampaignResponseModal'
+import CampaignEmailModal from '@/components/campaigns/CampaignEmailModal'
+import AgentCampaignResponseModal from '@/components/campaigns/AgentCampaignResponseModal'
 
 export default function CampaignDetailPage() {
   const params = useParams()

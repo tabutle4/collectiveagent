@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Edit, Plus, Save, X, Trash2, AlertCircle } from 'lucide-react'
-import PageContainer from '@/components/PageContainer'
+import PageContainer from '@/components/shared/PageContainer'
 
 interface ChecklistItem {
   id: string
