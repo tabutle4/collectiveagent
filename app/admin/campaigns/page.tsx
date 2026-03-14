@@ -120,7 +120,7 @@ export default function AdminCampaignsPage() {
                 </div>
                 <div className="text-left md:text-right border-t md:border-t-0 md:border-l border-luxury-gray-5 pt-4 md:pt-0 md:pl-6 md:pr-0">
                   <p className="text-xs md:text-sm text-luxury-gray-2 mb-1">Completed</p>
-                  <p className="text-xl md:text-2xl font-light" className="text-luxury-accent">
+                  <p className="text-xl md:text-2xl font-light text-luxury-accent">
                     {campaign.completed_count || 0}
                   </p>
 </div>

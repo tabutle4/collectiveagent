@@ -409,31 +409,31 @@ export default function CampaignDetailPage() {
         <div className="grid md:grid-cols-5 gap-4 mb-8">
           <div className="card-section text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Total Recipients</p>
-            <p className="text-3xl font-light" className="text-luxury-accent">
+            <p className="text-3xl font-light text-luxury-accent">
               {stats.total_recipients || 0}
             </p>
           </div>
           <div className="card-section text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Fully Completed</p>
-            <p className="text-3xl font-light" className="text-luxury-accent">
+            <p className="text-3xl font-light text-luxury-accent">
               {stats.fully_complete || 0}
             </p>
           </div>
           <div className="card-section text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">In Progress</p>
-            <p className="text-3xl font-light" className="text-luxury-accent">
+            <p className="text-3xl font-light text-luxury-accent">
               {(stats.total_recipients || 0) - (stats.fully_complete || 0)}
             </p>
           </div>
           <div className="card-section text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Attending Luncheon</p>
-            <p className="text-3xl font-light" className="text-luxury-accent">
+            <p className="text-3xl font-light text-luxury-accent">
               {attending.length}
             </p>
           </div>
           <div className="card-section text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Not Attending</p>
-            <p className="text-3xl font-light" className="text-luxury-accent">
+            <p className="text-3xl font-light text-luxury-accent">
               {notAttending.length}
             </p>
           </div>
@@ -786,19 +786,19 @@ export default function CampaignDetailPage() {
                 <div className="grid md:grid-cols-3 gap-4">
                   <div className="border-l-4 border-luxury-gold pl-3 py-2">
                     <p className="text-sm font-medium">Team</p>
-                    <p className="text-2xl font-light" className="text-luxury-accent">
+                    <p className="text-2xl font-light text-luxury-accent">
                       {surveys.filter(s => s.work_preference === 'team').length}
                     </p>
                   </div>
                   <div className="border-l-4 border-luxury-gold pl-3 py-2">
                     <p className="text-sm font-medium">Independent</p>
-                    <p className="text-2xl font-light" className="text-luxury-accent">
+                    <p className="text-2xl font-light text-luxury-accent">
                       {surveys.filter(s => s.work_preference === 'independent').length}
                     </p>
                   </div>
                   <div className="border-l-4 border-luxury-gold pl-3 py-2">
                     <p className="text-sm font-medium">Not Sure</p>
-                    <p className="text-2xl font-light" className="text-luxury-accent">
+                    <p className="text-2xl font-light text-luxury-accent">
                       {surveys.filter(s => s.work_preference === 'not_sure').length}
                     </p>
                   </div>

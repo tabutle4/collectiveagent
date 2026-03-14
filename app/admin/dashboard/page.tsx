@@ -44,7 +44,7 @@ export default function AdminDashboard() {
       {/* Stats */}
       <div className="grid md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1" className="text-luxury-accent">
+          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
             {stats.new}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
         </div>
         
         <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1" className="text-luxury-accent">
+          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
             {stats.contacted}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
@@ -62,7 +62,7 @@ export default function AdminDashboard() {
         </div>
         
         <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1" className="text-luxury-accent">
+          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
             {stats.total}
           </div>
           <div className="text-base text-luxury-gray-2 tracking-wide">
