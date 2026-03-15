@@ -45,6 +45,14 @@
   }
 
   .page-title {
+
+  .container-card {
+    @apply bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-5;
+  }
+
+  .inner-card {
+    @apply bg-luxury-light rounded-md p-4;
+  }
     @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
   }
 

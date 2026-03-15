@@ -105,7 +105,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
   const sidebarContent = (
     <>
-      <div className="flex items-center justify-between px-4 py-4 flex-shrink-0">
+      <div className="flex items-center justify-center px-4 py-4 flex-shrink-0">
         <Link href={isAdmin ? '/admin/dashboard' : '/profile'}>
           <img src={logo} alt="Logo" className="sidebar-logo" />
         </Link>
@@ -187,7 +187,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
         </div>
 
         <div className="px-5 pb-3 flex justify-end">
-          <span className="text-[9px] text-luxury-gray-3 tracking-[0.2em] uppercase">Collective Agent</span>
+          <span className="text-[9px] font-semibold text-luxury-gray-3 tracking-[0.2em] uppercase">Collective Agent</span>
         </div>
 
         {userMenuOpen && (
@@ -280,7 +280,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           </p>
         </div>
 
-        <div className="px-4 md:px-6 pb-6 max-w-7xl">
+        <div className="px-4 md:px-6 pb-6">
           {children}
         </div>
       </div>

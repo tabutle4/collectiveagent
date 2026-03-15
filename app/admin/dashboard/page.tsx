@@ -43,11 +43,11 @@ export default function AdminDashboard() {
 
         {/* Left container card - Needs Attention */}
         <div className="lg:col-span-5">
-          <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-5">
+          <div className="container-card">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Needs Attention</h2>
 
             <div className="space-y-3">
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Compliance Requested</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
                 <p className="text-xs text-luxury-gray-3">No transactions awaiting compliance review</p>
               </div>
 
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Approved - CDA Needed</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
@@ -63,7 +63,7 @@ export default function AdminDashboard() {
                 <p className="text-xs text-luxury-gray-3">No transactions ready for CDA</p>
               </div>
 
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Eligible for Payout</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
@@ -71,7 +71,7 @@ export default function AdminDashboard() {
                 <p className="text-xs text-luxury-gray-3">No transactions eligible for payout</p>
               </div>
 
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Broker Approval Pending</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
@@ -84,27 +84,27 @@ export default function AdminDashboard() {
 
         {/* Right container card - Overview */}
         <div className="lg:col-span-7">
-          <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-5">
+          <div className="container-card">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Overview</h2>
 
             {/* Stats row - flat inner cards */}
             <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <p className="text-xs font-semibold text-luxury-gray-3 mb-1">New Prospects</p>
                 <p className="text-2xl font-semibold text-luxury-accent">{stats.new}</p>
               </div>
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <p className="text-xs font-semibold text-luxury-gray-3 mb-1">Contacted</p>
                 <p className="text-2xl font-semibold text-luxury-accent">{stats.contacted}</p>
               </div>
-              <div className="bg-luxury-light rounded-md p-4">
+              <div className="inner-card">
                 <p className="text-xs font-semibold text-luxury-gray-3 mb-1">Total Prospects</p>
                 <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
               </div>
             </div>
 
             {/* Contact submissions - flat inner card */}
-            <div className="bg-luxury-light rounded-md p-4 mb-4">
+            <div className="inner-card mb-4">
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-sm font-semibold text-luxury-gray-1">Contact Submissions</p>
                 <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
@@ -116,7 +116,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* Recent Activity - flat inner card */}
-            <div className="bg-luxury-light rounded-md p-4">
+            <div className="inner-card">
               <h3 className="text-sm font-semibold text-luxury-gray-1 mb-3 pb-3 border-b border-luxury-gray-5/50">
                 Recent Activity
               </h3>
