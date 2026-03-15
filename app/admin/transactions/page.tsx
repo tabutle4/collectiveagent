@@ -294,7 +294,7 @@ export default function AdminTransactionsPage() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
+        <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
           All Transactions
         </h1>
         <p className="text-sm text-luxury-gray-2">

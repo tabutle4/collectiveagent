@@ -1353,7 +1353,7 @@ export default function FormResponsesPage() {
       <div className="max-w-7xl mx-auto">
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="text-2xl font-light tracking-luxury mb-4 md:mb-0">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-4 md:mb-0">
               Form Responses
             </h1>
             <div className="flex gap-2">

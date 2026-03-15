@@ -531,7 +531,7 @@ export default function CoordinationDetailPage() {
             </div>
           </div>
           
-          <h1 className="text-2xl font-light tracking-luxury mb-2">
+          <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
             {editData.property_address || listing.property_address}
           </h1>
           <p className="text-sm text-luxury-gray-2">

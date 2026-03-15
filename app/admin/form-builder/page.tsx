@@ -245,7 +245,7 @@ export default function FormBuilderPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Forms
           </button>
-          <h1 className="text-2xl font-light tracking-luxury">Form Builder</h1>
+          <h1 className="text-xl font-semibold text-luxury-gray-1">Form Builder</h1>
           <p className="text-sm text-luxury-gray-2 mt-2">
             Edit form fields and questions. Changes only affect new submissions, not past responses.
           </p>

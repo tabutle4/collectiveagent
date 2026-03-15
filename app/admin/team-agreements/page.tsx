@@ -153,7 +153,7 @@ export default function TeamAgreementsPage() {
     <div className="max-w-7xl mx-auto">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
+          <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
             Team Agreements
           </h1>
           <p className="text-sm text-luxury-gray-2">

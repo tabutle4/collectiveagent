@@ -117,7 +117,7 @@ export default function ActivateCoordinationPage() {
             >
               ← Back to Dashboard
             </button>
-            <h1 className="text-2xl font-light tracking-luxury">
+            <h1 className="text-xl font-semibold text-luxury-gray-1">
               Activate Listing Coordination
             </h1>
           </div>

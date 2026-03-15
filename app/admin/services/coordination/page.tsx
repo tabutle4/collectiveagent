@@ -127,7 +127,7 @@ export default function CoordinationServiceConfig() {
             >
               ← Back to Coordination Dashboard
             </button>
-            <h1 className="text-2xl font-light tracking-luxury">
+            <h1 className="text-xl font-semibold text-luxury-gray-1">
               Listing Coordination Service Configuration
             </h1>
             <p className="text-sm text-luxury-gray-2 mt-2">

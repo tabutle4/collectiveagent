@@ -811,7 +811,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             Back to Team Agreements
           </Link>
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
               {agreementData?.team_name || formData.team_name || 'Team Agreement Details'}
             </h1>
             <Link
@@ -1050,7 +1050,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           <ArrowLeft size={16} />
           Back to Team Agreements
         </Link>
-        <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
+        <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
           {isNew ? 'Create New Team Agreement' : 'Edit Team Agreement'}
         </h1>
       </div>

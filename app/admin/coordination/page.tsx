@@ -181,13 +181,13 @@ export default function AdminCoordinationDashboard() {
       <div className="max-w-7xl mx-auto">
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="text-2xl font-light tracking-luxury mb-4 md:mb-0">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-4 md:mb-0">
               Listing Coordination Management
             </h1>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowSendReportsModal(true)}
-                className="px-4 py-2 text-sm rounded transition-colors bg-blue-600 text-white hover:opacity-90 flex items-center gap-2"
+                className="btn btn-primary text-sm flex items-center gap-2"
               >
                 <Send className="w-4 h-4" />
                 Send All Weekly Reports
@@ -199,7 +199,7 @@ export default function AdminCoordinationDashboard() {
                   setScheduleTime('18:00')
                   setShowScheduleModal(true)
                 }}
-                className="px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 flex items-center gap-2"
+                className="btn btn-primary text-sm flex items-center gap-2"
               >
                 <Calendar className="w-4 h-4" />
                 Schedule Emails
@@ -380,7 +380,7 @@ export default function AdminCoordinationDashboard() {
                         e.stopPropagation()
                         handleDeleteCoordination(coordination.id)
                       }}
-                      className="px-4 py-2 text-sm rounded transition-colors bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"
+                      className="btn text-sm bg-red-600 text-white hover:opacity-90 flex items-center justify-center gap-2"
                     >
                       <Trash2 className="w-3 h-3" />
                       Delete
@@ -496,14 +496,14 @@ export default function AdminCoordinationDashboard() {
                 <button
                   onClick={() => handleSendAllReports(true)}
                   disabled={sendingReports}
-                  className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-blue-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingReports ? 'Sending...' : 'Send Now'}
                 </button>
                 <button
                   onClick={() => handleSendAllReports(false)}
                   disabled={sendingReports}
-                  className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {sendingReports ? 'Scheduling...' : 'Schedule for Next Monday'}
                 </button>
@@ -565,7 +565,7 @@ export default function AdminCoordinationDashboard() {
                   <button
                     onClick={handleScheduleEmails}
                     disabled={scheduling}
-                    className="flex-1 px-4 py-2 text-sm rounded transition-colors bg-green-600 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {scheduling ? 'Scheduling...' : 'Schedule'}
                   </button>

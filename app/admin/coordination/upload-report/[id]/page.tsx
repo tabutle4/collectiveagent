@@ -224,7 +224,7 @@ export default function UploadWeeklyReportPage() {
             >
               ← Back to Coordination
             </button>
-            <h1 className="text-2xl font-light tracking-luxury mb-2">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
               Upload Weekly Reports
             </h1>
             <p className="text-sm text-luxury-gray-2">
