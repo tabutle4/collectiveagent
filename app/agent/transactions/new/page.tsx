@@ -281,7 +281,7 @@ export default function CreateTransactionPage() {
         setTransactionId(data.id)
         setTransactionEmail(data.transaction_email)
       }
-      setSavedSections(new Set(visibleSlides.map(s => s.id)))
+      setSavedSections(new Set(visibleSlides.map(s => s.id) as string[]))
     } catch (error: any) {
       console.error('Error saving transaction:', error)
       alert(`Failed to save: ${error.message}`)
@@ -302,7 +302,7 @@ export default function CreateTransactionPage() {
         setTransactionId(data.id)
         setTransactionEmail(data.transaction_email)
       }
-      setSavedSections(prev => new Set([...prev, sectionId]))
+      setSavedSections(prev => { const next = new Set(Array.from(prev)); next.add(sectionId); return next })
     } catch (error: any) {
       console.error('Error saving:', error)
       alert(`Failed to save: ${error.message}`)
