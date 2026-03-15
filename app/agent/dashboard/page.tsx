@@ -17,7 +17,7 @@ export default function AgentDashboard() {
     totalUnits: 0,
     totalAgentNet: 0,
     goals: { volume: 0, units: 0, agent_net: 0 },
-    activeGoals: ['volume'] as ('volume' | 'units' | 'agent_net')[],
+    activeGoals: ['volume', 'units', 'agent_net'] as ('volume' | 'units' | 'agent_net')[],
     closedCount: 0,
     pendingCount: 0,
     activeCount: 0,
@@ -47,7 +47,6 @@ export default function AgentDashboard() {
       if (!freshUser) { router.push('/auth/login'); return }
       setUser(freshUser)
 
-      // Get commission plan details if they have one
       let capAmount = 0
       let hasCap = false
       if (freshUser.commission_plan) {
@@ -63,14 +62,12 @@ export default function AgentDashboard() {
         }
       }
 
-      // Get transactions
       const { data: transactions } = await supabase
         .from('transactions')
         .select('id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date')
         .eq('submitted_by', freshUser.id)
         .order('updated_at', { ascending: false })
 
-      // Get agent financial data from transaction_internal_agents
       const { data: agentRows } = await supabase
         .from('transaction_internal_agents')
         .select('transaction_id, agent_net, sales_volume, units')
@@ -80,13 +77,8 @@ export default function AgentDashboard() {
       const agentData = agentRows || []
       const currentYear = new Date().getFullYear()
 
-      let totalVolume = 0
-      let totalUnits = 0
-      let totalAgentNet = 0
-      let closedCount = 0
-      let pendingCount = 0
-      let activeCount = 0
-      let complianceCount = 0
+      let totalVolume = 0, totalUnits = 0, totalAgentNet = 0
+      let closedCount = 0, pendingCount = 0, activeCount = 0, complianceCount = 0
 
       txns.forEach(t => {
         const closedYear = t.closed_date ? new Date(t.closed_date).getFullYear() : null
@@ -94,13 +86,9 @@ export default function AgentDashboard() {
         if (t.status === 'closed' && closedYear === currentYear) {
           closedCount++
           totalUnits++
-          if (t.sales_price) {
-            totalVolume += parseFloat(t.sales_price)
-          } else if (t.monthly_rent && t.lease_term) {
-            totalVolume += parseFloat(t.monthly_rent) * parseInt(t.lease_term)
-          } else if (t.monthly_rent) {
-            totalVolume += parseFloat(t.monthly_rent) * 12
-          }
+          if (t.sales_price) totalVolume += parseFloat(t.sales_price)
+          else if (t.monthly_rent && t.lease_term) totalVolume += parseFloat(t.monthly_rent) * parseInt(t.lease_term)
+          else if (t.monthly_rent) totalVolume += parseFloat(t.monthly_rent) * 12
           const agentRow = agentData.find(a => a.transaction_id === t.id)
           if (agentRow?.agent_net) totalAgentNet += parseFloat(agentRow.agent_net)
         } else if (['pending', 'submitted', 'in_review', 'compliant', 'cda_in_progress', 'payout_in_progress', 'broker_review', 'cda_sent', 'payout_processed'].includes(t.status)) {
@@ -114,29 +102,16 @@ export default function AgentDashboard() {
         }
       })
 
-      // Parse active_goals - default to ['volume'] if not set
-      let activeGoals: ('volume' | 'units' | 'agent_net')[] = ['volume']
-      if (freshUser.active_goals && Array.isArray(freshUser.active_goals)) {
+      let activeGoals: ('volume' | 'units' | 'agent_net')[] = ['volume', 'units', 'agent_net']
+      if (freshUser.active_goals && Array.isArray(freshUser.active_goals) && freshUser.active_goals.length > 0) {
         activeGoals = freshUser.active_goals as ('volume' | 'units' | 'agent_net')[]
       }
 
       setStats({
-        totalVolume,
-        totalUnits,
-        totalAgentNet,
-        goals: {
-          volume: freshUser.sales_volume_goal || 0,
-          units: freshUser.units_goal || 0,
-          agent_net: freshUser.agent_net_goal || 0,
-        },
-        activeGoals,
-        closedCount,
-        pendingCount,
-        activeCount,
-        complianceCount,
-        capProgress: freshUser.cap_progress || 0,
-        capAmount,
-        hasCap,
+        totalVolume, totalUnits, totalAgentNet,
+        goals: { volume: freshUser.sales_volume_goal || 0, units: freshUser.units_goal || 0, agent_net: freshUser.agent_net_goal || 0 },
+        activeGoals, closedCount, pendingCount, activeCount, complianceCount,
+        capProgress: freshUser.cap_progress || 0, capAmount, hasCap,
         qualifyingCount: freshUser.qualifying_transaction_count || 0,
         commissionPlan: freshUser.commission_plan || '',
       })
@@ -156,8 +131,8 @@ export default function AgentDashboard() {
   if (!user) return null
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="overflow-x-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="page-title">DASHBOARD</h1>
         <button onClick={() => router.push('/agent/transactions/new')} className="btn btn-primary flex items-center gap-1.5">
           <Plus size={14} /> New Transaction
@@ -186,28 +161,28 @@ export default function AgentDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         <div className="container-card text-center">
           <div className="flex items-center justify-center mb-2">
-            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><FileText size={16} className="text-blue-600" /></div>
+            <div className="w-8 h-8 rounded-full bg-luxury-accent/10 flex items-center justify-center"><FileText size={16} className="text-luxury-accent" /></div>
           </div>
           <p className="text-xl font-bold text-luxury-gray-1">{stats.activeCount}</p>
           <p className="text-xs text-luxury-gray-3">Active</p>
         </div>
         <div className="container-card text-center">
           <div className="flex items-center justify-center mb-2">
-            <div className="w-8 h-8 rounded-full bg-yellow-50 flex items-center justify-center"><Clock size={16} className="text-yellow-600" /></div>
+            <div className="w-8 h-8 rounded-full bg-luxury-accent/10 flex items-center justify-center"><Clock size={16} className="text-luxury-accent" /></div>
           </div>
           <p className="text-xl font-bold text-luxury-gray-1">{stats.pendingCount}</p>
           <p className="text-xs text-luxury-gray-3">Pending</p>
         </div>
         <div className="container-card text-center">
           <div className="flex items-center justify-center mb-2">
-            <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center"><FileText size={16} className="text-purple-600" /></div>
+            <div className="w-8 h-8 rounded-full bg-luxury-accent/10 flex items-center justify-center"><FileText size={16} className="text-luxury-accent" /></div>
           </div>
           <p className="text-xl font-bold text-luxury-gray-1">{stats.complianceCount}</p>
           <p className="text-xs text-luxury-gray-3">In Compliance</p>
         </div>
         <div className="container-card text-center">
           <div className="flex items-center justify-center mb-2">
-            <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center"><CheckCircle size={16} className="text-green-600" /></div>
+            <div className="w-8 h-8 rounded-full bg-luxury-accent/10 flex items-center justify-center"><CheckCircle size={16} className="text-luxury-accent" /></div>
           </div>
           <p className="text-xl font-bold text-luxury-gray-1">{stats.closedCount}</p>
           <p className="text-xs text-luxury-gray-3">Closed This Year</p>
