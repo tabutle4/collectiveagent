@@ -75,15 +75,15 @@
 
   /* Inputs */
   .input-luxury {
-    @apply w-full px-3 py-2 text-sm border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
+    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
   }
 
   .textarea-luxury {
-    @apply w-full px-3 py-2 text-sm border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 min-h-[80px] resize-y rounded;
+    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 min-h-[80px] resize-y rounded;
   }
 
   .select-luxury {
-    @apply w-full px-3 py-2 text-sm border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 bg-white rounded;
+    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
   }
 
   /* Layout Helpers */
