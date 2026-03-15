@@ -128,7 +128,7 @@ export default function TeamAgreementsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="page-title">TEAMS</h1>
           <p className="text-xs text-luxury-gray-3 mt-1">Manage team agreements, splits, and revenue share</p>

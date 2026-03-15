@@ -136,7 +136,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
                 className="flex items-center gap-3 px-3 py-2 rounded-md opacity-30 cursor-not-allowed"
               >
                 <Icon size={18} className="text-luxury-gray-3 flex-shrink-0" strokeWidth={1.5} />
-                <span className="text-[13px] text-luxury-gray-3">{item.label}</span>
+                <span className="text-[13px] text-luxury-gray-2">{item.label}</span>
               </div>
             )
           }
@@ -293,7 +293,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
               </button>
             )}
           </div>
-          <p className="text-[13px] text-luxury-gray-3">
+          <p className="text-[13px] text-luxury-gray-2">
             Welcome back, <span className="text-luxury-gray-1 font-semibold">{user.preferred_first_name}</span>
           </p>
         </div>
