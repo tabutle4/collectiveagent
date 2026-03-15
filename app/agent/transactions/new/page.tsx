@@ -551,7 +551,7 @@ function SlideReview({ form, selectedType, onSave, saving }: { form: Transaction
           <div className="inner-card">
             <h3 className="text-xs font-semibold text-luxury-gray-2 mb-2">Transaction Type</h3>
             <p className="text-sm text-luxury-gray-1 font-medium">{selectedType?.name || 'Not selected'}</p>
-            {selectedType && selectedType.fee_amount > 0 && <p className="text-xs text-luxury-gray-3 mt-1">Processing fee: ${selectedType.fee_amount}</p>}
+            {selectedType && selectedType.processing_fee > 0 && <p className="text-xs text-luxury-gray-3 mt-1">Processing fee: ${selectedType.processing_fee}</p>}
           </div>
           {form.property_address && (
             <div className="inner-card">
