@@ -17,6 +17,7 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [planDetails, setPlanDetails] = useState<any>(null)
   const [personalForm, setPersonalForm] = useState({
     preferred_first_name: '', preferred_last_name: '', personal_email: '', personal_phone: '',
     instagram_handle: '', tiktok_handle: '', threads_handle: '', youtube_url: '', linkedin_url: '', facebook_url: '',
@@ -26,6 +27,7 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
   const [reForm, setReForm] = useState({
     office: '', team_name: '', team_lead: '', division: '', commission_plan: '',
     license_number: '', mls_id: '', nrds_id: '', association: '', status: '',
+    waive_processing_fees: false, special_commission_notes: '',
   })
   const [headshotUrl, setHeadshotUrl] = useState<string | null>(null)
 
@@ -49,15 +51,33 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
         division: user.division || '', commission_plan: user.commission_plan || user.commission_plan_other || '',
         license_number: user.license_number || '', mls_id: user.mls_id || '', nrds_id: user.nrds_id || '',
         association: user.association || '', status: user.status || (user.is_active ? 'active' : 'inactive'),
+        waive_processing_fees: user.waive_processing_fees || false,
+        special_commission_notes: user.special_commission_notes || '',
       })
+      loadPlanDetails(user.commission_plan)
     }
   }, [user])
+
+  const loadPlanDetails = async (planName: string | null) => {
+    if (!planName) return
+    const { data } = await supabase
+      .from('commission_plans')
+      .select('*')
+      .eq('name', planName)
+      .eq('is_active', true)
+      .single()
+    setPlanDetails(data)
+  }
 
   const formatDateForDisplay = (value: string | null) => {
     if (!value) return ''
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return value
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)
   }
 
   const loadUser = async () => {
@@ -83,7 +103,7 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
     setSaveError(null); setSaveSuccess(null)
   }
 
-  const handleReChange = (field: keyof typeof reForm, value: string) => {
+  const handleReChange = (field: keyof typeof reForm, value: any) => {
     setReForm(prev => ({ ...prev, [field]: value }))
     setSaveError(null); setSaveSuccess(null)
   }
@@ -124,6 +144,8 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
         updates.nrds_id = reForm.nrds_id.trim() || null
         updates.association = reForm.association.trim() || null
         updates.status = reForm.status.trim() || null
+        updates.waive_processing_fees = reForm.waive_processing_fees
+        updates.special_commission_notes = reForm.special_commission_notes.trim() || null
       }
       const { error } = await supabase.from('users').update(updates).eq('id', user.id)
       if (error) { setSaveError('Failed to save changes.') }
@@ -142,6 +164,12 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
 
   const roles = user.role ? [user.role] : []
   const displayName = `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
+  const isNewAgentPlan = user.commission_plan?.toLowerCase().includes('new')
+  const hasCap = planDetails?.has_cap || false
+  const capAmount = planDetails?.cap_amount || 0
+  const capProgress = user.cap_progress || 0
+  const qualifyingCount = user.qualifying_transaction_count || 0
+  const isPostCap = hasCap && capAmount > 0 && capProgress >= capAmount
 
   return (
     <div>
@@ -162,6 +190,84 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
       {(saveError || saveSuccess) && (
         <div className={`mb-5 text-xs px-4 py-2.5 rounded ${saveError ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
           {saveError || saveSuccess}
+        </div>
+      )}
+
+      {/* Commission Status Bar */}
+      {(isNewAgentPlan || hasCap) && (
+        <div className="container-card mb-5">
+          <div className="flex flex-col md:flex-row md:items-center gap-4">
+            {/* Plan name */}
+            <div className="flex-shrink-0">
+              <p className="text-xs text-luxury-gray-3">Commission Plan</p>
+              <p className="text-sm font-bold text-luxury-gray-1">{user.commission_plan || 'N/A'}</p>
+            </div>
+
+            <div className="flex-1">
+              {/* Cap progress */}
+              {hasCap && capAmount > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-luxury-gray-3">Cap Progress</p>
+                    <p className="text-xs font-medium text-luxury-gray-2">
+                      {formatCurrency(capProgress)} of {formatCurrency(capAmount)}
+                      {isPostCap && <span className="ml-2 text-green-600 font-semibold">Post-Cap</span>}
+                    </p>
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-bar-fill"
+                      style={{
+                        width: `${Math.min((capProgress / capAmount) * 100, 100)}%`,
+                        backgroundColor: isPostCap ? '#22C55E' : undefined,
+                      }}
+                    />
+                  </div>
+                  {isPostCap && (
+                    <p className="text-xs text-green-600 mt-1">
+                      Splits at {planDetails?.post_cap_agent_split || 97}/{planDetails?.post_cap_firm_split || 3} until cap resets
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* New Agent plan deal count */}
+              {isNewAgentPlan && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-luxury-gray-3">Qualifying Transactions</p>
+                    <p className="text-xs font-medium text-luxury-gray-2">{qualifyingCount} of 5 to upgrade</p>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-bar-fill" style={{ width: `${Math.min((qualifyingCount / 5) * 100, 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-luxury-gray-3 mt-1">
+                    {5 - qualifyingCount > 0
+                      ? `${5 - qualifyingCount} more qualifying deal${5 - qualifyingCount === 1 ? '' : 's'} to upgrade from New Agent plan`
+                      : 'Eligible for plan upgrade!'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Processing fee waiver badge */}
+            {user.waive_processing_fees && (
+              <div className="flex-shrink-0 text-center">
+                <span className="inline-block px-3 py-1.5 bg-green-50 text-green-700 text-xs font-semibold rounded">
+                  Processing Fees Waived
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Special commission notes - visible to both agent and admin */}
+          {user.special_commission_notes && (
+            <div className="mt-3 pt-3 border-t border-luxury-gray-5/30">
+              <p className="text-xs text-luxury-gray-3">Commission Notes</p>
+              <p className="text-sm text-luxury-gray-2">{user.special_commission_notes}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -203,6 +309,20 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
                       <option value="inactive">Inactive</option>
                     </select>
                   </div>
+
+                  {/* Admin-only: Processing fee waiver and special notes */}
+                  <div className="pt-3 border-t border-luxury-gray-5/30">
+                    <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Commission Overrides</h3>
+                    <label className="flex items-center gap-2 cursor-pointer mb-3">
+                      <input type="checkbox" checked={reForm.waive_processing_fees} onChange={(e) => handleReChange('waive_processing_fees', e.target.checked)} className="w-4 h-4" />
+                      <span className="text-xs text-luxury-gray-2">Waive Processing Fees</span>
+                    </label>
+                    <div>
+                      <label className="block text-xs text-luxury-gray-3 mb-1">Special Commission Notes</label>
+                      <textarea className="textarea-luxury" rows={3} value={reForm.special_commission_notes} onChange={(e) => handleReChange('special_commission_notes', e.target.value)} placeholder="Any special arrangements, negotiated rates, etc." />
+                    </div>
+                  </div>
+
                   <div>
                     <p className="text-xs text-luxury-gray-3">Join Date</p>
                     <p className="text-sm font-medium text-luxury-gray-1">{formatDateForDisplay(user.join_date || null) || 'N/A'}</p>

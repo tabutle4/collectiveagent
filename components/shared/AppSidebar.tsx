@@ -42,7 +42,7 @@ const adminNav: NavItem[] = [
 ]
 
 const agentNav: NavItem[] = [
-  { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: true },
+  { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
