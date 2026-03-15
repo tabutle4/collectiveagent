@@ -1,73 +1,111 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { Resend } from 'resend'
+import { ListingCoordination, Listing } from '@/types/listing-coordination'
+import { getMagicLinkUrl } from '@/lib/magic-links'
+import { getEmailLayout, emailSection, emailButton, emailSignature } from './layout'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-export async function POST(request: NextRequest) {
-  try {
-    const { user_id, user_name, user_email } = await request.json()
-
-    if (!user_id || !user_name || !user_email) {
-      return NextResponse.json({ error: 'user_id, user_name, and user_email are required' }, { status: 400 })
+export function getWelcomeEmailHtml(
+  coordination: ListingCoordination,
+  listing: Listing,
+  agentName: string,
+  agentEmail: string,
+  agentPhone: string,
+  scheduledTime?: Date | string | null
+): string {
+  const magicLink = getMagicLinkUrl(coordination.seller_magic_link!)
+  
+  let scheduleText = 'every Monday at 6:00 PM'
+  if (scheduledTime) {
+    const scheduleDate = typeof scheduledTime === 'string' ? new Date(scheduledTime) : scheduledTime
+    if (!isNaN(scheduleDate.getTime())) {
+      const dayOfWeek = scheduleDate.toLocaleDateString('en-US', { weekday: 'long' })
+      const time = scheduleDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      scheduleText = `every ${dayOfWeek} at ${time}`
     }
-
-    // Send email to office
-    await resend.emails.send({
-      from: 'Collective Realty Co. <notifications@coachingbrokeragetools.com>',
-      to: 'office@collectiverealtyco.com',
-      subject: `🎉 Onboarding Complete: ${user_name}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%); color: white; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 28px;">🎉 Onboarding Checklist Completed!</h1>
-          </div>
-          
-          <div style="padding: 30px; background: #f9f9f9;">
-            <p style="font-size: 16px; color: #333; margin-bottom: 20px;">
-              <strong>${user_name}</strong> has completed their onboarding checklist!
-            </p>
-            
-            <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 8px 0; color: #666; font-weight: bold;">Agent Name:</td>
-                  <td style="padding: 8px 0; color: #333;">${user_name}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #666; font-weight: bold;">Email:</td>
-                  <td style="padding: 8px 0; color: #333;">${user_email}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #666; font-weight: bold;">Completion Date:</td>
-                  <td style="padding: 8px 0; color: #333;">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                </tr>
-              </table>
-            </div>
-            
-            <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50;">
-              <p style="margin: 0; color: #2e7d32; font-weight: bold;">✓ All checklist items completed</p>
-              <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">The agent is now fully onboarded and ready to go!</p>
-            </div>
-          </div>
-          
-          <div style="background: #f0f0f0; padding: 20px; text-align: center; color: #666; font-size: 12px;">
-            <p style="margin: 0;">This is an automated notification from the Collective Realty Co. Agent Portal</p>
-          </div>
-        </div>
-      `,
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: 'Completion notification sent',
-    })
-  } catch (error: any) {
-    console.error('Error sending completion notification:', error)
-    return NextResponse.json({ error: error?.message || 'Failed to send notification' }, { status: 500 })
   }
+
+  const content = `
+    <p class="email-greeting">Hi ${coordination.seller_name},</p>
+    
+    <p>Welcome to Collective Realty Co.'s Weekly Listing Coordination service for your property at <strong>${listing.property_address}</strong>!</p>
+    
+    <p>We're excited to keep you informed every step of the way as we market your home.</p>
+    
+    ${emailSection('What to Expect', `
+      <ul>
+        <li>Weekly email updates ${scheduleText}</li>
+        <li>Showing activity and agent feedback</li>
+        <li>MLS property views and engagement</li>
+        <li>Your listing featured in our weekly email to 7,000+ buyers and agents</li>
+      </ul>
+    `)}
+    
+    ${emailSection('Your Listing Dashboard', `
+      <p>Access your personalized dashboard anytime to view all reports, showing history, and listing details:</p>
+      ${emailButton('Access Your Dashboard', magicLink)}
+      <p style="font-size: 11px; text-align: center; color: #888;">Bookmark this link for easy access to your reports anytime.</p>
+    `)}
+    
+    ${emailSection('Your Team', `
+      <p><strong>Listing Agent:</strong><br>
+      ${agentName}<br>
+      ${agentEmail}<br>
+      ${agentPhone}</p>
+      
+      <p style="margin-top: 15px;"><strong>Listing & Transaction Coordinator:</strong><br>
+      Leah Parpan<br>
+      transactions@coachingbrokeragetools.com<br>
+      (281) 638-9416</p>
+    `)}
+    
+    <p>If you have any questions, feel free to reach out to your listing agent or our coordination team.</p>
+    
+    <p>We look forward to keeping you updated on your listing's progress!</p>
+    
+    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'transactions@coachingbrokeragetools.com', '(281) 638-9416')}
+  `
+
+  return getEmailLayout(content, {
+    title: 'Welcome to Weekly Listing Coordination',
+    preheader: `Your listing coordination service for ${listing.property_address} is now active.`,
+  })
 }
 
+export function getWeeklyReportEmailHtml(
+  coordination: ListingCoordination,
+  listing: Listing,
+  dateSent: string,
+  reportDownloadUrl1?: string,
+  reportDownloadUrl2?: string
+): string {
+  const magicLink = getMagicLinkUrl(coordination.seller_magic_link!)
 
+  const reportButtons = (reportDownloadUrl1 || reportDownloadUrl2) ? emailSection('This Week\'s Reports', `
+    <p style="text-align: center;">
+      ${reportDownloadUrl1 ? `<a href="${reportDownloadUrl1}" class="email-btn" style="margin: 5px;">Download Showing Report</a>` : ''}
+      ${reportDownloadUrl2 ? `<a href="${reportDownloadUrl2}" class="email-btn" style="margin: 5px;">Download Traffic Report</a>` : ''}
+    </p>
+  `) : ''
 
+  const content = `
+    <p class="email-greeting">Hi ${coordination.seller_name},</p>
+    
+    <p>Your weekly activity report for <strong>${listing.property_address}</strong> is ready.</p>
+    
+    ${reportButtons}
+    
+    ${emailSection('Your Dashboard', `
+      <p>View all your reports and listing details anytime:</p>
+      ${emailButton('Your Listing Dashboard', magicLink)}
+      <p style="font-size: 11px; text-align: center; color: #888;">This link remains active as long as your listing coordination service is active.</p>
+    `)}
+    
+    <p>If you have any questions about this week's activity or your listing, please don't hesitate to reach out to your listing agent.</p>
+    
+    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'transactions@coachingbrokeragetools.com', '(281) 638-9416')}
+  `
 
+  return getEmailLayout(content, {
+    title: 'Weekly Listing Report',
+    subtitle: `${listing.property_address} | ${dateSent}`,
+    preheader: `Weekly report for ${listing.property_address} - ${dateSent}`,
+  })
+}
