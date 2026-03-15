@@ -164,6 +164,168 @@
     height: 6px;
     border-radius: 3px;
   }
+  /* ===== TRANSACTION MODULE ===== */
+
+  /* Section Title (uppercase label above slide content) */
+  .section-title {
+    @apply text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4;
+  }
+
+  /* Field Label (above inputs in slides) */
+  .field-label {
+    @apply block text-xs text-luxury-gray-3 mb-1;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    @apply w-full h-1 bg-luxury-gray-5 rounded overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full bg-luxury-accent rounded transition-all duration-300;
+  }
+
+  /* Slide Navigation (left column step list) */
+  .slide-nav-item {
+    @apply w-full text-left px-3 py-2 rounded text-xs transition-colors text-luxury-gray-3 hover:text-luxury-gray-1 hover:bg-luxury-gray-5/30;
+  }
+
+  .slide-nav-item-active {
+    @apply w-full text-left px-3 py-2 rounded text-xs transition-colors bg-luxury-accent/10 text-luxury-accent font-semibold;
+  }
+
+  .slide-nav-item-disabled {
+    @apply w-full text-left px-3 py-2 rounded text-xs opacity-30 cursor-not-allowed;
+  }
+
+  /* Type Selection Card */
+  .type-card {
+    @apply bg-luxury-light rounded-md p-4 text-left transition-all cursor-pointer hover:bg-luxury-gray-5/30 border border-transparent;
+  }
+
+  .type-card-selected {
+    @apply bg-luxury-light rounded-md p-4 text-left transition-all cursor-pointer ring-2 ring-luxury-accent bg-luxury-accent/5;
+  }
+
+  /* Status Badge */
+  .status-badge {
+    @apply text-xs font-medium;
+  }
+
+  /* Checklist Item */
+  .checklist-item {
+    @apply flex items-center gap-2 text-xs text-luxury-gray-2;
+  }
+
+  .checklist-check {
+    @apply w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-luxury-gray-5/40 text-luxury-gray-3;
+  }
+
+  .checklist-check-done {
+    @apply w-4 h-4 rounded flex items-center justify-center flex-shrink-0 bg-green-100 text-green-600;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  }
+
+  .modal-content {
+    @apply bg-white rounded-lg shadow-lg border border-gray-200 w-full mx-4 overflow-hidden;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5/50;
+  }
+
+  .modal-body {
+    @apply p-5 overflow-y-auto;
+  }
+
+  .modal-footer {
+    @apply flex items-center justify-between px-5 py-4 border-t border-luxury-gray-5/50 bg-luxury-light;
+  }
+
+  /* Delete Button (red outline) */
+  .btn-danger-outline {
+    @apply bg-white border border-red-600 text-red-600 hover:bg-red-50;
+  }
+
+  /* Danger Solid (deactivate, etc.) */
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+
+  /* Summary Data Row */
+  .summary-row {
+    @apply mb-3;
+  }
+
+  .summary-label {
+    @apply text-xs text-luxury-gray-3;
+  }
+
+  .summary-value {
+    @apply text-sm font-medium text-luxury-gray-1;
+  }
+
+  /* Table Header Cell */
+  .th-luxury {
+    @apply text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider;
+  }
+
+  .th-luxury-sortable {
+    @apply text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors;
+  }
+
+  /* Table Row */
+  .tr-luxury {
+    @apply border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors;
+  }
+
+  .tr-luxury-clickable {
+    @apply border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer;
+  }
+
+  /* Tab Navigation */
+  .tab-item {
+    @apply px-4 py-2 text-xs transition-colors text-luxury-gray-3 hover:text-luxury-gray-1;
+  }
+
+  .tab-item-active {
+    @apply px-4 py-2 text-xs transition-colors border-b-2 border-luxury-accent text-luxury-gray-1 font-semibold;
+  }
+
+  /* Checkbox with label */
+  .checkbox-label {
+    @apply flex items-center gap-2 cursor-pointer text-xs text-luxury-gray-2;
+  }
+
+  /* Document Upload Zone */
+  .upload-zone {
+    @apply border-2 border-dashed border-luxury-gray-5 rounded-lg p-6 text-center transition-colors hover:border-luxury-gray-3;
+  }
+
+  .upload-zone-active {
+    @apply border-2 border-dashed border-luxury-accent rounded-lg p-6 text-center transition-colors bg-luxury-accent/5;
+  }
+
+  /* Alert/Notice Boxes */
+  .alert-info {
+    @apply text-xs px-4 py-2.5 rounded bg-blue-50 text-blue-700;
+  }
+
+  .alert-success {
+    @apply text-xs px-4 py-2.5 rounded bg-green-50 text-green-700;
+  }
+
+  .alert-warning {
+    @apply text-xs px-4 py-2.5 rounded bg-yellow-50 text-yellow-700;
+  }
+
+  .alert-error {
+    @apply text-xs px-4 py-2.5 rounded bg-red-50 text-red-600;
+  }
 }
 
 /* Dark mode support */
