@@ -330,7 +330,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-luxury-gray-5">
-          <h2 className="text-xl font-light tracking-luxury">Preview & Send Campaign Email</h2>
+          <h2 className="text-xl font-light tracking-wide">Preview & Send Campaign Email</h2>
           <button
             onClick={onClose}
             className="text-luxury-gray-2 hover:text-luxury-black text-2xl leading-none"
