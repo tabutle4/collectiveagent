@@ -21,6 +21,7 @@ interface NavItem {
 
 interface AppSidebarProps {
   children: React.ReactNode
+  logoUrl?: string
 }
 
 const adminNav: NavItem[] = [
@@ -48,7 +49,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
-export default function AppSidebar({ children }: AppSidebarProps) {
+export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
@@ -60,6 +61,7 @@ export default function AppSidebar({ children }: AppSidebarProps) {
 
   const isAdmin = pathname?.startsWith('/admin')
   const navItems = isAdmin ? adminNav : agentNav
+  const logo = logoUrl || '/logo.png'
 
   useEffect(() => {
     setMounted(true)
@@ -123,15 +125,23 @@ export default function AppSidebar({ children }: AppSidebarProps) {
           }
         `}
       >
-        {/* Logo */}
-        <div className="flex items-center justify-center py-6 flex-shrink-0">
+        {/* Logo + collapse button */}
+        <div className="flex items-center justify-between px-4 py-5 flex-shrink-0">
           <Link href={isAdmin ? '/admin/dashboard' : '/profile'}>
             <img
-              src="/logo.png"
-              alt="Collective Realty Co."
-              className={sidebarOpen ? 'w-11 h-11 object-contain' : 'w-7 h-7 object-contain'}
+              src={logo}
+              alt="Logo"
+              className={sidebarOpen ? 'w-14 h-14 object-contain' : 'w-7 h-7 object-contain'}
             />
           </Link>
+          {sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+            >
+              <PanelLeft size={15} strokeWidth={1.5} />
+            </button>
+          )}
         </div>
 
         {/* Nav */}
@@ -222,7 +232,7 @@ export default function AppSidebar({ children }: AppSidebarProps) {
 
           {sidebarOpen && (
             <div className="px-5 pb-3 flex justify-end">
-              <span className="text-[9px] text-luxury-gray-3/60 tracking-[0.2em] uppercase">Collective Agent</span>
+              <span className="text-[9px] text-luxury-gray-3 tracking-[0.2em] uppercase">Collective Agent</span>
             </div>
           )}
 
@@ -279,13 +289,18 @@ export default function AppSidebar({ children }: AppSidebarProps) {
         className="transition-all duration-300 ease-out min-h-screen"
         style={{ marginLeft: isMobile ? 0 : (sidebarOpen ? '220px' : '56px') }}
       >
+        {/* Top bar */}
         <div className="sticky top-0 z-30 bg-luxury-light/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-          >
-            {isMobile ? <Menu size={20} strokeWidth={1.5} /> : <PanelLeft size={18} strokeWidth={1.5} />}
-          </button>
+          <div>
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+              >
+                {isMobile ? <Menu size={20} strokeWidth={1.5} /> : <PanelLeft size={15} strokeWidth={1.5} />}
+              </button>
+            )}
+          </div>
           <p className="text-[13px] text-luxury-gray-3">
             Welcome back, <span className="text-luxury-gray-1 font-semibold">{user.preferred_first_name}</span>
           </p>
