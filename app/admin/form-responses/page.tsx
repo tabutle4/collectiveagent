@@ -1349,7 +1349,7 @@ export default function FormResponsesPage() {
   }
 
   return (
-    <div>
+    <>
     
       
         <div className="card-section mb-6">
@@ -1970,7 +1970,6 @@ export default function FormResponsesPage() {
             )}
           </div>
         )}
-      </div>
 
       {/* Side Modal */}
       {modalOpen && selectedResponse && (
@@ -3464,6 +3463,6 @@ export default function FormResponsesPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
