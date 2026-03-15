@@ -3,31 +3,46 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Save, FileText, Upload, Check, X } from 'lucide-react'
+import { Save, FileText, Upload, Check, X, Search } from 'lucide-react'
 import { ProcessingFeeType } from '@/lib/transactions/types'
 import { getVisibleSlides, REPRESENTATION_TYPES, TENANT_TYPES, LOAN_TYPES, LEAD_SOURCES, FLYER_DIVISIONS, SlideConfig } from '@/lib/transactions/constants'
 import SummaryPanel from '@/components/transactions/SummaryPanel'
 
 interface TransactionForm {
-  processing_fee_type_id: string
+  // Type
+  transaction_type: string
   transaction_type_name: string
   is_lease: boolean
-  property_address: string
-  property_unit: string
+  processing_fee: number
+  // Property (structured)
+  street_address: string
+  unit_suite: string
+  city: string
+  state_code: string
+  zip_code: string
   mls_link: string
+  mls_number: string
+  // Client
   client_name: string
   client_email: string
   client_phone: string
+  // Financials
   sales_price: string
   monthly_rent: string
-  commission_rate: string
-  commission_amount: string
+  gross_commission: string
+  gross_commission_type: string
+  listing_side_commission: string
+  listing_side_commission_type: string
+  buying_side_commission: string
+  buying_side_commission_type: string
   additional_client_commission: string
   bonus_amount: string
   rebate_amount: string
+  // Dates
   closing_date: string
   move_in_date: string
   lease_term: string
+  // Details
   representation_type: string
   tenant_transaction_type: string
   loan_type: string
@@ -35,42 +50,68 @@ interface TransactionForm {
   flyer_division: string
   expedite_requested: boolean
   notes: string
+  // Referrals
   internal_referral: boolean
   internal_referral_fee: string
+  internal_referral_fee_type: string
   external_referral: boolean
   external_referral_fee: string
+  external_referral_fee_type: string
+  // BTSA / eCommission
   has_btsa: boolean
   btsa_amount: string
   has_ecommission: boolean
   ecommission_amount: string
+  // Title
   title_officer_name: string
   title_company: string
   title_company_email: string
 }
 
 const emptyForm: TransactionForm = {
-  processing_fee_type_id: '', transaction_type_name: '', is_lease: false,
-  property_address: '', property_unit: '', mls_link: '',
+  transaction_type: '', transaction_type_name: '', is_lease: false, processing_fee: 0,
+  street_address: '', unit_suite: '', city: '', state_code: 'TX', zip_code: '', mls_link: '', mls_number: '',
   client_name: '', client_email: '', client_phone: '',
-  sales_price: '', monthly_rent: '', commission_rate: '', commission_amount: '',
+  sales_price: '', monthly_rent: '',
+  gross_commission: '', gross_commission_type: 'percent',
+  listing_side_commission: '', listing_side_commission_type: 'percent',
+  buying_side_commission: '', buying_side_commission_type: 'percent',
   additional_client_commission: '', bonus_amount: '', rebate_amount: '',
   closing_date: '', move_in_date: '', lease_term: '',
   representation_type: '', tenant_transaction_type: '', loan_type: '',
   lead_source: '', flyer_division: '', expedite_requested: false, notes: '',
-  internal_referral: false, internal_referral_fee: '', external_referral: false, external_referral_fee: '',
+  internal_referral: false, internal_referral_fee: '', internal_referral_fee_type: 'percent',
+  external_referral: false, external_referral_fee: '', external_referral_fee_type: 'percent',
   has_btsa: false, btsa_amount: '', has_ecommission: false, ecommission_amount: '',
   title_officer_name: '', title_company: '', title_company_email: '',
+}
+
+function buildPropertyAddress(form: TransactionForm): string {
+  const parts = [form.street_address]
+  if (form.unit_suite) parts[0] += `, ${form.unit_suite}`
+  if (form.city) parts.push(form.city)
+  if (form.state_code) parts.push(form.state_code)
+  if (form.zip_code) parts.push(form.zip_code)
+  return parts.filter(Boolean).join(', ')
 }
 
 export default function CreateTransactionPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [transactionTypes, setTransactionTypes] = useState<ProcessingFeeType[]>([])
+  const [teams, setTeams] = useState<any[]>([])
   const [requiredDocs, setRequiredDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savedSections, setSavedSections] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<TransactionForm>(emptyForm)
   const [showMobileRight, setShowMobileRight] = useState(false)
+  const [clientSuggestions, setClientSuggestions] = useState<any[]>([])
+  const [titleSuggestions, setTitleSuggestions] = useState<any[]>([])
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false)
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false)
+  const [transactionId, setTransactionId] = useState<string | null>(null)
+  const [transactionEmail, setTransactionEmail] = useState<string | null>(null)
 
   const slideRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -80,31 +121,68 @@ export default function CreateTransactionPage() {
     try {
       const userStr = localStorage.getItem('user')
       if (!userStr) { router.push('/auth/login'); return }
-      setUser(JSON.parse(userStr))
-      const { data: types } = await supabase
-        .from('processing_fee_types')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_order', { ascending: true })
-      setTransactionTypes(types || [])
+      const userData = JSON.parse(userStr)
+      setUser(userData)
+
+      const [typesRes, teamsRes] = await Promise.all([
+        supabase.from('processing_fee_types').select('*').eq('is_active', true).order('display_order', { ascending: true }),
+        supabase.from('team_agreements').select('id, team_name, is_active').eq('is_active', true).order('team_name', { ascending: true }),
+      ])
+      setTransactionTypes(typesRes.data || [])
+      setTeams(teamsRes.data || [])
     } catch (error) { console.error('Error loading data:', error) }
     finally { setLoading(false) }
   }
 
+  // Load required docs when type changes
   useEffect(() => {
-    if (form.processing_fee_type_id) {
-      supabase
-        .from('required_documents')
-        .select('*')
-        .eq('processing_fee_type_id', form.processing_fee_type_id)
-        .eq('is_active', true)
-        .order('display_order', { ascending: true })
-        .then(({ data }) => setRequiredDocs(data || []))
+    if (form.transaction_type) {
+      const type = transactionTypes.find(t => t.id === form.transaction_type)
+      if (type) {
+        supabase
+          .from('required_documents')
+          .select('*')
+          .eq('processing_fee_type_id', type.id)
+          .eq('is_active', true)
+          .order('display_order', { ascending: true })
+          .then(({ data }) => setRequiredDocs(data || []))
+      }
     }
-  }, [form.processing_fee_type_id])
+  }, [form.transaction_type, transactionTypes])
+
+  // Client name search
+  useEffect(() => {
+    if (form.client_name.length < 2) { setClientSuggestions([]); return }
+    const timeout = setTimeout(async () => {
+      const { data } = await supabase
+        .from('transaction_contacts')
+        .select('name, email, phone, company')
+        .ilike('name', `%${form.client_name}%`)
+        .limit(5)
+      setClientSuggestions(data || [])
+      setShowClientSuggestions((data || []).length > 0)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [form.client_name])
+
+  // Title company search
+  useEffect(() => {
+    if (form.title_company.length < 2) { setTitleSuggestions([]); return }
+    const timeout = setTimeout(async () => {
+      const { data } = await supabase
+        .from('transaction_contacts')
+        .select('name, email, phone, company')
+        .or(`company.ilike.%${form.title_company}%,name.ilike.%${form.title_company}%`)
+        .eq('contact_type', 'title')
+        .limit(5)
+      setTitleSuggestions(data || [])
+      setShowTitleSuggestions((data || []).length > 0)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [form.title_company])
 
   const visibleSlides = useMemo(() => getVisibleSlides(form.is_lease), [form.is_lease])
-  const selectedType = transactionTypes.find(t => t.id === form.processing_fee_type_id)
+  const selectedType = transactionTypes.find(t => t.id === form.transaction_type)
 
   const updateForm = (field: keyof TransactionForm, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -113,9 +191,10 @@ export default function CreateTransactionPage() {
   const selectTransactionType = (type: ProcessingFeeType) => {
     setForm(prev => ({
       ...prev,
-      processing_fee_type_id: type.id,
+      transaction_type: type.id,
       transaction_type_name: type.name,
       is_lease: type.is_lease,
+      processing_fee: type.processing_fee,
     }))
   }
 
@@ -125,12 +204,12 @@ export default function CreateTransactionPage() {
 
   const isSlideComplete = (slide: SlideConfig): boolean => {
     switch (slide.id) {
-      case 'type': return !!form.processing_fee_type_id
-      case 'property': return !!form.property_address
+      case 'type': return !!form.transaction_type
+      case 'property': return !!form.street_address && !!form.city
       case 'client': return !!form.client_name
       case 'financials': return !!(form.sales_price || form.monthly_rent)
       case 'dates': return !!(form.closing_date || form.move_in_date)
-      case 'details': return !!form.representation_type
+      case 'details': return !!form.lead_source
       case 'title_info': return !!form.title_company
       case 'documents': return false
       case 'review': return false
@@ -138,56 +217,94 @@ export default function CreateTransactionPage() {
     }
   }
 
-  const handleSaveDraft = async () => {
-    if (!user || !form.processing_fee_type_id) return
+  const buildPayload = () => {
+    const propertyAddress = buildPropertyAddress(form)
+    return {
+      submitted_by: user.id,
+      agent_id: user.id,
+      property_address: propertyAddress || 'Untitled Transaction',
+      transaction_type: form.transaction_type_name || null,
+      status: 'prospect',
+      compliance_status: 'not_requested',
+      client_name: form.client_name || null,
+      client_email: form.client_email || null,
+      client_phone: form.client_phone || null,
+      mls_link: form.mls_link || null,
+      mls_number: form.mls_number || null,
+      lead_source: form.lead_source || null,
+      notes: form.notes || null,
+      sales_price: form.sales_price ? parseFloat(form.sales_price) : null,
+      monthly_rent: form.monthly_rent ? parseFloat(form.monthly_rent) : null,
+      gross_commission: form.gross_commission ? parseFloat(form.gross_commission) : null,
+      gross_commission_type: form.gross_commission_type || 'percent',
+      listing_side_commission: form.listing_side_commission ? parseFloat(form.listing_side_commission) : null,
+      listing_side_commission_type: form.listing_side_commission_type || 'percent',
+      buying_side_commission: form.buying_side_commission ? parseFloat(form.buying_side_commission) : null,
+      buying_side_commission_type: form.buying_side_commission_type || 'percent',
+      additional_client_commission: form.additional_client_commission ? parseFloat(form.additional_client_commission) : 0,
+      bonus_amount: form.bonus_amount ? parseFloat(form.bonus_amount) : 0,
+      rebate_amount: form.rebate_amount ? parseFloat(form.rebate_amount) : 0,
+      closing_date: form.closing_date || null,
+      move_in_date: form.move_in_date || null,
+      lease_term: form.lease_term || null,
+      representation_type: form.representation_type || null,
+      tenant_transaction_type: form.tenant_transaction_type || null,
+      flyer_division: form.flyer_division || null,
+      expedite_requested: form.expedite_requested,
+      expedite_fee: form.expedite_requested ? 95 : 0,
+      internal_referral: form.internal_referral,
+      internal_referral_fee: form.internal_referral_fee ? parseFloat(form.internal_referral_fee) : 0,
+      external_referral: form.external_referral,
+      external_referral_fee: form.external_referral_fee ? parseFloat(form.external_referral_fee) : 0,
+      has_btsa: form.has_btsa,
+      btsa_amount: form.btsa_amount ? parseFloat(form.btsa_amount) : 0,
+      has_ecommission: form.has_ecommission,
+      ecommission_amount: form.ecommission_amount ? parseFloat(form.ecommission_amount) : 0,
+      has_referral: form.internal_referral || form.external_referral,
+      title_officer_name: form.title_officer_name || null,
+      title_company: form.title_company || null,
+      title_company_email: form.title_company_email || null,
+    }
+  }
+
+  const handleSave = async () => {
+    if (!user || !form.transaction_type) return
     setSaving(true)
     try {
-      const payload: any = {
-        submitted_by: user.id,
-        property_address: form.property_address || 'Untitled Transaction',
-        status: 'prospect',
-        compliance_status: 'not_requested',
-        processing_fee_type_id: form.processing_fee_type_id,
-        client_name: form.client_name || null,
-        client_email: form.client_email || null,
-        client_phone: form.client_phone || null,
-        mls_link: form.mls_link || null,
-        lead_source: form.lead_source || null,
-        notes: form.notes || null,
-        sales_price: form.sales_price ? parseFloat(form.sales_price) : null,
-        monthly_rent: form.monthly_rent ? parseFloat(form.monthly_rent) : null,
-        commission_rate: form.commission_rate ? parseFloat(form.commission_rate) : null,
-        commission_amount: form.commission_amount ? parseFloat(form.commission_amount) : null,
-        additional_client_commission: form.additional_client_commission ? parseFloat(form.additional_client_commission) : 0,
-        bonus_amount: form.bonus_amount ? parseFloat(form.bonus_amount) : 0,
-        rebate_amount: form.rebate_amount ? parseFloat(form.rebate_amount) : 0,
-        closing_date: form.closing_date || null,
-        move_in_date: form.move_in_date || null,
-        lease_term: form.lease_term || null,
-        representation_type: form.representation_type || null,
-        tenant_transaction_type: form.tenant_transaction_type || null,
-        loan_type: form.loan_type || null,
-        flyer_division: form.flyer_division || null,
-        expedite_requested: form.expedite_requested,
-        expedite_fee: form.expedite_requested ? 95 : 0,
-        internal_referral: form.internal_referral,
-        internal_referral_fee: form.internal_referral_fee ? parseFloat(form.internal_referral_fee) : 0,
-        external_referral: form.external_referral,
-        external_referral_fee: form.external_referral_fee ? parseFloat(form.external_referral_fee) : 0,
-        has_btsa: form.has_btsa,
-        btsa_amount: form.btsa_amount ? parseFloat(form.btsa_amount) : 0,
-        has_ecommission: form.has_ecommission,
-        ecommission_amount: form.ecommission_amount ? parseFloat(form.ecommission_amount) : 0,
-        has_referral: form.internal_referral || form.external_referral,
-        title_officer_name: form.title_officer_name || null,
-        title_company: form.title_company || null,
-        title_company_email: form.title_company_email || null,
+      const payload = buildPayload()
+      if (transactionId) {
+        const { error } = await supabase.from('transactions').update(payload).eq('id', transactionId)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
+        if (error) throw error
+        setTransactionId(data.id)
+        setTransactionEmail(data.transaction_email)
       }
-      const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
-      if (error) throw error
-      router.push('/agent/transactions')
+      setSavedSections(new Set(visibleSlides.map(s => s.id)))
     } catch (error: any) {
       console.error('Error saving transaction:', error)
+      alert(`Failed to save: ${error.message}`)
+    } finally { setSaving(false) }
+  }
+
+  const handleSaveSection = async (sectionId: string) => {
+    if (!user || !form.transaction_type) return
+    setSaving(true)
+    try {
+      const payload = buildPayload()
+      if (transactionId) {
+        const { error } = await supabase.from('transactions').update(payload).eq('id', transactionId)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('transactions').insert([payload]).select().single()
+        if (error) throw error
+        setTransactionId(data.id)
+        setTransactionEmail(data.transaction_email)
+      }
+      setSavedSections(prev => new Set([...prev, sectionId]))
+    } catch (error: any) {
+      console.error('Error saving:', error)
       alert(`Failed to save: ${error.message}`)
     } finally { setSaving(false) }
   }
@@ -204,8 +321,8 @@ export default function CreateTransactionPage() {
           <h1 className="page-title">NEW TRANSACTION</h1>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleSaveDraft} disabled={saving || !form.processing_fee_type_id} className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
-            <Save size={14} /> {saving ? 'Saving...' : 'Save Draft'}
+          <button onClick={handleSave} disabled={saving || !form.transaction_type} className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
+            <Save size={14} /> {saving ? 'Saving...' : transactionId ? 'Save All' : 'Save Draft'}
           </button>
           <button onClick={() => setShowMobileRight(!showMobileRight)} className="btn btn-secondary lg:hidden flex items-center gap-1.5">
             <FileText size={14} /> Progress
@@ -217,85 +334,103 @@ export default function CreateTransactionPage() {
         {/* LEFT: All slides stacked vertically */}
         <div className={`${showMobileRight ? 'hidden lg:block' : ''} lg:col-span-8 space-y-5`}>
 
-          {/* Slide: Transaction Type */}
+          {/* Type */}
           <div ref={el => { slideRefs.current['type'] = el }} className="container-card">
-            <SlideType types={transactionTypes} selected={form.processing_fee_type_id} onSelect={selectTransactionType} />
+            <SlideType types={transactionTypes} selected={form.transaction_type} onSelect={selectTransactionType} />
+            <SectionSaveButton sectionId="type" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('type')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Property Details */}
+          {/* Property */}
           <div ref={el => { slideRefs.current['property'] = el }} className="container-card">
             <SlideProperty form={form} onChange={updateForm} />
+            <SectionSaveButton sectionId="property" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('property')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Client Information */}
+          {/* Client */}
           <div ref={el => { slideRefs.current['client'] = el }} className="container-card">
-            <SlideClient form={form} onChange={updateForm} />
+            <SlideClient
+              form={form}
+              onChange={updateForm}
+              suggestions={clientSuggestions}
+              showSuggestions={showClientSuggestions}
+              onSelectSuggestion={(c) => {
+                setForm(prev => ({ ...prev, client_name: c.name || '', client_email: c.email || '', client_phone: c.phone || '' }))
+                setShowClientSuggestions(false)
+              }}
+              onDismissSuggestions={() => setShowClientSuggestions(false)}
+            />
+            <SectionSaveButton sectionId="client" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('client')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Financial Details */}
+          {/* Financials */}
           <div ref={el => { slideRefs.current['financials'] = el }} className="container-card">
             <SlideFinancials form={form} onChange={updateForm} />
+            <SectionSaveButton sectionId="financials" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('financials')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Key Dates */}
+          {/* Dates */}
           <div ref={el => { slideRefs.current['dates'] = el }} className="container-card">
             <SlideDates form={form} onChange={updateForm} />
+            <SectionSaveButton sectionId="dates" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('dates')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Additional Details */}
+          {/* Details */}
           <div ref={el => { slideRefs.current['details'] = el }} className="container-card">
-            <SlideDetails form={form} onChange={updateForm} />
+            <SlideDetails form={form} onChange={updateForm} teams={teams} />
+            <SectionSaveButton sectionId="details" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('details')} onSave={handleSaveSection} />
           </div>
 
-          {/* Slide: Title Information (sales only) */}
+          {/* Title Info (sales only) */}
           {!form.is_lease && (
             <div ref={el => { slideRefs.current['title_info'] = el }} className="container-card">
-              <SlideTitleInfo form={form} onChange={updateForm} />
+              <SlideTitleInfo
+                form={form}
+                onChange={updateForm}
+                suggestions={titleSuggestions}
+                showSuggestions={showTitleSuggestions}
+                onSelectSuggestion={(c) => {
+                  setForm(prev => ({ ...prev, title_company: c.company || c.name || '', title_officer_name: c.name || '', title_company_email: c.email || '' }))
+                  setShowTitleSuggestions(false)
+                }}
+                onDismissSuggestions={() => setShowTitleSuggestions(false)}
+              />
+              <SectionSaveButton sectionId="title_info" saving={saving} disabled={!form.transaction_type} saved={savedSections.has('title_info')} onSave={handleSaveSection} />
             </div>
           )}
 
-          {/* Slide: Documents */}
+          {/* Documents */}
           <div ref={el => { slideRefs.current['documents'] = el }} className="container-card">
-            <SlideDocuments requiredDocs={requiredDocs} />
+            <SlideDocuments requiredDocs={requiredDocs} transactionEmail={transactionEmail} transactionId={transactionId} />
           </div>
 
-          {/* Slide: Review & Save */}
+          {/* Review */}
           <div ref={el => { slideRefs.current['review'] = el }} className="container-card">
-            <SlideReview form={form} selectedType={selectedType} onSave={handleSaveDraft} saving={saving} />
+            <SlideReview form={form} selectedType={selectedType} onSave={handleSave} saving={saving} transactionId={transactionId} />
           </div>
         </div>
 
-        {/* RIGHT: Progress steps + Summary (sticky) */}
+        {/* RIGHT: Progress + Summary (sticky) */}
         <div className={`${showMobileRight ? 'block' : 'hidden'} lg:block lg:col-span-4`}>
           <div className="lg:sticky lg:top-4 space-y-5">
-            {/* Step Progress */}
+            {/* Progress */}
             <div className="container-card p-3">
               <div className="flex items-center justify-between mb-3 px-1">
                 <h2 className="section-title mb-0">Progress</h2>
                 {showMobileRight && (
-                  <button onClick={() => setShowMobileRight(false)} className="lg:hidden text-luxury-gray-3 hover:text-luxury-gray-1">
-                    <X size={16} />
-                  </button>
+                  <button onClick={() => setShowMobileRight(false)} className="lg:hidden text-luxury-gray-3 hover:text-luxury-gray-1"><X size={16} /></button>
                 )}
               </div>
               <div className="space-y-0.5">
                 {visibleSlides.map((slide) => {
                   const done = isSlideComplete(slide)
                   return (
-                    <button
-                      key={slide.id}
-                      onClick={() => { scrollToSlide(slide.id); setShowMobileRight(false) }}
-                      className="slide-nav-item flex items-center gap-2 w-full"
-                    >
-                      <div className={done ? 'checklist-check-done' : 'checklist-check'}>
-                        {done && <Check size={8} />}
-                      </div>
+                    <button key={slide.id} onClick={() => { scrollToSlide(slide.id); setShowMobileRight(false) }} className="slide-nav-item flex items-center gap-2 w-full">
+                      <div className={done ? 'checklist-check-done' : 'checklist-check'}>{done && <Check size={8} />}</div>
                       <span className={done ? 'text-luxury-gray-1' : ''}>{slide.title}</span>
                     </button>
                   )
                 })}
               </div>
-              {/* Mini progress bar */}
               <div className="mt-3 px-1">
                 <div className="progress-bar">
                   <div className="progress-bar-fill" style={{ width: `${(visibleSlides.filter(s => isSlideComplete(s)).length / visibleSlides.length) * 100}%` }} />
@@ -304,25 +439,41 @@ export default function CreateTransactionPage() {
               </div>
             </div>
 
-            {/* Summary Panel */}
+            {/* Summary */}
             <SummaryPanel
               typeName={selectedType?.name || null}
-              typeId={form.processing_fee_type_id}
+              typeId={form.transaction_type}
               isLease={form.is_lease}
-              propertyAddress={form.property_address}
+              propertyAddress={buildPropertyAddress(form)}
               clientName={form.client_name}
               salesPrice={form.sales_price}
               monthlyRent={form.monthly_rent}
-              commissionRate={form.commission_rate}
+              commissionRate={form.gross_commission}
               closingDate={form.closing_date}
               moveInDate={form.move_in_date}
               expediteRequested={form.expedite_requested}
-              processingFee={selectedType?.processing_fee || 0}
+              processingFee={form.processing_fee}
               onClose={() => setShowMobileRight(false)}
             />
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ===== SECTION SAVE BUTTON =====
+
+function SectionSaveButton({ sectionId, saving, disabled, saved, onSave }: { sectionId: string; saving: boolean; disabled: boolean; saved: boolean; onSave: (id: string) => void }) {
+  return (
+    <div className="flex justify-end mt-4 pt-3 border-t border-luxury-gray-5/30">
+      {saved ? (
+        <span className="text-xs text-green-600 flex items-center gap-1"><Check size={12} /> Saved</span>
+      ) : (
+        <button onClick={() => onSave(sectionId)} disabled={saving || disabled} className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50">
+          <Save size={12} /> {saving ? 'Saving...' : 'Save Section'}
+        </button>
+      )}
     </div>
   )
 }
@@ -356,9 +507,18 @@ function SlideProperty({ form, onChange }: { form: TransactionForm; onChange: Fo
     <div>
       <h2 className="section-title">Property Details</h2>
       <div className="space-y-4">
-        <div><label className="field-label">Property Address</label><input className="input-luxury" value={form.property_address} onChange={(e) => onChange('property_address', e.target.value)} placeholder="123 Main St, Houston, TX 77001" /></div>
+        <div><label className="field-label">Street Address</label><input className="input-luxury" value={form.street_address} onChange={(e) => onChange('street_address', e.target.value)} placeholder="123 Main Street" /></div>
+        <div className="grid grid-cols-4 gap-3">
+          <div><label className="field-label">Unit / Suite</label><input className="input-luxury" value={form.unit_suite} onChange={(e) => onChange('unit_suite', e.target.value)} placeholder="Apt 4B" /></div>
+          <div><label className="field-label">City</label><input className="input-luxury" value={form.city} onChange={(e) => onChange('city', e.target.value)} placeholder="Houston" /></div>
+          <div><label className="field-label">State</label><input className="input-luxury" value={form.state_code} onChange={(e) => onChange('state_code', e.target.value)} placeholder="TX" maxLength={2} /></div>
+          <div><label className="field-label">ZIP</label><input className="input-luxury" value={form.zip_code} onChange={(e) => onChange('zip_code', e.target.value)} placeholder="77001" maxLength={10} /></div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="field-label">Unit / Suite</label><input className="input-luxury" value={form.property_unit} onChange={(e) => onChange('property_unit', e.target.value)} placeholder="Apt 4B" /></div>
+          <div><label className="field-label">MLS Number</label><input className="input-luxury" value={form.mls_number} onChange={(e) => onChange('mls_number', e.target.value)} placeholder="12345678" /></div>
+          <div><label className="field-label">MLS Link</label><input className="input-luxury" value={form.mls_link} onChange={(e) => onChange('mls_link', e.target.value)} placeholder="https://..." /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div><label className="field-label">Lead Source</label>
             <select className="select-luxury" value={form.lead_source} onChange={(e) => onChange('lead_source', e.target.value)}>
               <option value="">Select...</option>
@@ -366,23 +526,55 @@ function SlideProperty({ form, onChange }: { form: TransactionForm; onChange: Fo
             </select>
           </div>
         </div>
-        <div><label className="field-label">MLS Link</label><input className="input-luxury" value={form.mls_link} onChange={(e) => onChange('mls_link', e.target.value)} placeholder="https://..." /></div>
         <div><label className="field-label">Notes</label><textarea className="textarea-luxury" rows={3} value={form.notes} onChange={(e) => onChange('notes', e.target.value)} placeholder="Any additional notes..." /></div>
       </div>
     </div>
   )
 }
 
-function SlideClient({ form, onChange }: { form: TransactionForm; onChange: FormUpdater }) {
+function SlideClient({ form, onChange, suggestions, showSuggestions, onSelectSuggestion, onDismissSuggestions }: {
+  form: TransactionForm; onChange: FormUpdater; suggestions: any[]; showSuggestions: boolean
+  onSelectSuggestion: (c: any) => void; onDismissSuggestions: () => void
+}) {
   return (
     <div>
       <h2 className="section-title">Client Information</h2>
       <div className="space-y-4">
-        <div><label className="field-label">Client Name</label><input className="input-luxury" value={form.client_name} onChange={(e) => onChange('client_name', e.target.value)} placeholder="John Doe" /></div>
+        <div className="relative">
+          <label className="field-label">Client Name</label>
+          <input className="input-luxury" value={form.client_name} onChange={(e) => onChange('client_name', e.target.value)} onBlur={() => setTimeout(onDismissSuggestions, 200)} placeholder="John Doe" />
+          {showSuggestions && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-40 overflow-y-auto">
+              {suggestions.map((c, i) => (
+                <button key={i} onClick={() => onSelectSuggestion(c)} className="w-full text-left px-3 py-2 hover:bg-luxury-light text-xs border-b border-luxury-gray-5/30 last:border-0">
+                  <p className="font-medium text-luxury-gray-1">{c.name}</p>
+                  {c.email && <p className="text-luxury-gray-3">{c.email}</p>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="field-label">Client Email</label><input className="input-luxury" type="email" value={form.client_email} onChange={(e) => onChange('client_email', e.target.value)} placeholder="john@example.com" /></div>
           <div><label className="field-label">Client Phone</label><input className="input-luxury" value={form.client_phone} onChange={(e) => onChange('client_phone', e.target.value)} placeholder="(555) 123-4567" /></div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function CommissionInput({ label, value, type, onValueChange, onTypeChange }: {
+  label: string; value: string; type: string; onValueChange: (v: string) => void; onTypeChange: (t: string) => void
+}) {
+  return (
+    <div>
+      <label className="field-label">{label}</label>
+      <div className="flex gap-2">
+        <input className="input-luxury flex-1" type="number" step="0.01" value={value} onChange={(e) => onValueChange(e.target.value)} placeholder="0.00" />
+        <select className="select-luxury w-20" value={type} onChange={(e) => onTypeChange(e.target.value)}>
+          <option value="percent">%</option>
+          <option value="flat">$</option>
+        </select>
       </div>
     </div>
   )
@@ -398,9 +590,10 @@ function SlideFinancials({ form, onChange }: { form: TransactionForm; onChange: 
         ) : (
           <div><label className="field-label">Sales Price</label><input className="input-luxury" type="number" step="0.01" value={form.sales_price} onChange={(e) => onChange('sales_price', e.target.value)} placeholder="0.00" /></div>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="field-label">Commission Rate (%)</label><input className="input-luxury" type="number" step="0.01" value={form.commission_rate} onChange={(e) => onChange('commission_rate', e.target.value)} placeholder="3.00" /></div>
-          <div><label className="field-label">Commission Amount ($)</label><input className="input-luxury" type="number" step="0.01" value={form.commission_amount} onChange={(e) => onChange('commission_amount', e.target.value)} placeholder="0.00" /></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <CommissionInput label="Gross Commission" value={form.gross_commission} type={form.gross_commission_type} onValueChange={(v) => onChange('gross_commission', v)} onTypeChange={(t) => onChange('gross_commission_type', t)} />
+          <CommissionInput label="Listing Side" value={form.listing_side_commission} type={form.listing_side_commission_type} onValueChange={(v) => onChange('listing_side_commission', v)} onTypeChange={(t) => onChange('listing_side_commission_type', t)} />
+          <CommissionInput label="Buying Side" value={form.buying_side_commission} type={form.buying_side_commission_type} onValueChange={(v) => onChange('buying_side_commission', v)} onTypeChange={(t) => onChange('buying_side_commission_type', t)} />
         </div>
         <div><label className="field-label">Additional Client Commission ($)</label><input className="input-luxury" type="number" step="0.01" value={form.additional_client_commission} onChange={(e) => onChange('additional_client_commission', e.target.value)} placeholder="0.00" /></div>
         <div className="grid grid-cols-2 gap-3">
@@ -430,7 +623,7 @@ function SlideDates({ form, onChange }: { form: TransactionForm; onChange: FormU
   )
 }
 
-function SlideDetails({ form, onChange }: { form: TransactionForm; onChange: FormUpdater }) {
+function SlideDetails({ form, onChange, teams }: { form: TransactionForm; onChange: FormUpdater; teams: any[] }) {
   return (
     <div>
       <h2 className="section-title">Additional Details</h2>
@@ -458,10 +651,17 @@ function SlideDetails({ form, onChange }: { form: TransactionForm; onChange: For
             </div>
           )}
         </div>
-        <div><label className="field-label">Flyer Division</label>
+        <div><label className="field-label">Flyer Division or Team</label>
           <select className="select-luxury" value={form.flyer_division} onChange={(e) => onChange('flyer_division', e.target.value)}>
             <option value="">Select...</option>
-            {FLYER_DIVISIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            <optgroup label="Divisions">
+              {FLYER_DIVISIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </optgroup>
+            {teams.length > 0 && (
+              <optgroup label="Teams">
+                {teams.map(t => <option key={t.id} value={`team:${t.id}`}>{t.team_name}</option>)}
+              </optgroup>
+            )}
           </select>
         </div>
 
@@ -470,11 +670,29 @@ function SlideDetails({ form, onChange }: { form: TransactionForm; onChange: For
           <div className="space-y-3">
             <label className="checkbox-label"><input type="checkbox" checked={form.internal_referral} onChange={(e) => onChange('internal_referral', e.target.checked)} className="w-4 h-4" />Internal Referral</label>
             {form.internal_referral && (
-              <div><label className="field-label">Internal Referral Fee ($)</label><input className="input-luxury" type="number" step="0.01" value={form.internal_referral_fee} onChange={(e) => onChange('internal_referral_fee', e.target.value)} /></div>
+              <div>
+                <label className="field-label">Internal Referral Fee</label>
+                <div className="flex gap-2">
+                  <input className="input-luxury flex-1" type="number" step="0.01" value={form.internal_referral_fee} onChange={(e) => onChange('internal_referral_fee', e.target.value)} placeholder="0.00" />
+                  <select className="select-luxury w-20" value={form.internal_referral_fee_type} onChange={(e) => onChange('internal_referral_fee_type', e.target.value)}>
+                    <option value="percent">%</option>
+                    <option value="flat">$</option>
+                  </select>
+                </div>
+              </div>
             )}
             <label className="checkbox-label"><input type="checkbox" checked={form.external_referral} onChange={(e) => onChange('external_referral', e.target.checked)} className="w-4 h-4" />External Referral</label>
             {form.external_referral && (
-              <div><label className="field-label">External Referral Fee ($)</label><input className="input-luxury" type="number" step="0.01" value={form.external_referral_fee} onChange={(e) => onChange('external_referral_fee', e.target.value)} /></div>
+              <div>
+                <label className="field-label">External Referral Fee</label>
+                <div className="flex gap-2">
+                  <input className="input-luxury flex-1" type="number" step="0.01" value={form.external_referral_fee} onChange={(e) => onChange('external_referral_fee', e.target.value)} placeholder="0.00" />
+                  <select className="select-luxury w-20" value={form.external_referral_fee_type} onChange={(e) => onChange('external_referral_fee_type', e.target.value)}>
+                    <option value="percent">%</option>
+                    <option value="flat">$</option>
+                  </select>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -501,12 +719,28 @@ function SlideDetails({ form, onChange }: { form: TransactionForm; onChange: For
   )
 }
 
-function SlideTitleInfo({ form, onChange }: { form: TransactionForm; onChange: FormUpdater }) {
+function SlideTitleInfo({ form, onChange, suggestions, showSuggestions, onSelectSuggestion, onDismissSuggestions }: {
+  form: TransactionForm; onChange: FormUpdater; suggestions: any[]; showSuggestions: boolean
+  onSelectSuggestion: (c: any) => void; onDismissSuggestions: () => void
+}) {
   return (
     <div>
       <h2 className="section-title">Title Information</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div><label className="field-label">Title Company</label><input className="input-luxury" value={form.title_company} onChange={(e) => onChange('title_company', e.target.value)} placeholder="ABC Title Company" /></div>
+        <div className="relative">
+          <label className="field-label">Title Company</label>
+          <input className="input-luxury" value={form.title_company} onChange={(e) => onChange('title_company', e.target.value)} onBlur={() => setTimeout(onDismissSuggestions, 200)} placeholder="ABC Title Company" />
+          {showSuggestions && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-40 overflow-y-auto">
+              {suggestions.map((c, i) => (
+                <button key={i} onClick={() => onSelectSuggestion(c)} className="w-full text-left px-3 py-2 hover:bg-luxury-light text-xs border-b border-luxury-gray-5/30 last:border-0">
+                  <p className="font-medium text-luxury-gray-1">{c.company || c.name}</p>
+                  {c.email && <p className="text-luxury-gray-3">{c.email}</p>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div><label className="field-label">Title Officer Name</label><input className="input-luxury" value={form.title_officer_name} onChange={(e) => onChange('title_officer_name', e.target.value)} placeholder="Jane Smith" /></div>
         <div><label className="field-label">Title Company Email</label><input className="input-luxury" type="email" value={form.title_company_email} onChange={(e) => onChange('title_company_email', e.target.value)} placeholder="closing@abctitle.com" /></div>
       </div>
@@ -514,35 +748,50 @@ function SlideTitleInfo({ form, onChange }: { form: TransactionForm; onChange: F
   )
 }
 
-function SlideDocuments({ requiredDocs }: { requiredDocs: any[] }) {
+function SlideDocuments({ requiredDocs, transactionEmail, transactionId }: { requiredDocs: any[]; transactionEmail: string | null; transactionId: string | null }) {
   return (
     <div>
-      <h2 className="section-title">Documents</h2>
-      <p className="text-xs text-luxury-gray-3 mb-4">Upload documents now or after saving. You can also email documents to the transaction's unique email address.</p>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="section-title mb-0">Documents</h2>
+        {transactionEmail && (
+          <div className="flex items-center gap-1.5 text-xs text-luxury-gray-3">
+            <span>Email docs to:</span>
+            <span className="font-medium text-luxury-gray-1 bg-luxury-light px-2 py-0.5 rounded select-all">{transactionEmail}</span>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-luxury-gray-3 mb-4">Upload documents and assign them to the required document types. Unassigned documents will be categorized by compliance.</p>
       {requiredDocs.length > 0 && (
         <div className="inner-card mb-4">
-          <h3 className="text-xs font-semibold text-luxury-gray-2 mb-2">Required Documents</h3>
+          <h3 className="text-xs font-semibold text-luxury-gray-2 mb-2">Required Documents for This Transaction Type</h3>
           <div className="space-y-1.5">
             {requiredDocs.map(doc => (
               <div key={doc.id} className="checklist-item">
                 <div className="checklist-check" />
                 <span>{doc.name}</span>
-                {doc.is_required && <span className="text-red-500">*</span>}
+                {doc.is_required && <span className="text-red-500 ml-1">*</span>}
               </div>
             ))}
           </div>
         </div>
       )}
-      <div className="upload-zone py-10">
-        <Upload size={24} className="mx-auto text-luxury-gray-3 mb-2" />
-        <p className="text-xs text-luxury-gray-3 mb-1">Documents can be uploaded after saving the transaction</p>
-        <p className="text-xs text-luxury-gray-3">Save your transaction first, then upload from the detail page</p>
-      </div>
+      {!transactionId ? (
+        <div className="alert-info">Save your transaction first to enable document uploads.</div>
+      ) : (
+        <div className="upload-zone py-10">
+          <Upload size={24} className="mx-auto text-luxury-gray-3 mb-2" />
+          <p className="text-xs text-luxury-gray-3 mb-1">Drag and drop files here or click to browse</p>
+          <p className="text-xs text-luxury-gray-3">After uploading, assign each document to its type from the list above</p>
+        </div>
+      )}
     </div>
   )
 }
 
-function SlideReview({ form, selectedType, onSave, saving }: { form: TransactionForm; selectedType?: ProcessingFeeType; onSave: () => void; saving: boolean }) {
+function SlideReview({ form, selectedType, onSave, saving, transactionId }: {
+  form: TransactionForm; selectedType?: ProcessingFeeType; onSave: () => void; saving: boolean; transactionId: string | null
+}) {
+  const address = buildPropertyAddress(form)
   return (
     <div>
       <h2 className="section-title">Review & Save</h2>
@@ -553,10 +802,10 @@ function SlideReview({ form, selectedType, onSave, saving }: { form: Transaction
             <p className="text-sm text-luxury-gray-1 font-medium">{selectedType?.name || 'Not selected'}</p>
             {selectedType && selectedType.processing_fee > 0 && <p className="text-xs text-luxury-gray-3 mt-1">Processing fee: ${selectedType.processing_fee}</p>}
           </div>
-          {form.property_address && (
+          {address && (
             <div className="inner-card">
               <h3 className="text-xs font-semibold text-luxury-gray-2 mb-2">Property</h3>
-              <p className="text-sm text-luxury-gray-1">{form.property_address}{form.property_unit ? `, ${form.property_unit}` : ''}</p>
+              <p className="text-sm text-luxury-gray-1">{address}</p>
               {form.mls_link && <a href={form.mls_link} target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent mt-1 block">View MLS Listing</a>}
             </div>
           )}
@@ -568,19 +817,23 @@ function SlideReview({ form, selectedType, onSave, saving }: { form: Transaction
               {form.client_phone && <p className="text-xs text-luxury-gray-3">{form.client_phone}</p>}
             </div>
           )}
-          {(form.sales_price || form.monthly_rent || form.commission_rate) && (
+          {(form.sales_price || form.monthly_rent || form.gross_commission) && (
             <div className="inner-card">
               <h3 className="text-xs font-semibold text-luxury-gray-2 mb-2">Financials</h3>
               {form.sales_price && <p className="text-xs text-luxury-gray-2">Sales Price: ${parseFloat(form.sales_price).toLocaleString()}</p>}
               {form.monthly_rent && <p className="text-xs text-luxury-gray-2">Monthly Rent: ${parseFloat(form.monthly_rent).toLocaleString()}</p>}
-              {form.commission_rate && <p className="text-xs text-luxury-gray-2">Commission: {form.commission_rate}%</p>}
+              {form.gross_commission && <p className="text-xs text-luxury-gray-2">Gross Commission: {form.gross_commission}{form.gross_commission_type === 'percent' ? '%' : ' (flat)'}</p>}
             </div>
           )}
         </div>
-        <div className="alert-info">This transaction will be saved as a draft. You can request compliance review after filling in all required fields.</div>
-        <div className="flex justify-end">
-          <button onClick={onSave} disabled={saving || !form.processing_fee_type_id} className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
-            <Save size={14} /> {saving ? 'Saving...' : 'Save Transaction'}
+        {transactionId ? (
+          <div className="alert-success">Transaction saved. You can continue editing or request compliance review when ready.</div>
+        ) : (
+          <div className="alert-info">This transaction will be saved as a draft. You can request compliance review after filling in all required fields.</div>
+        )}
+        <div className="flex justify-end gap-3">
+          <button onClick={onSave} disabled={saving || !form.transaction_type} className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
+            <Save size={14} /> {saving ? 'Saving...' : transactionId ? 'Save Changes' : 'Save Transaction'}
           </button>
         </div>
       </div>

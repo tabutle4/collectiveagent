@@ -25,10 +25,21 @@ export const LOAN_TYPES = [
 ]
 
 export const LEAD_SOURCES = [
-  { value: 'own', label: "Agent's Own Lead" },
-  { value: 'team', label: 'Lead from Team Lead' },
-  { value: 'firm', label: 'Lead from Firm' },
-  { value: 'referral', label: 'Referral' },
+  { value: 'brokerage_referral', label: 'Brokerage Referral' },
+  { value: 'team_lead_referral', label: 'Team Lead Referral' },
+  { value: 'internal_agent_referral', label: 'Internal Agent Referral' },
+  { value: 'external_agent_referral', label: 'External Agent Referral' },
+  { value: 'repeat_client', label: 'Repeat Client' },
+  { value: 'friend_family', label: 'Friend/Family' },
+  { value: 'personal_referral', label: 'Personal Referral' },
+  { value: 'ig_lead', label: 'IG Lead' },
+  { value: 'kvcore_lead', label: 'kvCORE Lead' },
+  { value: 'har_lead', label: 'HAR Lead' },
+  { value: 'ntreis_lead', label: 'NTREIS Lead' },
+  { value: 'other_social_media', label: 'Other Social Media Lead' },
+  { value: 'other_listing_service', label: 'Other Listing Service Lead' },
+  { value: 'facebook_lead', label: 'Facebook Lead' },
+  { value: 'client_referral', label: 'Client Referral' },
   { value: 'other', label: 'Other' },
 ]
 
