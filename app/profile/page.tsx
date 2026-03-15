@@ -5,7 +5,12 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 
-export default function ProfilePage() {
+interface ProfilePageProps {
+  userId?: string
+  isAdmin?: boolean
+}
+
+export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProps) {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -18,9 +23,13 @@ export default function ProfilePage() {
     shipping_address_line1: '', shipping_address_line2: '', shipping_city: '', shipping_state: '', shipping_zip: '',
     birth_month: '', date_of_birth: '', shirt_type: '', shirt_size: '',
   })
+  const [reForm, setReForm] = useState({
+    office: '', team_name: '', team_lead: '', division: '', commission_plan: '',
+    license_number: '', mls_id: '', nrds_id: '', association: '', status: '',
+  })
   const [headshotUrl, setHeadshotUrl] = useState<string | null>(null)
 
-  useEffect(() => { checkAuthAndLoadUser() }, [])
+  useEffect(() => { loadUser() }, [userId])
 
   useEffect(() => {
     if (user) {
@@ -35,6 +44,12 @@ export default function ProfilePage() {
         birth_month: user.birth_month || '', date_of_birth: user.date_of_birth || '',
         shirt_type: user.shirt_type || '', shirt_size: user.shirt_size || '',
       })
+      setReForm({
+        office: user.office || '', team_name: user.team_name || '', team_lead: user.team_lead || '',
+        division: user.division || '', commission_plan: user.commission_plan || user.commission_plan_other || '',
+        license_number: user.license_number || '', mls_id: user.mls_id || '', nrds_id: user.nrds_id || '',
+        association: user.association || '', status: user.status || (user.is_active ? 'active' : 'inactive'),
+      })
     }
   }, [user])
 
@@ -45,12 +60,16 @@ export default function ProfilePage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const checkAuthAndLoadUser = async () => {
+  const loadUser = async () => {
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { router.push('/auth/login'); return }
-      const userData = JSON.parse(userStr)
-      const { data, error } = await supabase.from('users').select('*').eq('id', userData.id).single()
+      let targetId = userId
+      if (!targetId) {
+        const userStr = localStorage.getItem('user')
+        if (!userStr) { router.push('/auth/login'); return }
+        const userData = JSON.parse(userStr)
+        targetId = userData.id
+      }
+      const { data, error } = await supabase.from('users').select('*').eq('id', targetId).single()
       if (error) throw error
       if (!data) throw new Error('User not found')
       setUser(data)
@@ -61,11 +80,15 @@ export default function ProfilePage() {
 
   const handlePersonalChange = (field: keyof typeof personalForm, value: string) => {
     setPersonalForm(prev => ({ ...prev, [field]: value }))
-    setSaveError(null)
-    setSaveSuccess(null)
+    setSaveError(null); setSaveSuccess(null)
   }
 
-  const handleSavePersonal = async () => {
+  const handleReChange = (field: keyof typeof reForm, value: string) => {
+    setReForm(prev => ({ ...prev, [field]: value }))
+    setSaveError(null); setSaveSuccess(null)
+  }
+
+  const handleSave = async () => {
     if (!user) return
     setSaving(true); setSaveError(null); setSaveSuccess(null)
     try {
@@ -90,29 +113,60 @@ export default function ProfilePage() {
         shirt_type: personalForm.shirt_type.trim() || null,
         shirt_size: personalForm.shirt_size.trim() || null,
       }
+      if (isAdmin) {
+        updates.office = reForm.office.trim() || null
+        updates.team_name = reForm.team_name.trim() || null
+        updates.team_lead = reForm.team_lead.trim() || null
+        updates.division = reForm.division.trim() || null
+        updates.commission_plan = reForm.commission_plan.trim() || null
+        updates.license_number = reForm.license_number.trim() || null
+        updates.mls_id = reForm.mls_id.trim() || null
+        updates.nrds_id = reForm.nrds_id.trim() || null
+        updates.association = reForm.association.trim() || null
+        updates.status = reForm.status.trim() || null
+      }
       const { error } = await supabase.from('users').update(updates).eq('id', user.id)
       if (error) { setSaveError('Failed to save changes.') }
-      else { setSaveSuccess('Personal information updated.'); await checkAuthAndLoadUser() }
+      else { setSaveSuccess('Profile updated.'); await loadUser() }
     } catch (e) { setSaveError('Failed to save changes.') }
     finally { setSaving(false) }
   }
 
-  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading your profile...</div>
+  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading profile...</div>
   if (!user) return (
     <div className="text-center py-12">
       <p className="text-sm text-red-600">Failed to load profile.</p>
-      <button onClick={() => router.push('/auth/login')} className="btn btn-primary mt-4">Go to Login</button>
+      <button onClick={() => router.back()} className="btn btn-secondary mt-4">Go Back</button>
     </div>
   )
 
   const roles = user.role ? [user.role] : []
+  const displayName = `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
 
   return (
     <div>
-      <h1 className="page-title mb-6">MY PROFILE</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          {isAdmin && (
+            <button onClick={() => router.push('/admin/users')} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors mb-2 block">
+              ← Back to Agents
+            </button>
+          )}
+          <h1 className="page-title">{isAdmin ? displayName.toUpperCase() : 'MY PROFILE'}</h1>
+        </div>
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary disabled:opacity-50">
+          {saving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
+
+      {(saveError || saveSuccess) && (
+        <div className={`mb-5 text-xs px-4 py-2.5 rounded ${saveError ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+          {saveError || saveSuccess}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left column - Photo + Real Estate Info */}
+        {/* Left column */}
         <div className="lg:col-span-4">
           <div className="container-card">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Profile Photo</h2>
@@ -123,8 +177,8 @@ export default function ProfilePage() {
                 firstName={user.preferred_first_name || user.first_name || ''}
                 lastName={user.preferred_last_name || user.last_name || ''}
                 initialCrop={user.headshot_crop || null}
-                onUploadComplete={(url) => { setHeadshotUrl(url); checkAuthAndLoadUser() }}
-                onRemove={() => { setHeadshotUrl(null); checkAuthAndLoadUser() }}
+                onUploadComplete={(url) => { setHeadshotUrl(url); loadUser() }}
+                onRemove={() => { setHeadshotUrl(null); loadUser() }}
                 size="large"
               />
             </div>
@@ -132,38 +186,69 @@ export default function ProfilePage() {
 
             <div className="mt-6 pt-5 border-t border-luxury-gray-5/50">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Real Estate Info</h2>
-              <div className="space-y-3">
-                {[
-                  { label: 'Office', value: user.office },
-                  { label: 'Team', value: user.team_name },
-                  { label: 'Team Lead', value: user.team_lead },
-                  { label: 'Division(s)', value: user.division },
-                  { label: 'Commission Plan', value: user.commission_plan || user.commission_plan_other },
-                  { label: 'License #', value: user.license_number },
-                  { label: 'MLS ID', value: user.mls_id },
-                  { label: 'NRDS ID', value: user.nrds_id },
-                  { label: 'Association', value: user.association },
-                  { label: 'Join Date', value: formatDateForDisplay(user.join_date || null) },
-                  { label: 'Role', value: roles.join(', ') },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <p className="text-xs text-luxury-gray-3">{item.label}</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{item.value || 'N/A'}</p>
+              {isAdmin ? (
+                <div className="space-y-3">
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Office</label><input className="input-luxury" value={reForm.office} onChange={(e) => handleReChange('office', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Team</label><input className="input-luxury" value={reForm.team_name} onChange={(e) => handleReChange('team_name', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Team Lead</label><input className="input-luxury" value={reForm.team_lead} onChange={(e) => handleReChange('team_lead', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Division(s)</label><input className="input-luxury" value={reForm.division} onChange={(e) => handleReChange('division', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Commission Plan</label><input className="input-luxury" value={reForm.commission_plan} onChange={(e) => handleReChange('commission_plan', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">License #</label><input className="input-luxury" value={reForm.license_number} onChange={(e) => handleReChange('license_number', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">MLS ID</label><input className="input-luxury" value={reForm.mls_id} onChange={(e) => handleReChange('mls_id', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">NRDS ID</label><input className="input-luxury" value={reForm.nrds_id} onChange={(e) => handleReChange('nrds_id', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Association</label><input className="input-luxury" value={reForm.association} onChange={(e) => handleReChange('association', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Status</label>
+                    <select className="select-luxury" value={reForm.status} onChange={(e) => handleReChange('status', e.target.value)}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
                   </div>
-                ))}
-              </div>
-              <p className="text-xs text-luxury-gray-3 mt-4">Managed by the office. Contact admin if incorrect.</p>
+                  <div>
+                    <p className="text-xs text-luxury-gray-3">Join Date</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{formatDateForDisplay(user.join_date || null) || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-luxury-gray-3">Role</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{roles.join(', ') || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-luxury-gray-3">Login Email</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.email || 'N/A'}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: 'Office', value: user.office },
+                    { label: 'Team', value: user.team_name },
+                    { label: 'Team Lead', value: user.team_lead },
+                    { label: 'Division(s)', value: user.division },
+                    { label: 'Commission Plan', value: user.commission_plan || user.commission_plan_other },
+                    { label: 'License #', value: user.license_number },
+                    { label: 'MLS ID', value: user.mls_id },
+                    { label: 'NRDS ID', value: user.nrds_id },
+                    { label: 'Association', value: user.association },
+                    { label: 'Join Date', value: formatDateForDisplay(user.join_date || null) },
+                    { label: 'Role', value: roles.join(', ') },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <p className="text-xs text-luxury-gray-3">{item.label}</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{item.value || 'N/A'}</p>
+                    </div>
+                  ))}
+                  <p className="text-xs text-luxury-gray-3 mt-4">Managed by the office. Contact admin if incorrect.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right column - Editable Personal Info */}
+        {/* Right column */}
         <div className="lg:col-span-8">
           <div className="container-card">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Personal Information</h2>
 
             <div className="space-y-5">
-              {/* Name */}
               <div className="inner-card">
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Name</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -172,7 +257,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Contact */}
               <div className="inner-card">
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Contact</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -182,7 +266,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Social Media */}
               <div className="inner-card">
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Social Media</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -195,7 +278,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Mailing Address */}
               <div className="inner-card">
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Mailing Address</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -207,7 +289,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Personal Details */}
               <div className="inner-card">
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Personal Details</h3>
                 <div className="grid grid-cols-2 gap-3">
@@ -217,15 +298,6 @@ export default function ProfilePage() {
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">Shirt Size</label><input className="input-luxury" value={personalForm.shirt_size} onChange={(e) => handlePersonalChange('shirt_size', e.target.value)} /></div>
                 </div>
               </div>
-            </div>
-
-            {saveError && <p className="text-xs text-red-600 mt-3">{saveError}</p>}
-            {saveSuccess && <p className="text-xs text-green-700 mt-3">{saveSuccess}</p>}
-
-            <div className="mt-5 flex justify-end">
-              <button onClick={handleSavePersonal} disabled={saving} className="btn btn-primary disabled:opacity-50">
-                {saving ? 'Saving...' : 'Save Personal Info'}
-              </button>
             </div>
           </div>
         </div>
