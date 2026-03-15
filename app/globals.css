@@ -47,7 +47,7 @@
   .page-title {
 
   .container-card {
-    @apply bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-5;
+    @apply bg-white rounded-lg shadow-lg border border-gray-200 p-5;
   }
 
   .inner-card {
