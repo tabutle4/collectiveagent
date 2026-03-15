@@ -36,6 +36,14 @@
   }
   
   /* Secondary button - dark gray outline */
+  .sidebar-logo {
+    @apply w-24 h-24 object-contain;
+  }
+
+  .sidebar-logo-collapsed {
+    @apply w-9 h-9 object-contain;
+  }
+
   .page-title {
     @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
   }
