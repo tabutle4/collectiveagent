@@ -46,7 +46,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
-  { href: '/agent/roster', label: 'Roster', icon: FileText },
+  { href: '/roster', label: 'Roster', icon: FileText },
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
