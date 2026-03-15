@@ -282,7 +282,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       )}
 
       <div className="min-h-screen" style={{ marginLeft: isMobile ? 0 : '220px' }}>
-        <div className="sticky top-0 z-30 bg-luxury-light/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
+        <div className="sticky top-0 z-30 bg-luxury-page-bg/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
           <div>
             {isMobile && (
               <button
@@ -298,7 +298,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           </p>
         </div>
 
-        <div className="px-4 md:px-6 pb-6">
+        <div className="px-4 md:px-6 pt-6 pb-6">
           {children}
         </div>
       </div>
