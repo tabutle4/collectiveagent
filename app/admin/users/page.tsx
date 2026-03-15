@@ -217,7 +217,7 @@ export default function AdminUsersPage() {
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
         <h1 className="page-title">
-          AGENTS ({filteredAndSortedUsers.length}{filteredAndSortedUsers.length !== users.length ? ` of ${users.length}` : ''})
+          AGENTS ({statusCounts.active} Active)
         </h1>
         <div className="flex flex-wrap gap-2">
           <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5"><ExternalLink size={14} /> Roster</a>

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
 
-type DateRange = 'ytd' | 'mtd' | 'qtd' | 'last_quarter' | 'last_month' | 'next_month' | 'next_quarter'
+type DateRange = 'ytd' | 'mtd' | 'qtd' | 'last_quarter' | 'last_month' | 'last_year' | 'last_q1' | 'last_q2' | 'last_q3' | 'last_q4' | 'next_month' | 'next_quarter' | 'q1' | 'q2' | 'q3' | 'q4'
 type TxnFilter = 'all' | 'sales' | 'leases'
 
 const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
@@ -13,8 +13,17 @@ const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: 'qtd', label: 'Quarter to Date' },
   { value: 'last_month', label: 'Last Month' },
   { value: 'last_quarter', label: 'Last Quarter' },
+  { value: 'last_year', label: 'Last Year' },
+  { value: 'last_q1', label: 'Last Year Q1' },
+  { value: 'last_q2', label: 'Last Year Q2' },
+  { value: 'last_q3', label: 'Last Year Q3' },
+  { value: 'last_q4', label: 'Last Year Q4' },
   { value: 'next_month', label: 'Next Month' },
   { value: 'next_quarter', label: 'Next Quarter' },
+  { value: 'q1', label: 'Q1 This Year' },
+  { value: 'q2', label: 'Q2 This Year' },
+  { value: 'q3', label: 'Q3 This Year' },
+  { value: 'q4', label: 'Q4 This Year' },
 ]
 
 function getDateRange(range: DateRange): { start: Date; end: Date; label: string; isFuture: boolean } {
