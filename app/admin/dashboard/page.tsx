@@ -32,83 +32,69 @@ export default function AdminDashboard() {
   const recentProspects = prospects.slice(0, 5)
 
   if (loading) {
-    return <div className="text-center py-12 text-luxury-gray-2">Loading...</div>
+    return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
   }
 
   return (
     <div>
-      <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" >
-        Admin Dashboard
-      </h2>
+      <h1 className="text-xl font-semibold text-luxury-gray-1 mb-6">
+        Dashboard
+      </h1>
 
-      {/* Stats */}
-      <div className="grid md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
-            {stats.new}
-          </div>
-          <div className="text-base text-luxury-gray-2 tracking-wide">
-            New Prospects
-          </div>
+      <div className="grid md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-6">
+          <p className="text-sm text-luxury-gray-3 mb-1">New Prospects</p>
+          <p className="text-2xl font-semibold text-luxury-gray-1">{stats.new}</p>
         </div>
-        
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
-            {stats.contacted}
-          </div>
-          <div className="text-base text-luxury-gray-2 tracking-wide">
-            Contacted
-          </div>
+
+        <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-6">
+          <p className="text-sm text-luxury-gray-3 mb-1">Contacted</p>
+          <p className="text-2xl font-semibold text-luxury-gray-1">{stats.contacted}</p>
         </div>
-        
-        <div className="bg-white border border-luxury-gray-5 rounded p-5 text-center shadow-sm">
-          <div className="text-2xl md:text-3xl font-light mb-1 text-luxury-accent">
-            {stats.total}
-          </div>
-          <div className="text-base text-luxury-gray-2 tracking-wide">
-            Total Prospects
-          </div>
+
+        <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-6">
+          <p className="text-sm text-luxury-gray-3 mb-1">Total Prospects</p>
+          <p className="text-2xl font-semibold text-luxury-gray-1">{stats.total}</p>
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white border border-luxury-gray-5 rounded shadow-sm p-6">
-        <h3 className="text-base font-medium mb-4 tracking-wide text-luxury-gray-2 border-b border-luxury-gray-5 pb-2">
+      <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-6">
+        <h2 className="text-sm font-semibold text-luxury-gray-1 mb-4 pb-3 border-b border-luxury-gray-5/50">
           Recent Activity
-        </h3>
-        
+        </h2>
+
         {recentProspects.length === 0 ? (
-          <p className="text-luxury-gray-2 text-center py-8">
+          <p className="text-sm text-luxury-gray-3 text-center py-8">
             No prospects yet
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-0">
             {recentProspects.map((prospect) => (
               <div
                 key={prospect.id}
-                className="flex items-center justify-between py-3 border-b border-luxury-gray-5 last:border-0"
+                className="flex items-center justify-between py-3 border-b border-luxury-gray-5/50 last:border-0"
               >
                 <div>
-                  <p className="font-medium">
+                  <p className="text-sm font-medium text-luxury-gray-1">
                     {prospect.preferred_first_name} {prospect.preferred_last_name}
                   </p>
-                  <p className="text-base text-luxury-gray-2">
+                  <p className="text-xs text-luxury-gray-3">
                     {new Date(prospect.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 <Link
                   href={`/admin/prospects/${prospect.id}`}
-                  className="text-base text-luxury-black hover:underline"
+                  className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
                 >
-                  View Details →
+                  View Details
                 </Link>
               </div>
             ))}
           </div>
         )}
-        
+
         <div className="text-center mt-6">
-          <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
+          <Link href="/admin/prospects" className="btn btn-secondary text-sm">
             View All Prospects
           </Link>
         </div>

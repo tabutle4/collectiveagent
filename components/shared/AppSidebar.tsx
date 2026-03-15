@@ -238,8 +238,8 @@ export default function AppSidebar({ children }: AppSidebarProps) {
                       flex items-center gap-3 px-3 py-2 mb-0.5 rounded-md transition-colors
                       ${!sidebarOpen ? 'justify-center' : ''}
                       ${isActive
-                        ? 'bg-white shadow-sm text-luxury-gray-1'
-                        : 'text-luxury-gray-2 hover:bg-white/60 hover:text-luxury-gray-1'
+                        ? 'bg-white shadow-sm border border-luxury-gray-5/50 text-luxury-gray-1'
+                        : 'text-luxury-gray-2 hover:bg-luxury-gray-5/30 hover:text-luxury-gray-1'
                       }
                     `}
                     title={!sidebarOpen ? item.label : undefined}
@@ -264,7 +264,7 @@ export default function AppSidebar({ children }: AppSidebarProps) {
           {sidebarOpen ? (
             <button
               onClick={() => setUserMenuOpen(!userMenuOpen)}
-              className="flex items-center gap-3 w-full px-2 py-2 rounded-md hover:bg-white/60 transition-colors"
+              className="flex items-center gap-3 w-full px-2 py-2 rounded-md hover:bg-luxury-gray-5/30 transition-colors"
             >
               <div className="w-8 h-8 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
                 {user.preferred_first_name?.[0]}{user.preferred_last_name?.[0]}
