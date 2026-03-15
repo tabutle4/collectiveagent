@@ -388,7 +388,7 @@ export default function CreateTransactionPage() {
         }
       }
 
-      setSavedSections(visibleSlides.map(s => s.id))
+      // saved sections handled by handleSaveSection
     } catch (error: any) {
       console.error('Error saving:', error)
       alert(`Failed to save: ${error.message}`)
@@ -679,6 +679,14 @@ export default function CreateTransactionPage() {
                 <h3 className="text-xs font-semibold text-luxury-gray-2 mb-3">Referrals</h3>
                 <div className="space-y-3">
                   <label className="checkbox-label"><input type="checkbox" checked={form.brokerage_referral} onChange={(e) => updateForm('brokerage_referral', e.target.checked)} className="w-4 h-4" />Brokerage Referral</label>
+                  {form.brokerage_referral && (
+                    <div className="flex gap-2">
+                      <input className="input-luxury flex-1" type="number" step="0.01" value={(form as any).brokerage_referral_fee || ''} onChange={(e) => updateForm('brokerage_referral_fee' as any, e.target.value)} placeholder="0.00" />
+                      <select className="select-luxury w-20" value={(form as any).brokerage_referral_fee_type || 'percent'} onChange={(e) => updateForm('brokerage_referral_fee_type' as any, e.target.value)}>
+                        <option value="percent">%</option><option value="flat">$</option>
+                      </select>
+                    </div>
+                  )}
                   <label className="checkbox-label"><input type="checkbox" checked={form.internal_referral} onChange={(e) => updateForm('internal_referral', e.target.checked)} className="w-4 h-4" />Internal Agent Referral</label>
                   {form.internal_referral && (
                     <div className="flex gap-2">
