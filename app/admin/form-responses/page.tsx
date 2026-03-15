@@ -1354,7 +1354,7 @@ export default function FormResponsesPage() {
       
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="page-title mb-4 md:mb-0">
+            <h1 className="page-title">
               Form Responses
             </h1>
             <div className="flex gap-2">

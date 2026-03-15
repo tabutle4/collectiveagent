@@ -153,7 +153,7 @@ export default function AgentFormsPage() {
   return (
     <>
       <div>
-        <h1 className="page-title mb-1">FORMS</h1>
+        <h1 className="page-title mb-6">FORMS</h1>
         <p className="text-xs text-luxury-gray-3 mb-6">Submit forms and view your past submissions.</p>
 
         <div className="container-card">

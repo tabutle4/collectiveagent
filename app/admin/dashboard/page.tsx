@@ -37,7 +37,7 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="page-title mb-6">DASHBOARD</h1>
+      <h1 className="page-title">DASHBOARD</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 

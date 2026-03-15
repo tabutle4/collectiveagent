@@ -54,7 +54,7 @@ export default function ProspectsPage() {
 
   return (
     <div>
-      <h1 className="page-title mb-6">PROSPECTS</h1>
+      <h1 className="page-title">PROSPECTS</h1>
 
       {/* Filter Tabs */}
       <div className="mb-5">
