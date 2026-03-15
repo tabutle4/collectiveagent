@@ -46,7 +46,7 @@ function LoginForm() {
       if (userRole === 'Admin') {
         router.push('/admin/dashboard')
       } else {
-        router.push('/agent/profile')
+        router.push('/agent/dashboard')
       }
     } catch (err) {
       setError('An error occurred. Please try again.')
