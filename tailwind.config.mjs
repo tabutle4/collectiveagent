@@ -18,7 +18,7 @@ const config = {
           'gray-3': '#999999',
           'gray-4': '#aaaaaa',
           'gray-5': '#cccccc',
-          'light': '#E1E1E1',
+          'light': '#F9F9F9',
           white: '#ffffff',
           accent: '#C5A278',
         },
