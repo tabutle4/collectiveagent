@@ -131,7 +131,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             <img
               src={logo}
               alt="Logo"
-              className={sidebarOpen ? 'w-14 h-14 object-contain' : 'w-7 h-7 object-contain'}
+              className={sidebarOpen ? 'w-20 h-20 object-contain' : 'w-9 h-9 object-contain'}
             />
           </Link>
           {sidebarOpen && (
