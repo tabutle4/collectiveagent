@@ -8,13 +8,13 @@
     padding: 0;
     box-sizing: border-box;
   }
-  
+
   html {
     margin: 0;
     padding: 0;
     height: 100%;
   }
-  
+
   body {
     font-size: 14px;
     @apply bg-white text-luxury-gray-1 font-sans;
@@ -25,17 +25,46 @@
 }
 
 @layer components {
-  /* Standard Button Styles */
+  /* Buttons */
   .btn {
     @apply inline-block px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center;
   }
-  
-  /* Primary button - warm accent */
+
   .btn-primary {
     @apply bg-luxury-accent text-white hover:opacity-90;
   }
-  
-  /* Secondary button - dark gray outline */
+
+  .btn-secondary {
+    @apply bg-white border border-luxury-gray-3 text-luxury-gray-2 hover:border-luxury-black;
+  }
+
+  /* Page Title */
+  .page-title {
+    @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
+  }
+
+  /* Cards */
+  .container-card {
+    @apply bg-white rounded-lg shadow-lg border border-gray-200 p-5;
+  }
+
+  .inner-card {
+    @apply bg-luxury-light rounded-md p-4;
+  }
+
+  .card-luxury {
+    @apply bg-white shadow-sm border border-luxury-gray-5 rounded;
+  }
+
+  .card-section {
+    @apply bg-white p-6 border border-luxury-gray-5 rounded shadow-sm;
+  }
+
+  .card-dark {
+    @apply bg-luxury-dark-3 p-6 text-white rounded;
+  }
+
+  /* Sidebar */
   .sidebar-logo {
     @apply w-32 h-32 object-contain;
   }
@@ -44,23 +73,7 @@
     @apply w-9 h-9 object-contain;
   }
 
-  .page-title {
-
-  .container-card {
-    @apply bg-white rounded-lg shadow-lg border border-gray-200 p-5;
-  }
-
-  .inner-card {
-    @apply bg-luxury-light rounded-md p-4;
-  }
-    @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
-  }
-
-  .btn-secondary {
-    @apply bg-white border border-luxury-gray-3 text-luxury-gray-2 hover:border-luxury-black;
-  }
-
-  /* Clean Input Styles */
+  /* Inputs */
   .input-luxury {
     @apply w-full px-3 py-2 text-sm border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
   }
@@ -73,7 +86,29 @@
     @apply w-full px-3 py-2 text-sm border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 bg-white rounded;
   }
 
-  /* Range slider styles */
+  /* Layout Helpers */
+  .flex-between-border {
+    @apply flex items-center justify-between py-4 border-b border-luxury-gray-5;
+  }
+
+  /* Headers */
+  .header-luxury {
+    @apply bg-luxury-dark-3 text-white py-8 px-6 text-center;
+  }
+
+  .header-title {
+    @apply text-base font-medium tracking-widest uppercase text-white;
+  }
+
+  .header-subtitle {
+    @apply text-xs tracking-wide text-luxury-gray-5 mt-1;
+  }
+
+  .header-divider {
+    @apply w-12 h-px bg-white/30 mx-auto mt-3;
+  }
+
+  /* Range Slider */
   input[type="range"] {
     accent-color: #000000;
     -webkit-appearance: none;
@@ -129,40 +164,6 @@
     height: 6px;
     border-radius: 3px;
   }
-  
-  /* Clean Card Styles */
-  .card-luxury {
-    @apply bg-white shadow-sm border border-luxury-gray-5 rounded;
-  }
-  
-  .card-section {
-    @apply bg-white p-6 border border-luxury-gray-5 rounded shadow-sm;
-  }
-  
-  .card-dark {
-    @apply bg-luxury-dark-3 p-6 text-white rounded;
-  }
-  
-  .flex-between-border {
-    @apply flex items-center justify-between py-4 border-b border-luxury-gray-5;
-  }
-  
-  /* Clean Header - Works in dark mode */
-  .header-luxury {
-    @apply bg-luxury-dark-3 text-white py-8 px-6 text-center;
-  }
-  
-  .header-title {
-    @apply text-base font-medium tracking-widest uppercase text-white;
-  }
-  
-  .header-subtitle {
-    @apply text-xs tracking-wide text-luxury-gray-5 mt-1;
-  }
-  
-  .header-divider {
-    @apply w-12 h-px bg-white/30 mx-auto mt-3;
-  }
 }
 
 /* Dark mode support */
@@ -170,11 +171,11 @@
   .header-luxury {
     @apply bg-luxury-dark-2 text-white;
   }
-  
+
   .header-title {
     @apply text-white;
   }
-  
+
   .header-subtitle {
     @apply text-white/70;
   }
