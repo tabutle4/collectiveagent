@@ -221,7 +221,6 @@ export default function CreateTransactionPage() {
     const propertyAddress = buildPropertyAddress(form)
     return {
       submitted_by: user.id,
-      agent_id: user.id,
       property_address: propertyAddress || 'Untitled Transaction',
       transaction_type: form.transaction_type_name || null,
       status: 'prospect',
