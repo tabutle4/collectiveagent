@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
-import { Search, ChevronDown, ExternalLink } from 'lucide-react'
+import { Search, ChevronDown, ExternalLink, Download } from 'lucide-react'
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -23,7 +23,7 @@ export default function AdminUsersPage() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, roles, is_active, created_at, headshot_url')
+        .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, roles, is_active, created_at, headshot_url, office, team_name, commission_plan, license_number, personal_phone, join_date')
         .order('created_at', { ascending: false })
       if (error) throw error
       setUsers(data || [])
@@ -31,9 +31,27 @@ export default function AdminUsersPage() {
     finally { setLoading(false) }
   }
 
+  const getRoles = (user: any): string[] => {
+    if (!user.roles) return []
+    if (Array.isArray(user.roles)) return user.roles.map((r: string) => r.toLowerCase())
+    try { const parsed = JSON.parse(user.roles); return Array.isArray(parsed) ? parsed.map((r: string) => r.toLowerCase()) : [] }
+    catch { return [] }
+  }
+
+  const getDisplayRole = (user: any): string => {
+    const roles = getRoles(user)
+    if (roles.includes('broker')) return 'Broker'
+    if (roles.includes('admin')) return 'Admin'
+    if (roles.includes('team_lead')) return 'Team Lead'
+    if (roles.includes('agent')) return 'Agent'
+    return roles[0] || ''
+  }
+
   const allRoles = useMemo(() => {
     const rolesSet = new Set<string>()
-    users.forEach(user => { if (user.role) rolesSet.add(user.role) })
+    users.forEach(user => {
+      getRoles(user).forEach(role => rolesSet.add(role))
+    })
     return Array.from(rolesSet).sort()
   }, [users])
 
@@ -48,7 +66,9 @@ export default function AdminUsersPage() {
         return fullName.includes(query) || legalName.includes(query) || email.includes(query)
       })
     }
-    if (roleFilter !== 'all') filtered = filtered.filter(user => user.role === roleFilter)
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(user => getRoles(user).includes(roleFilter))
+    }
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
@@ -76,7 +96,9 @@ export default function AdminUsersPage() {
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { all: users.length }
-    allRoles.forEach(role => { counts[role] = users.filter(user => user.role === role).length })
+    allRoles.forEach(role => {
+      counts[role] = users.filter(user => getRoles(user).includes(role)).length
+    })
     return counts
   }, [users, allRoles])
 
@@ -91,6 +113,68 @@ export default function AdminUsersPage() {
     else { setSortBy(field); setSortOrder('asc') }
   }
 
+  const exportCSV = () => {
+    const headers = ['Name', 'Legal Name', 'Email', 'Phone', 'Office', 'Team', 'Commission Plan', 'License #', 'Roles', 'Status', 'Join Date', 'Created']
+    const rows = filteredAndSortedUsers.map(user => [
+      `${user.preferred_first_name} ${user.preferred_last_name}`,
+      `${user.first_name} ${user.last_name}`,
+      user.email || '',
+      user.personal_phone || '',
+      user.office || '',
+      user.team_name || '',
+      user.commission_plan || '',
+      user.license_number || '',
+      getRoles(user).join(', '),
+      user.is_active ? 'Active' : 'Inactive',
+      user.join_date ? new Date(user.join_date).toLocaleDateString() : '',
+      new Date(user.created_at).toLocaleDateString(),
+    ])
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const str = cell?.toString() || ''
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
+      }).join(','))
+    ].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `agents-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportPDF = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    const tableRows = filteredAndSortedUsers.map(user => `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.preferred_first_name} ${user.preferred_last_name}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.email}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.office || ''}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.team_name || ''}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${getRoles(user).join(', ')}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.is_active ? 'Active' : 'Inactive'}</td>
+      </tr>
+    `).join('')
+    printWindow.document.write(`
+      <!DOCTYPE html><html><head><title>Agents - Collective Realty Co.</title>
+      <style>body{font-family:Montserrat,sans-serif;padding:40px;color:#1A1A1A;}
+      h1{font-size:18px;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;}
+      p{font-size:12px;color:#555;margin-bottom:20px;}
+      table{width:100%;border-collapse:collapse;}
+      th{text-align:left;padding:8px 10px;border-bottom:2px solid #1A1A1A;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#555;}
+      @media print{body{padding:20px;}}</style></head>
+      <body><h1>Agents</h1>
+      <p>${filteredAndSortedUsers.length} agents | Exported ${new Date().toLocaleDateString()}</p>
+      <table><thead><tr><th>Name</th><th>Email</th><th>Office</th><th>Team</th><th>Roles</th><th>Status</th></tr></thead>
+      <tbody>${tableRows}</tbody></table></body></html>
+    `)
+    printWindow.document.close()
+    printWindow.onload = () => printWindow.print()
+  }
+
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
@@ -103,6 +187,12 @@ export default function AdminUsersPage() {
           <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5">
             <ExternalLink size={14} /> Roster
           </a>
+          <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5">
+            <Download size={14} /> CSV
+          </button>
+          <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5">
+            <Download size={14} /> PDF
+          </button>
           <button onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
             + Create User
           </button>
@@ -119,7 +209,7 @@ export default function AdminUsersPage() {
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="select-luxury">
               <option value="all">All Roles ({roleCounts.all})</option>
               {allRoles.map((role) => (
-                <option key={role} value={role}>{role} ({roleCounts[role] || 0})</option>
+                <option key={role} value={role} className="capitalize">{role} ({roleCounts[role] || 0})</option>
               ))}
             </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select-luxury">
@@ -144,6 +234,7 @@ export default function AdminUsersPage() {
                       <div className="flex items-center gap-1">Name {sortBy === 'name' && <ChevronDown size={14} className={sortOrder === 'desc' ? 'rotate-180' : ''} />}</div>
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Email</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Office</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Role</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Status</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort('created_at')}>
@@ -160,7 +251,8 @@ export default function AdminUsersPage() {
                         <p className="text-xs text-luxury-gray-3">{user.first_name} {user.last_name}</p>
                       </td>
                       <td className="py-3 px-4 text-sm text-luxury-gray-2">{user.email}</td>
-                      <td className="py-3 px-4">{user.role && <span className="text-xs text-luxury-gray-2">{user.role}</span>}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.office || ''}</td>
+                      <td className="py-3 px-4"><span className="text-xs text-luxury-gray-2 capitalize">{getDisplayRole(user)}</span></td>
                       <td className="py-3 px-4">
                         <span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>
                           {user.is_active ? 'Active' : 'Inactive'}
@@ -188,7 +280,7 @@ export default function AdminUsersPage() {
                   </div>
                   <div className="space-y-1 text-xs text-luxury-gray-3">
                     <p>{user.email}</p>
-                    {user.role && <p>{user.role}</p>}
+                    <p className="capitalize">{getDisplayRole(user)}{user.office ? ` · ${user.office}` : ''}</p>
                   </div>
                 </div>
               ))}
