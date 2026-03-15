@@ -21,10 +21,7 @@ export default function AdminUsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, roles, is_active, created_at, headshot_url, office, team_name, commission_plan, license_number, personal_phone, join_date')
-        .order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false })
       if (error) throw error
       setUsers(data || [])
     } catch (error) { console.error('Error fetching users:', error) }
@@ -42,16 +39,33 @@ export default function AdminUsersPage() {
     const roles = getRoles(user)
     if (roles.includes('broker')) return 'Broker'
     if (roles.includes('admin')) return 'Admin'
+    if (roles.includes('operations')) return 'Operations'
+    if (roles.includes('tc')) return 'TC'
     if (roles.includes('team_lead')) return 'Team Lead'
     if (roles.includes('agent')) return 'Agent'
     return roles[0] || ''
   }
 
+  const getAdditionalRoles = (user: any): string => {
+    const roles = getRoles(user)
+    const primary = getDisplayRole(user).toLowerCase().replace(' ', '_')
+    return roles.filter(r => r !== primary && r !== 'agent').map(r => r.replace('_', ' ')).join(', ')
+  }
+
+  const getSocialLinks = (user: any): string => {
+    const links: string[] = []
+    if (user.instagram_handle) links.push(`IG: ${user.instagram_handle}`)
+    if (user.tiktok_handle) links.push(`TT: ${user.tiktok_handle}`)
+    if (user.threads_handle) links.push(`Threads: ${user.threads_handle}`)
+    if (user.linkedin_url) links.push('LinkedIn')
+    if (user.facebook_url) links.push('Facebook')
+    if (user.youtube_url) links.push('YouTube')
+    return links.join(', ')
+  }
+
   const allRoles = useMemo(() => {
     const rolesSet = new Set<string>()
-    users.forEach(user => {
-      getRoles(user).forEach(role => rolesSet.add(role))
-    })
+    users.forEach(user => { getRoles(user).forEach(role => rolesSet.add(role)) })
     return Array.from(rolesSet).sort()
   }, [users])
 
@@ -63,12 +77,12 @@ export default function AdminUsersPage() {
         const fullName = `${user.preferred_first_name} ${user.preferred_last_name}`.toLowerCase()
         const legalName = `${user.first_name} ${user.last_name}`.toLowerCase()
         const email = user.email?.toLowerCase() || ''
-        return fullName.includes(query) || legalName.includes(query) || email.includes(query)
+        const office = user.office?.toLowerCase() || ''
+        const team = user.team_name?.toLowerCase() || ''
+        return fullName.includes(query) || legalName.includes(query) || email.includes(query) || office.includes(query) || team.includes(query)
       })
     }
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(user => getRoles(user).includes(roleFilter))
-    }
+    if (roleFilter !== 'all') filtered = filtered.filter(user => getRoles(user).includes(roleFilter))
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
@@ -80,12 +94,33 @@ export default function AdminUsersPage() {
           aValue = `${a.preferred_first_name} ${a.preferred_last_name}`.toLowerCase()
           bValue = `${b.preferred_first_name} ${b.preferred_last_name}`.toLowerCase()
           break
+        case 'email':
+          aValue = (a.email || '').toLowerCase()
+          bValue = (b.email || '').toLowerCase()
+          break
+        case 'office':
+          aValue = (a.office || '').toLowerCase()
+          bValue = (b.office || '').toLowerCase()
+          break
+        case 'role':
+          aValue = getDisplayRole(a).toLowerCase()
+          bValue = getDisplayRole(b).toLowerCase()
+          break
+        case 'team_name':
+          aValue = (a.team_name || '').toLowerCase()
+          bValue = (b.team_name || '').toLowerCase()
+          break
+        case 'status':
+          aValue = a.is_active ? 'active' : 'inactive'
+          bValue = b.is_active ? 'active' : 'inactive'
+          break
         case 'created_at':
           aValue = new Date(a.created_at).getTime()
           bValue = new Date(b.created_at).getTime()
           break
         default:
-          aValue = a[sortBy]; bValue = b[sortBy]
+          aValue = (a[sortBy] || '').toString().toLowerCase()
+          bValue = (b[sortBy] || '').toString().toLowerCase()
       }
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1
       if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1
@@ -96,9 +131,7 @@ export default function AdminUsersPage() {
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { all: users.length }
-    allRoles.forEach(role => {
-      counts[role] = users.filter(user => getRoles(user).includes(role)).length
-    })
+    allRoles.forEach(role => { counts[role] = users.filter(user => getRoles(user).includes(role)).length })
     return counts
   }, [users, allRoles])
 
@@ -113,64 +146,67 @@ export default function AdminUsersPage() {
     else { setSortBy(field); setSortOrder('asc') }
   }
 
+  const SortHeader = ({ field, children }: { field: string; children: React.ReactNode }) => (
+    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort(field)}>
+      <div className="flex items-center gap-1">{children} {sortBy === field && <ChevronDown size={14} className={`transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />}</div>
+    </th>
+  )
+
   const exportCSV = () => {
-    const headers = ['Name', 'Legal Name', 'Email', 'Phone', 'Office', 'Team', 'Commission Plan', 'License #', 'Roles', 'Status', 'Join Date', 'Created']
+    const headers = ['Agent Name', 'Email', 'Office', 'Role', 'Additional Roles', 'Team', 'Phone', 'Birthday', 'Social Media', 'Division', 'License #', 'MLS ID', 'Association', 'Commission Plan', 'Status', 'Join Date']
     const rows = filteredAndSortedUsers.map(user => [
-      `${user.preferred_first_name} ${user.preferred_last_name}`,
-      `${user.first_name} ${user.last_name}`,
-      user.email || '',
-      user.personal_phone || '',
-      user.office || '',
-      user.team_name || '',
-      user.commission_plan || '',
-      user.license_number || '',
-      getRoles(user).join(', '),
-      user.is_active ? 'Active' : 'Inactive',
-      user.join_date ? new Date(user.join_date).toLocaleDateString() : '',
-      new Date(user.created_at).toLocaleDateString(),
+      `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`,
+      user.email || '', user.office || '', getDisplayRole(user), getAdditionalRoles(user),
+      user.team_name || '', user.personal_phone || '', user.birth_month || '',
+      getSocialLinks(user), user.division || '', user.license_number || '',
+      user.mls_id || '', user.association || '', user.commission_plan || '',
+      user.is_active ? 'Active' : 'Inactive', user.join_date ? new Date(user.join_date).toLocaleDateString() : '',
     ])
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => {
-        const str = cell?.toString() || ''
-        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
-      }).join(','))
-    ].join('\n')
+    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => {
+      const str = cell?.toString() || ''
+      return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
+    }).join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = `agents-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
+    a.href = url; a.download = `agents-${new Date().toISOString().split('T')[0]}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 
   const exportPDF = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
-    const tableRows = filteredAndSortedUsers.map(user => `
-      <tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.preferred_first_name} ${user.preferred_last_name}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.email}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.office || ''}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.team_name || ''}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${getRoles(user).join(', ')}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">${user.is_active ? 'Active' : 'Inactive'}</td>
-      </tr>
-    `).join('')
-    printWindow.document.write(`
-      <!DOCTYPE html><html><head><title>Agents - Collective Realty Co.</title>
-      <style>body{font-family:Montserrat,sans-serif;padding:40px;color:#1A1A1A;}
-      h1{font-size:18px;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;}
-      p{font-size:12px;color:#555;margin-bottom:20px;}
+    const tableRows = filteredAndSortedUsers.map(user => {
+      const headshot = user.headshot_url
+        ? `<img src="${user.headshot_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;object-position:top center;" />`
+        : `<div style="width:32px;height:32px;border-radius:50%;background:#C5A278;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600;">${(user.preferred_first_name || user.first_name || '?')[0]}${(user.preferred_last_name || user.last_name || '?')[0]}</div>`
+      return `<tr>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${headshot}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;font-weight:600;">${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.office || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getDisplayRole(user)}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getAdditionalRoles(user) || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.team_name || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.personal_phone || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.birth_month || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getSocialLinks(user) || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.division || ''}</td>
+      </tr>`
+    }).join('')
+    const filterDesc = [roleFilter !== 'all' ? `Role: ${roleFilter}` : '', statusFilter !== 'all' ? `Status: ${statusFilter}` : '', searchQuery ? `Search: "${searchQuery}"` : ''].filter(Boolean).join(' | ') || 'All agents'
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Agents - Collective Realty Co.</title>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+      body{font-family:'Montserrat',sans-serif;padding:30px;color:#1A1A1A;font-size:10px;}
+      h1{font-size:16px;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;font-weight:600;}
+      .subtitle{font-size:10px;color:#555;margin-bottom:16px;}
       table{width:100%;border-collapse:collapse;}
-      th{text-align:left;padding:8px 10px;border-bottom:2px solid #1A1A1A;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#555;}
-      @media print{body{padding:20px;}}</style></head>
-      <body><h1>Agents</h1>
-      <p>${filteredAndSortedUsers.length} agents | Exported ${new Date().toLocaleDateString()}</p>
-      <table><thead><tr><th>Name</th><th>Email</th><th>Office</th><th>Team</th><th>Roles</th><th>Status</th></tr></thead>
-      <tbody>${tableRows}</tbody></table></body></html>
-    `)
+      th{text-align:left;padding:6px 5px;border-bottom:2px solid #1A1A1A;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#555;font-weight:600;}
+      @media print{body{padding:15px;} @page{size:landscape;margin:0.4in;}}</style></head>
+      <body><h1>Collective Realty Co. Agent Roster</h1>
+      <p class="subtitle">${filteredAndSortedUsers.length} agents | ${filterDesc} | ${new Date().toLocaleDateString()}</p>
+      <table><thead><tr><th></th><th>Agent Name</th><th>Email</th><th>Office</th><th>Role</th><th>Add'l Roles</th><th>Team</th><th>Phone</th><th>Birthday</th><th>Social</th><th>Division</th></tr></thead>
+      <tbody>${tableRows}</tbody></table></body></html>`)
     printWindow.document.close()
     printWindow.onload = () => printWindow.print()
   }
@@ -179,23 +215,15 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
         <h1 className="page-title">
           AGENTS ({filteredAndSortedUsers.length}{filteredAndSortedUsers.length !== users.length ? ` of ${users.length}` : ''})
         </h1>
-        <div className="flex gap-2">
-          <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5">
-            <ExternalLink size={14} /> Roster
-          </a>
-          <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5">
-            <Download size={14} /> CSV
-          </button>
-          <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5">
-            <Download size={14} /> PDF
-          </button>
-          <button onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
-            + Create User
-          </button>
+        <div className="flex flex-wrap gap-2">
+          <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5"><ExternalLink size={14} /> Roster</a>
+          <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5"><Download size={14} /> CSV</button>
+          <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5"><Download size={14} /> PDF</button>
+          <button onClick={() => setCreateModalOpen(true)} className="btn btn-primary">+ Create User</button>
         </div>
       </div>
 
@@ -203,19 +231,15 @@ export default function AdminUsersPage() {
         <div className="flex flex-col md:flex-row gap-4 mb-5">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3" size={18} />
-            <input type="text" placeholder="Search by name or email..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input-luxury pl-10" />
+            <input type="text" placeholder="Search by name, email, office, team..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input-luxury pl-10" />
           </div>
           <div className="flex gap-3">
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="select-luxury">
               <option value="all">All Roles ({roleCounts.all})</option>
-              {allRoles.map((role) => (
-                <option key={role} value={role} className="capitalize">{role} ({roleCounts[role] || 0})</option>
-              ))}
+              {allRoles.map((role) => (<option key={role} value={role} className="capitalize">{role.replace('_', ' ')} ({roleCounts[role] || 0})</option>))}
             </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select-luxury">
-              {Object.entries(statusCounts).map(([status, count]) => (
-                <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)} ({count})</option>
-              ))}
+              {Object.entries(statusCounts).map(([status, count]) => (<option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)} ({count})</option>))}
             </select>
           </div>
         </div>
@@ -223,23 +247,20 @@ export default function AdminUsersPage() {
         {users.length === 0 ? (
           <div className="text-center py-12"><p className="text-sm text-luxury-gray-3">No users yet</p></div>
         ) : filteredAndSortedUsers.length === 0 ? (
-          <div className="text-center py-12"><p className="text-sm text-luxury-gray-3">No users match your search criteria</p></div>
+          <div className="text-center py-12"><p className="text-sm text-luxury-gray-3">No users match your filters</p></div>
         ) : (
           <>
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-luxury-gray-5/50">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort('name')}>
-                      <div className="flex items-center gap-1">Name {sortBy === 'name' && <ChevronDown size={14} className={sortOrder === 'desc' ? 'rotate-180' : ''} />}</div>
-                    </th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Email</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Office</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Role</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Status</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort('created_at')}>
-                      <div className="flex items-center gap-1">Created {sortBy === 'created_at' && <ChevronDown size={14} className={sortOrder === 'desc' ? 'rotate-180' : ''} />}</div>
-                    </th>
+                    <SortHeader field="name">Name</SortHeader>
+                    <SortHeader field="email">Email</SortHeader>
+                    <SortHeader field="office">Office</SortHeader>
+                    <SortHeader field="role">Role</SortHeader>
+                    <SortHeader field="team_name">Team</SortHeader>
+                    <SortHeader field="status">Status</SortHeader>
+                    <SortHeader field="created_at">Created</SortHeader>
                     <th className="py-3 px-4"></th>
                   </tr>
                 </thead>
@@ -247,16 +268,26 @@ export default function AdminUsersPage() {
                   {filteredAndSortedUsers.map((user) => (
                     <tr key={user.id} className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer" onClick={() => router.push(`/admin/users/${user.id}`)}>
                       <td className="py-3 px-4">
-                        <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
-                        <p className="text-xs text-luxury-gray-3">{user.first_name} {user.last_name}</p>
+                        <div className="flex items-center gap-3">
+                          {user.headshot_url ? (
+                            <img src={user.headshot_url} alt="" className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                              {(user.preferred_first_name || user.first_name || '?')[0]}{(user.preferred_last_name || user.last_name || '?')[0]}
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
+                            <p className="text-xs text-luxury-gray-3">{user.first_name} {user.last_name}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-sm text-luxury-gray-2">{user.email}</td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.office || ''}</td>
                       <td className="py-3 px-4"><span className="text-xs text-luxury-gray-2 capitalize">{getDisplayRole(user)}</span></td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.team_name || ''}</td>
                       <td className="py-3 px-4">
-                        <span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        <span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-3">{new Date(user.created_at).toLocaleDateString()}</td>
                       <td className="py-3 px-4"><span className="text-xs text-luxury-accent">View</span></td>
@@ -269,18 +300,24 @@ export default function AdminUsersPage() {
             <div className="md:hidden space-y-3">
               {filteredAndSortedUsers.map((user) => (
                 <div key={user.id} className="inner-card cursor-pointer" onClick={() => router.push(`/admin/users/${user.id}`)}>
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start gap-3">
+                    {user.headshot_url ? (
+                      <img src={user.headshot_url} alt="" className="w-10 h-10 rounded-full object-cover object-top flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                        {(user.preferred_first_name || user.first_name || '?')[0]}{(user.preferred_last_name || user.last_name || '?')[0]}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
-                      <p className="text-xs text-luxury-gray-3">{user.first_name} {user.last_name}</p>
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
+                        <span className={`text-xs font-medium flex-shrink-0 ml-2 ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
+                      </div>
+                      <div className="space-y-0.5 text-xs text-luxury-gray-3 mt-1">
+                        <p>{user.email}</p>
+                        <p className="capitalize">{getDisplayRole(user)}{user.office ? ` · ${user.office}` : ''}{user.team_name ? ` · ${user.team_name}` : ''}</p>
+                      </div>
                     </div>
-                    <span className={`text-xs font-medium flex-shrink-0 ml-2 ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-xs text-luxury-gray-3">
-                    <p>{user.email}</p>
-                    <p className="capitalize">{getDisplayRole(user)}{user.office ? ` · ${user.office}` : ''}</p>
                   </div>
                 </div>
               ))}

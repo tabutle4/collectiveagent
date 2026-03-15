@@ -27,7 +27,7 @@
 @layer components {
   /* Buttons */
   .btn {
-    @apply inline-block px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center;
+    @apply inline-block px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center;
   }
 
   .btn-primary {
