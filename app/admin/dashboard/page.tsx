@@ -199,7 +199,7 @@ export default function AdminDashboard() {
 
       {/* YTD Reporting */}
       <div className="container-card mb-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{rangeInfo.label}</h2>
           <div className="flex gap-2">
             <select
