@@ -536,7 +536,7 @@ export default function CreateTransactionPage() {
                               setShowContactSuggestions(null)
                             }} className="w-full text-left px-3 py-2 hover:bg-luxury-light text-xs border-b border-luxury-gray-5/30 last:border-0">
                               <p className="font-medium text-luxury-gray-1">{c.name}</p>
-                              {c.email {email && <p className="text-luxury-gray-3">{typeof c.email{email && <p className="text-luxury-gray-3">{typeof c.email <p className="text-luxury-gray-3">{typeof c.email === 'string' ? c.email : ''}</p>}
+                               {c.email && <p className="text-luxury-gray-3">{typeof c.email === "string" ? c.email : ""}</p>}
                             </button>
                           ))}
                         </div>
