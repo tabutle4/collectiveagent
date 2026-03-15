@@ -7,7 +7,7 @@ import {
   LayoutDashboard, UserCog, Calendar, Search,
   Briefcase, Receipt, UsersRound, DollarSign,
   Settings, Menu, X, ChevronRight,
-  Users, FileText, FolderOpen, CircleDollarSign,
+  Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser,
   BarChart3
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
@@ -29,7 +29,8 @@ const adminNav: NavItem[] = [
   { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
   { href: '/admin/users', label: 'Agents', icon: UserCog },
   { href: '/admin/team-agreements', label: 'Teams', icon: UsersRound },
-  { href: '/admin/contacts', label: 'Contacts', icon: Users },
+  { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
+  { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
   { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
   { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
