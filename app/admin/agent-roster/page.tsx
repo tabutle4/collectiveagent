@@ -125,7 +125,7 @@ export default function AgentRosterPage() {
       const noResults = document.getElementById('noResults')
       if (noResults) noResults.style.display = visibleCount === 0 ? 'block' : 'none'
     }
-    return () => { try { delete (window as any).filterTable } catch {} }
+    return () => { (window as any).filterTable = undefined }
   }, [htmlContent])
 
   useEffect(() => {
