@@ -258,7 +258,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   )
 
   return (
-    <div className="min-h-screen bg-luxury-light">
+    <div className="min-h-screen bg-luxury-page-bg">
       {mobileMenuOpen && isMobile && (
         <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setMobileMenuOpen(false)} />
       )}
