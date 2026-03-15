@@ -17,6 +17,7 @@ interface NavItem {
   label: string
   icon: any
   disabled?: boolean
+  external?: boolean
 }
 
 interface AppSidebarProps {
@@ -46,7 +47,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
-  { href: '/roster', label: 'Roster', icon: FileText },
+  { href: '/roster', label: 'Roster', icon: FileText, external: true },
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
@@ -140,6 +141,20 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             )
           }
 
+          if (item.external) {
+            return (
+              
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-luxury-gray-2 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1"
+              >
+                <Icon size={18} className="flex-shrink-0 text-luxury-gray-3" strokeWidth={1.5} />
+                <span className="text-[13px] font-medium">{item.label}</span>
+              </a>
+            )
+          }
           return (
             <Link
               key={item.href}
