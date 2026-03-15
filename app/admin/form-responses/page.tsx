@@ -1349,17 +1349,17 @@ export default function FormResponsesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-7xl mx-auto">
+    
+      
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-4 md:mb-0">
+            <h1 className="page-title mb-4 md:mb-0">
               Form Responses
             </h1>
             <div className="flex gap-2">
               <button
                 onClick={() => setCreateFormModalOpen(true)}
-                className="px-4 py-2 text-sm rounded transition-colors btn-primary flex items-center gap-2"
+                className="btn btn-primary flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Create New Form
@@ -1367,7 +1367,7 @@ export default function FormResponsesPage() {
               {(activeTab === 'pre-listing' || activeTab === 'just-listed') && (
                 <button
                   onClick={handleCreateNew}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   Create New Response
@@ -1376,7 +1376,7 @@ export default function FormResponsesPage() {
               {activeTab === 'prospects' && (
                 <button
                   onClick={handleExportProspects}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1385,7 +1385,7 @@ export default function FormResponsesPage() {
               {activeTab === 'pre-listing' && (
                 <button
                   onClick={handleExportPreListing}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1394,7 +1394,7 @@ export default function FormResponsesPage() {
               {activeTab === 'just-listed' && (
                 <button
                   onClick={handleExportJustListed}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-secondary flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
