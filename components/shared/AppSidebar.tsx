@@ -109,7 +109,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const sidebarContent = (
     <>
       <div className="flex items-center justify-center px-4 py-4 flex-shrink-0">
-        <Link href={isAdmin ? '/admin/dashboard' : '/profile'}>
+        <Link href={isAdmin ? '/admin/dashboard' : '/agent/profile'}>
           <img src={logo} alt="Logo" className="sidebar-logo" />
         </Link>
         {isMobile && (
@@ -125,7 +125,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = !item.disabled && (
+          const isActive = !item.disabled && !item.external && (
             pathname === item.href || pathname?.startsWith(item.href + '/')
           )
 
@@ -143,7 +143,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
           if (item.external) {
             return (
-              
+              <a
                 key={item.href}
                 href={item.href}
                 target="_blank"
@@ -155,6 +155,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
               </a>
             )
           }
+
           return (
             <Link
               key={item.href}
