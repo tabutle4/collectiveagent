@@ -43,7 +43,7 @@ export default function AdminDashboard() {
 
         {/* Left container card - Needs Attention */}
         <div className="lg:col-span-5">
-          <div className="container-card">
+          <div className="container-card h-full">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Needs Attention</h2>
 
             <div className="space-y-3">
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
 
         {/* Right container card - Overview */}
         <div className="lg:col-span-7">
-          <div className="container-card">
+          <div className="container-card h-full">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Overview</h2>
 
             {/* Stats row - flat inner cards */}
