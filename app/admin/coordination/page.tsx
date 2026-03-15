@@ -291,7 +291,7 @@ export default function AdminCoordinationDashboard() {
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteCoordination(coordination.id) }}
-                      className="btn text-xs bg-red-600 text-white hover:opacity-90 flex items-center justify-center gap-1.5"
+                      className="btn text-xs bg-white border border-red-600 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1.5"
                     >
                       <Trash2 size={12} /> Delete
                     </button>

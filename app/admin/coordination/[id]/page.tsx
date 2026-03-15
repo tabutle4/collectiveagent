@@ -1088,7 +1088,7 @@ export default function CoordinationDetailPage() {
                       <button
                         onClick={() => handleDeleteReport(report.id)}
                         disabled={deletingReportId === report.id}
-                        className="ml-4 px-3 py-1.5 text-xs rounded transition-colors bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="ml-4 px-3 py-1.5 text-xs rounded transition-colors bg-white border border-red-600 text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         {deletingReportId === report.id ? (
                           <>
@@ -1134,7 +1134,7 @@ export default function CoordinationDetailPage() {
             )}
             <button
               onClick={handleDeleteCoordination}
-              className="px-6 py-2.5 text-sm rounded transition-colors bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"
+              className="px-6 py-2.5 text-sm rounded transition-colors bg-white border border-red-600 text-red-600 hover:bg-red-50 flex items-center justify-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
               Delete Coordination
