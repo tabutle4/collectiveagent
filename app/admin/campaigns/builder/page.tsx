@@ -317,7 +317,7 @@ function CampaignBuilderContent() {
   const selectedStep = selectedStepIndex !== null ? steps[selectedStepIndex] : null
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-0">
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -329,7 +329,7 @@ function CampaignBuilderContent() {
           </Link>
           
           <div className="flex items-center justify-between">
-            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
+            <h2 className="text-xl md:text-2xl font-semibold tracking-wide" >
               {campaignId ? 'Edit Campaign' : 'Create New Campaign'}
             </h2>
             <div className="flex gap-3">
@@ -357,7 +357,7 @@ function CampaignBuilderContent() {
         )}
 
         {previewMode ? (
-          <div className="card-section">
+          <div className="container-card">
             <h3 className="text-lg font-medium mb-4">Campaign Preview</h3>
             <p className="text-sm text-luxury-gray-2 mb-4">
               This is how agents will see the campaign. Steps: {steps.length}
@@ -379,7 +379,7 @@ function CampaignBuilderContent() {
             {/* Left Sidebar - Campaign Info & Steps List */}
             <div className="lg:col-span-1 space-y-6">
               {/* Campaign Basic Info */}
-              <div className="card-section">
+              <div className="container-card">
                 <h3 className="text-lg font-medium mb-4">Campaign Info</h3>
                 <div className="space-y-4">
                   <div>
@@ -432,7 +432,7 @@ function CampaignBuilderContent() {
               </div>
 
               {/* Steps List */}
-              <div className="card-section">
+              <div className="container-card">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium">Steps ({steps.length})</h3>
                   <div className="flex gap-2">
@@ -521,7 +521,7 @@ function CampaignBuilderContent() {
                   }}
                 />
               ) : (
-                <div className="card-section text-center py-12">
+                <div className="container-card text-center py-12">
                   <p className="text-luxury-gray-2">Select a step to edit, or add a new step</p>
                 </div>
               )}
@@ -612,7 +612,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
   }
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2">Step Title</label>
         <input
@@ -762,7 +762,7 @@ function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (st
   }
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2">Step Title</label>
         <input
@@ -810,7 +810,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
   }
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2">Step Title</label>
         <input
@@ -987,7 +987,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
   }
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       <div className="mb-4">
         <label className="block text-sm font-medium mb-2">Step Title</label>
         <input
@@ -1123,7 +1123,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
 
 export default function CampaignBuilderPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-0 flex items-center justify-center">Loading...</div>}>
       <CampaignBuilderContent />
     </Suspense>
   )

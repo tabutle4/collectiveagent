@@ -474,9 +474,9 @@ export default function CoordinationDetailPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading...</p>
           </div>
         </div>
@@ -486,9 +486,9 @@ export default function CoordinationDetailPage() {
   
   if (!coordination || !listing) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2 mb-4">Coordination not found</p>
             <button
               onClick={() => router.push('/admin/coordination')}
@@ -503,9 +503,9 @@ export default function CoordinationDetailPage() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="card-section mb-6">
+    <div className="">
+      <div className="">
+        <div className="container-card mb-6">
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => router.push('/admin/coordination')}
@@ -540,26 +540,26 @@ export default function CoordinationDetailPage() {
         </div>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="card-section">
+          <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Service Fee</p>
             <p className="text-xl font-medium">${coordination.service_fee} <span className="text-sm font-normal text-luxury-gray-2">(one time)</span></p>
           </div>
-          <div className="card-section">
+          <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Emails Sent</p>
             <p className="text-xl font-medium">{Math.max(coordination.total_emails_sent || 0, emailHistory.length)}</p>
             {coordination.total_emails_sent === 0 && emailHistory.length > 0 && (
               <p className="text-xs text-yellow-600 mt-1">Count updated from email history</p>
             )}
           </div>
-          <div className="card-section">
+          <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Start Date</p>
             <p className="text-sm">{formatDate(coordination.start_date)}</p>
           </div>
-          <div className="card-section">
+          <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Last Email</p>
             <p className="text-sm">{formatDate(coordination.last_email_sent_at)}</p>
           </div>
-          <div className="card-section">
+          <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Next Scheduled</p>
             <p className="text-sm">
               {coordination.next_email_scheduled_for ? (
@@ -577,7 +577,7 @@ export default function CoordinationDetailPage() {
         </div>
         
         {coordination.payment_method === 'agent_pays' && (
-          <div className="card-section mb-6">
+          <div className="container-card mb-6">
             <h3 className="text-sm font-medium text-luxury-gold mb-3">Payment Status - Agent Pays</h3>
             <div className="bg-luxury-light p-4 rounded">
               <div className="grid grid-cols-2 gap-4 mb-3">
@@ -634,7 +634,7 @@ export default function CoordinationDetailPage() {
         {coordination.payment_method === 'agent_pays' && 
          !coordination.service_paid && 
          (listing?.status === 'pending' || listing?.status === 'sold') && (
-          <div className="card-section mb-6 bg-red-50 border-red-200">
+          <div className="container-card mb-6 bg-red-50 border-red-200">
             <h3 className="text-sm font-medium text-red-800 mb-2">⚠️ Action Required</h3>
             <p className="text-sm text-red-700">
               This listing is {listing.status} but the $250 coordination fee has not been marked as paid. 
@@ -643,7 +643,7 @@ export default function CoordinationDetailPage() {
           </div>
         )}
         
-        <div className="card-section mb-6">
+        <div className="container-card mb-6">
           <h2 className="text-lg font-medium mb-4">Listing Information</h2>
           
           <div className="space-y-4">
@@ -813,7 +813,7 @@ export default function CoordinationDetailPage() {
           </div>
         </div>
         
-        <div className="card-section mb-6">
+        <div className="container-card mb-6">
           <h2 className="text-lg font-medium mb-4">Coordination Details</h2>
           
           <div className="space-y-4">
@@ -914,7 +914,7 @@ export default function CoordinationDetailPage() {
         </div>
         
         {coordination.seller_magic_link && (
-          <div className="card-section mb-6">
+          <div className="container-card mb-6">
             <h2 className="text-lg font-medium mb-4">Seller Dashboard Access</h2>
             <div className="bg-luxury-light p-4 rounded">
               <p className="text-sm mb-2">Magic Link (copy to share with seller):</p>
@@ -939,7 +939,7 @@ export default function CoordinationDetailPage() {
           </div>
         )}
         
-        <div className="card-section">
+        <div className="container-card">
           <h2 className="text-lg font-medium mb-4">Email Actions</h2>
           <div className="flex flex-col space-y-3 mb-6">
             <button
@@ -1015,7 +1015,7 @@ export default function CoordinationDetailPage() {
           </div>
 
           {/* Weekly Reports Section */}
-          <div className="card-section mb-6">
+          <div className="container-card mb-6">
             <h2 className="text-lg font-medium mb-4">Weekly Reports</h2>
             {loadingReports ? (
               <div className="text-center py-8">

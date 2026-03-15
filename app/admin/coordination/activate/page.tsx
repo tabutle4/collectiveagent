@@ -107,9 +107,9 @@ export default function ActivateCoordinationPage() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+    <div className="">
+      <div className="">
+        <div className="container-card">
           <div className="mb-6">
             <button
               onClick={() => router.push('/admin/coordination')}

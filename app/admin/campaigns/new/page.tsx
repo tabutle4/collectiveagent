@@ -245,7 +245,7 @@ export default function NewCampaignPage() {
           ← Back to Campaigns
         </Link>
         
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" >
+        <h2 className="text-xl md:text-2xl font-semibold tracking-wide mb-5 md:mb-8" >
           Create New Campaign
         </h2>
       </div>
@@ -256,7 +256,7 @@ export default function NewCampaignPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="card-section">
+      <form onSubmit={handleSubmit} className="container-card">
         <div className="space-y-6">
           {/* Campaign Name */}
           <div>

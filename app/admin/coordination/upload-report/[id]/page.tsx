@@ -185,9 +185,9 @@ export default function UploadWeeklyReportPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading...</p>
           </div>
         </div>
@@ -197,9 +197,9 @@ export default function UploadWeeklyReportPage() {
   
   if (!coordination || !listing) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2 mb-4">Coordination not found</p>
             <button
               onClick={() => router.push('/admin/coordination')}
@@ -214,9 +214,9 @@ export default function UploadWeeklyReportPage() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+    <div className="">
+      <div className="">
+        <div className="container-card">
           <div className="mb-6">
             <button
               onClick={() => router.push(`/admin/coordination/${coordinationId}`)}
