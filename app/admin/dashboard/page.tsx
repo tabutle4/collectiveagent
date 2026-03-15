@@ -69,6 +69,31 @@ function getDateRange(range: DateRange): { start: Date; end: Date; label: string
   }
 }
 
+    case 'last_year':
+      return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `${year - 1} Full Year`, isFuture: false }
+    case 'last_q1':
+      return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 2, 31, 23, 59, 59), label: `Q1 ${year - 1}`, isFuture: false }
+    case 'last_q2':
+      return { start: new Date(year - 1, 3, 1), end: new Date(year - 1, 5, 30, 23, 59, 59), label: `Q2 ${year - 1}`, isFuture: false }
+    case 'last_q3':
+      return { start: new Date(year - 1, 6, 1), end: new Date(year - 1, 8, 30, 23, 59, 59), label: `Q3 ${year - 1}`, isFuture: false }
+    case 'last_q4':
+      return { start: new Date(year - 1, 9, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `Q4 ${year - 1}`, isFuture: false }
+    case 'q1': {
+      const q1Future = quarter < 0;
+      return { start: new Date(year, 0, 1), end: quarter > 0 ? new Date(year, 2, 31, 23, 59, 59) : now, label: `Q1 ${year}`, isFuture: false }
+    }
+    case 'q2': {
+      return { start: new Date(year, 3, 1), end: quarter > 1 ? new Date(year, 5, 30, 23, 59, 59) : quarter === 1 ? now : new Date(year, 5, 30, 23, 59, 59), label: `Q2 ${year}`, isFuture: quarter < 1 }
+    }
+    case 'q3': {
+      return { start: new Date(year, 6, 1), end: quarter > 2 ? new Date(year, 8, 30, 23, 59, 59) : quarter === 2 ? now : new Date(year, 8, 30, 23, 59, 59), label: `Q3 ${year}`, isFuture: quarter < 2 }
+    }
+    case 'q4': {
+      return { start: new Date(year, 9, 1), end: quarter === 3 ? now : new Date(year, 11, 31, 23, 59, 59), label: `Q4 ${year}`, isFuture: quarter < 3 }
+    }
+    default:
+      return { start: new Date(year, 0, 1), end: now, label: `${year} Year to Date`, isFuture: false }
 export default function AdminDashboard() {
   const [prospects, setProspects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
