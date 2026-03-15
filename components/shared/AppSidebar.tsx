@@ -42,7 +42,8 @@ const adminNav: NavItem[] = [
 
 const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard, disabled: true },
-  { href: '/agent/form-responses', label: 'Transactions', icon: Receipt },
+  { href: '/agent/transactions', label: 'Transactions', icon: Receipt, disabled: true },
+  { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
   { href: '/agent/roster', label: 'Roster', icon: FileText },
