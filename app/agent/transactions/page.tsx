@@ -28,10 +28,13 @@ export default function AgentTransactionsPage() {
     try {
       const { data, error } = await supabase
         .from('transactions')
-        .select('id, created_at, updated_at, property_address, status, compliance_status, client_name, sales_price, monthly_rent, processing_fee_type_id, closing_date, move_in_date, processing_fee_types(name, is_lease)')
+        .select('id, created_at, updated_at, property_address, status, compliance_status, client_name, sales_price, monthly_rent, closing_date, move_in_date, transaction_type')
         .eq('submitted_by', userId)
         .order('updated_at', { ascending: false })
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
       setTransactions(data || [])
     } catch (error) { console.error('Error fetching transactions:', error) }
     finally { setLoading(false) }
@@ -62,8 +65,7 @@ export default function AgentTransactionsPage() {
   }), [transactions])
 
   const formatPrice = (t: any) => {
-    const isLease = t.processing_fee_types?.is_lease
-    const amount = isLease ? t.monthly_rent : t.sales_price
+    const amount = t.monthly_rent || t.sales_price
     if (!amount) return ''
     return `$${parseFloat(amount).toLocaleString()}`
   }
@@ -131,7 +133,7 @@ export default function AgentTransactionsPage() {
                       <td className="py-3 px-4">
                         <p className="text-sm font-semibold text-luxury-gray-1">{t.property_address || 'No address'}</p>
                       </td>
-                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{t.processing_fee_types?.name || ''}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{t.transaction_type || ''}</td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{t.client_name || ''}</td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{formatPrice(t)}</td>
                       <td className="py-3 px-4"><StatusBadge status={t.status as TransactionStatus} /></td>
@@ -151,7 +153,7 @@ export default function AgentTransactionsPage() {
                     <span className="flex-shrink-0 ml-2"><StatusBadge status={t.status as TransactionStatus} /></span>
                   </div>
                   <div className="text-xs text-luxury-gray-3 space-y-0.5">
-                    <p>{t.processing_fee_types?.name}{t.client_name ? ` · ${t.client_name}` : ''}</p>
+                    <p>{t.transaction_type}{t.client_name ? ` · ${t.client_name}` : ''}</p>
                     {formatPrice(t) && <p>{formatPrice(t)}</p>}
                   </div>
                 </div>
