@@ -56,7 +56,7 @@ export default function AdminDashboard() {
           <ContentCard>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-luxury-gray-1">Compliance Requested</p>
-              <span className="text-xs font-semibold text-luxury-gray-1 bg-luxury-gray-5/40 px-2.5 py-1 rounded">0</span>
+              <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
             </div>
             <p className="text-xs text-luxury-gray-3">No transactions awaiting compliance review</p>
           </ContentCard>
@@ -65,15 +65,15 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-3 gap-4 h-full">
             <ContentCard>
               <p className="text-xs font-semibold text-luxury-gray-3 mb-1">New Prospects</p>
-              <p className="text-2xl font-semibold text-luxury-gray-1">{stats.new}</p>
+              <p className="text-2xl font-semibold text-luxury-accent">{stats.new}</p>
             </ContentCard>
             <ContentCard>
               <p className="text-xs font-semibold text-luxury-gray-3 mb-1">Contacted</p>
-              <p className="text-2xl font-semibold text-luxury-gray-1">{stats.contacted}</p>
+              <p className="text-2xl font-semibold text-luxury-accent">{stats.contacted}</p>
             </ContentCard>
             <ContentCard>
               <p className="text-xs font-semibold text-luxury-gray-3 mb-1">Total Prospects</p>
-              <p className="text-2xl font-semibold text-luxury-gray-1">{stats.total}</p>
+              <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
             </ContentCard>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default function AdminDashboard() {
           <ContentCard>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-luxury-gray-1">Approved - CDA Needed</p>
-              <span className="text-xs font-semibold text-luxury-gray-1 bg-luxury-gray-5/40 px-2.5 py-1 rounded">0</span>
+              <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
             </div>
             <p className="text-xs text-luxury-gray-3">No transactions ready for CDA</p>
           </ContentCard>
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
           <ContentCard>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-luxury-gray-1">Contact Submissions</p>
-              <span className="text-xs font-semibold text-luxury-gray-1 bg-luxury-gray-5/40 px-2.5 py-1 rounded">0</span>
+              <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
             </div>
             <p className="text-xs text-luxury-gray-3">No new contact submissions</p>
           </ContentCard>
@@ -107,7 +107,7 @@ export default function AdminDashboard() {
           <ContentCard>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-luxury-gray-1">Eligible for Payout</p>
-              <span className="text-xs font-semibold text-luxury-gray-1 bg-luxury-gray-5/40 px-2.5 py-1 rounded">0</span>
+              <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
             </div>
             <p className="text-xs text-luxury-gray-3">No transactions eligible for payout</p>
           </ContentCard>
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
           <ContentCard>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold text-luxury-gray-1">Broker Approval Pending</p>
-              <span className="text-xs font-semibold text-luxury-gray-1 bg-luxury-gray-5/40 px-2.5 py-1 rounded">0</span>
+              <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
             </div>
             <p className="text-xs text-luxury-gray-3">No CDAs awaiting broker approval</p>
           </ContentCard>
@@ -145,7 +145,7 @@ export default function AdminDashboard() {
                     </div>
                     <Link
                       href={`/admin/prospects/${prospect.id}`}
-                      className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                      className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
                     >
                       View
                     </Link>
