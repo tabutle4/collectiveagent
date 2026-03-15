@@ -132,7 +132,7 @@ export interface Transaction {
 export interface ProcessingFeeType {
   id: string
   name: string
-  fee_amount: number
+  processing_fee: number
   fee_type: string
   is_lease: boolean
   counts_toward_cap: boolean

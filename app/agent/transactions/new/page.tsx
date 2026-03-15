@@ -317,7 +317,7 @@ export default function CreateTransactionPage() {
               closingDate={form.closing_date}
               moveInDate={form.move_in_date}
               expediteRequested={form.expedite_requested}
-              processingFee={selectedType?.fee_amount || 0}
+              processingFee={selectedType?.processing_fee || 0}
               onClose={() => setShowMobileRight(false)}
             />
           </div>
@@ -340,7 +340,7 @@ function SlideType({ types, selected, onSelect }: { types: ProcessingFeeType[]; 
           <button key={type.id} onClick={() => onSelect(type)} className={selected === type.id ? 'type-card-selected' : 'type-card'}>
             <p className="text-sm font-semibold text-luxury-gray-1">{type.name}</p>
             <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-xs text-luxury-gray-3">Fee: {type.fee_amount > 0 ? `$${type.fee_amount}` : 'None'}</span>
+              <span className="text-xs text-luxury-gray-3">Fee: {type.processing_fee > 0 ? `$${type.processing_fee}` : 'None'}</span>
               {type.is_lease && <span className="text-xs text-blue-600">Lease</span>}
               {type.additional_fee_description && <span className="text-xs text-luxury-gray-3">+ {type.additional_fee_description}</span>}
             </div>
@@ -358,7 +358,7 @@ function SlideProperty({ form, onChange }: { form: TransactionForm; onChange: Fo
       <div className="space-y-4">
         <div><label className="field-label">Property Address</label><input className="input-luxury" value={form.property_address} onChange={(e) => onChange('property_address', e.target.value)} placeholder="123 Main St, Houston, TX 77001" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="field-label">Unit / Suite (optional)</label><input className="input-luxury" value={form.property_unit} onChange={(e) => onChange('property_unit', e.target.value)} placeholder="Apt 4B" /></div>
+          <div><label className="field-label">Unit / Suite</label><input className="input-luxury" value={form.property_unit} onChange={(e) => onChange('property_unit', e.target.value)} placeholder="Apt 4B" /></div>
           <div><label className="field-label">Lead Source</label>
             <select className="select-luxury" value={form.lead_source} onChange={(e) => onChange('lead_source', e.target.value)}>
               <option value="">Select...</option>
@@ -366,8 +366,8 @@ function SlideProperty({ form, onChange }: { form: TransactionForm; onChange: Fo
             </select>
           </div>
         </div>
-        <div><label className="field-label">MLS Link (optional)</label><input className="input-luxury" value={form.mls_link} onChange={(e) => onChange('mls_link', e.target.value)} placeholder="https://..." /></div>
-        <div><label className="field-label">Notes (optional)</label><textarea className="textarea-luxury" rows={3} value={form.notes} onChange={(e) => onChange('notes', e.target.value)} placeholder="Any additional notes..." /></div>
+        <div><label className="field-label">MLS Link</label><input className="input-luxury" value={form.mls_link} onChange={(e) => onChange('mls_link', e.target.value)} placeholder="https://..." /></div>
+        <div><label className="field-label">Notes</label><textarea className="textarea-luxury" rows={3} value={form.notes} onChange={(e) => onChange('notes', e.target.value)} placeholder="Any additional notes..." /></div>
       </div>
     </div>
   )
