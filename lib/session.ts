@@ -1,13 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 
-const SESSION_SECRET = process.env.SESSION_SECRET!
 const SESSION_DURATION = 8 * 60 * 60 // 8 hours in seconds
-
-if (!SESSION_SECRET) {
-  throw new Error('Missing env.SESSION_SECRET')
-}
-
-const secret = new TextEncoder().encode(SESSION_SECRET)
 
 export interface SessionUser {
   id: string
@@ -27,6 +20,7 @@ export interface Session {
 }
 
 export async function createSessionToken(user: SessionUser, sessionId: string): Promise<string> {
+  const secret = new TextEncoder().encode(process.env.SESSION_SECRET!)
   return new SignJWT({ user, sessionId })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -36,6 +30,7 @@ export async function createSessionToken(user: SessionUser, sessionId: string): 
 
 export async function verifySessionToken(token: string): Promise<Session | null> {
   try {
+    const secret = new TextEncoder().encode(process.env.SESSION_SECRET!)
     const { payload } = await jwtVerify(token, secret)
     return payload as unknown as Session
   } catch {
