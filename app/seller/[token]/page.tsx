@@ -78,22 +78,20 @@ export default function SellerDashboard() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-luxury-light">
-        <LuxuryHeader />
-        <div className="pt-24 px-4"><div className="max-w-5xl mx-auto">
+      <div className="min-h-screen bg-luxury-light pt-24 px-4">
+        <div className="max-w-5xl mx-auto">
           <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading your dashboard...</p>
           </div>
-        </div></div>
+        </div>
       </div>
     )
   }
   
   if (error || !coordination || !listing) {
     return (
-      <div className="min-h-screen bg-luxury-light">
-        <LuxuryHeader />
-        <div className="pt-24 px-4"><div className="max-w-5xl mx-auto">
+      <div className="min-h-screen bg-luxury-light pt-24 px-4">
+        <div className="max-w-5xl mx-auto">
           <div className="container-card text-center py-12">
             <h2 className="text-xl font-medium mb-4 text-luxury-gray-1">Access Denied</h2>
             <p className="text-luxury-gray-2 mb-6">
@@ -103,7 +101,7 @@ export default function SellerDashboard() {
               Please contact your listing agent for a new access link.
             </p>
           </div>
-        </div></div>
+        </div>
       </div>
     )
   }
@@ -332,8 +330,8 @@ export default function SellerDashboard() {
             </a>
           </p>
         </div>
-      </div>
     </div>
+    </>
   )
 }
 

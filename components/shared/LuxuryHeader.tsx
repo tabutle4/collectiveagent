@@ -1,4 +1,8 @@
-export default function LuxuryHeader() {
+interface LuxuryHeaderProps {
+  showTrainingCenter?: boolean
+}
+
+export default function LuxuryHeader({ showTrainingCenter = true }: LuxuryHeaderProps) {
   return (
     <header className="header-luxury fixed top-0 left-0 right-0 z-50">
       <div className="flex items-center space-x-2 md:space-x-4">
@@ -6,9 +10,11 @@ export default function LuxuryHeader() {
         <img src="/logo.png" alt="Collective Realty Co." className="hidden md:block" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
         <span className="header-title">COLLECTIVE AGENT</span>
       </div>
-      <a href="https://office.collectiverealtyco.com" target="_blank" rel="noopener noreferrer" className="header-subtitle">
-        Training Center
-      </a>
+      {showTrainingCenter && (
+        <a href="https://office.collectiverealtyco.com" target="_blank" rel="noopener noreferrer" className="header-subtitle">
+          Training Center
+        </a>
+      )}
     </header>
   )
 }
