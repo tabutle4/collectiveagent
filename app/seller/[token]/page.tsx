@@ -333,7 +333,6 @@ export default function SellerDashboard() {
           </p>
         </div>
       </div>
-      </div>
     </div>
   )
 }
