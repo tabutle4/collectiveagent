@@ -427,8 +427,8 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       )}
 
       {/* Template Settings */}
-      <div className="card-section space-y-6">
-        <h3 className="text-lg font-medium tracking-luxury">Template Settings</h3>
+      <div className="container-card space-y-6">
+        <h3 className="text-lg font-medium tracking-wide">Template Settings</h3>
         
         <div className="grid md:grid-cols-2 gap-6">
           <div>
@@ -531,8 +531,8 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       </div>
 
       {/* Variable Helper */}
-      <div className="card-section">
-        <h3 className="text-lg font-medium tracking-luxury mb-4">Available Variables</h3>
+      <div className="container-card">
+        <h3 className="text-lg font-medium tracking-wide mb-4">Available Variables</h3>
         <p className="text-sm text-luxury-gray-2 mb-4">
           Click a variable to insert it into your HTML content at the cursor position
         </p>
@@ -568,9 +568,9 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       </div>
 
       {/* HTML Editor / Preview */}
-      <div className="card-section">
+      <div className="container-card">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium tracking-luxury">Email Content</h3>
+          <h3 className="text-lg font-medium tracking-wide">Email Content</h3>
           <div className="flex gap-2">
             <button
               onClick={() => setActiveTab('code')}
@@ -605,7 +605,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
                 <button
                   type="button"
                   onClick={() => setHtmlEditMode(true)}
-                  className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
+                  className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
                 >
                   Edit HTML
                 </button>
@@ -691,7 +691,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
             handleSave()
           }}
           disabled={saving || !name?.trim() || !subjectLine?.trim() || !htmlContent?.trim()}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Saving...' : template ? 'Update Template' : 'Save Template'}
         </button>

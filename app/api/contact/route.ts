@@ -4,7 +4,8 @@ import { sendContactEmail } from '@/lib/email'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, userName, userEmail } = body
+    const { message,
+      subject, userName, userEmail } = body
 
     if (!message || !userName || !userEmail) {
       return NextResponse.json(
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
 
     await sendContactEmail({
       message,
+      subject,
       userName,
       userEmail,
     })

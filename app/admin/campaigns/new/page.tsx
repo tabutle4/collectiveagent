@@ -245,7 +245,7 @@ export default function NewCampaignPage() {
           ← Back to Campaigns
         </Link>
         
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-5 md:mb-8" >
+        <h2 className="text-xl md:text-2xl font-semibold tracking-wide mb-5 md:mb-8" >
           Create New Campaign
         </h2>
       </div>
@@ -256,7 +256,7 @@ export default function NewCampaignPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="card-section">
+      <form onSubmit={handleSubmit} className="container-card">
         <div className="space-y-6">
           {/* Campaign Name */}
           <div>
@@ -409,11 +409,11 @@ Collective Realty Co."
           <button
             type="submit"
             disabled={loading}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating...' : 'Create Campaign'}
           </button>
-          <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+          <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
             Cancel
           </Link>
         </div>

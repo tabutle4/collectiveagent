@@ -185,9 +185,9 @@ export default function UploadWeeklyReportPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading...</p>
           </div>
         </div>
@@ -197,13 +197,13 @@ export default function UploadWeeklyReportPage() {
   
   if (!coordination || !listing) {
     return (
-      <div className="min-h-screen bg-luxury-light py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+      <div className="">
+        <div className="">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2 mb-4">Coordination not found</p>
             <button
               onClick={() => router.push('/admin/coordination')}
-              className="px-6 py-2.5 text-sm rounded transition-colors btn-black"
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-primary"
             >
               Back to Dashboard
             </button>
@@ -214,9 +214,9 @@ export default function UploadWeeklyReportPage() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+    <div className="">
+      <div className="">
+        <div className="container-card">
           <div className="mb-6">
             <button
               onClick={() => router.push(`/admin/coordination/${coordinationId}`)}
@@ -224,7 +224,7 @@ export default function UploadWeeklyReportPage() {
             >
               ← Back to Coordination
             </button>
-            <h1 className="text-2xl font-light tracking-luxury mb-2">
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
               Upload Weekly Reports
             </h1>
             <p className="text-sm text-luxury-gray-2">
@@ -291,7 +291,7 @@ export default function UploadWeeklyReportPage() {
                     />
                     <label
                       htmlFor="file1-input"
-                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-black cursor-pointer"
+                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-primary cursor-pointer"
                     >
                       Choose File
                     </label>
@@ -343,7 +343,7 @@ export default function UploadWeeklyReportPage() {
                     />
                     <label
                       htmlFor="file2-input"
-                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-black cursor-pointer"
+                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-primary cursor-pointer"
                     >
                       Choose File
                     </label>
@@ -368,7 +368,7 @@ export default function UploadWeeklyReportPage() {
               <button
                 type="button"
                 onClick={() => router.push(`/admin/coordination/${coordinationId}`)}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
               >
                 Cancel
               </button>
@@ -378,7 +378,7 @@ export default function UploadWeeklyReportPage() {
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed'
-                    : 'btn-black'
+                    : 'btn-primary'
                 }`}
               >
                 {uploading ? (

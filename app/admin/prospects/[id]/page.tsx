@@ -68,7 +68,7 @@ export default function ProspectDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Prospect not found</p>
-        <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+        <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
           Back to Prospects
         </Link>
       </div>
@@ -112,7 +112,7 @@ export default function ProspectDetailPage() {
               <button
                 onClick={updateStatus}
                 disabled={updating}
-                className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {updating ? 'Updating...' : 'Update Status'}
               </button>

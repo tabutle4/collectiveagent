@@ -529,7 +529,7 @@ export default function AgentFormResponsesPage() {
                 <button
                   onClick={handleRequestUpdate}
                   disabled={requestingUpdate || !updateMessage.trim()}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {requestingUpdate ? 'Sending...' : 'Send Update Request'}
                 </button>

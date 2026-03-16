@@ -97,7 +97,7 @@ export default function RegisterPage() {
     <PageContainer>
 
       
-      <div className="max-w-md mx-auto px-6 py-16">
+      <div className="max-w-md mx-auto py-16">
         <h2 className="text-2xl font-light text-center mb-4 tracking-luxury">
           Create First Admin Account
         </h2>
@@ -224,7 +224,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-black w-full"
+            className="btn btn-primary w-full"
           >
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>

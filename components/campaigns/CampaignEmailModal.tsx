@@ -330,7 +330,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-luxury-gray-5">
-          <h2 className="text-xl font-light tracking-luxury">Preview & Send Campaign Email</h2>
+          <h2 className="text-xl font-light tracking-wide">Preview & Send Campaign Email</h2>
           <button
             onClick={onClose}
             className="text-luxury-gray-2 hover:text-luxury-black text-2xl leading-none"
@@ -518,7 +518,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
         <div className="flex items-center justify-end gap-4 p-6 border-t border-luxury-gray-5">
           <button
             onClick={onClose}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={sending}
           >
             Cancel
@@ -526,7 +526,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
           <button
             onClick={handleSend}
             disabled={sending || !selectedTemplate}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? 'Sending...' : 'Send Emails'}
           </button>

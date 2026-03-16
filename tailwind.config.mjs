@@ -19,6 +19,7 @@ const config = {
           'gray-4': '#aaaaaa',
           'gray-5': '#cccccc',
           'light': '#F9F9F9',
+          'page-bg': '#EBEBEB',
           white: '#ffffff',
           accent: '#C5A278',
         },

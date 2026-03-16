@@ -1349,17 +1349,18 @@ export default function FormResponsesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-7xl mx-auto">
+    <>
+    
+      
         <div className="card-section mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="text-2xl font-light tracking-luxury mb-4 md:mb-0">
+            <h1 className="page-title">
               Form Responses
             </h1>
             <div className="flex gap-2">
               <button
                 onClick={() => setCreateFormModalOpen(true)}
-                className="px-4 py-2 text-sm rounded transition-colors btn-black flex items-center gap-2"
+                className="btn btn-primary flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 Create New Form
@@ -1367,7 +1368,7 @@ export default function FormResponsesPage() {
               {(activeTab === 'pre-listing' || activeTab === 'just-listed') && (
                 <button
                   onClick={handleCreateNew}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   Create New Response
@@ -1376,7 +1377,7 @@ export default function FormResponsesPage() {
               {activeTab === 'prospects' && (
                 <button
                   onClick={handleExportProspects}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1385,7 +1386,7 @@ export default function FormResponsesPage() {
               {activeTab === 'pre-listing' && (
                 <button
                   onClick={handleExportPreListing}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1394,7 +1395,7 @@ export default function FormResponsesPage() {
               {activeTab === 'just-listed' && (
                 <button
                   onClick={handleExportJustListed}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-white flex items-center gap-2"
+                  className="btn btn-secondary flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
                   Export CSV
@@ -1969,7 +1970,6 @@ export default function FormResponsesPage() {
             )}
           </div>
         )}
-      </div>
 
       {/* Side Modal */}
       {modalOpen && selectedResponse && (
@@ -1993,7 +1993,7 @@ export default function FormResponsesPage() {
                 {!isEditing ? (
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="px-4 py-2 text-sm rounded transition-colors btn-black"
+                    className="px-4 py-2 text-sm rounded transition-colors btn-primary"
                   >
                     Edit
                   </button>
@@ -2004,7 +2004,7 @@ export default function FormResponsesPage() {
                         setIsEditing(false)
                         setEditData({ ...selectedResponse })
                       }}
-                      className="px-4 py-2 text-sm rounded transition-colors btn-white"
+                      className="px-4 py-2 text-sm rounded transition-colors btn-secondary"
                       disabled={saving}
                     >
                       Cancel
@@ -2012,7 +2012,7 @@ export default function FormResponsesPage() {
                     <button
                       onClick={handleSave}
                       disabled={saving}
-                      className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                      className="px-4 py-2 text-sm rounded transition-colors btn-primary disabled:opacity-50"
                     >
                       {saving ? 'Saving...' : 'Save'}
                     </button>
@@ -3344,7 +3344,7 @@ export default function FormResponsesPage() {
               <div className="flex justify-end gap-4 pt-6 border-t border-luxury-gray-5">
                 <button
                   onClick={() => setCreateModalOpen(false)}
-                  className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                  className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
                   disabled={creating}
                 >
                   Cancel
@@ -3352,7 +3352,7 @@ export default function FormResponsesPage() {
                 <button
                   onClick={handleCreateSubmit}
                   disabled={creating}
-                  className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                  className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50"
                 >
                   {creating ? 'Creating...' : 'Create Form Response'}
                 </button>
@@ -3443,7 +3443,7 @@ export default function FormResponsesPage() {
                     setCreateFormModalOpen(false)
                     setNewFormDefinition({ name: '', description: '', form_type: 'pre-listing' })
                   }}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-white"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-secondary"
                   disabled={creatingForm}
                 >
                   Cancel
@@ -3451,7 +3451,7 @@ export default function FormResponsesPage() {
                 <button
                   onClick={editingForm ? handleUpdateForm : handleCreateForm}
                   disabled={creatingForm || !newFormDefinition.name || !newFormDefinition.form_type}
-                  className="px-4 py-2 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                  className="px-4 py-2 text-sm rounded transition-colors btn-primary disabled:opacity-50"
                 >
                   {creatingForm 
                     ? (editingForm ? 'Updating...' : 'Creating...') 
@@ -3463,7 +3463,6 @@ export default function FormResponsesPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
-

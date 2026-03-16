@@ -218,7 +218,7 @@ export default function CampaignDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Campaign not found</p>
-        <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white inline-block">
+        <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
           Back to Campaigns
         </Link>
       </div>
@@ -239,12 +239,12 @@ export default function CampaignDetailPage() {
         </Link>
         
         <div className="flex items-center justify-between mb-4 md:mb-6">
-          <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
+          <h2 className="text-xl md:text-2xl font-semibold tracking-wide" >
             {campaign.name}
           </h2>
           <Link
             href={`/admin/campaigns/builder/${params.id}`}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Edit Campaign Design
           </Link>
@@ -266,7 +266,7 @@ export default function CampaignDetailPage() {
               </p>
               <button
                 onClick={() => setEditingDeadline(true)}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary"
               >
                 Edit Deadline
               </button>
@@ -318,7 +318,7 @@ export default function CampaignDetailPage() {
                   }
                 }}
                 disabled={savingDeadline}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingDeadline ? 'Saving...' : 'Save'}
               </button>
@@ -333,7 +333,7 @@ export default function CampaignDetailPage() {
                   }
                 }}
                 disabled={savingDeadline}
-                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
@@ -345,7 +345,7 @@ export default function CampaignDetailPage() {
             onClick={() => {
               window.open(`/api/campaigns/${params.id}/export-pdf`, '_blank')
             }}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-gold text-white hover:opacity-90"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center bg-luxury-accent text-white hover:opacity-90"
           >
             📄 Export PDF Report
           </button>
@@ -370,7 +370,7 @@ export default function CampaignDetailPage() {
                 alert(error.message || 'Failed to duplicate campaign')
               }
             }}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
           >
             📋 Duplicate for Next Year
           </button>
@@ -407,31 +407,31 @@ export default function CampaignDetailPage() {
       {/* Stats Overview */}
       {stats && (
         <div className="grid md:grid-cols-5 gap-4 mb-8">
-          <div className="card-section text-center">
+          <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Total Recipients</p>
             <p className="text-3xl font-light text-luxury-accent">
               {stats.total_recipients || 0}
             </p>
           </div>
-          <div className="card-section text-center">
+          <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Fully Completed</p>
             <p className="text-3xl font-light text-luxury-accent">
               {stats.fully_complete || 0}
             </p>
           </div>
-          <div className="card-section text-center">
+          <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">In Progress</p>
             <p className="text-3xl font-light text-luxury-accent">
               {(stats.total_recipients || 0) - (stats.fully_complete || 0)}
             </p>
           </div>
-          <div className="card-section text-center">
+          <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Attending Luncheon</p>
             <p className="text-3xl font-light text-luxury-accent">
               {attending.length}
             </p>
           </div>
-          <div className="card-section text-center">
+          <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Not Attending</p>
             <p className="text-3xl font-light text-luxury-accent">
               {notAttending.length}
@@ -441,8 +441,8 @@ export default function CampaignDetailPage() {
       )}
 
       {/* Event Staff Email & RSVP Sender */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Send RSVP List to Event Staff</h3>
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">Send RSVP List to Event Staff</h3>
         <div className="flex gap-4">
           <input
             type="email"
@@ -451,13 +451,13 @@ export default function CampaignDetailPage() {
             placeholder="event@venue.com"
             className="input-luxury flex-1"
           />
-          <button onClick={saveEventStaffEmail} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-white">
+          <button onClick={saveEventStaffEmail} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary">
             Save Email
           </button>
           <button
             onClick={sendRsvpList}
             disabled={sendingRsvp || !eventStaffEmail}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sendingRsvp ? 'Sending...' : 'Send RSVP List'}
           </button>
@@ -467,8 +467,8 @@ export default function CampaignDetailPage() {
         </p>
       </div>
       {/* Send Campaign Emails */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Send Campaign Emails</h3>
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">Send Campaign Emails</h3>
         
         <div className="space-y-4">
           <p className="text-sm text-luxury-gray-2">
@@ -477,7 +477,7 @@ export default function CampaignDetailPage() {
           
           <button
             onClick={() => setEmailModalOpen(true)}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Preview & Send Emails
           </button>
@@ -523,9 +523,9 @@ export default function CampaignDetailPage() {
         />
       )}
       {/* Token Generator */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Campaign Tokens</h3>
-        <button onClick={generateTokens} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black">
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">Campaign Tokens</h3>
+        <button onClick={generateTokens} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary">
           Generate Tokens for All Active Agents
         </button>
         <p className="text-xs text-luxury-gray-2 mt-2">
@@ -534,8 +534,8 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Migrate Profile Updates */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Migrate Profile Updates</h3>
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">Migrate Profile Updates</h3>
         <p className="text-sm text-luxury-gray-2 mb-4">
           If profile updates from this campaign failed to sync to user profiles, use this to push them from campaign_responses to the users table.
         </p>
@@ -607,8 +607,8 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Agent Progress List */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">Agent Progress ({agents.length} agents)</h3>
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">Agent Progress ({agents.length} agents)</h3>
         
         {agents.length === 0 ? (
           <p className="text-luxury-gray-2 text-center py-8">
@@ -645,7 +645,7 @@ export default function CampaignDetailPage() {
                           <div className="flex items-center gap-2">
                             <div className="w-24 h-2 bg-luxury-gray-5 rounded">
                               <div
-                                className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-gold'}`}
+                                className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-accent'}`}
                                 style={{ width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}` }}
                               />
                             </div>
@@ -708,7 +708,7 @@ export default function CampaignDetailPage() {
                               setSelectedAgent(agent)
                               setResponseModalOpen(true)
                             }}
-                            className="text-sm px-3 py-1 rounded transition-colors text-center btn-black"
+                            className="text-sm px-3 py-1 rounded transition-colors text-center btn-primary"
                           >
                             View Responses
                           </button>
@@ -724,8 +724,8 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* RSVP Details */}
-      <div className="card-section mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">
+      <div className="container-card mb-8">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">
           Luncheon RSVPs ({attending.length} attending)
         </h3>
         
@@ -750,8 +750,8 @@ export default function CampaignDetailPage() {
       </div>
 
       {/* Feedback Survey Summary */}
-      <div className="card-section">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">
+      <div className="container-card">
+        <h3 className="text-lg font-medium mb-4 tracking-wide">
           Feedback Survey Summary ({surveys.length} responses)
         </h3>
         
@@ -766,7 +766,7 @@ export default function CampaignDetailPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-48 h-3 bg-luxury-gray-5 rounded">
                     <div
-                      className="h-full bg-luxury-gold rounded"
+                      className="h-full bg-luxury-accent rounded"
                       style={{ 
                         width: `${(surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length / 10) * 100}%` 
                       }}

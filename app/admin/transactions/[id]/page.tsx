@@ -2393,7 +2393,7 @@ export default function TransactionDetailPage() {
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
         {saving && (
-          <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded text-sm z-50">
+          <div className="fixed top-4 right-4 bg-luxury-gray-1 text-white px-4 py-2 rounded text-sm z-50">
             Saving...
           </div>
         )}
@@ -2779,7 +2779,7 @@ export default function TransactionDetailPage() {
               </div>
               <button 
                 onClick={openAddAgentModal}
-                className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 flex items-center gap-2 text-sm"
+                className="btn btn-primary text-sm flex items-center gap-2"
               >
                 <Plus size={16} />
                 Add Agent
@@ -3577,7 +3577,7 @@ export default function TransactionDetailPage() {
                 <h1 className="text-xl font-medium text-gray-900">Contacts</h1>
                 <p className="text-sm text-gray-500">Manage contacts on this transaction</p>
               </div>
-              <button className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 flex items-center gap-2 text-sm">
+              <button className="btn btn-primary text-sm flex items-center gap-2">
                 <Plus size={16} />
                 Add Contact
               </button>
@@ -3587,7 +3587,7 @@ export default function TransactionDetailPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                 <Users size={32} className="mx-auto text-gray-300 mb-3" />
                 <p className="text-gray-500 mb-4">No contacts added to this transaction</p>
-                <button className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 text-sm">
+                <button className="btn btn-primary text-sm">
                   Add First Contact
                 </button>
               </div>
@@ -3712,7 +3712,7 @@ export default function TransactionDetailPage() {
                 <h1 className="text-xl font-medium text-gray-900">Documents</h1>
                 <p className="text-sm text-gray-500">Manage transaction documents</p>
               </div>
-              <button className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 flex items-center gap-2 text-sm">
+              <button className="btn btn-primary text-sm flex items-center gap-2">
                 <Plus size={16} />
                 Upload Document
               </button>
@@ -3891,7 +3891,7 @@ export default function TransactionDetailPage() {
                   // If not a fixed fee plan and role requires fee, require processing fee type selection
                   return !hasFixedFee && !roleHasNoFee && !selectedProcessingFeeType
                 })()}
-                className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {addingAgent ? 'Adding...' : 'Add Agent'}
               </button>
@@ -4203,7 +4203,7 @@ export default function TransactionDetailPage() {
                   }
                 }}
                 disabled={addingExternalBrokerage || (!selectedExistingBrokerage && !newBrokerageForm.brokerage_name)}
-                className="px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {addingExternalBrokerage ? 'Adding...' : 'Add Brokerage'}
               </button>

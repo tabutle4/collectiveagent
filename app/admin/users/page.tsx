@@ -1,484 +1,337 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
-import { Search, ChevronDown } from 'lucide-react'
+import { Search, ChevronDown, ExternalLink, Download } from 'lucide-react'
 
 export default function AdminUsersPage() {
+  const router = useRouter()
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedUser, setSelectedUser] = useState<any>(null)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [createModalOpen, setCreateModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
+  useEffect(() => { fetchUsers() }, [])
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, roles, is_active, created_at, headshot_url')
-        .order('created_at', { ascending: false })
-
+      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false })
       if (error) throw error
-      
       setUsers(data || [])
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching users:', error)
-      setLoading(false)
-    }
+    } catch (error) { console.error('Error fetching users:', error) }
+    finally { setLoading(false) }
   }
 
-  const handleEditUser = async (user: any) => {
-    try {
-      // Always fetch fresh user data from database before opening modal
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (error) throw error
-      
-      // Update the user in the list with fresh data (including is_active)
-      setUsers(prevUsers => prevUsers.map(u => u.id === data.id ? { ...u, is_active: data.is_active } : u))
-      
-      setSelectedUser(data)
-      setModalOpen(true)
-    } catch (error) {
-      console.error('Error fetching user details:', error)
-      alert('Failed to load user details')
-    }
+  const getRoles = (user: any): string[] => {
+    if (!user.roles) return []
+    if (Array.isArray(user.roles)) return user.roles.map((r: string) => r.toLowerCase())
+    try { const parsed = JSON.parse(user.roles); return Array.isArray(parsed) ? parsed.map((r: string) => r.toLowerCase()) : [] }
+    catch { return [] }
   }
 
-  const handleUserSaved = async (updatedUser: any) => {
-    // Refresh the entire users list from database to ensure we have the latest data
-    await fetchUsers()
-    setModalOpen(false)
-    setSelectedUser(null)
+  const getDisplayRole = (user: any): string => {
+    const roles = getRoles(user)
+    if (roles.includes('broker')) return 'Broker'
+    if (roles.includes('admin')) return 'Admin'
+    if (roles.includes('operations')) return 'Operations'
+    if (roles.includes('tc')) return 'TC'
+    if (roles.includes('team_lead')) return 'Team Lead'
+    if (roles.includes('agent')) return 'Agent'
+    return roles[0] || ''
   }
 
-  // Get unique roles from all users
+  const getAdditionalRoles = (user: any): string => {
+    const roles = getRoles(user)
+    const primary = getDisplayRole(user).toLowerCase().replace(' ', '_')
+    return roles.filter(r => r !== primary && r !== 'agent').map(r => r.replace('_', ' ')).join(', ')
+  }
+
+  const getSocialLinks = (user: any): string => {
+    const links: string[] = []
+    if (user.instagram_handle) links.push(`IG: ${user.instagram_handle}`)
+    if (user.tiktok_handle) links.push(`TT: ${user.tiktok_handle}`)
+    if (user.threads_handle) links.push(`Threads: ${user.threads_handle}`)
+    if (user.linkedin_url) links.push('LinkedIn')
+    if (user.facebook_url) links.push('Facebook')
+    if (user.youtube_url) links.push('YouTube')
+    return links.join(', ')
+  }
+
   const allRoles = useMemo(() => {
     const rolesSet = new Set<string>()
-    users.forEach(user => {
-      if (user.role) {
-        rolesSet.add(user.role)
-      }
-    })
+    users.forEach(user => { getRoles(user).forEach(role => rolesSet.add(role)) })
     return Array.from(rolesSet).sort()
   }, [users])
 
-  // Filter and sort users
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = [...users]
-
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(user => {
         const fullName = `${user.preferred_first_name} ${user.preferred_last_name}`.toLowerCase()
         const legalName = `${user.first_name} ${user.last_name}`.toLowerCase()
         const email = user.email?.toLowerCase() || ''
-        return fullName.includes(query) || legalName.includes(query) || email.includes(query)
+        const office = user.office?.toLowerCase() || ''
+        const team = user.team_name?.toLowerCase() || ''
+        return fullName.includes(query) || legalName.includes(query) || email.includes(query) || office.includes(query) || team.includes(query)
       })
     }
-
-    // Role filter
-    if (roleFilter !== 'all') {
-      filtered = filtered.filter(user => 
-        user.role === roleFilter
-      )
-    }
-
-    // Status filter
+    if (roleFilter !== 'all') filtered = filtered.filter(user => getRoles(user).includes(roleFilter))
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
     }
-
-    // Sort
     filtered.sort((a, b) => {
-      let aValue: any
-      let bValue: any
-
+      let aValue: any, bValue: any
       switch (sortBy) {
         case 'name':
           aValue = `${a.preferred_first_name} ${a.preferred_last_name}`.toLowerCase()
           bValue = `${b.preferred_first_name} ${b.preferred_last_name}`.toLowerCase()
+          break
+        case 'email':
+          aValue = (a.email || '').toLowerCase()
+          bValue = (b.email || '').toLowerCase()
+          break
+        case 'office':
+          aValue = (a.office || '').toLowerCase()
+          bValue = (b.office || '').toLowerCase()
+          break
+        case 'role':
+          aValue = getDisplayRole(a).toLowerCase()
+          bValue = getDisplayRole(b).toLowerCase()
+          break
+        case 'team_name':
+          aValue = (a.team_name || '').toLowerCase()
+          bValue = (b.team_name || '').toLowerCase()
+          break
+        case 'status':
+          aValue = a.is_active ? 'active' : 'inactive'
+          bValue = b.is_active ? 'active' : 'inactive'
           break
         case 'created_at':
           aValue = new Date(a.created_at).getTime()
           bValue = new Date(b.created_at).getTime()
           break
         default:
-          aValue = a[sortBy]
-          bValue = b[sortBy]
+          aValue = (a[sortBy] || '').toString().toLowerCase()
+          bValue = (b[sortBy] || '').toString().toLowerCase()
       }
-
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1
       if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1
       return 0
     })
-
     return filtered
   }, [users, searchQuery, roleFilter, statusFilter, sortBy, sortOrder])
 
-  // Counts for filters
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { all: users.length }
-    allRoles.forEach(role => {
-      counts[role] = users.filter(user => 
-        user.role === role
-      ).length
-    })
+    allRoles.forEach(role => { counts[role] = users.filter(user => getRoles(user).includes(role)).length })
     return counts
   }, [users, allRoles])
 
-  const statusCounts = useMemo(() => {
-    return {
-      all: users.length,
-      active: users.filter(u => u.is_active).length,
-      inactive: users.filter(u => !u.is_active).length,
-    }
-  }, [users])
+  const statusCounts = useMemo(() => ({
+    all: users.length,
+    active: users.filter(u => u.is_active).length,
+    inactive: users.filter(u => !u.is_active).length,
+  }), [users])
 
   const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortBy(field)
-      setSortOrder('asc')
-    }
+    if (sortBy === field) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(field); setSortOrder('asc') }
   }
 
-  if (loading) {
-    return <div className="text-center py-12 text-luxury-gray-2">Loading...</div>
+  const SortHeader = ({ field, children }: { field: string; children: React.ReactNode }) => (
+    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort(field)}>
+      <div className="flex items-center gap-1">{children} {sortBy === field && <ChevronDown size={14} className={`transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />}</div>
+    </th>
+  )
+
+  const exportCSV = () => {
+    const headers = ['Agent Name', 'Email', 'Office', 'Role', 'Additional Roles', 'Team', 'Phone', 'Birthday', 'Social Media', 'Division', 'License #', 'MLS ID', 'Association', 'Commission Plan', 'Status', 'Join Date']
+    const rows = filteredAndSortedUsers.map(user => [
+      `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`,
+      user.email || '', user.office || '', getDisplayRole(user), getAdditionalRoles(user),
+      user.team_name || '', user.personal_phone || '', user.birth_month || '',
+      getSocialLinks(user), user.division || '', user.license_number || '',
+      user.mls_id || '', user.association || '', user.commission_plan || '',
+      user.is_active ? 'Active' : 'Inactive', user.join_date ? new Date(user.join_date).toLocaleDateString() : '',
+    ])
+    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => {
+      const str = cell?.toString() || ''
+      return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
+    }).join(','))].join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `agents-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    URL.revokeObjectURL(url)
   }
+
+  const exportPDF = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    const tableRows = filteredAndSortedUsers.map(user => {
+      const headshot = user.headshot_url
+        ? `<img src="${user.headshot_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;object-position:top center;" />`
+        : `<div style="width:32px;height:32px;border-radius:50%;background:#C5A278;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600;">${(user.preferred_first_name || user.first_name || '?')[0]}${(user.preferred_last_name || user.last_name || '?')[0]}</div>`
+      return `<tr>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${headshot}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;font-weight:600;">${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.office || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getDisplayRole(user)}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getAdditionalRoles(user) || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.team_name || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.personal_phone || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.birth_month || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getSocialLinks(user) || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.division || ''}</td>
+      </tr>`
+    }).join('')
+    const filterDesc = [roleFilter !== 'all' ? `Role: ${roleFilter}` : '', statusFilter !== 'all' ? `Status: ${statusFilter}` : '', searchQuery ? `Search: "${searchQuery}"` : ''].filter(Boolean).join(' | ') || 'All agents'
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Agents - Collective Realty Co.</title>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+      body{font-family:'Montserrat',sans-serif;padding:30px;color:#1A1A1A;font-size:10px;}
+      h1{font-size:16px;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;font-weight:600;}
+      .subtitle{font-size:10px;color:#555;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;}
+      th{text-align:left;padding:6px 5px;border-bottom:2px solid #1A1A1A;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#555;font-weight:600;}
+      @media print{body{padding:15px;} @page{size:landscape;margin:0.4in;}}</style></head>
+      <body><h1>Collective Realty Co. Agent Roster</h1>
+      <p class="subtitle">${filteredAndSortedUsers.length} agents | ${filterDesc} | ${new Date().toLocaleDateString()}</p>
+      <table><thead><tr><th></th><th>Agent Name</th><th>Email</th><th>Office</th><th>Role</th><th>Add'l Roles</th><th>Team</th><th>Phone</th><th>Birthday</th><th>Social</th><th>Division</th></tr></thead>
+      <tbody>${tableRows}</tbody></table></body></html>`)
+    printWindow.document.close()
+    printWindow.onload = () => printWindow.print()
+  }
+
+  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5 md:mb-8">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury" >
-          Users ({filteredAndSortedUsers.length}{filteredAndSortedUsers.length !== users.length ? ` of ${users.length}` : ''})
-        </h2>
-        <button
-          onClick={() => {
-            setSelectedUser(null)
-            setModalOpen(true)
-          }}
-          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-black"
-        >
-          + Create User
-        </button>
-      </div>
-
-      {/* Search Bar */}
-      <div className="mb-4 md:mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3" size={18} />
-          <input
-            type="text"
-            placeholder="Search by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-luxury-gray-5 rounded focus:outline-none focus:ring-1 focus:ring-luxury-black focus:border-luxury-black"
-          />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+        <h1 className="page-title">
+          AGENTS ({statusCounts.active} Active)
+        </h1>
+        <div className="flex flex-wrap gap-2">
+          <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5"><ExternalLink size={14} /> Roster</a>
+          <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5"><Download size={14} /> CSV</button>
+          <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5"><Download size={14} /> PDF</button>
+          <button onClick={() => setCreateModalOpen(true)} className="btn btn-primary">+ Create User</button>
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="mb-4 md:mb-6 -mx-6 px-6 md:mx-0 md:px-0">
-        {/* Role Filters */}
-        <div className="mb-3">
-          <div className="text-xs text-luxury-gray-2 mb-2 font-medium">Filter by Role:</div>
-          <div className="grid grid-cols-2 md:flex md:flex-row gap-2 md:gap-2">
-            <button
-              onClick={() => setRoleFilter('all')}
-              className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium ${
-                roleFilter === 'all'
-                  ? 'bg-luxury-black text-white'
-                  : 'btn-white'
-              }`}
-            >
-              <span>All</span>
-              <span className="text-[11px] md:text-xs font-normal opacity-80">({roleCounts.all})</span>
-            </button>
-            {allRoles.map((role) => (
-              <button
-                key={role}
-                onClick={() => setRoleFilter(role)}
-                className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium capitalize ${
-                  roleFilter === role
-                    ? 'bg-luxury-black text-white'
-                    : 'btn-white'
-                }`}
-              >
-                <span>{role}</span>
-                <span className="text-[11px] md:text-xs font-normal opacity-80">({roleCounts[role] || 0})</span>
-              </button>
-            ))}
+      <div className="container-card">
+        <div className="flex flex-col md:flex-row gap-4 mb-5">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3" size={18} />
+            <input type="text" placeholder="Search by name, email, office, team..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input-luxury pl-10" />
+          </div>
+          <div className="flex gap-3">
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="select-luxury">
+              <option value="all">All Roles ({roleCounts.all})</option>
+              {allRoles.map((role) => (<option key={role} value={role} className="capitalize">{role.replace('_', ' ')} ({roleCounts[role] || 0})</option>))}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select-luxury">
+              {Object.entries(statusCounts).map(([status, count]) => (<option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)} ({count})</option>))}
+            </select>
           </div>
         </div>
 
-        {/* Status Filters */}
-        <div>
-          <div className="text-xs text-luxury-gray-2 mb-2 font-medium">Filter by Status:</div>
-          <div className="grid grid-cols-2 md:flex md:flex-row gap-2 md:gap-2">
-            {Object.entries(statusCounts).map(([status, count]) => {
-              const label = status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)
-              const isActive = statusFilter === status
-              return (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors flex items-center justify-center gap-1 font-medium ${
-                    isActive
-                      ? 'bg-luxury-black text-white'
-                      : 'btn-white'
-                  }`}
-                >
-                  <span>{label}</span>
-                  <span className="text-[11px] md:text-xs font-normal opacity-80">({count})</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Sort Controls */}
-      <div className="mb-4 md:mb-6 flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-luxury-gray-2 font-medium">Sort by:</span>
-        <div className="flex gap-2 flex-wrap">
-          {[
-            { value: 'name', label: 'Name' },
-            { value: 'created_at', label: 'Created Date' },
-          ].map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSort(option.value)}
-              className={`px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-1 ${
-                sortBy === option.value
-                  ? 'bg-luxury-black text-white'
-                  : 'btn-white'
-              }`}
-            >
-              <span>{option.label}</span>
-              {sortBy === option.value && (
-                <ChevronDown 
-                  size={14} 
-                  className={sortOrder === 'desc' ? 'rotate-180' : ''} 
-                />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="card-section mb-6">
-        <p className="text-base text-luxury-gray-2">
-          <strong>Note:</strong> office@collectiverealtyco.com is hardcoded to receive all admin notifications.
-        </p>
-        <p className="text-base text-luxury-gray-2 mt-2">
-          All users listed below with admin role also receive prospect notifications.
-        </p>
-      </div>
-
-      {users.length === 0 ? (
-        <div className="card-section text-center py-12">
-          <p className="text-luxury-gray-2">No users yet</p>
-        </div>
-      ) : filteredAndSortedUsers.length === 0 ? (
-        <div className="card-section text-center py-12">
-          <p className="text-luxury-gray-2">No users match your search criteria</p>
-        </div>
-      ) : (
-        <>
-          {/* Desktop Table */}
-          <div className="hidden md:block bg-white shadow-md rounded overflow-hidden">
-            <div className="overflow-x-auto">
+        {users.length === 0 ? (
+          <div className="text-center py-12"><p className="text-sm text-luxury-gray-3">No users yet</p></div>
+        ) : filteredAndSortedUsers.length === 0 ? (
+          <div className="text-center py-12"><p className="text-sm text-luxury-gray-3">No users match your filters</p></div>
+        ) : (
+          <>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-luxury-light">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury cursor-pointer hover:bg-luxury-gray-5 transition-colors"
-                        onClick={() => handleSort('name')}>
-                      <div className="flex items-center gap-2">
-                        Name
-                        {sortBy === 'name' && (
-                          <ChevronDown 
-                            size={14} 
-                            className={sortOrder === 'desc' ? 'rotate-180' : ''} 
-                          />
-                        )}
-                      </div>
-                    </th>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury">
-                      Email
-                    </th>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury">
-                      Roles
-                    </th>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury cursor-pointer hover:bg-luxury-gray-5 transition-colors"
-                        onClick={() => handleSort('created_at')}>
-                      <div className="flex items-center gap-2">
-                        Created
-                        {sortBy === 'created_at' && (
-                          <ChevronDown 
-                            size={14} 
-                            className={sortOrder === 'desc' ? 'rotate-180' : ''} 
-                          />
-                        )}
-                      </div>
-                    </th>
-                    <th className="px-6 py-4 text-left text-base font-medium text-luxury-gray-1 tracking-luxury">
-                      Actions
-                    </th>
+                <thead>
+                  <tr className="border-b border-luxury-gray-5/50">
+                    <SortHeader field="name">Name</SortHeader>
+                    <SortHeader field="email">Email</SortHeader>
+                    <SortHeader field="office">Office</SortHeader>
+                    <SortHeader field="role">Role</SortHeader>
+                    <SortHeader field="team_name">Team</SortHeader>
+                    <SortHeader field="status">Status</SortHeader>
+                    <SortHeader field="created_at">Created</SortHeader>
+                    <th className="py-3 px-4"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-luxury-gray-5">
+                <tbody>
                   {filteredAndSortedUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-luxury-light transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-luxury-gray-1">
-                          {user.preferred_first_name} {user.preferred_last_name}
-                        </div>
-                        <div className="text-xs text-luxury-gray-3">
-                          Legal: {user.first_name} {user.last_name}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-luxury-gray-2">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {user.role && (
-                            <span
-                              className="inline-block px-2 py-1 text-xs tracking-wide rounded bg-luxury-dark-3 text-white"
-                            >
-                              {user.role}
-                            </span>
+                    <tr key={user.id} className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer" onClick={() => router.push(`/admin/users/${user.id}`)}>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          {user.headshot_url ? (
+                            <img src={user.headshot_url} alt="" className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                              {(user.preferred_first_name || user.first_name || '?')[0]}{(user.preferred_last_name || user.last_name || '?')[0]}
+                            </div>
                           )}
+                          <div>
+                            <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
+                            <p className="text-xs text-luxury-gray-3">{user.first_name} {user.last_name}</p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className={`
-                          inline-block px-3 py-1 text-xs tracking-wide rounded
-                          ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
-                        `}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                      <td className="py-3 px-4 text-sm text-luxury-gray-2">{user.email}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.office || ''}</td>
+                      <td className="py-3 px-4"><span className="text-xs text-luxury-gray-2 capitalize">{getDisplayRole(user)}</span></td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.team_name || ''}</td>
+                      <td className="py-3 px-4">
+                        <span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
                       </td>
-                      <td className="px-6 py-4 text-luxury-gray-2 text-base">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleEditUser(user)}
-                          className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white"
-                        >
-                          Edit
-                        </button>
-                      </td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-3">{new Date(user.created_at).toLocaleDateString()}</td>
+                      <td className="py-3 px-4"><span className="text-xs text-luxury-accent">View</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {/* Mobile Cards */}
-          <div className="md:hidden space-y-4">
-            {filteredAndSortedUsers.map((user) => (
-              <div
-                key={user.id}
-                className="bg-white border border-luxury-gray-5 rounded shadow-sm p-4"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="font-medium text-luxury-gray-1">
-                      {user.preferred_first_name} {user.preferred_last_name}
-                    </div>
-                    <div className="text-xs text-luxury-gray-3">
-                      {user.first_name} {user.last_name}
-                    </div>
-                  </div>
-                  <span className={`
-                    inline-block px-2 py-1 text-xs tracking-wide rounded
-                    ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}
-                  `}>
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <div className="text-base text-luxury-gray-2 space-y-1">
-                  <div>{user.email}</div>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {user.role && (
-                      <span
-                        className="inline-block px-2 py-1 text-xs uppercase tracking-wide rounded bg-luxury-dark-3 text-white"
-                      >
-                        {user.role}
-                      </span>
+            <div className="md:hidden space-y-3">
+              {filteredAndSortedUsers.map((user) => (
+                <div key={user.id} className="inner-card cursor-pointer" onClick={() => router.push(`/admin/users/${user.id}`)}>
+                  <div className="flex items-start gap-3">
+                    {user.headshot_url ? (
+                      <img src={user.headshot_url} alt="" className="w-10 h-10 rounded-full object-cover object-top flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+                        {(user.preferred_first_name || user.first_name || '?')[0]}{(user.preferred_last_name || user.last_name || '?')[0]}
+                      </div>
                     )}
-                  </div>
-                  <div className="text-base mt-2">
-                    Created: {new Date(user.created_at).toLocaleDateString()}
-                  </div>
-                  <div className="mt-3">
-                    <button
-                      onClick={() => handleEditUser(user)}
-                      className="px-2.5 md:px-4 py-2 text-xs md:text-sm rounded transition-colors text-center btn-white w-full"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-semibold text-luxury-gray-1">{user.preferred_first_name} {user.preferred_last_name}</p>
+                        <span className={`text-xs font-medium flex-shrink-0 ml-2 ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
+                      </div>
+                      <div className="space-y-0.5 text-xs text-luxury-gray-3 mt-1">
+                        <p>{user.email}</p>
+                        <p className="capitalize">{getDisplayRole(user)}{user.office ? ` · ${user.office}` : ''}{user.team_name ? ` · ${user.team_name}` : ''}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
-      {modalOpen && (
+      {createModalOpen && (
         <AdminUserProfileModal
-          user={selectedUser || undefined}
-          onClose={() => {
-            setModalOpen(false)
-            setSelectedUser(null)
-          }}
-          onSaved={(updatedUser) => {
-            if (selectedUser) {
-              // Update existing user
-              handleUserSaved(updatedUser)
-            } else {
-              // Add new user to list
-              setUsers([updatedUser, ...users])
-              setModalOpen(false)
-              setSelectedUser(null)
-            }
-          }}
+          onClose={() => setCreateModalOpen(false)}
+          onSaved={(newUser) => { setUsers([newUser, ...users]); setCreateModalOpen(false) }}
         />
       )}
-
-      <div className="card-section mt-8">
-        <h3 className="text-lg font-medium mb-4 tracking-luxury">
-          Adding New Admin Users
-        </h3>
-        <p className="text-base text-luxury-gray-2">
-          Additional admin user management features will be added in future updates. For now, you can add users directly through the Supabase dashboard or contact support.
-        </p>
-      </div>
     </div>
   )
 }

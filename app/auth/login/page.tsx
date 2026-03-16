@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import AuthFooter from '@/components/shared/AuthFooter'
 
 function LoginForm() {
   const router = useRouter()
@@ -169,6 +170,7 @@ export default function LoginPage() {
         </div>
       </div>
 
+      <AuthFooter />
     </div>
   )
 }

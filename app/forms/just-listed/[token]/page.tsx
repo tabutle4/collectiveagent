@@ -519,7 +519,7 @@ export default function PublicJustListedForm() {
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   loading 
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed' 
-                    : 'btn-black'
+                    : 'btn-primary'
                 }`}
               >
                 {loading ? (

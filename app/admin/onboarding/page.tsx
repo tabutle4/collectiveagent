@@ -366,7 +366,7 @@ export default function OnboardingManagementPage() {
               <button
                 onClick={handleUnlockAll}
                 disabled={unlockingAll || stats.locked === 0}
-                className="px-4 py-2 text-sm rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <Unlock className="w-4 h-4" />
                 {unlockingAll ? 'Unlocking...' : 'Unlock Everyone'}
@@ -402,7 +402,7 @@ export default function OnboardingManagementPage() {
                   className={`px-3 py-1.5 text-xs rounded transition-colors ${
                     filterStatus === filter.value
                       ? 'bg-luxury-black text-white'
-                      : 'btn-white'
+                      : 'btn-secondary'
                   }`}
                 >
                   {filter.label}
@@ -557,7 +557,7 @@ export default function OnboardingManagementPage() {
                               handleUnlock(user.id)
                             }}
                             disabled={unlocking === user.id}
-                            className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             <Unlock className="w-4 h-4" />
                             {unlocking === user.id ? 'Unlocking...' : 'Unlock Checklist'}
@@ -570,7 +570,7 @@ export default function OnboardingManagementPage() {
                               handleLock(user.id)
                             }}
                             disabled={unlocking === user.id}
-                            className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             <Lock className="w-4 h-4" />
                             {unlocking === user.id ? 'Locking...' : 'Lock Checklist'}

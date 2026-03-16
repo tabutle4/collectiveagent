@@ -107,9 +107,9 @@ export default function ActivateCoordinationPage() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+    <div className="">
+      <div className="">
+        <div className="container-card">
           <div className="mb-6">
             <button
               onClick={() => router.push('/admin/coordination')}
@@ -117,7 +117,7 @@ export default function ActivateCoordinationPage() {
             >
               ← Back to Dashboard
             </button>
-            <h1 className="text-2xl font-light tracking-luxury">
+            <h1 className="text-xl font-semibold text-luxury-gray-1">
               Activate Listing Coordination
             </h1>
           </div>
@@ -270,14 +270,14 @@ export default function ActivateCoordinationPage() {
               <button
                 type="button"
                 onClick={() => router.push('/admin/coordination')}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-white"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || !selectedListing}
-                className="px-6 py-2.5 text-sm rounded transition-colors btn-black disabled:opacity-50"
+                className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50"
               >
                 {loading ? 'Activating...' : 'Activate Coordination'}
               </button>

@@ -31,7 +31,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-luxury-gray-5">
           <div>
-            <h3 className="text-2xl font-light tracking-luxury">
+            <h3 className="text-2xl font-light tracking-wide">
               Campaign Responses
             </h3>
             <p className="text-sm text-luxury-gray-2 mt-1">
@@ -52,7 +52,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
             {/* Profile Updates Section */}
             {Object.keys(profileUpdates).length > 0 && (
               <div>
-                <h4 className="text-lg font-medium mb-4 tracking-luxury border-b border-luxury-gray-5 pb-2">
+                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
                   Profile Updates (Step 2)
                 </h4>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -201,7 +201,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
             {/* Commission Plan Section */}
             {campaignResponse?.commission_plan_2026 && (
               <div>
-                <h4 className="text-lg font-medium mb-4 tracking-luxury border-b border-luxury-gray-5 pb-2">
+                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
                   Commission Plan Selection
                 </h4>
                 <div>
@@ -219,7 +219,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
             {/* RSVP Section */}
             {campaignResponse && campaignResponse.attending_luncheon !== null && campaignResponse.attending_luncheon !== undefined && (
               <div>
-                <h4 className="text-lg font-medium mb-4 tracking-luxury border-b border-luxury-gray-5 pb-2">
+                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
                   Luncheon RSVP (Step 3)
                 </h4>
                 <div>
@@ -240,7 +240,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
             {/* Survey Section */}
             {campaignResponse && (campaignResponse.support_rating || campaignResponse.work_preference) && (
               <div>
-                <h4 className="text-lg font-medium mb-4 tracking-luxury border-b border-luxury-gray-5 pb-2">
+                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
                   Feedback Survey (Step 4)
                 </h4>
                 {campaignResponse.support_rating && (
@@ -249,7 +249,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div className="flex items-center gap-2 mt-1">
                       <div className="w-48 h-2 bg-luxury-gray-5 rounded">
                         <div
-                          className="h-full bg-luxury-gold rounded"
+                          className="h-full bg-luxury-accent rounded"
                           style={{ width: `${(campaignResponse.support_rating / 10) * 100}%` }}
                         />
                       </div>
@@ -290,7 +290,7 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
         <div className="flex justify-end px-6 py-4 border-t border-luxury-gray-5">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded transition-colors text-center btn-black"
+            className="px-4 py-2 text-sm rounded transition-colors text-center btn-primary"
           >
             Close
           </button>
