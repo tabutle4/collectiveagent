@@ -111,7 +111,7 @@ export default function SellerDashboard() {
     <LuxuryHeader showTrainingCenter={false} />
     <div className="min-h-screen bg-luxury-light pt-24 px-4">
       <div className="max-w-5xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-8 text-center">
           <h1 className="page-title mb-1">Your Listing Dashboard</h1>
           <p className="text-sm text-luxury-gray-3">{listing.property_address}</p>
         </div>
