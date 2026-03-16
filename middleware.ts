@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
 '/api/forms',
 '/roster',
 '/agent-roster.html',
+'/seller',
 ]
 
 const ADMIN_PATHS = ['/admin']
