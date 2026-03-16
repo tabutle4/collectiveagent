@@ -93,19 +93,20 @@
 
   /* Headers */
   .header-luxury {
-    @apply bg-luxury-dark-3 text-white py-8 px-6 text-center;
+    @apply bg-white border-b border-luxury-gray-5 flex items-center justify-between px-4;
+    height: 80px;
   }
 
   .header-title {
-    @apply text-base font-medium tracking-widest uppercase text-white;
+    @apply text-luxury-gray-1 text-sm md:text-lg tracking-[0.2em] md:tracking-[0.25em] font-semibold;
   }
 
   .header-subtitle {
-    @apply text-xs tracking-wide text-luxury-gray-5 mt-1;
+    @apply text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors font-semibold;
   }
 
   .header-divider {
-    @apply w-12 h-px bg-white/30 mx-auto mt-3;
+    @apply hidden;
   }
 
   /* Range Slider */
