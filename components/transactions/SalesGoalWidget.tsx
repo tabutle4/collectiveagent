@@ -38,7 +38,7 @@ export default function SalesGoalWidget({
   const [goalInput, setGoalInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [localActiveGoals, setLocalActiveGoals] = useState<GoalMetric[]>(activeGoals.length > 0 ? activeGoals : ['volume', 'units', 'agent_net'])
+  const [localActiveGoals, setLocalActiveGoals] = useState<GoalMetric[]>(activeGoals.length > 0 ? activeGoals : ['volume', 'agent_net'])
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {

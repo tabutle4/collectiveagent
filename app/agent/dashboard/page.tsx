@@ -17,7 +17,7 @@ export default function AgentDashboard() {
     totalUnits: 0,
     totalAgentNet: 0,
     goals: { volume: 0, units: 0, agent_net: 0 },
-    activeGoals: ['volume', 'units', 'agent_net'] as ('volume' | 'units' | 'agent_net')[],
+    activeGoals: ['volume', 'agent_net'] as ('volume' | 'units' | 'agent_net')[],
     closedCount: 0,
     pendingCount: 0,
     activeCount: 0,
