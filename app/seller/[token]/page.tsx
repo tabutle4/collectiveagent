@@ -107,7 +107,9 @@ export default function SellerDashboard() {
   }
   
   return (
-    <div className="min-h-screen bg-luxury-light py-8 px-4">
+    <>
+    <LuxuryHeader showTrainingCenter={false} />
+    <div className="min-h-screen bg-luxury-light pt-24 px-4">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <h1 className="page-title mb-1">Your Listing Dashboard</h1>
@@ -331,6 +333,7 @@ export default function SellerDashboard() {
           </p>
         </div>
       </div>
+    </div>
     </>
   )
 }
