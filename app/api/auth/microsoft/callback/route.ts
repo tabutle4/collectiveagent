@@ -6,7 +6,7 @@ import { randomUUID } from 'crypto'
 const CLIENT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ID
 const CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/microsoft/callback`
-const ISSUER = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER
+const TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER?.split('/')[3]
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Exchange code for tokens
-    const tokenResponse = await fetch(`${ISSUER}/oauth2/v2.0/token`, {
+    const tokenResponse = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
