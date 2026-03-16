@@ -10,9 +10,10 @@ const PUBLIC_PATHS = [
   '/api/auth/microsoft',
   '/api/auth/microsoft/callback',
   '/api/auth/logout',
-  '/prospective-agent-form',
-  '/api/forms',
-  '/roster',
+'/prospective-agent-form',
+'/api/forms',
+'/roster',
+'/agent-roster.html',
 ]
 
 const ADMIN_PATHS = ['/admin']
