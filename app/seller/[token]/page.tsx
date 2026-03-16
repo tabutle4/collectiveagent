@@ -79,7 +79,7 @@ export default function SellerDashboard() {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
         <div className="max-w-5xl mx-auto">
-          <div className="card-section text-center py-12">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading your dashboard...</p>
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function SellerDashboard() {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
         <div className="max-w-5xl mx-auto">
-          <div className="card-section text-center py-12">
+          <div className="container-card text-center py-12">
             <h2 className="text-xl font-medium mb-4 text-luxury-gray-1">Access Denied</h2>
             <p className="text-luxury-gray-2 mb-6">
               {error || 'This access link is invalid or has expired.'}
@@ -108,13 +108,12 @@ export default function SellerDashboard() {
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-5xl mx-auto">
-        <div className="header-luxury mb-8">
-          <h1 className="header-title">Your Listing Dashboard</h1>
-          <div className="header-divider"></div>
-          <p className="header-subtitle mt-3">{listing.property_address}</p>
+        <div className="mb-8">
+          <h1 className="page-title mb-1">Your Listing Dashboard</h1>
+          <p className="text-sm text-luxury-gray-3">{listing.property_address}</p>
         </div>
         
-        <div className="card-section mb-6">
+        <div className="container-card mb-5">
           <h2 className="text-xl font-light mb-4">
             Welcome, {coordination.seller_name}!
           </h2>
@@ -125,8 +124,8 @@ export default function SellerDashboard() {
         </div>
         
         <div className="grid md:grid-cols-2 gap-6 mb-6">
-          <div className="card-section">
-            <h3 className="text-sm font-medium text-luxury-gold mb-3">Your Listing Agent</h3>
+          <div className="container-card">
+            <h3 className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-3">Your Listing Agent</h3>
             {agentInfo ? (
               <>
                 <p className="text-base font-medium mb-1">{agentInfo.name}</p>
@@ -148,8 +147,8 @@ export default function SellerDashboard() {
             )}
           </div>
           
-          <div className="card-section">
-            <h3 className="text-sm font-medium text-luxury-gold mb-3">Listing & Transaction Coordinator</h3>
+          <div className="container-card">
+            <h3 className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-3">Listing & Transaction Coordinator</h3>
             <p className="text-base font-medium mb-1">Leah Parpan</p>
             <p className="text-sm text-luxury-gray-2 mb-1">
               <a href="mailto:transactions@collectiverealtyco.com" className="hover:text-luxury-black">
@@ -165,21 +164,21 @@ export default function SellerDashboard() {
         </div>
         
         {listing.listing_website_url && (
-          <div className="card-section mb-6">
-            <h3 className="text-sm font-medium text-luxury-gold mb-3">View Your Listing Online</h3>
+          <div className="container-card mb-5">
+            <h3 className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-3">View Your Listing Online</h3>
             <a
               href={listing.listing_website_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block px-6 py-2.5 text-sm rounded transition-colors btn-primary"
+              className="btn btn-primary"
             >
               Visit Listing Website →
             </a>
           </div>
         )}
         
-        <div className="card-section mb-6">
-          <h3 className="text-sm font-medium text-luxury-gold mb-3">Listing Status</h3>
+        <div className="container-card mb-5">
+          <h3 className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-3">Listing Status</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
               <p className="text-xs text-luxury-gray-2 mb-1">Transaction Type</p>
@@ -219,7 +218,7 @@ export default function SellerDashboard() {
           </div>
         </div>
         
-        <div className="card-section">
+        <div className="container-card">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
             <h3 className="text-lg font-medium">Weekly Activity Reports</h3>
             {coordination.onedrive_folder_url && (
@@ -227,7 +226,7 @@ export default function SellerDashboard() {
                 href={coordination.onedrive_folder_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-block px-4 py-2 text-sm rounded transition-colors btn-primary mt-2 md:mt-0"
+                className="btn btn-secondary mt-2 md:mt-0"
               >
                 View Past Reports →
               </a>
@@ -237,7 +236,7 @@ export default function SellerDashboard() {
           {reports.length > 0 && (
             <div className="space-y-4">
               {reports.map((report) => (
-                <div key={report.id} className="bg-luxury-light p-4 rounded">
+                <div key={report.id} className="inner-card">
                   <div className="flex-1">
                     <h4 className="text-base font-medium mb-1">
                       Week of {formatDateRange(report.week_start_date, report.week_end_date)}
@@ -291,7 +290,7 @@ export default function SellerDashboard() {
                             href={report.report_file_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors btn-primary"
+                            className="btn btn-secondary"
                           >
                             Download Showing Report
                           </a>
@@ -301,7 +300,7 @@ export default function SellerDashboard() {
                             href={report.report_file_url_2}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-block px-4 py-2 text-sm text-center rounded transition-colors btn-primary"
+                            className="btn btn-secondary"
                           >
                             Download Traffic Report
                           </a>
