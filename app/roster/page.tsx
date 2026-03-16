@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import PageContainer from '@/components/shared/PageContainer'
-import { supabase } from '@/lib/supabase'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 
 export default function PublicRosterPage() {
   const [htmlContent, setHtmlContent] = useState('')
@@ -198,23 +197,31 @@ export default function PublicRosterPage() {
 
   if (loading) {
     return (
-      <PageContainer includeHeader={false} className="flex items-center justify-center">
-        <p className="text-gray-500">Loading agent roster...</p>
-      </PageContainer>
+      <>
+        <LuxuryHeader />
+        <div className="min-h-screen bg-luxury-light pt-24 px-4 flex items-center justify-center">
+          <p className="text-luxury-gray-3">Loading agent roster...</p>
+        </div>
+      </>
     )
   }
 
   return (
-    <div 
-      className="agent-roster-container"
-      style={{ 
-        margin: '0',
-        padding: '0',
-        width: '100%',
-        overflowX: 'hidden'
-      }}
-      dangerouslySetInnerHTML={{ __html: htmlContent }}
-    />
+    <>
+      <LuxuryHeader />
+      <div className="pt-20">
+        <div 
+          className="agent-roster-container"
+          style={{ 
+            margin: '0',
+            padding: '0',
+            width: '100%',
+            overflowX: 'hidden'
+          }}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      </div>
+    </>
   )
 }
 

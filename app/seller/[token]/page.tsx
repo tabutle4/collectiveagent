@@ -330,7 +330,7 @@ export default function SellerDashboard() {
             </a>
           </p>
         </div>
-    </div>
+      </div>
     </>
   )
 }
