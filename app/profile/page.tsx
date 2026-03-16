@@ -84,10 +84,10 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
     try {
       let targetId = userId
       if (!targetId) {
-        const userStr = localStorage.getItem('user')
-        if (!userStr) { router.push('/auth/login'); return }
-        const userData = JSON.parse(userStr)
-        targetId = userData.id
+        const meRes = await fetch('/api/auth/me')
+        if (!meRes.ok) { router.push('/auth/login'); return }
+        const meData = await meRes.json()
+        targetId = meData.user.id
       }
       const { data, error } = await supabase.from('users').select('*').eq('id', targetId).single()
       if (error) throw error
