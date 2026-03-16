@@ -1,3 +1,0 @@
-{
-  "/api/campaigns/[id]/export-pdf/route": "app/api/campaigns/[id]/export-pdf/route.js"
-}

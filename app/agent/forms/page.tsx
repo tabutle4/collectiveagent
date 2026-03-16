@@ -40,6 +40,22 @@ interface Submission {
 export default function AgentFormsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [forms, setForms] = useState<Form[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,12 +67,9 @@ export default function AgentFormsPage() {
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) { router.push('/auth/login'); return }
     try {
-      const userData = JSON.parse(userStr)
-      setUser(userData)
-      loadSubmissions(userData.id)
+      setUser(user)
+      loadSubmissions(user?.id)
       loadForms()
     } catch (error) {
       console.error('Error parsing user data:', error)
@@ -120,7 +133,7 @@ export default function AgentFormsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          listing_id: selectedSubmission.id, agent_id: user.id,
+          listing_id: selectedSubmission.id, agent_id: user?.id,
           agent_name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`,
           agent_email: user.email, message: updateMessage, property_address: selectedSubmission.property_address,
         }),

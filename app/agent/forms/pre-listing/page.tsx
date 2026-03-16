@@ -6,6 +6,18 @@ import { ServiceConfiguration } from '@/types/listing-coordination'
 
 export default function PreListingForm() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) { router.push('/auth/login'); return }
+        const data = await response.json()
+        setUser(data.user)
+      } catch { router.push('/auth/login') }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [loading, setLoading] = useState(false)
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
   const [agents, setAgents] = useState<Array<{id: string, name: string}>>([])
@@ -52,21 +64,6 @@ export default function PreListingForm() {
         if (data.success && data.agents) {
           setAgents(data.agents)
           // Auto-select logged-in user if they're an agent
-          const userStr = localStorage.getItem('user')
-          if (userStr) {
-            try {
-              const user = JSON.parse(userStr)
-              const agentName = `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim()
-              const matchingAgent = data.agents.find((a: any) => a.id === user.id)
-              if (matchingAgent) {
-                setSelectedAgent(matchingAgent)
-                setAgentSearch(matchingAgent.name)
-                setFormData(prev => ({ ...prev, agent_id: matchingAgent.id, agent_name: matchingAgent.name }))
-              }
-            } catch (error) {
-              console.error('Error parsing user data:', error)
-            }
-          }
         }
       })
       .catch(err => console.error('Error fetching agents:', err))
@@ -111,15 +108,7 @@ export default function PreListingForm() {
     
     try {
       // Get user from localStorage
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        setLoading(false)
-        alert('Please log in to submit this form')
-        router.push('/auth/login')
-        return
-      }
       
-      const user = JSON.parse(userStr)
       
       const response = await fetch('/api/listings/create', {
         method: 'POST',
@@ -127,7 +116,7 @@ export default function PreListingForm() {
         body: JSON.stringify({
           ...formData,
           submission_type: submissionType,
-          user_id: user.id,
+          user_id: user?.id,
         }),
       })
       
@@ -136,7 +125,7 @@ export default function PreListingForm() {
       if (data.success) {
         alert('Pre-listing form submitted successfully!')
         // Redirect to user's dashboard based on role (simple string, not array)
-        if (user.role === 'Admin') {
+        if (user?.role === 'Admin') {
           router.push('/admin/dashboard')
         } else {
           router.push('/forms/success')

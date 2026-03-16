@@ -32,6 +32,22 @@ interface ListingResponse {
 export default function AgentFormResponsesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [listings, setListings] = useState<ListingResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
@@ -41,16 +57,10 @@ export default function AgentFormResponsesPage() {
   const [updateMessage, setUpdateMessage] = useState('')
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) {
-      router.push('/auth/login')
-      return
-    }
 
     try {
-      const userData = JSON.parse(userStr)
-      setUser(userData)
-      loadData(userData.id)
+      setUser(user)
+      loadData(user?.id)
     } catch (error) {
       console.error('Error parsing user data:', error)
       router.push('/auth/login')
@@ -95,7 +105,7 @@ export default function AgentFormResponsesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listing_id: selectedResponse.id,
-          agent_id: user.id,
+          agent_id: user?.id,
           agent_name: user.preferred_first_name && user.preferred_last_name
             ? `${user.preferred_first_name} ${user.preferred_last_name}`
             : `${user.first_name} ${user.last_name}`,

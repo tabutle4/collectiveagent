@@ -31,6 +31,23 @@ interface ChecklistItem {
 
 export default function OnboardingManagementPage() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [users, setUsers] = useState<User[]>([])
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,16 +67,10 @@ export default function OnboardingManagementPage() {
   const checkAdminAccess = async () => {
     try {
       // Check localStorage for user (same auth method as rest of app)
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        router.push('/auth/login')
-        return
-      }
 
-      const userData = JSON.parse(userStr)
 
       // Check role (simple string, not array)
-      if (userData?.role !== 'Admin') {
+      if (user?.role !== 'Admin') {
         router.push('/admin/dashboard')
         return
       }
@@ -88,7 +99,7 @@ export default function OnboardingManagementPage() {
 
       // Filter for users with 'Agent' role (simple string, not array)
       const agents = (usersData || []).filter((user: any) => 
-        user.role === 'Agent'
+        user?.role === 'Agent'
       )
       setUsers(agents as User[])
 
@@ -422,14 +433,14 @@ export default function OnboardingManagementPage() {
             filteredUsers.map((user) => {
               const progress = calculateProgress(user)
               const unlockStatus = getUnlockStatus(user)
-              const isExpanded = expandedUsers[user.id]
+              const isExpanded = expandedUsers[user?.id]
               const preferredName = `${user.preferred_first_name} ${user.preferred_last_name}`
 
               return (
-                <div key={user.id} className="card-section border-2 border-luxury-gray-5">
+                <div key={user?.id} className="card-section border-2 border-luxury-gray-5">
                   <div
                     className="flex items-center justify-between cursor-pointer hover:bg-luxury-light transition-colors p-4"
-                    onClick={() => toggleUserExpanded(user.id)}
+                    onClick={() => toggleUserExpanded(user?.id)}
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">
                       <div className="flex-shrink-0">
@@ -554,32 +565,32 @@ export default function OnboardingManagementPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleUnlock(user.id)
+                              handleUnlock(user?.id)
                             }}
-                            disabled={unlocking === user.id}
+                            disabled={unlocking === user?.id}
                             className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             <Unlock className="w-4 h-4" />
-                            {unlocking === user.id ? 'Unlocking...' : 'Unlock Checklist'}
+                            {unlocking === user?.id ? 'Unlocking...' : 'Unlock Checklist'}
                           </button>
                         )}
                         {user.onboarding_unlocked && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleLock(user.id)
+                              handleLock(user?.id)
                             }}
-                            disabled={unlocking === user.id}
+                            disabled={unlocking === user?.id}
                             className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
                             <Lock className="w-4 h-4" />
-                            {unlocking === user.id ? 'Locking...' : 'Lock Checklist'}
+                            {unlocking === user?.id ? 'Locking...' : 'Lock Checklist'}
                           </button>
                         )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleResetChecklist(user.id)
+                            handleResetChecklist(user?.id)
                           }}
                           className="px-3 py-1.5 text-xs rounded transition-colors text-center bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 flex items-center gap-2"
                         >

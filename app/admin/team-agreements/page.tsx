@@ -43,18 +43,31 @@ interface TeamAgreement {
 export default function TeamAgreementsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [agreements, setAgreements] = useState<TeamAgreement[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'terminated'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) { router.push('/auth/login'); return }
     try {
-      const userData = JSON.parse(userStr)
-      if (userData.role !== 'Admin') { router.push('/auth/login'); return }
-      setUser(userData)
+      if (user?.role !== 'Admin') { router.push('/auth/login'); return }
+      setUser(user)
       loadAgreements()
     } catch (error) {
       console.error('Error parsing user data:', error)

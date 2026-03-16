@@ -8,6 +8,23 @@ import { Send, Mail, Trash2, Loader2, Check } from 'lucide-react'
 
 export default function CoordinationDetailPage() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const params = useParams()
   const coordinationId = params.id as string
   
@@ -71,7 +88,7 @@ export default function CoordinationDetailPage() {
     
     if (!error && data) {
       const agentsList = data.map(user => ({
-        id: user.id,
+        id: user?.id,
         name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim()
       })).sort((a, b) => a.name.localeCompare(b.name))
       setAgents(agentsList)
@@ -141,17 +158,11 @@ export default function CoordinationDetailPage() {
 
     setDeletingReportId(reportId)
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('You must be logged in to delete a report.')
-        return
-      }
-      const user = JSON.parse(userStr)
 
       const response = await fetch('/api/coordination/delete-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId, userId: user.id }),
+        body: JSON.stringify({ reportId, userId: user?.id }),
       })
 
       const data = await response.json()
@@ -269,19 +280,13 @@ export default function CoordinationDetailPage() {
 
     setSaving(true)
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('You must be logged in to regenerate the folder link.')
-        return
-      }
-      const user = JSON.parse(userStr)
 
       const response = await fetch('/api/coordination/regenerate-folder-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           coordinationId,
-          userId: user.id,
+          userId: user?.id,
         }),
       })
 
@@ -309,20 +314,14 @@ export default function CoordinationDetailPage() {
     }
 
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('You must be logged in to delete')
-        return
-      }
 
-      const user = JSON.parse(userStr)
       
       const response = await fetch('/api/coordination/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           coordinationId,
-          userId: user.id,
+          userId: user?.id,
         }),
       })
 

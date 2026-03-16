@@ -262,6 +262,23 @@ function getAdditionalFields(selected: any, formType: string): Array<[string, an
 
 export default function FormResponsesPage() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [prospects, setProspects] = useState<ProspectResponse[]>([])
   const [listings, setListings] = useState<ListingResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -336,7 +353,7 @@ export default function FormResponsesPage() {
       .then(({ data, error }) => {
         if (!error && data) {
           const agentsList = data.map(user => ({
-            id: user.id,
+            id: user?.id,
             name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim()
           })).sort((a, b) => a.name.localeCompare(b.name))
           setAgents(agentsList)
@@ -478,13 +495,7 @@ export default function FormResponsesPage() {
     }
 
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('You must be logged in to delete')
-        return
-      }
 
-      const user = JSON.parse(userStr)
       
       // For prospective agents, use the users/delete endpoint
       if (formType === 'prospective-agent') {
@@ -493,7 +504,7 @@ export default function FormResponsesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: listingId, // For prospects, listingId is actually the user ID
-            requestingUserId: user.id, // Requesting user ID
+            requestingUserId: user?.id, // Requesting user ID
           }),
         })
 
@@ -515,7 +526,7 @@ export default function FormResponsesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             listingId,
-            userId: user.id,
+            userId: user?.id,
           }),
         })
 
@@ -585,20 +596,14 @@ export default function FormResponsesPage() {
     setCreating(true)
     try {
       // Get admin user from localStorage
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        alert('Please log in to create a form response')
-        return
-      }
       
-      const user = JSON.parse(userStr)
       
       const response = await fetch('/api/listings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newFormData,
-          user_id: user.id,
+          user_id: user?.id,
           // Set form completion flags based on active tab
           pre_listing_form_completed: activeTab === 'pre-listing',
           just_listed_form_completed: activeTab === 'just-listed',
@@ -1154,8 +1159,6 @@ export default function FormResponsesPage() {
     setCreatingForm(true)
     
     try {
-      const userStr = localStorage.getItem('user')
-      const user = userStr ? JSON.parse(userStr) : null
       
       const response = await fetch('/api/forms/create', {
         method: 'POST',

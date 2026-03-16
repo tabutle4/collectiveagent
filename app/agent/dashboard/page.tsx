@@ -11,6 +11,22 @@ import { TransactionStatus } from '@/lib/transactions/types'
 export default function AgentDashboard() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalVolume: 0,
@@ -34,14 +50,11 @@ export default function AgentDashboard() {
 
   const loadDashboard = async () => {
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { router.push('/auth/login'); return }
-      const userData = JSON.parse(userStr)
 
       const { data: freshUser } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userData.id)
+        .eq('id', user?.id)
         .single()
 
       if (!freshUser) { router.push('/auth/login'); return }
@@ -141,7 +154,7 @@ export default function AgentDashboard() {
 
       {/* Sales Goal Widget */}
       <SalesGoalWidget
-        userId={user.id}
+        userId={user?.id}
         volume={stats.totalVolume}
         units={stats.totalUnits}
         agentNet={stats.totalAgentNet}

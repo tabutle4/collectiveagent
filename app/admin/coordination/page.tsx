@@ -12,6 +12,23 @@ interface CoordinationWithListing extends ListingCoordination {
 
 export default function AdminCoordinationDashboard() {
   const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [coordinations, setCoordinations] = useState<CoordinationWithListing[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active')
@@ -54,13 +71,10 @@ export default function AdminCoordinationDashboard() {
       return
     }
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { alert('You must be logged in to delete'); return }
-      const user = JSON.parse(userStr)
       const response = await fetch('/api/coordination/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ coordinationId, userId: user.id }),
+        body: JSON.stringify({ coordinationId, userId: user?.id }),
       })
       const data = await response.json()
       if (data.success) {
@@ -83,13 +97,10 @@ export default function AdminCoordinationDashboard() {
   const handleSendAllReports = async (sendNow: boolean) => {
     setSendingReports(true)
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { alert('You must be logged in'); return }
-      const user = JSON.parse(userStr)
       const response = await fetch('/api/coordination/send-all-weekly-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, send_now: sendNow }),
+        body: JSON.stringify({ userId: user?.id, send_now: sendNow }),
       })
       const data = await response.json()
       if (data.success) {
@@ -111,13 +122,10 @@ export default function AdminCoordinationDashboard() {
     if (!scheduleDate || !scheduleTime) { alert('Please select both date and time'); return }
     setScheduling(true)
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { alert('You must be logged in'); return }
-      const user = JSON.parse(userStr)
       const response = await fetch('/api/coordination/update-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, scheduleDate, scheduleTime, applyToAll }),
+        body: JSON.stringify({ userId: user?.id, scheduleDate, scheduleTime, applyToAll }),
       })
       const data = await response.json()
       if (data.success) {

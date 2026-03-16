@@ -10,6 +10,22 @@ import { Edit, Copy, Mail, CheckCircle2 } from 'lucide-react'
 export default function AgentFeeInfoPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [loading, setLoading] = useState(true)
   const [editingOnboardingFee, setEditingOnboardingFee] = useState(false)
   const [editingMonthlyFee, setEditingMonthlyFee] = useState(false)
@@ -27,19 +43,13 @@ export default function AgentFeeInfoPage() {
   const loadUserData = async () => {
     try {
       // Check localStorage for user (same auth method as rest of app)
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        router.push('/auth/login')
-        return
-      }
 
-      const userData = JSON.parse(userStr)
 
       // Fetch fresh user data from database
       const { data: freshUserData, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userData.id)
+        .eq('id', user?.id)
         .single()
 
       if (error) throw error
@@ -120,7 +130,7 @@ export default function AgentFeeInfoPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: user.id,
+          user_id: user?.id,
           amount: total,
           join_date: joinDate,
         }),

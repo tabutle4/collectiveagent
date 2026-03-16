@@ -116,6 +116,22 @@ export default function EditTransactionPage() {
   const txnId = params.id as string
 
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [transaction, setTransaction] = useState<any>(null)
   const [transactionTypes, setTransactionTypes] = useState<ProcessingFeeType[]>([])
   const [agents, setAgents] = useState<any[]>([])
@@ -136,10 +152,7 @@ export default function EditTransactionPage() {
 
   const loadAll = async () => {
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) { router.push('/auth/login'); return }
-      const userData = JSON.parse(userStr)
-      setUser(userData)
+      setUser(user)
 
       const [txnRes, typesRes, agentsRes, teamsRes, contactsRes, intAgentsRes] = await Promise.all([
         supabase.from('transactions').select('*').eq('id', txnId).single(),
@@ -177,8 +190,8 @@ export default function EditTransactionPage() {
       if (clients.length === 0 || !clients[0].name) clients.push({ ...emptyClient })
 
       // Check for intermediary (second agent)
-      const myAgentRow = (intAgentsRes.data || []).find((a: any) => a.agent_id === userData.id)
-      const otherAgentRow = (intAgentsRes.data || []).find((a: any) => a.agent_id !== userData.id)
+      const myAgentRow = (intAgentsRes.data || []).find((a: any) => a.agent_id === user?.id)
+      const otherAgentRow = (intAgentsRes.data || []).find((a: any) => a.agent_id !== user?.id)
       const isIntermediary = txn.representing === 'intermediary' || txn.representation_type === 'intermediary'
 
       // Parse notes (jsonb)
@@ -387,7 +400,7 @@ export default function EditTransactionPage() {
         if (!Array.isArray(existingNotes)) existingNotes = []
         const lastNote = existingNotes[existingNotes.length - 1]
         if (!lastNote || lastNote.text !== form.notes) {
-          existingNotes.push({ text: form.notes, date: new Date().toISOString(), by: user.id })
+          existingNotes.push({ text: form.notes, date: new Date().toISOString(), by: user?.id })
         }
         payload.notes = JSON.stringify(existingNotes)
       }

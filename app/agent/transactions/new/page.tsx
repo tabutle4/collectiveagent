@@ -115,6 +115,22 @@ const emptyForm: TransactionForm = {
 export default function CreateTransactionPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [transactionTypes, setTransactionTypes] = useState<ProcessingFeeType[]>([])
   const [agents, setAgents] = useState<any[]>([])
   const [teams, setTeams] = useState<string[]>([])
@@ -137,12 +153,9 @@ export default function CreateTransactionPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const userStr = localStorage.getItem('user')
-        if (!userStr) { router.push('/auth/login'); return }
-        const userData = JSON.parse(userStr)
-        setUser(userData)
+        setUser(user)
         // Set office from user profile
-        setForm(prev => ({ ...prev, office_location: userData.office || '' }))
+        setForm(prev => ({ ...prev, office_location: user.office || '' }))
 
         const [typesRes, agentsRes, teamsRes] = await Promise.all([
           supabase.from('processing_fee_types').select('*').eq('is_active', true).order('display_order', { ascending: true }),
@@ -263,7 +276,7 @@ export default function CreateTransactionPage() {
     const address = buildPropertyAddress(form.street_address, form.unit_suite, form.city, form.state_code, form.zip_code)
     const primaryClient = form.clients[0]
     return {
-      submitted_by: user.id,
+      submitted_by: user?.id,
       property_address: address || 'Untitled Transaction',
       transaction_type: form.transaction_type_name || null,
       status: 'prospect',
@@ -279,7 +292,7 @@ export default function CreateTransactionPage() {
       client_email: primaryClient?.email?.toLowerCase() || null,
       client_phone: primaryClient?.phone || null,
       lead_source: form.lead_source || null,
-      notes: form.notes ? JSON.stringify([{ text: form.notes, date: new Date().toISOString(), by: user.id }]) : null,
+      notes: form.notes ? JSON.stringify([{ text: form.notes, date: new Date().toISOString(), by: user?.id }]) : null,
       sales_price: form.sales_price ? parseFloat(form.sales_price) : null,
       monthly_rent: form.monthly_rent ? parseFloat(form.monthly_rent) : null,
       gross_commission: form.gross_commission ? parseFloat(form.gross_commission) : null,
@@ -338,7 +351,7 @@ export default function CreateTransactionPage() {
         // Insert primary agent into transaction_internal_agents
         await supabase.from('transaction_internal_agents').insert([{
           transaction_id: data.id,
-          agent_id: user.id,
+          agent_id: user?.id,
           agent_role: form.transaction_type_name.toLowerCase().includes('buyer') ? 'buyer_agent'
             : form.transaction_type_name.toLowerCase().includes('seller') ? 'listing_agent'
             : form.transaction_type_name.toLowerCase().includes('landlord') ? 'listing_agent'

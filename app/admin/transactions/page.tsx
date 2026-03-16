@@ -20,8 +20,6 @@ export default function AdminTransactionsPage() {
   const [transactionTypes, setTransactionTypes] = useState<string[]>([])
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) { router.push('/auth/login'); return }
     fetchData()
   }, [])
 

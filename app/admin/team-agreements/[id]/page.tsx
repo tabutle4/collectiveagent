@@ -99,6 +99,22 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   const isView = id !== 'new' && !isEdit
   
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -120,20 +136,14 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) {
-      router.push('/auth/login')
-      return
-    }
 
     try {
-      const userData = JSON.parse(userStr)
       // Check role (simple string, not array)
-      if (userData.role !== 'Admin') {
+      if (user?.role !== 'Admin') {
         router.push('/auth/login')
         return
       }
-      setUser(userData)
+      setUser(user)
       loadAgents()
       if (id && id !== 'new') {
         loadAgreement()

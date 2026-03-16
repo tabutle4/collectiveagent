@@ -11,17 +11,30 @@ import { STATUS_GROUPS } from '@/lib/transactions/constants'
 export default function AgentTransactionsPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [transactions, setTransactions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) { router.push('/auth/login'); return }
-    const userData = JSON.parse(userStr)
-    setUser(userData)
-    fetchTransactions(userData.id)
+    setUser(user)
+    fetchTransactions(user?.id)
   }, [])
 
   const fetchTransactions = async (userId: string) => {

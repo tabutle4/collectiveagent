@@ -15,6 +15,22 @@ export default function UploadWeeklyReportPage() {
   const [coordination, setCoordination] = useState<ListingCoordination | null>(null)
   const [listing, setListing] = useState<Listing | null>(null)
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   
   const [reportDate, setReportDate] = useState('')
   
@@ -25,14 +41,6 @@ export default function UploadWeeklyReportPage() {
   
   useEffect(() => {
     // Get user from localStorage
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr))
-      } catch (error) {
-        console.error('Error parsing user data:', error)
-      }
-    }
     
     loadCoordination()
     setDefaultReportDate()
@@ -154,7 +162,7 @@ export default function UploadWeeklyReportPage() {
         const data = new FormData()
         data.append('coordination_id', coordinationId)
         data.append('listing_id', listing!.id)
-        data.append('user_id', user.id)
+        data.append('user_id', user?.id)
         data.append('report_date', reportDate)
         data.append('report_file_1', file1)
         if (file2) {

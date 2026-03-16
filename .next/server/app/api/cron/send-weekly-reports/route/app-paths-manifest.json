@@ -1,3 +1,0 @@
-{
-  "/api/cron/send-weekly-reports/route": "app/api/cron/send-weekly-reports/route.js"
-}

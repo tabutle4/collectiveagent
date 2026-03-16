@@ -806,6 +806,22 @@ export default function TransactionDetailPage() {
   const initialTab = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'overview'
 
   const [user, setUser] = useState<any>(null)
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          router.push('/auth/login')
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
+    }
+    if (!user) fetchUser()
+  }, [router, user])
   const [transaction, setTransaction] = useState<Transaction | null>(null)
   const [agents, setAgents] = useState<TransactionAgent[]>([])
   const [contacts, setContacts] = useState<TransactionContact[]>([])
@@ -964,19 +980,13 @@ export default function TransactionDetailPage() {
   }, [])
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) {
-      router.push('/auth/login')
-      return
-    }
 
     try {
-      const userData = JSON.parse(userStr)
-      if (userData.role !== 'Admin') {
+      if (user?.role !== 'Admin') {
         router.push('/auth/login')
         return
       }
-      setUser(userData)
+      setUser(user)
       if (transactionId) {
         loadData()
       }
@@ -2175,7 +2185,7 @@ export default function TransactionDetailPage() {
           transaction_id: transaction.id,
           flyer_type: flyerType,
           status: 'requested',
-          requested_by: user.id,
+          requested_by: user?.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
