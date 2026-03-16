@@ -136,16 +136,14 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
 
   useEffect(() => {
-
     if (!user) return
-      loadAgents()
-      if (id && id !== 'new') {
-        loadAgreement()
-      } else {
-        setLoading(false)
-      }
+    loadAgents()
+    if (id && id !== 'new') {
+      loadAgreement()
+    } else {
+      setLoading(false)
     }
-  }, [router, id, isNew])
+  }, [user, id, isNew])
 
   const loadAgents = async () => {
     try {
