@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase'
 import { verifyPassword } from '@/lib/auth'
+import { createSessionToken, getSessionCookieOptions } from '@/lib/session'
+import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +15,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user by email - select role column (TEXT type)
-    const { data: user, error: userError } = await supabase
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, role, is_active, password_hash, first_name, last_name, preferred_first_name, preferred_last_name, reset_token, reset_token_expires')
+      .select('id, email, role, is_active, password_hash, first_name, last_name, preferred_first_name, preferred_last_name')
       .eq('email', email.toLowerCase())
       .single()
 
@@ -27,7 +28,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user is active
     if (!user.is_active) {
       return NextResponse.json(
         { error: 'Account is inactive. Please contact support.' },
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify password
     const isValid = await verifyPassword(password, user.password_hash)
     if (!isValid) {
       return NextResponse.json(
@@ -44,13 +43,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Remove password hash from response
-    const { password_hash, reset_token, reset_token_expires, ...userData } = user
+    // Create session in database
+    const sessionId = randomUUID()
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
 
-    return NextResponse.json({
-      user: userData,
-      message: 'Login successful',
+    await supabaseAdmin.from('sessions').insert({
+      user_id: user.id,
+      session_id: sessionId,
+      expires_at: expiresAt.toISOString(),
+      ip_address: request.headers.get('x-forwarded-for') || null,
+      user_agent: request.headers.get('user-agent') || null,
     })
+
+    const sessionToken = await createSessionToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      preferred_first_name: user.preferred_first_name,
+      preferred_last_name: user.preferred_last_name,
+    }, sessionId)
+
+    const { name, options } = getSessionCookieOptions()
+    const userRole = user.role || ''
+    const redirectPath = userRole === 'admin' || userRole === 'broker' || userRole === 'operations' || userRole === 'tc'
+      ? '/admin/dashboard'
+      : '/agent/dashboard'
+
+    const response = NextResponse.json({
+      message: 'Login successful',
+      redirectTo: redirectPath,
+    })
+
+    response.cookies.set(name, sessionToken, options)
+    return response
+
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(
