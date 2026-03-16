@@ -77,30 +77,29 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   }, [])
 
   useEffect(() => {
-    if (user) return
-    const userStr = localStorage.getItem('user')
-    if (!userStr) {
-      const currentPath = window.location.pathname + window.location.search
-      router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
-      return
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/auth/me')
+        if (!response.ok) {
+          const currentPath = window.location.pathname + window.location.search
+          router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
+          return
+        }
+        const data = await response.json()
+        setUser(data.user)
+      } catch {
+        router.push('/auth/login')
+      }
     }
-    try {
-      const userData = JSON.parse(userStr)
-      const role = userData.role || ''
-      if (isAdmin && role !== 'Admin') { router.push('/auth/login'); return }
-      if (!isAdmin && role !== 'Agent' && role !== 'Admin') { router.push('/auth/login'); return }
-      setUser(userData)
-    } catch (error) {
-      router.push('/auth/login')
-    }
-  }, [router, user, isAdmin])
+    if (!user) fetchUser()
+  }, [router, user])
 
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [pathname])
 
-  const handleLogout = () => {
-    localStorage.removeItem('user')
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/auth/login')
   }
 
