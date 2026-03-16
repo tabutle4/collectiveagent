@@ -33,9 +33,9 @@ export default function AgentTransactionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
-    setUser(user)
+    if (!user) return
     fetchTransactions(user?.id)
-  }, [])
+  }, [user])
 
   const fetchTransactions = async (userId: string) => {
     try {
