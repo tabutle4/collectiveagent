@@ -70,6 +70,7 @@ export default function OnboardingManagementPage() {
 
 
       // Check role (simple string, not array)
+      if (!user) return
       if (user?.role !== 'Admin') {
         router.push('/admin/dashboard')
         return

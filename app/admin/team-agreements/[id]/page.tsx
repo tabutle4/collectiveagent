@@ -137,22 +137,13 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
 
-    try {
-      // Check role (simple string, not array)
-      if (user?.role !== 'Admin') {
-        router.push('/auth/login')
-        return
-      }
-      setUser(user)
+    if (!user) return
       loadAgents()
       if (id && id !== 'new') {
         loadAgreement()
       } else {
         setLoading(false)
       }
-    } catch (error) {
-      console.error('Error parsing user data:', error)
-      router.push('/auth/login')
     }
   }, [router, id, isNew])
 

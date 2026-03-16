@@ -65,15 +65,9 @@ export default function TeamAgreementsPage() {
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
-    try {
-      if (user?.role !== 'Admin') { router.push('/auth/login'); return }
-      setUser(user)
-      loadAgreements()
-    } catch (error) {
-      console.error('Error parsing user data:', error)
-      router.push('/auth/login')
-    }
-  }, [router])
+    if (!user) return
+    loadAgreements()
+  }, [user])
 
   const loadAgreements = async () => {
     setLoading(true)
