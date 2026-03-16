@@ -46,7 +46,7 @@ export default function AgentDashboard() {
   })
   const [recentTransactions, setRecentTransactions] = useState<any[]>([])
 
-  useEffect(() => { loadDashboard() }, [])
+  useEffect(() => { if (user) loadDashboard() }, [user])
 
   const loadDashboard = async () => {
     try {
