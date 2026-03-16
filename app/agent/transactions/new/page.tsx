@@ -151,9 +151,9 @@ export default function CreateTransactionPage() {
   // ===== DATA LOADING =====
 
   useEffect(() => {
+    if (!user) return
     const load = async () => {
       try {
-        setUser(user)
         // Set office from user profile
         setForm(prev => ({ ...prev, office_location: user.office || '' }))
 
