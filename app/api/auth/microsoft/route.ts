@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
-import { createSessionToken, getSessionCookieOptions } from '@/lib/session'
 import { randomUUID } from 'crypto'
 
-const MICROSOFT_TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER
 const CLIENT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ID
-const CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
+const TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER?.split('/')[3]
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/microsoft/callback`
 
 export async function GET(request: NextRequest) {
@@ -19,6 +16,6 @@ export async function GET(request: NextRequest) {
   })
 
   return NextResponse.redirect(
-    `${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?${params.toString()}`
+    `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${params.toString()}`
   )
 }
