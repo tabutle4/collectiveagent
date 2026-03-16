@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
 '/seller',
 '/campaign',
 '/api/seller',
+'/api/campaign',
 ]
 
 const ADMIN_PATHS = ['/admin']
