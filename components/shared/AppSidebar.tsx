@@ -7,7 +7,7 @@ import {
   LayoutDashboard, UserCog, Calendar, Search,
   Briefcase, Receipt, UsersRound, DollarSign,
   Settings, Menu, X, ChevronRight,
-  Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser,
+  Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser, ClipboardList,
   BarChart3
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
@@ -33,6 +33,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
   { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
   { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
+  { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
   { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
@@ -45,6 +46,7 @@ const adminNav: NavItem[] = [
 const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
