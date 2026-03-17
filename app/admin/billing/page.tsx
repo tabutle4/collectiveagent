@@ -229,8 +229,8 @@ export default function AdminBillingPage() {
           <p className="text-2xl font-semibold text-red-500">{stats.monthlyOverdue}</p>
         </div>
         <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Monthly Not Set Up</p>
-          <p className="text-2xl font-semibold text-yellow-500">{stats.monthlyUnpaid}</p>
+          <p className="text-xs text-luxury-gray-3 mb-1">Monthly No Invoice Yet</p>
+          <p className="text-2xl font-semibold text-luxury-accent">{stats.monthlyUnpaid}</p>
         </div>
       </div>
 
@@ -279,7 +279,7 @@ export default function AdminBillingPage() {
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Monthly</p>
                       {monthlyStatus === 'current' && <span className="text-xs text-green-600 font-medium">Current</span>}
                       {monthlyStatus === 'overdue' && <span className="text-xs text-red-500 font-medium">Overdue</span>}
-                      {monthlyStatus === 'unpaid' && <span className="text-xs text-yellow-500 font-medium">Not Set Up</span>}
+                      {monthlyStatus === 'unpaid' && <span className="text-xs text-green-600 font-medium">Current</span>}
                       {monthlyStatus === 'waived' && <span className="text-xs text-luxury-gray-3 font-medium">Waived</span>}
                     </div>
                   </div>

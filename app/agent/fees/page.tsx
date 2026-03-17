@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
 
 declare global {
   interface Window { Payload: any }
@@ -181,8 +181,8 @@ export default function AgentFeesPage() {
             )}
             {monthlyStatus === 'unpaid' && (
               <>
-                <Clock size={18} className="text-yellow-500" />
-                <span className="text-xs font-medium text-yellow-500">Not Set Up</span>
+                <CheckCircle2 size={18} className="text-green-600" />
+                <span className="text-xs font-medium text-green-600">Current</span>
               </>
             )}
           </div>
