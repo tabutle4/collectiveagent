@@ -22,6 +22,11 @@ nextConfig.redirects = async () => [
     destination: 'https://payload.com/pay/12iNY7qfPjXchPl8UUkuFEJ4k3ftqgmmlKY8TwrFz27KKH',
     permanent: false,
   },
+  {
+    source: '/onboarding-checklist',
+    destination: '/agent/checklist',
+    permanent: false,
+  },
 ]
 
 module.exports = nextConfig
