@@ -14,6 +14,10 @@ interface Agent {
   email: string
   status: string
   full_nav_access: boolean
+  onboarding_fee_paid: boolean
+  accepted_trec: boolean
+  independent_contractor_agreement_signed: boolean
+  w9_completed: boolean
 }
 
 interface ChecklistItem {
@@ -65,7 +69,7 @@ export default function AdminOnboardingPage() {
     setLoading(true)
     try {
       const [agentsRes, itemsRes, completionsRes] = await Promise.all([
-        supabase.from('users').select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, status, full_nav_access').eq('status', 'active').order('first_name'),
+        supabase.from('users').select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, status, full_nav_access, onboarding_fee_paid, accepted_trec, independent_contractor_agreement_signed, w9_completed').eq('status', 'active').order('first_name'),
         supabase.from('onboarding_checklist_items').select('id, section, section_title, item_key, label, priority, display_order').eq('is_active', true).order('display_order'),
         supabase.from('onboarding_checklist_completions').select('user_id, checklist_item_id, completed_at, completed_by'),
       ])
@@ -210,6 +214,34 @@ export default function AdminOnboardingPage() {
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
                   <div className="progress-bar">
                     <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                  </div>
+
+                  {/* Pre-Access Steps */}
+                  <div className="inner-card mb-2">
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Pre-Access Steps</p>
+                    <div className="space-y-2">
+                      {[
+                        { field: 'onboarding_fee_paid', label: 'Onboarding Fee Paid' },
+                        { field: 'accepted_trec', label: 'TREC Invitation Accepted' },
+                        { field: 'independent_contractor_agreement_signed', label: 'ICA Signed' },
+                        { field: 'w9_completed', label: 'W-9 Completed' },
+                      ].map(({ field, label }) => {
+                        const isComplete = !!(agent as any)[field]
+                        return (
+                          <div
+                            key={field}
+                            className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors"
+                            onClick={() => togglePreAccessStep(agent.id, field, isComplete)}
+                          >
+                            {isComplete
+                              ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+                              : <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                            }
+                            <span className={`text-xs ${isComplete ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">
