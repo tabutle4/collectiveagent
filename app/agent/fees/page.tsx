@@ -11,6 +11,7 @@ export default function AgentFeesPage() {
   const [loading, setLoading] = useState(true)
   const [onboardingLoading, setOnboardingLoading] = useState(false)
   const [monthlyLoading, setMonthlyLoading] = useState(false)
+  const [receipts, setReceipts] = useState<any[]>([])
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -33,6 +34,10 @@ export default function AgentFeesPage() {
         .eq('id', user.id)
         .single()
       if (data) setUser((prev: any) => ({ ...prev, ...data }))
+      // Load receipts
+      const receiptRes = await fetch(`/api/payload/receipts?user_id=${user.id}`)
+      const receiptData = await receiptRes.json()
+      setReceipts(receiptData.receipts || [])
       setLoading(false)
     }
     loadUser()
@@ -200,6 +205,27 @@ export default function AgentFeesPage() {
           </div>
         )}
       </div>
+
+      {receipts.length > 0 && (
+        <div className="container-card mb-4">
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Payment History</h2>
+          <div className="space-y-2">
+            {receipts.map((r) => (
+              <div key={r.id} className="inner-card flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
+                  <p className="text-xs text-luxury-gray-3">
+                    {r.paid_at ? new Date(r.paid_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-luxury-gray-1">
+                  ${typeof r.amount === 'number' ? r.amount.toFixed(2) : r.amount}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="inner-card">
         <p className="text-xs text-luxury-gray-3">Questions about your billing? Email <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a></p>
