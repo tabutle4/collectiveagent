@@ -263,7 +263,7 @@ export default function HeadshotUpload({
         />
         <label
           htmlFor={`headshot-upload-${userId}`}
-          className={`px-3 py-1.5 text-xs rounded transition-colors text-center border cursor-pointer flex items-center gap-2 ${
+          className={`px-2 py-1 text-xs rounded transition-colors text-center border cursor-pointer flex items-center gap-1.5 ${
             disabled || uploading
               ? 'bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed'
               : 'bg-white border-luxury-gray-5 text-luxury-gray-1 hover:border-luxury-black'
@@ -278,16 +278,16 @@ export default function HeadshotUpload({
               type="button"
               onClick={() => setEditingCrop((prev) => !prev)}
               disabled={disabled || uploading}
-              className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-2 py-1 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               <Move className="w-3 h-3" />
-              {editingCrop ? 'Done Adjusting' : 'Adjust Position'}
+              {editingCrop ? 'Done' : 'Adjust'}
             </button>
             <button
               type="button"
               onClick={handleRemove}
               disabled={disabled || uploading}
-              className="px-3 py-1.5 text-xs rounded transition-colors text-center bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-2 py-1 text-xs rounded transition-colors text-center bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               <X className="w-3 h-3" />
               Remove
