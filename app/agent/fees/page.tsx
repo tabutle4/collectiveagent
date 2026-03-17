@@ -9,7 +9,8 @@ export default function AgentFeesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [invoiceLoading, setInvoiceLoading] = useState(false)
+  const [onboardingLoading, setOnboardingLoading] = useState(false)
+  const [monthlyLoading, setMonthlyLoading] = useState(false)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -53,12 +54,8 @@ export default function AgentFeesPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
-  const handlePay = async () => {
-    if (!user?.payload_payee_id) {
-      alert('Your payment account is not set up yet. Please contact the office.')
-      return
-    }
-    setInvoiceLoading(true)
+  const handlePayOnboarding = async () => {
+    setOnboardingLoading(true)
     try {
       const res = await fetch('/api/payload/onboarding-invoice', {
         method: 'POST',
@@ -74,7 +71,28 @@ export default function AgentFeesPage() {
     } catch {
       alert('Something went wrong. Please contact the office.')
     } finally {
-      setInvoiceLoading(false)
+      setOnboardingLoading(false)
+    }
+  }
+
+  const handlePayMonthly = async () => {
+    setMonthlyLoading(true)
+    try {
+      const res = await fetch('/api/payload/monthly-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id }),
+      })
+      const data = await res.json()
+      if (data.invoice_url) {
+        window.open(data.invoice_url, '_blank')
+      } else {
+        alert('Could not generate invoice. Please contact the office.')
+      }
+    } catch {
+      alert('Something went wrong. Please contact the office.')
+    } finally {
+      setMonthlyLoading(false)
     }
   }
 
@@ -84,8 +102,9 @@ export default function AgentFeesPage() {
     <div>
       <h1 className="page-title mb-6">FEES & BILLING</h1>
 
+      {/* Onboarding Fee */}
       <div className="container-card mb-4">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Onboarding Fee</p>
             <p className="text-sm font-semibold text-luxury-gray-1">$399 — One Time</p>
@@ -107,10 +126,20 @@ export default function AgentFeesPage() {
             )}
           </div>
         </div>
+        {!user?.onboarding_fee_paid && (
+          <button
+            onClick={handlePayOnboarding}
+            disabled={onboardingLoading}
+            className="btn btn-primary text-xs w-full disabled:opacity-50"
+          >
+            {onboardingLoading ? 'Generating Invoice...' : 'Pay Onboarding Fee'}
+          </button>
+        )}
       </div>
 
+      {/* Monthly Fee */}
       <div className="container-card mb-4">
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Monthly Fee</p>
             <p className="text-sm font-semibold text-luxury-gray-1">$50 / month</p>
@@ -141,30 +170,27 @@ export default function AgentFeesPage() {
         </div>
 
         {monthlyStatus !== 'current' && (
-          <div className={`rounded p-3 mb-4 ${monthlyStatus === 'overdue' ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+          <div className={`rounded p-3 mb-3 ${monthlyStatus === 'overdue' ? 'bg-red-50 border border-red-200' : 'bg-yellow-50 border border-yellow-200'}`}>
             <p className={`text-xs font-medium ${monthlyStatus === 'overdue' ? 'text-red-700' : 'text-yellow-700'}`}>
               {monthlyStatus === 'overdue'
                 ? 'Your monthly fee is overdue. Please pay to avoid interruption of services.'
-                : 'Your monthly fee has not been set up yet. Please contact the office to get started.'}
+                : 'Your monthly fee has not been set up yet.'}
             </p>
           </div>
         )}
 
-        <div className="border-t border-luxury-gray-5/50 pt-4">
-          <p className="text-xs text-luxury-gray-3 mb-3">Payment options:</p>
-          <div className="space-y-2">
-            <button
-              onClick={handlePay}
-              disabled={invoiceLoading}
-              className="btn btn-primary text-xs w-full disabled:opacity-50"
-            >
-              {invoiceLoading ? 'Generating Invoice...' : 'Pay Online'}
-            </button>
-            <div className="inner-card">
-              <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
-              <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
-              <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
-            </div>
+        <div className="space-y-2">
+          <button
+            onClick={handlePayMonthly}
+            disabled={monthlyLoading}
+            className="btn btn-primary text-xs w-full disabled:opacity-50"
+          >
+            {monthlyLoading ? 'Generating Invoice...' : monthlyStatus === 'current' ? 'Pay Next Month Early' : 'Pay Monthly Fee'}
+          </button>
+          <div className="inner-card">
+            <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
+            <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
+            <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
           </div>
         </div>
       </div>
