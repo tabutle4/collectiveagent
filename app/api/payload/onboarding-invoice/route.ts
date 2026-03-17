@@ -65,13 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: data.message || 'Failed to create invoice' }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      invoice_id: data.id,
-      invoice_url: data.payment_link,
-      total: 399 + proratedFee,
-      prorated_fee: proratedFee,
-    })
+    return NextResponse.json({ success: true, invoice_id: data.id, invoice_url: `https://payload.com/pay/${data.id}`, total: 399 + proratedFee, prorated_fee: proratedFee })
   } catch (error: any) {
     console.error('Error creating onboarding invoice:', error)
     return NextResponse.json({ error: error.message || 'Failed to create invoice' }, { status: 500 })

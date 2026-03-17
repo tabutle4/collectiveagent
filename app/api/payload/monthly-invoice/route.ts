@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     console.log('Payload response:', JSON.stringify(data))
     if (!res.ok) return NextResponse.json({ error: data.message || 'Failed to create invoice' }, { status: 500 })
 
-    return NextResponse.json({ success: true, invoice_id: data.id, invoice_url: data.payment_link })
+    return NextResponse.json({ success: true, invoice_id: data.id, invoice_url: `https://payload.com/pay/${data.id}` })
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to create invoice' }, { status: 500 })
   }
