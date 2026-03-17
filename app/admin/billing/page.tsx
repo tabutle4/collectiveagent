@@ -1,9 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle2, AlertCircle, Clock, Search, ChevronDown, ChevronUp } from 'lucide-react'
+
+declare global {
+  interface Window { Payload: any }
+}
 
 export default function AdminBillingPage() {
   const router = useRouter()
@@ -14,10 +18,20 @@ export default function AdminBillingPage() {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
   const [receipts, setReceipts] = useState<Record<string, any[]>>({})
   const [loadingReceipts, setLoadingReceipts] = useState<string | null>(null)
-  const [invoiceLoading, setInvoiceLoading] = useState<string | null>(null)
+  const [paying, setPaying] = useState<string | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
+  const payloadScriptLoaded = useRef(false)
+
+  useEffect(() => {
+    if (payloadScriptLoaded.current) return
+    const script = document.createElement('script')
+    script.src = 'https://payload.com/Payload.js'
+    script.async = true
+    document.head.appendChild(script)
+    payloadScriptLoaded.current = true
+  }, [])
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -51,10 +65,8 @@ export default function AdminBillingPage() {
     if (agent.division) return 'waived'
     if (!agent.monthly_fee_paid_through) return 'unpaid'
     const paidThrough = new Date(agent.monthly_fee_paid_through)
-    const today = new Date()
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    if (paidThrough >= endOfMonth || paidThrough >= today) return 'current'
-    return 'overdue'
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+    return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -62,7 +74,7 @@ export default function AdminBillingPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const loadReceipts = async (agentId: string, payeeId: string) => {
+  const loadReceipts = async (agentId: string) => {
     if (receipts[agentId]) return
     setLoadingReceipts(agentId)
     try {
@@ -76,47 +88,77 @@ export default function AdminBillingPage() {
     }
   }
 
-  const toggleAgent = (agentId: string, payeeId: string) => {
+  const toggleAgent = (agentId: string) => {
     if (expandedAgent === agentId) {
       setExpandedAgent(null)
     } else {
       setExpandedAgent(agentId)
-      if (payeeId) loadReceipts(agentId, payeeId)
+      loadReceipts(agentId)
     }
   }
 
-  const createInvoice = async (agentId: string, type: 'onboarding' | 'monthly' | 'custom') => {
-    setInvoiceLoading(`${agentId}-${type}`)
+  const openCheckout = async (agentId: string, type: 'onboarding' | 'monthly' | 'custom') => {
+    const key = `${agentId}-${type}`
+    setPaying(key)
     try {
-      let url = ''
-      let body: any = { user_id: agentId }
-      if (type === 'onboarding') url = '/api/payload/onboarding-invoice'
-      else if (type === 'monthly') url = '/api/payload/monthly-invoice'
-      else {
-        url = '/api/payload/custom-invoice'
-        body = { user_id: agentId, amount: parseFloat(customAmount), description: customDesc }
+      const body: any = { user_id: agentId, type }
+      if (type === 'custom') {
+        body.amount = parseFloat(customAmount)
+        body.description = customDesc
       }
-      const res = await fetch(url, {
+
+      const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await res.json()
-      if (data.invoice_url) {
-        window.open(data.invoice_url, '_blank')
-        // Refresh receipts
+      const invoiceData = await invoiceRes.json()
+      if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
+
+      const tokenRes = await fetch('/api/payload/checkout-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: invoiceData.invoice_id,
+          description: type === 'onboarding' ? 'Onboarding Fee' : type === 'monthly' ? 'Monthly Brokerage Fee' : customDesc,
+        }),
+      })
+      const tokenData = await tokenRes.json()
+      if (!tokenData.client_token) throw new Error(tokenData.error || 'Failed to create checkout session')
+
+      window.Payload(tokenData.client_token)
+      const checkout = new window.Payload.Checkout({
+        style: {
+          default: {
+            primaryColor: '#C5A278',
+            backgroundColor: '#ffffff',
+            color: '#1A1A1A',
+            input: { borderColor: '#e5e5e5', boxShadow: 'none' },
+            header: { backgroundColor: '#1A1A1A', color: '#ffffff' },
+            button: { boxShadow: 'none' },
+          },
+        },
+      })
+
+      checkout.on('success', async (evt: any) => {
+        await fetch('/api/payload/confirm-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transaction_id: evt.transaction_id }),
+        })
+        // Refresh receipts and agent list
         delete receipts[agentId]
-        loadReceipts(agentId, agents.find(a => a.id === agentId)?.payload_payee_id)
+        await loadReceipts(agentId)
+        await loadAgents()
         setShowCustomForm(null)
         setCustomAmount('')
         setCustomDesc('')
-      } else {
-        alert(data.error || 'Failed to create invoice')
-      }
-    } catch {
-      alert('Something went wrong')
-    } finally {
-      setInvoiceLoading(null)
+      })
+
+      checkout.on('closed', () => setPaying(null))
+    } catch (err: any) {
+      alert(err.message || 'Something went wrong')
+      setPaying(null)
     }
   }
 
@@ -162,7 +204,13 @@ export default function AdminBillingPage() {
       <div className="container-card mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
-          <input type="text" placeholder="Search agents..." value={search} onChange={e => setSearch(e.target.value)} className="input-luxury pl-8" />
+          <input
+            type="text"
+            placeholder="Search agents..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input-luxury pl-8"
+          />
         </div>
       </div>
 
@@ -175,7 +223,7 @@ export default function AdminBillingPage() {
 
           return (
             <div key={agent.id} className="container-card">
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleAgent(agent.id, agent.payload_payee_id)}>
+              <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleAgent(agent.id)}>
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
@@ -184,11 +232,9 @@ export default function AdminBillingPage() {
                   <div className="flex gap-3 flex-shrink-0">
                     <div className="text-center">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Onboarding</p>
-                      {agent.onboarding_fee_paid ? (
-                        <span className="text-xs text-green-600 font-medium">Paid</span>
-                      ) : (
-                        <span className="text-xs text-red-500 font-medium">Unpaid</span>
-                      )}
+                      {agent.onboarding_fee_paid
+                        ? <span className="text-xs text-green-600 font-medium">Paid</span>
+                        : <span className="text-xs text-red-500 font-medium">Unpaid</span>}
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Monthly</p>
@@ -206,72 +252,78 @@ export default function AdminBillingPage() {
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
-                  {/* Invoice Actions */}
-                  <div>
-                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Create Invoice</p>
-                    <div className="flex gap-2 flex-wrap">
-                      {!agent.onboarding_fee_paid && (
-                        <button
-                          onClick={() => createInvoice(agent.id, 'onboarding')}
-                          disabled={invoiceLoading === `${agent.id}-onboarding`}
-                          className="btn btn-secondary text-xs disabled:opacity-50"
-                        >
-                          {invoiceLoading === `${agent.id}-onboarding` ? 'Creating...' : 'Onboarding Fee ($399)'}
-                        </button>
-                      )}
-                      {!agent.division && (
-                        <button
-                          onClick={() => createInvoice(agent.id, 'monthly')}
-                          disabled={invoiceLoading === `${agent.id}-monthly`}
-                          className="btn btn-secondary text-xs disabled:opacity-50"
-                        >
-                          {invoiceLoading === `${agent.id}-monthly` ? 'Creating...' : 'Monthly Fee ($50)'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)}
-                        className="btn btn-secondary text-xs"
-                      >
-                        Custom Invoice
-                      </button>
+                  {!agent.payload_payee_id && (
+                    <div className="inner-card bg-yellow-50 border border-yellow-200">
+                      <p className="text-xs font-medium text-yellow-700">No Payload customer ID. Agent must be set up before invoicing.</p>
                     </div>
+                  )}
 
-                    {showCustomForm === agent.id && (
-                      <div className="mt-3 inner-card space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
-                            <input
-                              type="number"
-                              value={customAmount}
-                              onChange={e => setCustomAmount(e.target.value)}
-                              className="input-luxury text-xs"
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
-                            <input
-                              type="text"
-                              value={customDesc}
-                              onChange={e => setCustomDesc(e.target.value)}
-                              className="input-luxury text-xs"
-                              placeholder="Invoice description"
-                            />
-                          </div>
-                        </div>
+                  {agent.payload_payee_id && (
+                    <div>
+                      <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Create Invoice</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {!agent.onboarding_fee_paid && (
+                          <button
+                            onClick={() => openCheckout(agent.id, 'onboarding')}
+                            disabled={paying === `${agent.id}-onboarding`}
+                            className="btn btn-secondary text-xs disabled:opacity-50"
+                          >
+                            {paying === `${agent.id}-onboarding` ? 'Opening...' : 'Onboarding ($399 + Prorated)'}
+                          </button>
+                        )}
+                        {!agent.division && (
+                          <button
+                            onClick={() => openCheckout(agent.id, 'monthly')}
+                            disabled={paying === `${agent.id}-monthly`}
+                            className="btn btn-secondary text-xs disabled:opacity-50"
+                          >
+                            {paying === `${agent.id}-monthly` ? 'Opening...' : 'Monthly ($50)'}
+                          </button>
+                        )}
                         <button
-                          onClick={() => createInvoice(agent.id, 'custom')}
-                          disabled={!customAmount || !customDesc || invoiceLoading === `${agent.id}-custom`}
-                          className="btn btn-primary text-xs disabled:opacity-50"
+                          onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)}
+                          className="btn btn-secondary text-xs"
                         >
-                          {invoiceLoading === `${agent.id}-custom` ? 'Creating...' : 'Create & Open Invoice'}
+                          Custom Invoice
                         </button>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Payment History */}
+                      {showCustomForm === agent.id && (
+                        <div className="mt-3 inner-card space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
+                              <input
+                                type="number"
+                                value={customAmount}
+                                onChange={e => setCustomAmount(e.target.value)}
+                                className="input-luxury text-xs"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
+                              <input
+                                type="text"
+                                value={customDesc}
+                                onChange={e => setCustomDesc(e.target.value)}
+                                className="input-luxury text-xs"
+                                placeholder="Invoice description"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => openCheckout(agent.id, 'custom')}
+                            disabled={!customAmount || !customDesc || paying === `${agent.id}-custom`}
+                            className="btn btn-primary text-xs disabled:opacity-50"
+                          >
+                            {paying === `${agent.id}-custom` ? 'Opening...' : 'Create & Open Checkout'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment History</p>
                     {loadingReceipts === agent.id ? (

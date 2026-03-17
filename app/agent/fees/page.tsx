@@ -1,17 +1,34 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+
+// Extend window for Payload.js
+declare global {
+  interface Window {
+    Payload: any
+  }
+}
 
 export default function AgentFeesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [onboardingLoading, setOnboardingLoading] = useState(false)
-  const [monthlyLoading, setMonthlyLoading] = useState(false)
+  const [paying, setPaying] = useState<'onboarding' | 'monthly' | null>(null)
   const [receipts, setReceipts] = useState<any[]>([])
+  const payloadScriptLoaded = useRef(false)
+
+  // Load Payload.js once
+  useEffect(() => {
+    if (payloadScriptLoaded.current) return
+    const script = document.createElement('script')
+    script.src = 'https://payload.com/Payload.js'
+    script.async = true
+    document.head.appendChild(script)
+    payloadScriptLoaded.current = true
+  }, [])
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -26,30 +43,28 @@ export default function AgentFeesPage() {
   }, [router])
 
   useEffect(() => {
-    if (!user) return
-    const loadUser = async () => {
+    if (!user?.id) return
+    const loadData = async () => {
       const { data } = await supabase
         .from('users')
         .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, division')
         .eq('id', user.id)
         .single()
       if (data) setUser((prev: any) => ({ ...prev, ...data }))
-      // Load receipts
+
       const receiptRes = await fetch(`/api/payload/receipts?user_id=${user.id}`)
       const receiptData = await receiptRes.json()
       setReceipts(receiptData.receipts || [])
       setLoading(false)
     }
-    loadUser()
+    loadData()
   }, [user?.id])
 
   const getMonthlyStatus = () => {
     if (!user?.monthly_fee_paid_through) return 'unpaid'
     const paidThrough = new Date(user.monthly_fee_paid_through)
-    const today = new Date()
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    if (paidThrough >= endOfMonth || paidThrough >= today) return 'current'
-    return 'overdue'
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+    return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }
 
   const monthlyStatus = getMonthlyStatus()
@@ -59,45 +74,70 @@ export default function AgentFeesPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
-  const handlePayOnboarding = async () => {
-    setOnboardingLoading(true)
+  const openCheckout = async (type: 'onboarding' | 'monthly') => {
+    setPaying(type)
     try {
-      const res = await fetch('/api/payload/onboarding-invoice', {
+      // Step 1: Create invoice
+      const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id }),
+        body: JSON.stringify({ user_id: user.id, type }),
       })
-      const data = await res.json()
-      if (data.invoice_url) {
-        window.open(data.invoice_url, '_blank')
-      } else {
-        alert('Could not generate invoice. Please contact the office.')
-      }
-    } catch {
-      alert('Something went wrong. Please contact the office.')
-    } finally {
-      setOnboardingLoading(false)
-    }
-  }
+      const invoiceData = await invoiceRes.json()
+      if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
 
-  const handlePayMonthly = async () => {
-    setMonthlyLoading(true)
-    try {
-      const res = await fetch('/api/payload/monthly-invoice', {
+      // Step 2: Get checkout client token
+      const tokenRes = await fetch('/api/payload/checkout-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id }),
+        body: JSON.stringify({
+          invoice_id: invoiceData.invoice_id,
+          description: type === 'onboarding' ? 'Onboarding Fee' : 'Monthly Brokerage Fee',
+        }),
       })
-      const data = await res.json()
-      if (data.invoice_url) {
-        window.open(data.invoice_url, '_blank')
-      } else {
-        alert('Could not generate invoice. Please contact the office.')
-      }
-    } catch {
-      alert('Something went wrong. Please contact the office.')
-    } finally {
-      setMonthlyLoading(false)
+      const tokenData = await tokenRes.json()
+      if (!tokenData.client_token) throw new Error(tokenData.error || 'Failed to create checkout session')
+
+      // Step 3: Open embedded checkout
+      window.Payload(tokenData.client_token)
+      const checkout = new window.Payload.Checkout({
+        style: {
+          default: {
+            primaryColor: '#C5A278',
+            backgroundColor: '#ffffff',
+            color: '#1A1A1A',
+            input: { borderColor: '#e5e5e5', boxShadow: 'none' },
+            header: { backgroundColor: '#1A1A1A', color: '#ffffff' },
+            button: { boxShadow: 'none' },
+          },
+        },
+      })
+
+      // Step 4: Confirm transaction on success
+      checkout.on('success', async (evt: any) => {
+        await fetch('/api/payload/confirm-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transaction_id: evt.transaction_id }),
+        })
+        // Refresh user data to reflect payment
+        const { data } = await supabase
+          .from('users')
+          .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through')
+          .eq('id', user.id)
+          .single()
+        if (data) setUser((prev: any) => ({ ...prev, ...data }))
+
+        // Refresh receipts
+        const receiptRes = await fetch(`/api/payload/receipts?user_id=${user.id}`)
+        const receiptData = await receiptRes.json()
+        setReceipts(receiptData.receipts || [])
+      })
+
+      checkout.on('closed', () => setPaying(null))
+    } catch (err: any) {
+      alert(err.message || 'Something went wrong. Please contact the office.')
+      setPaying(null)
     }
   }
 
@@ -112,7 +152,9 @@ export default function AgentFeesPage() {
         <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Onboarding Fee</p>
-            {!user?.onboarding_fee_paid && <p className="text-sm font-semibold text-luxury-gray-1">$399 — One Time</p>}
+            {!user?.onboarding_fee_paid && (
+              <p className="text-sm font-semibold text-luxury-gray-1">$399 + Prorated Monthly — One Time</p>
+            )}
             {user?.onboarding_fee_paid_date && (
               <p className="text-xs text-luxury-gray-3 mt-1">Paid {formatDate(user.onboarding_fee_paid_date)}</p>
             )}
@@ -133,11 +175,11 @@ export default function AgentFeesPage() {
         </div>
         {!user?.onboarding_fee_paid && (
           <button
-            onClick={handlePayOnboarding}
-            disabled={onboardingLoading}
+            onClick={() => openCheckout('onboarding')}
+            disabled={paying === 'onboarding'}
             className="btn btn-primary text-xs w-full disabled:opacity-50"
           >
-            {onboardingLoading ? 'Generating Invoice...' : 'Pay Onboarding Fee'}
+            {paying === 'onboarding' ? 'Opening Checkout...' : 'Pay Onboarding Fee'}
           </button>
         )}
       </div>
@@ -191,21 +233,21 @@ export default function AgentFeesPage() {
         ) : (
           <div className="space-y-2">
             <button
-              onClick={handlePayMonthly}
-              disabled={monthlyLoading}
+              onClick={() => openCheckout('monthly')}
+              disabled={paying === 'monthly'}
               className="btn btn-primary text-xs w-full disabled:opacity-50"
             >
-              {monthlyLoading ? 'Generating Invoice...' : monthlyStatus === 'current' ? 'Pay Next Month Early' : 'Pay Monthly Fee'}
+              {paying === 'monthly' ? 'Opening Checkout...' : monthlyStatus === 'current' ? 'Pay Next Month Early' : 'Pay Monthly Fee'}
             </button>
             <div className="inner-card">
-              <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
-              <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
-              <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
+              <p className="text-xs font-medium text-luxury-gray-2 mb-1">Prefer Zelle?</p>
+              <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> — include your name in the memo.</p>
             </div>
           </div>
         )}
       </div>
 
+      {/* Payment History */}
       {receipts.length > 0 && (
         <div className="container-card mb-4">
           <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Payment History</h2>
@@ -214,9 +256,7 @@ export default function AgentFeesPage() {
               <div key={r.id} className="inner-card flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
-                  <p className="text-xs text-luxury-gray-3">
-                    {r.paid_at ? new Date(r.paid_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}
-                  </p>
+                  <p className="text-xs text-luxury-gray-3">{formatDate(r.paid_at)}</p>
                 </div>
                 <p className="text-sm font-semibold text-luxury-gray-1">
                   ${typeof r.amount === 'number' ? r.amount.toFixed(2) : r.amount}
@@ -228,7 +268,12 @@ export default function AgentFeesPage() {
       )}
 
       <div className="inner-card">
-        <p className="text-xs text-luxury-gray-3">Questions about your billing? Email <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a></p>
+        <p className="text-xs text-luxury-gray-3">
+          Questions about your billing? Email{' '}
+          <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+            office@collectiverealtyco.com
+          </a>
+        </p>
       </div>
     </div>
   )

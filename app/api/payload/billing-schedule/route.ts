@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const authHeader = () =>
+  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
+// Creates a monthly billing schedule for an agent starting next month.
+// Only needed if NOT using the auto_billing_toggle in checkout.
+// If the agent enabled autopay at checkout, Payload handles this automatically.
 export async function POST(request: NextRequest) {
   try {
     const { user_id } = await request.json()
-
-    if (!user_id) {
-      return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
-    }
+    if (!user_id) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
 
     const supabase = createClient()
     const { data: user } = await supabase
       .from('users')
-      .select('payload_payee_id, email')
+      .select('payload_payee_id')
       .eq('id', user_id)
       .single()
 
@@ -20,23 +23,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
     }
 
-    const authHeader = 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
-    const processing_id = process.env.PAYLOAD_PROCESSING_ID
-
-    // Start next month
-    const today = new Date()
-    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
-    const startDate = nextMonth.toISOString().split('T')[0]
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0]
 
     const res = await fetch('https://api.payload.com/billing_schedules/', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader,
+        'Authorization': authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
         'type': 'subscription',
-        'processing_id': processing_id!,
+        'processing_id': process.env.PAYLOAD_PROCESSING_ID!,
         'customer_id': user.payload_payee_id,
         'start_date': startDate,
         'recurring_frequency': 'monthly',
@@ -46,16 +44,10 @@ export async function POST(request: NextRequest) {
     })
 
     const data = await res.json()
-
     if (!res.ok) {
       console.error('Payload billing schedule creation failed:', data)
       return NextResponse.json({ error: data.message || 'Failed to create billing schedule' }, { status: 500 })
     }
-
-    // Update user record
-    await supabase.from('users').update({
-      monthly_fee_paid_through: startDate,
-    }).eq('id', user_id)
 
     return NextResponse.json({ success: true, schedule_id: data.id, start_date: startDate })
   } catch (error: any) {

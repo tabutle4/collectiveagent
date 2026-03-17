@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const authHeader = () =>
+  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
 export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get('user_id')
@@ -13,26 +16,21 @@ export async function GET(request: NextRequest) {
       .eq('id', userId)
       .single()
 
-    if (!user?.payload_payee_id) {
-      return NextResponse.json({ receipts: [] })
-    }
-
-    const authHeader = 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+    if (!user?.payload_payee_id) return NextResponse.json({ receipts: [] })
 
     const res = await fetch(
       `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=paid&limit=20`,
-      { headers: { 'Authorization': authHeader } }
+      { headers: { 'Authorization': authHeader() } }
     )
 
-    const data = await res.json()
     if (!res.ok) return NextResponse.json({ receipts: [] })
 
+    const data = await res.json()
     const receipts = (data.values || []).map((inv: any) => ({
       id: inv.id,
       amount: inv.amount,
       paid_at: inv.paid_at,
       description: inv.items?.[0]?.type || 'Payment',
-      payment_link: inv.payment_link,
     }))
 
     return NextResponse.json({ receipts })
