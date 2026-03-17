@@ -9,6 +9,7 @@ export default function AgentFeesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -50,6 +51,31 @@ export default function AgentFeesPage() {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A'
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
+
+  const handlePay = async () => {
+    if (!user?.payload_payee_id) {
+      alert('Your payment account is not set up yet. Please contact the office.')
+      return
+    }
+    setInvoiceLoading(true)
+    try {
+      const res = await fetch('/api/payload/onboarding-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id }),
+      })
+      const data = await res.json()
+      if (data.invoice_url) {
+        window.open(data.invoice_url, '_blank')
+      } else {
+        alert('Could not generate invoice. Please contact the office.')
+      }
+    } catch {
+      alert('Something went wrong. Please contact the office.')
+    } finally {
+      setInvoiceLoading(false)
+    }
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
@@ -127,21 +153,18 @@ export default function AgentFeesPage() {
         <div className="border-t border-luxury-gray-5/50 pt-4">
           <p className="text-xs text-luxury-gray-3 mb-3">Payment options:</p>
           <div className="space-y-2">
-            
-            <a
-              href="https://agent.collectiverealtyco.com/pay/retainer"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-primary text-xs w-full text-center block"
+            <button
+              onClick={handlePay}
+              disabled={invoiceLoading}
+              className="btn btn-primary text-xs w-full disabled:opacity-50"
             >
-              Pay Online
-            </a>
+              {invoiceLoading ? 'Generating Invoice...' : 'Pay Online'}
+            </button>
             <div className="inner-card">
               <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
               <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
               <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
             </div>
-
           </div>
         </div>
       </div>
