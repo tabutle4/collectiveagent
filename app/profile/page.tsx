@@ -524,6 +524,7 @@ export default function ProfilePage() {
               You are both an admin and an agent. Use the admin dashboard to manage agent settings.
             </p>
           )}
+          </div> 
       </PageContainer>
   )
 }
