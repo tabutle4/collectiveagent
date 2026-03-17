@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select('id, email, first_name, last_name')
       .eq('is_active', true)
-      .or('roles.cs.{agent},roles.cs.{Agent}')
+      .filter('roles', 'cs', '{"agent"}')
       .is('campaign_token', null)
 
     if (error) throw error

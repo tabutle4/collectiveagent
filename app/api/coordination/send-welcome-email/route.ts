@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
           .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .or('roles.cs.{agent},roles.cs.{Agent}')
+          .filter('roles', 'cs', '{"agent"}')
           .limit(1)
 
         let agentData = null
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
             .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .or('roles.cs.{agent},roles.cs.{Agent}')
+            .filter('roles', 'cs', '{"agent"}')
             .limit(1)
 
           if (agentsByLegal && agentsByLegal.length > 0) {

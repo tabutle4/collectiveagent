@@ -161,7 +161,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       const { data, error } = await supabase
         .from('users')
         .select('id, preferred_first_name, preferred_last_name, email, is_active')
-        .contains('roles', ['agent'])
+        .filter('roles', 'cs', '{"agent"}')
         .order('preferred_first_name', { ascending: true })
         .order('preferred_last_name', { ascending: true })
 

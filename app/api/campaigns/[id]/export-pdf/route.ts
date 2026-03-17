@@ -118,7 +118,7 @@ export async function GET(
         )
       `)
       .eq('is_active', true)
-      .or('roles.cs.{agent},roles.cs.{Agent}')
+      .filter('roles', 'cs', '{"agent"}')
       .eq('campaign_recipients.campaign_id', normalizedId)
 
     const agents = agentsData || []

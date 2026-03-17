@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       .select('id')
       .eq('campaign_token', token)
       .eq('is_active', true)
-      .or('roles.cs.{agent},roles.cs.{Agent}')
+      .filter('roles', 'cs', '{"agent"}')
       .single()
 
     if (!user) {

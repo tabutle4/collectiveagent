@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const { data: admins } = await supabase
       .from('users')
       .select('email, preferred_first_name, preferred_last_name')
-      .contains('roles', ['admin'])
+      .filter('roles', 'cs', '{"admin"}')
 
     if (!admins || admins.length === 0) {
       return NextResponse.json({ error: 'No admin users found to notify' }, { status: 500 })

@@ -349,7 +349,7 @@ export default function FormResponsesPage() {
     supabase
       .from('users')
       .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .or('roles.cs.{agent},roles.cs.{Agent}')
+      .filter('roles', 'cs', '{"agent"}')
       .then(({ data, error }) => {
         if (!error && data) {
           const agentsList = data.map(user => ({

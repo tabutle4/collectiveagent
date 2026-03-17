@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const { data: agents, error } = await supabase
       .from('users')
       .select('id, first_name, last_name, preferred_first_name, preferred_last_name, is_active')
-      .or('roles.cs.{agent},roles.cs.{Agent}')
+      .filter('roles', 'cs', '{"agent"}')
       .order('preferred_first_name', { ascending: true })
     
     if (error) {

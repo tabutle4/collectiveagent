@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .or('roles.cs.{agent},roles.cs.{Agent}')
+          .filter('roles', 'cs', '{"agent"}')
           .limit(1)
         
         if (agentsByPreferred && agentsByPreferred.length > 0) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
             .select('id, first_name, last_name, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .or('roles.cs.{agent},roles.cs.{Agent}')
+            .filter('roles', 'cs', '{"agent"}')
             .limit(1)
           
           if (agentsByLegal && agentsByLegal.length > 0) {
@@ -388,7 +388,7 @@ export async function POST(request: NextRequest) {
           .select('id, preferred_first_name, preferred_last_name, roles')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .or('roles.cs.{agent},roles.cs.{Agent}')
+          .filter('roles', 'cs', '{"agent"}')
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
@@ -399,7 +399,7 @@ export async function POST(request: NextRequest) {
             .select('id, first_name, last_name, roles')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .or('roles.cs.{agent},roles.cs.{Agent}')
+            .filter('roles', 'cs', '{"agent"}')
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {

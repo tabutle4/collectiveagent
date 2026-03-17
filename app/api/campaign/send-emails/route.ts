@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           is_active,
           campaign_recipients!left(fully_completed_at, campaign_id)
         `)
-        .or('roles.cs.{agent},roles.cs.{Agent}')
+        .filter('roles', 'cs', '{"agent"}')
 
       // Apply filter-specific conditions
       if (recipient_filter === 'individual') {
