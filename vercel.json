@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/payload/sync-payments",
-      "schedule": "0 14 * * *"
-    }
-  ]
-}
