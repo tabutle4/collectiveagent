@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CheckCircle2, AlertCircle, Clock, Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Clock, Search, ChevronDown, ChevronUp, Send, Receipt } from 'lucide-react'
 
 declare global {
   interface Window { Payload: any }
@@ -16,14 +16,16 @@ export default function AdminBillingPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
-  const [receipts, setReceipts] = useState<Record<string, any[]>>({})
-  const [loadingReceipts, setLoadingReceipts] = useState<string | null>(null)
-  const [paying, setPaying] = useState<string | null>(null)
+  const [agentData, setAgentData] = useState<Record<string, { invoices: any[], receipts: any[] }>>({})
+  const [loadingAgent, setLoadingAgent] = useState<string | null>(null)
+  const [sending, setSending] = useState<string | null>(null)
+  const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
   const payloadScriptLoaded = useRef(false)
 
+  // Load Payload.js for in-person custom invoice checkout only
   useEffect(() => {
     if (payloadScriptLoaded.current) return
     const script = document.createElement('script')
@@ -61,6 +63,46 @@ export default function AdminBillingPage() {
     setLoading(false)
   }
 
+  const loadAgentData = async (agentId: string) => {
+    if (agentData[agentId]) return
+    setLoadingAgent(agentId)
+    try {
+      const [invoiceRes, receiptRes] = await Promise.all([
+        fetch(`/api/payload/open-invoices?user_id=${agentId}`),
+        fetch(`/api/payload/receipts?user_id=${agentId}`),
+      ])
+      const invoices = await invoiceRes.json()
+      const receipts = await receiptRes.json()
+      setAgentData(prev => ({
+        ...prev,
+        [agentId]: {
+          invoices: invoices.invoices || [],
+          receipts: receipts.receipts || [],
+        },
+      }))
+    } catch {
+      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [] } }))
+    } finally {
+      setLoadingAgent(null)
+    }
+  }
+
+  const refreshAgentData = async (agentId: string) => {
+    const updated = { ...agentData }
+    delete updated[agentId]
+    setAgentData(updated)
+    await loadAgentData(agentId)
+  }
+
+  const toggleAgent = (agentId: string, hasPayloadId: boolean) => {
+    if (expandedAgent === agentId) {
+      setExpandedAgent(null)
+    } else {
+      setExpandedAgent(agentId)
+      if (hasPayloadId) loadAgentData(agentId)
+    }
+  }
+
   const getMonthlyStatus = (agent: any) => {
     if (agent.division) return 'waived'
     if (!agent.monthly_fee_paid_through) return 'unpaid'
@@ -74,91 +116,81 @@ export default function AdminBillingPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const loadReceipts = async (agentId: string) => {
-    if (receipts[agentId]) return
-    setLoadingReceipts(agentId)
+  const formatCurrency = (amount: number) =>
+    typeof amount === 'number' ? `$${amount.toFixed(2)}` : `$${amount}`
+
+  // Send an existing open invoice to the agent via Payload email
+  const sendInvoice = async (agentId: string, invoiceId: string) => {
+    setSending(`invoice-${invoiceId}`)
     try {
-      const res = await fetch(`/api/payload/receipts?user_id=${agentId}`)
+      const res = await fetch('/api/payload/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, user_id: agentId }),
+      })
       const data = await res.json()
-      setReceipts(prev => ({ ...prev, [agentId]: data.receipts || [] }))
-    } catch {
-      setReceipts(prev => ({ ...prev, [agentId]: [] }))
+      if (!data.success) throw new Error(data.error || 'Failed to send')
+      alert('Invoice sent successfully.')
+    } catch (err: any) {
+      alert(err.message || 'Failed to send invoice')
     } finally {
-      setLoadingReceipts(null)
+      setSending(null)
     }
   }
 
-  const toggleAgent = (agentId: string) => {
-    if (expandedAgent === agentId) {
-      setExpandedAgent(null)
-    } else {
-      setExpandedAgent(agentId)
-      loadReceipts(agentId)
-    }
-  }
-
-  const openCheckout = async (agentId: string, type: 'onboarding' | 'monthly' | 'custom') => {
-    const key = `${agentId}-${type}`
-    setPaying(key)
+  // Send a receipt for a paid invoice
+  const sendReceipt = async (agentId: string, invoiceId: string) => {
+    setSending(`receipt-${invoiceId}`)
     try {
-      const body: any = { user_id: agentId, type }
-      if (type === 'custom') {
-        body.amount = parseFloat(customAmount)
-        body.description = customDesc
-      }
+      const res = await fetch('/api/payload/send-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, user_id: agentId }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to send')
+      alert('Receipt sent successfully.')
+    } catch (err: any) {
+      alert(err.message || 'Failed to send receipt')
+    } finally {
+      setSending(null)
+    }
+  }
 
+  // Create a custom invoice and send it to the agent
+  const createAndSendCustomInvoice = async (agentId: string) => {
+    if (!customAmount || !customDesc) return
+    setCreatingInvoice(agentId)
+    try {
+      // Create invoice
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          user_id: agentId,
+          type: 'custom',
+          amount: parseFloat(customAmount),
+          description: customDesc,
+        }),
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
 
-      const tokenRes = await fetch('/api/payload/checkout-token', {
+      // Send it
+      await fetch('/api/payload/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoice_id: invoiceData.invoice_id,
-          description: type === 'onboarding' ? 'Onboarding Fee' : type === 'monthly' ? 'Monthly Brokerage Fee' : customDesc,
-        }),
-      })
-      const tokenData = await tokenRes.json()
-      if (!tokenData.client_token) throw new Error(tokenData.error || 'Failed to create checkout session')
-
-      window.Payload(tokenData.client_token)
-      const checkout = new window.Payload.Checkout({
-        style: {
-          default: {
-            primaryColor: '#C5A278',
-            backgroundColor: '#ffffff',
-            color: '#1A1A1A',
-            input: { borderColor: '#e5e5e5', boxShadow: 'none' },
-            header: { backgroundColor: '#1A1A1A', color: '#ffffff' },
-            button: { boxShadow: 'none' },
-          },
-        },
+        body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
       })
 
-      checkout.on('success', async (evt: any) => {
-        await fetch('/api/payload/confirm-transaction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transaction_id: evt.transaction_id }),
-        })
-        // Refresh receipts and agent list
-        delete receipts[agentId]
-        await loadReceipts(agentId)
-        await loadAgents()
-        setShowCustomForm(null)
-        setCustomAmount('')
-        setCustomDesc('')
-      })
-
-      checkout.on('closed', () => setPaying(null))
+      setShowCustomForm(null)
+      setCustomAmount('')
+      setCustomDesc('')
+      await refreshAgentData(agentId)
     } catch (err: any) {
-      alert(err.message || 'Something went wrong')
-      setPaying(null)
+      alert(err.message || 'Failed to create invoice')
+    } finally {
+      setCreatingInvoice(null)
     }
   }
 
@@ -182,6 +214,7 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
+      {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="container-card text-center">
           <p className="text-xs text-luxury-gray-3 mb-1">Total Agents</p>
@@ -201,6 +234,7 @@ export default function AdminBillingPage() {
         </div>
       </div>
 
+      {/* Search */}
       <div className="container-card mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
@@ -214,22 +248,27 @@ export default function AdminBillingPage() {
         </div>
       </div>
 
+      {/* Agent List */}
       <div className="space-y-3">
         {filtered.map(agent => {
           const name = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
           const monthlyStatus = getMonthlyStatus(agent)
           const isExpanded = expandedAgent === agent.id
-          const agentReceipts = receipts[agent.id] || []
+          const data = agentData[agent.id]
 
           return (
             <div key={agent.id} className="container-card">
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleAgent(agent.id)}>
+              {/* Agent row */}
+              <div
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => toggleAgent(agent.id, !!agent.payload_payee_id)}
+              >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
                     <p className="text-xs text-luxury-gray-3">{agent.email}</p>
                   </div>
-                  <div className="flex gap-3 flex-shrink-0">
+                  <div className="flex gap-4 flex-shrink-0">
                     <div className="text-center">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Onboarding</p>
                       {agent.onboarding_fee_paid
@@ -250,102 +289,142 @@ export default function AdminBillingPage() {
                 </div>
               </div>
 
+              {/* Expanded */}
               {isExpanded && (
-                <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
+                <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-5">
+
                   {!agent.payload_payee_id && (
                     <div className="inner-card bg-yellow-50 border border-yellow-200">
-                      <p className="text-xs font-medium text-yellow-700">No Payload customer ID. Agent must be set up before invoicing.</p>
+                      <p className="text-xs font-medium text-yellow-700">No Payload customer ID. Agent must complete onboarding before invoicing.</p>
                     </div>
                   )}
 
-                  {agent.payload_payee_id && (
-                    <div>
-                      <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Create Invoice</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {!agent.onboarding_fee_paid && (
-                          <button
-                            onClick={() => openCheckout(agent.id, 'onboarding')}
-                            disabled={paying === `${agent.id}-onboarding`}
-                            className="btn btn-secondary text-xs disabled:opacity-50"
-                          >
-                            {paying === `${agent.id}-onboarding` ? 'Opening...' : 'Onboarding ($399 + Prorated)'}
-                          </button>
+                  {agent.payload_payee_id && loadingAgent === agent.id && (
+                    <p className="text-xs text-luxury-gray-3">Loading...</p>
+                  )}
+
+                  {agent.payload_payee_id && data && (
+                    <>
+                      {/* Open Invoices */}
+                      <div>
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Outstanding Invoices</p>
+                        {data.invoices.length === 0 ? (
+                          <p className="text-xs text-luxury-gray-3">No outstanding invoices.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {data.invoices.map((inv: any) => (
+                              <div key={inv.id} className="inner-card">
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold text-luxury-gray-1">{inv.description}</p>
+                                    {inv.due_date && (
+                                      <p className="text-xs text-luxury-gray-3 mt-0.5">Due {formatDate(inv.due_date)}</p>
+                                    )}
+                                    {inv.items?.length > 1 && (
+                                      <div className="mt-1 space-y-0.5">
+                                        {inv.items.filter((i: any) => i.entry_type === 'charge').map((i: any, idx: number) => (
+                                          <p key={idx} className="text-xs text-luxury-gray-3">{i.type}: {formatCurrency(i.amount)}</p>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <p className="text-sm font-semibold text-luxury-gray-1">{formatCurrency(inv.amount_due ?? inv.amount)}</p>
+                                    <button
+                                      onClick={() => sendInvoice(agent.id, inv.id)}
+                                      disabled={sending === `invoice-${inv.id}`}
+                                      className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                                      title="Send invoice to agent"
+                                    >
+                                      <Send size={11} />
+                                      {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         )}
-                        {!agent.division && (
-                          <button
-                            onClick={() => openCheckout(agent.id, 'monthly')}
-                            disabled={paying === `${agent.id}-monthly`}
-                            className="btn btn-secondary text-xs disabled:opacity-50"
-                          >
-                            {paying === `${agent.id}-monthly` ? 'Opening...' : 'Monthly ($50)'}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)}
-                          className="btn btn-secondary text-xs"
-                        >
-                          Custom Invoice
-                        </button>
                       </div>
 
-                      {showCustomForm === agent.id && (
-                        <div className="mt-3 inner-card space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
-                              <input
-                                type="number"
-                                value={customAmount}
-                                onChange={e => setCustomAmount(e.target.value)}
-                                className="input-luxury text-xs"
-                                placeholder="0.00"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
-                              <input
-                                type="text"
-                                value={customDesc}
-                                onChange={e => setCustomDesc(e.target.value)}
-                                className="input-luxury text-xs"
-                                placeholder="Invoice description"
-                              />
-                            </div>
-                          </div>
+                      {/* Custom Invoice */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-luxury-gray-2">Custom Invoice</p>
                           <button
-                            onClick={() => openCheckout(agent.id, 'custom')}
-                            disabled={!customAmount || !customDesc || paying === `${agent.id}-custom`}
-                            className="btn btn-primary text-xs disabled:opacity-50"
+                            onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)}
+                            className="text-xs text-luxury-accent hover:underline"
                           >
-                            {paying === `${agent.id}-custom` ? 'Opening...' : 'Create & Open Checkout'}
+                            {showCustomForm === agent.id ? 'Cancel' : '+ New'}
                           </button>
                         </div>
-                      )}
-                    </div>
-                  )}
 
-                  <div>
-                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment History</p>
-                    {loadingReceipts === agent.id ? (
-                      <p className="text-xs text-luxury-gray-3">Loading...</p>
-                    ) : agentReceipts.length === 0 ? (
-                      <p className="text-xs text-luxury-gray-3">No payments found</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {agentReceipts.map(r => (
-                          <div key={r.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-luxury-light">
-                            <div>
-                              <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
-                              <p className="text-xs text-luxury-gray-3">{formatDate(r.paid_at)}</p>
+                        {showCustomForm === agent.id && (
+                          <div className="inner-card space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
+                                <input
+                                  type="number"
+                                  value={customAmount}
+                                  onChange={e => setCustomAmount(e.target.value)}
+                                  className="input-luxury text-xs"
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
+                                <input
+                                  type="text"
+                                  value={customDesc}
+                                  onChange={e => setCustomDesc(e.target.value)}
+                                  className="input-luxury text-xs"
+                                  placeholder="e.g. HAR dues reimbursement"
+                                />
+                              </div>
                             </div>
-                            <p className="text-xs font-semibold text-luxury-gray-1">
-                              ${typeof r.amount === 'number' ? r.amount.toFixed(2) : r.amount}
-                            </p>
+                            <button
+                              onClick={() => createAndSendCustomInvoice(agent.id)}
+                              disabled={!customAmount || !customDesc || creatingInvoice === agent.id}
+                              className="btn btn-primary text-xs w-full disabled:opacity-50"
+                            >
+                              {creatingInvoice === agent.id ? 'Creating & Sending...' : 'Create & Send to Agent'}
+                            </button>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    )}
-                  </div>
+
+                      {/* Payment History */}
+                      <div>
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment History</p>
+                        {data.receipts.length === 0 ? (
+                          <p className="text-xs text-luxury-gray-3">No payments found.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {data.receipts.map((r: any) => (
+                              <div key={r.id} className="flex items-center justify-between py-1 px-2 rounded hover:bg-luxury-light">
+                                <div>
+                                  <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
+                                  <p className="text-xs text-luxury-gray-3">{formatDate(r.paid_at)}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
+                                  <button
+                                    onClick={() => sendReceipt(agent.id, r.id)}
+                                    disabled={sending === `receipt-${r.id}`}
+                                    className="text-luxury-gray-3 hover:text-luxury-accent disabled:opacity-50"
+                                    title="Resend receipt to agent"
+                                  >
+                                    <Receipt size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
