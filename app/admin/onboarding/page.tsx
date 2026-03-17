@@ -119,6 +119,15 @@ export default function AdminOnboardingPage() {
     }
   }
 
+  const togglePreAccessStep = async (agentId: string, field: string, current: boolean) => {
+    const updates: Record<string, any> = { [field]: !current }
+    if (field === 'onboarding_fee_paid' && !current) {
+      updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
+    }
+    await supabase.from('users').update(updates).eq('id', agentId)
+    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, [field]: !current } : a))
+  }
+
   const toggleNavAccess = async (agentId: string, current: boolean) => {
     await supabase.from('users').update({ full_nav_access: !current }).eq('id', agentId)
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, full_nav_access: !current } : a))
