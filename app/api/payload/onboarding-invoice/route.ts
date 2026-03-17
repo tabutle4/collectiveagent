@@ -29,8 +29,11 @@ export async function POST(request: NextRequest) {
     const remainingDays = daysInMonth - today.getDate() + 1
     const proratedFee = prorated_amount ?? Math.round((50 / daysInMonth) * remainingDays * 100) / 100
 
+    const dueDateStr = today.toISOString().split('T')[0]
+
     const params = new URLSearchParams({
       'type': 'bill',
+      'due_date': dueDateStr,
       'processing_id': processing_id!,
       'customer_id': user.payload_payee_id,
       'items[0][type]': 'Onboarding Fee',
