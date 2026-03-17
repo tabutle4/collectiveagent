@@ -158,9 +158,7 @@ export default function AgentFeesPage() {
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-primary text-xs w-full text-center block"
-            >
-              Pay Online
-            </a>
+            >Pay Online</a>
             <div className="inner-card">
               <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
               <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
