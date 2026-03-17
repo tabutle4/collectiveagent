@@ -141,10 +141,7 @@ export default function AgentFeesPage() {
               <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
               <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
             </div>
-            <div className="inner-card">
-              <p className="text-xs font-medium text-luxury-gray-2 mb-1">Check</p>
-              <p className="text-xs text-luxury-gray-3">Make payable to <span className="font-medium text-luxury-gray-2">Collective Realty Co.</span> and mail or drop off at the office.</p>
-            </div>
+
           </div>
         </div>
       </div>
