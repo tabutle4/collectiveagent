@@ -7,7 +7,12 @@ import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import PageContainer from '@/components/shared/PageContainer'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 
-export default function ProfilePage() {
+type ProfilePageProps = {
+  userId?: string
+  isAdmin?: boolean
+}
+
+export default function ProfilePage({ userId: adminUserId, isAdmin = false }: ProfilePageProps = {}) {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -15,7 +20,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     checkAuthAndLoadUser()
-  }, [])
+  }, [adminUserId, isAdmin])
 
   const formatDateForDisplay = (value: string | null) => {
     if (!value) return ''
@@ -30,19 +35,24 @@ export default function ProfilePage() {
 
   const checkAuthAndLoadUser = async () => {
     try {
-      const userStr = localStorage.getItem('user')
-      if (!userStr) {
-        router.push('/auth/login')
-        return
-      }
+      let userIdToLoad = adminUserId || null
 
-      const userData = JSON.parse(userStr)
+      if (!userIdToLoad) {
+        const userStr = localStorage.getItem('user')
+        if (!userStr) {
+          router.push('/auth/login')
+          return
+        }
+
+        const userData = JSON.parse(userStr)
+        userIdToLoad = userData.id
+      }
 
       // Fetch fresh user data
       const { data: freshUserData, error: userError } = await supabase
         .from('users')
         .select('*')
-        .eq('id', userData.id)
+        .eq('id', userIdToLoad)
         .single()
 
       if (userError) {
@@ -92,7 +102,7 @@ export default function ProfilePage() {
   const preferredName = `${user.preferred_first_name} ${user.preferred_last_name}`
   // Check role (simple string, not array)
   const roles = user.role ? [user.role] : []
-  const isAdmin = user.role === 'Admin'
+  const isUserAdmin = user.role === 'Admin'
   const isAgent = user.role === 'Agent'
 
   const [saving, setSaving] = useState(false)
