@@ -112,7 +112,7 @@ export default function AgentFeesPage() {
         <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Onboarding Fee</p>
-            <p className="text-sm font-semibold text-luxury-gray-1">$399 — One Time</p>
+            {!user?.onboarding_fee_paid && <p className="text-sm font-semibold text-luxury-gray-1">$399 — One Time</p>}
             {user?.onboarding_fee_paid_date && (
               <p className="text-xs text-luxury-gray-3 mt-1">Paid {formatDate(user.onboarding_fee_paid_date)}</p>
             )}
