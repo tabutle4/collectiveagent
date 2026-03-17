@@ -1936,10 +1936,8 @@ export default function FormResponsesPage() {
                                     onClick={async () => {
                                       if (confirm(`Are you sure you want to delete "${form.name}"?`)) {
                                         try {
-                                          const response = await fetch('/api/forms/delete', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ id: form.id }),
+                                          const response = await fetch(`/api/forms/delete?id=${form.id}`, {
+                                            method: 'DELETE',
                                           })
                                           const data = await response.json()
                                           if (data.success) {
