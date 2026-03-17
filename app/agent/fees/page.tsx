@@ -179,20 +179,26 @@ export default function AgentFeesPage() {
           </div>
         )}
 
-        <div className="space-y-2">
-          <button
-            onClick={handlePayMonthly}
-            disabled={monthlyLoading}
-            className="btn btn-primary text-xs w-full disabled:opacity-50"
-          >
-            {monthlyLoading ? 'Generating Invoice...' : monthlyStatus === 'current' ? 'Pay Next Month Early' : 'Pay Monthly Fee'}
-          </button>
-          <div className="inner-card">
-            <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
-            <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
-            <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
+        {user?.division ? (
+          <div className="bg-green-50 border border-green-200 rounded p-3">
+            <p className="text-xs font-medium text-green-700">Your monthly fee has been waived due to your division status.</p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-2">
+            <button
+              onClick={handlePayMonthly}
+              disabled={monthlyLoading}
+              className="btn btn-primary text-xs w-full disabled:opacity-50"
+            >
+              {monthlyLoading ? 'Generating Invoice...' : monthlyStatus === 'current' ? 'Pay Next Month Early' : 'Pay Monthly Fee'}
+            </button>
+            <div className="inner-card">
+              <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
+              <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
+              <p className="text-xs text-luxury-gray-3 mt-1">Include your name in the memo.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="inner-card">
