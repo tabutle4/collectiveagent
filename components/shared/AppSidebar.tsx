@@ -35,6 +35,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
   { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
+  { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
