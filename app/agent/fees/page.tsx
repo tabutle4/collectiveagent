@@ -9,8 +9,6 @@ export default function AgentFeesPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [invoiceLoading, setInvoiceLoading] = useState(false)
-  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -26,7 +24,6 @@ export default function AgentFeesPage() {
 
   useEffect(() => {
     if (!user) return
-    // Fetch fresh user data including fee status
     const loadUser = async () => {
       const { data } = await supabase
         .from('users')
@@ -44,8 +41,7 @@ export default function AgentFeesPage() {
     const paidThrough = new Date(user.monthly_fee_paid_through)
     const today = new Date()
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-    if (paidThrough >= endOfMonth) return 'current'
-    if (paidThrough >= today) return 'current'
+    if (paidThrough >= endOfMonth || paidThrough >= today) return 'current'
     return 'overdue'
   }
 
@@ -56,35 +52,12 @@ export default function AgentFeesPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
-  const handlePayMonthly = async () => {
-    setInvoiceLoading(true)
-    try {
-      const res = await fetch('/api/payload/onboarding-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id }),
-      })
-      const data = await res.json()
-      if (data.invoice_url) {
-        setInvoiceUrl(data.invoice_url)
-        window.open(data.invoice_url, '_blank')
-      } else {
-        alert('Could not generate invoice. Please contact the office.')
-      }
-    } catch (e) {
-      alert('Something went wrong. Please contact the office.')
-    } finally {
-      setInvoiceLoading(false)
-    }
-  }
-
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
     <div>
       <h1 className="page-title mb-6">FEES & BILLING</h1>
 
-      {/* Onboarding Fee */}
       <div className="container-card mb-4">
         <div className="flex items-start justify-between">
           <div>
@@ -110,7 +83,6 @@ export default function AgentFeesPage() {
         </div>
       </div>
 
-      {/* Monthly Fee */}
       <div className="container-card mb-4">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -121,17 +93,19 @@ export default function AgentFeesPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {monthlyStatus === 'current' ? (
+            {monthlyStatus === 'current' && (
               <>
                 <CheckCircle2 size={18} className="text-green-600" />
                 <span className="text-xs font-medium text-green-600">Current</span>
               </>
-            ) : monthlyStatus === 'overdue' ? (
+            )}
+            {monthlyStatus === 'overdue' && (
               <>
                 <AlertCircle size={18} className="text-red-500" />
                 <span className="text-xs font-medium text-red-500">Overdue</span>
               </>
-            ) : (
+            )}
+            {monthlyStatus === 'unpaid' && (
               <>
                 <Clock size={18} className="text-yellow-500" />
                 <span className="text-xs font-medium text-yellow-500">Not Set Up</span>
@@ -154,11 +128,14 @@ export default function AgentFeesPage() {
           <p className="text-xs text-luxury-gray-3 mb-3">Payment options:</p>
           <div className="space-y-2">
             
+            <a
               href="https://agent.collectiverealtyco.com/pay/retainer"
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-primary text-xs w-full text-center block"
-            >Pay Online</a>
+            >
+              Pay Online
+            </a>
             <div className="inner-card">
               <p className="text-xs font-medium text-luxury-gray-2 mb-1">Zelle</p>
               <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span></p>
