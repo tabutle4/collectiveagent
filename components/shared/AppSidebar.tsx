@@ -267,7 +267,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   )
 
   return (
-    <div className="min-h-screen bg-luxury-page-bg" style={{ position: 'relative', overflow: 'hidden' }}>
+    <div className="min-h-screen bg-luxury-page-bg" style={{ position: 'relative' }}>
       <svg style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0, opacity: 0.5 }} xmlns="http://www.w3.org/2000/svg">
         <line x1="0" y1="0" x2="500" y2="500" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.18"/>
         <line x1="0" y1="60" x2="500" y2="560" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
