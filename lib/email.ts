@@ -32,42 +32,54 @@ const ADMIN_EMAIL = 'office@collectiverealtyco.com'
 export async function sendProspectWelcomeEmail(prospect: {
   preferred_first_name: string
   email: string
+  join_link: string
 }) {
   const html = getLuxuryEmailTemplate({
     greeting: `Hi ${prospect.preferred_first_name},`,
     content: `
       <p class="intro-text">Thank you for submitting your information. We're excited to learn more about you and your goals in real estate.</p>
-      
+
       <p class="intro-text">At Collective Realty Co., we believe in offering real support, real structure, and real freedom so you can grow your business your way. Linked below, you'll find details about our commission plans and company offerings to help you explore whether we're the right fit for you.</p>
-      
+
       <div class="section-box">
         <h2 class="section-title">Commission Plans & Offerings</h2>
-        
         <div style="text-align: center; margin: 20px 0;">
           <a href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Commission-Plans.aspx" class="btn btn-black">View Plans & Offerings</a>
         </div>
-        
         <div class="password-box">
           Password: <span class="password-code">thefirm357</span>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <h2 class="section-title">Weekly Coaching & Training</h2>
+        <p style="text-align: center; color: #666; font-size: 15px; margin: 0 0 20px 0;">At Collective Realty Co., you'll have access to weekly coaching sessions, market updates, and hands-on support to help you close more deals and grow your business.</p>
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="https://collectiverealtyco.setmore.com/services/1fe35e59-6d4f-4392-8227-c831b31cefd0" class="btn btn-black">View Coaching Calendar</a>
         </div>
       </div>
     `,
     darkSection: `
       <h2 class="dark-section-title">Choose Your Next Step</h2>
-      
+
       <div class="option-box">
         <h3 class="option-title">Ready to Move Forward?</h3>
-        <p class="option-description">Submit the Join Our Firm form to request partnership.</p>
+        <p class="option-description">Your personalized onboarding link is ready. Click below to complete your join steps — your information is pre-filled, so it only takes a few minutes.</p>
         <div style="text-align: center;">
-          <a href="https://forms.office.com/Pages/ResponsePage.aspx?id=57xJl6bLKUG8z_SmhG224abx-HwYOq9AjRqZoiPnxy5UMzVUMkQyVjNRQUlQUkZOVllUNkJCM1ZHWS4u" class="btn btn-white">Join Our Firm</a>
+          <a href="${prospect.join_link}" class="btn btn-white">Start Your Onboarding</a>
         </div>
       </div>
-      
+
       <div class="divider">OR</div>
-      
+
       <div class="option-box">
         <h3 class="option-title">Schedule a Quick Call with Our Broker</h3>
         <p class="option-description">Connect with us to discuss your goals and learn how we can support your success.</p>
+        <p style="text-align: center; color: #aaaaaa; font-size: 14px; margin: 0 0 15px 0;">
+          Courtney Okanlomo<br>
+          courtneyo@collectiverealtyco.com<br>
+          (281) 989-8604
+        </p>
         <div style="text-align: center;">
           <a href="https://collectiverealtyco.setmore.com/services/1fe35e59-6d4f-4392-8227-c831b31cefd0" class="btn btn-white">Schedule Call</a>
         </div>
@@ -85,76 +97,10 @@ export async function sendProspectWelcomeEmail(prospect: {
     from: FROM_EMAILS.onboarding,
     to: prospect.email,
     cc: ADMIN_EMAIL,
-    subject: 'Next Steps with Collective Realty Co.',
+    subject: 'Thank You for Your Interest in Joining Collective Realty Co., The Coaching Brokerage',
     html,
   })
 }
-
-export async function sendAdminProspectNotification(
-  adminEmails: string[],
-  prospect: any
-) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  
-  const html = getLuxuryEmailTemplate({
-    greeting: 'New Prospective Agent Submission',
-    content: `
-      <p class="intro-text">A new prospect has submitted the prospective agent form.</p>
-      
-      <div class="section-box">
-        <h3 style="margin-top: 0; color: #000;">CONTACT INFORMATION</h3>
-        <p style="margin: 8px 0;"><strong>Name:</strong> ${prospect.preferred_first_name} ${prospect.preferred_last_name}</p>
-        <p style="margin: 8px 0;"><strong>Legal Name:</strong> ${prospect.first_name} ${prospect.last_name}</p>
-        <p style="margin: 8px 0;"><strong>Email:</strong> ${prospect.email}</p>
-        <p style="margin: 8px 0;"><strong>Phone:</strong> ${prospect.phone}</p>
-        <p style="margin: 8px 0;"><strong>Location:</strong> ${prospect.location}</p>
-        ${prospect.instagram_handle ? `<p style="margin: 8px 0;"><strong>Instagram:</strong> @${prospect.instagram_handle}</p>` : ''}
-        
-        <h3 style="margin-top: 25px; color: #000;">MLS INFORMATION</h3>
-        <p style="margin: 8px 0;"><strong>MLS:</strong> ${prospect.mls_choice}</p>
-       <p style="margin: 8px 0;"><strong>Association Status:</strong> ${prospect.association_status_on_join === 'new_agent' ? 'Brand new licensed agent' : 'Previously a member with another brokerage'}</p>
-        ${prospect.previous_brokerage ? `<p style="margin: 8px 0;"><strong>Previous Brokerage:</strong> ${prospect.previous_brokerage}</p>` : ''}
-        
-        <h3 style="margin-top: 25px; color: #000;">EXPECTATIONS</h3>
-        <p style="margin: 8px 0;"><strong>What expectations do you have for Collective Realty Co.?</strong></p>
-        <p style="margin: 8px 0 16px 0; color: #666;">"${prospect.expectations}"</p>
-        
-        <p style="margin: 8px 0;"><strong>Do you want to be held accountable?</strong></p>
-        <p style="margin: 8px 0 16px 0; color: #666;">"${prospect.accountability}"</p>
-        
-        <p style="margin: 8px 0;"><strong>How do you plan to produce business leads?</strong></p>
-        <p style="margin: 8px 0 16px 0; color: #666;">"${prospect.lead_generation}"</p>
-        
-        <p style="margin: 8px 0;"><strong>Is there anything you would like to add?</strong></p>
-        <p style="margin: 8px 0 16px 0; color: #666;">"${prospect.additional_info}"</p>
-        
-        <h3 style="margin-top: 25px; color: #000;">REFERRAL & TEAM INFORMATION</h3>
-        <p style="margin: 8px 0;"><strong>How did you hear about us?</strong> ${prospect.how_heard}${prospect.how_heard_other ? ` - ${prospect.how_heard_other}` : ''}</p>
-        ${prospect.referred_by_agent ? `<p style="margin: 8px 0;"><strong>Referring Agent:</strong> ${prospect.referred_by_agent}</p>` : '<p style="margin: 8px 0;"><strong>Referring Agent:</strong> N/A</p>'}
-        ${prospect.joining_team ? `<p style="margin: 8px 0;"><strong>Joining Team:</strong> ${prospect.joining_team}</p>` : '<p style="margin: 8px 0;"><strong>Joining Team:</strong> N/A</p>'}
-        
-        <p style="margin: 25px 0 0 0; color: #666; font-size: 14px;"><strong>Submitted:</strong> ${new Date(prospect.created_at).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}</p>
-      </div>
-      
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${appUrl}/admin/prospects/${prospect.id}" class="btn btn-black">View in Dashboard</a>
-      </div>
-    `,
-    closing: `
-      <p style="text-align: center; color: #666; font-size: 14px; font-style: italic;">Collective Realty Co. Admin Notification</p>
-    `,
-  })
-
-  const allRecipients = [ADMIN_EMAIL, ...adminEmails]
-
-  return resend.emails.send({
-    from: FROM_EMAILS.notifications,
-    to: allRecipients,
-    subject: `New Prospective Agent: ${prospect.preferred_first_name} ${prospect.preferred_last_name}`,
-    html,
-  })
-}
-
 export async function sendPasswordResetEmail(
   email: string,
   resetToken: string,

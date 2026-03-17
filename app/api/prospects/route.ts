@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { sendProspectWelcomeEmail, sendAdminProspectNotification } from '@/lib/email'
+import { sendProspectWelcomeEmail } from '@/lib/email'
+import crypto from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,7 +33,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validate phone number: must be exactly 10 digits
     const phoneDigits = formData.phone.replace(/\D/g, '')
     if (phoneDigits.length !== 10) {
       return NextResponse.json(
@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       )
     }
+
+    // Generate a unique onboarding token for this prospect
+    const campaign_token = crypto.randomBytes(24).toString('hex')
 
     const { data: prospect, error: insertError } = await supabase
       .from('users')
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest) {
         referring_agent: formData.referring_agent || null,
         joining_team: formData.joining_team || null,
         prospect_status: 'new',
+        campaign_token,
       })
       .select()
       .single()
@@ -90,27 +94,17 @@ export async function POST(request: NextRequest) {
       throw insertError
     }
 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://collectiveagentapp.com'
+    const joinLink = `${appUrl}/onboard/${campaign_token}`
+
     try {
       await sendProspectWelcomeEmail({
         preferred_first_name: prospect.preferred_first_name,
         email: prospect.email,
+        join_link: joinLink,
       })
     } catch (emailError) {
       console.error('Error sending prospect email:', emailError)
-    }
-
-    const { data: adminUsers } = await supabase
-      .from('users')
-      .select('email')
-      .contains('roles', ['admin'])
-      .eq('is_active', true)
-
-    const adminEmails = adminUsers?.map(u => u.email) || []
-
-    try {
-      await sendAdminProspectNotification(adminEmails, prospect)
-    } catch (emailError) {
-      console.error('Error sending admin notification:', emailError)
     }
 
     return NextResponse.json({
@@ -138,9 +132,7 @@ export async function GET(request: NextRequest) {
       .eq('status', 'prospect')
       .order('created_at', { ascending: false })
 
-    if (error) {
-      throw error
-    }
+    if (error) throw error
 
     return NextResponse.json({ prospects })
   } catch (error) {
