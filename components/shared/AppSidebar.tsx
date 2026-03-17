@@ -66,7 +66,11 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [isMobile, setIsMobile] = useState(false)
 
   const isAdmin = pathname?.startsWith('/admin')
-  const navItems = isAdmin ? adminNav : agentNav
+  const restrictedAgentNav: NavItem[] = [
+    { href: '/agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
+  ]
+  const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
   const logo = logoUrl || '/logo.png'
 
   useEffect(() => {
