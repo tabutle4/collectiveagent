@@ -11,4 +11,17 @@ const nextConfig = {
   },
 }
 
+nextConfig.redirects = async () => [
+  {
+    source: '/pay/retainer',
+    destination: 'https://payload.com/pay/12iNY7p4qZuJenrf8bKrHONnvdSj4WTxngsSaI1IPIBQJN',
+    permanent: false,
+  },
+  {
+    source: '/pay/commission',
+    destination: 'https://payload.com/pay/12iNY7qfPjXchPl8UUkuFEJ4k3ftqgmmlKY8TwrFz27KKH',
+    permanent: false,
+  },
+]
+
 module.exports = nextConfig
