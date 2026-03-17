@@ -47,6 +47,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
   { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
+  { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
@@ -69,6 +70,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const restrictedAgentNav: NavItem[] = [
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
+  { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   ]
   const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
   const logo = logoUrl || '/logo.png'
