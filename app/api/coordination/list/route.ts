@@ -35,17 +35,23 @@ export async function GET(request: NextRequest) {
     const agentIds = [...new Set(data.map((c: any) => c.agent_id).filter(Boolean))]
     const listingIds = [...new Set(data.map((c: any) => c.listing_id).filter(Boolean))]
 
-    const [agentsRes, listingsRes] = await Promise.all([
+    const [agentsRes, listingsRes, transactionsRes] = await Promise.all([
       agentIds.length > 0
         ? supabase.from('users').select('id, preferred_first_name, preferred_last_name, first_name, last_name').in('id', agentIds)
         : { data: [] },
       listingIds.length > 0
         ? supabase.from('listings').select('id, transaction_type, property_address').in('id', listingIds)
         : { data: [] },
+      listingIds.length > 0
+        ? supabase.from('transactions').select('id, transaction_type, property_address').in('id', listingIds)
+        : { data: [] },
     ])
 
     const agentMap = Object.fromEntries((agentsRes.data || []).map((a: any) => [a.id, a]))
-    const listingMap = Object.fromEntries((listingsRes.data || []).map((l: any) => [l.id, l]))
+    const listingMap = {
+      ...Object.fromEntries((transactionsRes.data || []).map((t: any) => [t.id, t])),
+      ...Object.fromEntries((listingsRes.data || []).map((l: any) => [l.id, l])),
+    }
 
     const coordinationsWithAgents = data.map((coord: any) => {
       const agent = agentMap[coord.agent_id]
