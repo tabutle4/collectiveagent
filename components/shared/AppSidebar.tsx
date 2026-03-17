@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  LayoutDashboard, UserCog, Calendar, Search,
+  LayoutDashboard, UserCog, Calendar, Search, Wallet,
   Briefcase, Receipt, UsersRound, DollarSign,
   Settings, Menu, X, ChevronRight,
   Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser, ClipboardList,
@@ -35,6 +35,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
   { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
+  { href: '/admin/billing', label: 'Billing', icon: Wallet },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
