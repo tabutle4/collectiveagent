@@ -188,7 +188,7 @@ export default function LoginPage() {
             {/* Card accent strip */}
             <div style={{ height: '2px', backgroundColor: '#C5A278' }} />
 
-            <div style={{ padding: '48px 48px 40px' }}>
+            <div style={{ padding: '72px 48px 64px' }}>
               <div style={{ marginBottom: '32px' }}>
                 <h1 style={{ fontSize: '22px', fontWeight: 600, color: '#1A1A1A', margin: '0 0 6px', letterSpacing: '-0.01em' }}>
                   Welcome back
