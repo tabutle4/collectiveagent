@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/auth/logout',
   '/prospective-agent-form',
   '/api/forms',
+  '/forms',
   '/roster',
   '/agent-roster.html',
   '/seller',
