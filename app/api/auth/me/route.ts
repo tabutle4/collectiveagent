@@ -31,7 +31,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Session invalidated' }, { status: 401 })
     }
 
-    return NextResponse.json({ user: session.user })
+    const { data: dbUser } = await supabaseAdmin
+      .from('users')
+      .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, role, roles, office, commission_plan, full_nav_access, status, is_active, headshot_url, headshot_crop, qualifying_transaction_count, cap_progress, join_date')
+      .eq('id', session.user.id)
+      .single()
+
+    return NextResponse.json({ user: { ...session.user, ...dbUser } })
 
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })
