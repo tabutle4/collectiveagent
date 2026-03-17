@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
     }
 
+    console.log('Creating monthly invoice for:', user.payload_payee_id)
     const authHeader = 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
     const processing_id = process.env.PAYLOAD_PROCESSING_ID
 
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
     })
 
     const data = await res.json()
+    console.log('Payload response:', JSON.stringify(data))
     if (!res.ok) return NextResponse.json({ error: data.message || 'Failed to create invoice' }, { status: 500 })
 
     return NextResponse.json({ success: true, invoice_id: data.id, invoice_url: data.payment_link })

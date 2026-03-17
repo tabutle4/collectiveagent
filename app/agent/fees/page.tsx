@@ -30,7 +30,7 @@ export default function AgentFeesPage() {
     const loadUser = async () => {
       const { data } = await supabase
         .from('users')
-        .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id')
+        .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, division')
         .eq('id', user.id)
         .single()
       if (data) setUser((prev: any) => ({ ...prev, ...data }))
