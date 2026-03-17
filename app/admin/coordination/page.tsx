@@ -8,6 +8,7 @@ import { Send, Trash2, Calendar, X } from 'lucide-react'
 interface CoordinationWithListing extends ListingCoordination {
   listing?: Listing
   agent_name?: string
+  transaction_type?: string
 }
 
 export default function AdminCoordinationDashboard() {
