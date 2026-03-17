@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import PageContainer from '@/components/PageContainer'
+import PageContainer from '@/components/shared/PageContainer'
 import { supabase } from '@/lib/supabase'
 
 export default function PublicRosterPage() {

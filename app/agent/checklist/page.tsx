@@ -1,8 +1,7 @@
 'use client'
 
 import { Suspense } from 'react'
-import PageContainer from '@/components/PageContainer'
-import { AgentOnboardingPageContent } from '@/app/onboarding-checklist/page'
+import PageContainer from '@/components/shared/PageContainer'
 
 export default function AgentChecklistPage() {
   return (
@@ -15,7 +14,6 @@ export default function AgentChecklistPage() {
         </PageContainer>
       }
     >
-      <AgentOnboardingPageContent insideAgentLayout />
     </Suspense>
   )
 }
