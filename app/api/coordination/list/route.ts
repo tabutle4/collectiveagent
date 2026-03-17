@@ -46,6 +46,17 @@ export async function GET(request: NextRequest) {
               : `${agentData.first_name} ${agentData.last_name}`
           }
         }
+        if (coord.listing_id) {
+          const { data: listingData } = await supabase
+            .from('listings')
+            .select('transaction_type, property_address')
+            .eq('id', coord.listing_id)
+            .single()
+          if (listingData) {
+            coord.transaction_type = listingData.transaction_type
+            if (!coord.listing) coord.listing = listingData
+          }
+        }
         return coord
       })
     )

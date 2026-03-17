@@ -232,7 +232,7 @@ export default function AdminCoordinationDashboard() {
                       {coordination.listing?.property_address || 'Unknown Address'}
                     </h3>
                     <p className="text-xs text-luxury-gray-3 mb-3">
-                      Seller: {coordination.seller_name} · Agent: {coordination.agent_name || 'Unknown'}{coordination.listing?.transaction_type ? ` · ${coordination.listing.transaction_type}` : ''}
+                      Seller: {coordination.seller_name} · Agent: {coordination.agent_name || 'Unknown'}{coordination.transaction_type ? ` · ${coordination.transaction_type}` : ''}
                     </p>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
