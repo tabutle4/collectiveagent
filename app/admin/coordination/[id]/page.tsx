@@ -810,6 +810,16 @@ export default function CoordinationDetailPage() {
               </select>
             </div>
           </div>
+
+          <div className="flex justify-end mt-6 pt-6 border-t border-luxury-gray-5">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-2.5 text-sm rounded transition-colors btn-primary disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
         
         <div className="container-card mb-6">
