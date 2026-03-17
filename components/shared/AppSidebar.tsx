@@ -258,7 +258,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
   return (
     <div className="min-h-screen bg-luxury-page-bg" style={{ position: 'relative', overflow: 'hidden' }}>
-      <svg style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }} xmlns="http://www.w3.org/2000/svg">
+      <svg style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0, opacity: 0.5 }} xmlns="http://www.w3.org/2000/svg">
         <line x1="0" y1="0" x2="500" y2="500" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.18"/>
         <line x1="0" y1="60" x2="500" y2="560" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
         <line x1="0" y1="120" x2="400" y2="520" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.09"/>
@@ -290,7 +290,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
         </aside>
       )}
 
-      <div className="min-h-screen" style={{ marginLeft: isMobile ? 0 : '220px' }}>
+      <div className="min-h-screen" style={{ marginLeft: isMobile ? 0 : '220px', position: 'relative', zIndex: 1 }}>
         <div className="sticky top-0 z-30 bg-luxury-page-bg/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
           <div>
             {isMobile && (
