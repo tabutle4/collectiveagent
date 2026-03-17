@@ -1,9 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/send-weekly-reports",
-      "schedule": "0 0 * * 2"
+      "path": "/api/payload/sync-payments",
+      "schedule": "0 14 * * *"
     }
   ]
 }
-
