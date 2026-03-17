@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AuthFooter from '@/components/shared/AuthFooter'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
 
 function LoginForm() {
   const router = useRouter()
@@ -164,13 +165,8 @@ export default function LoginPage() {
       <div style={{ height: '3px', backgroundColor: '#C5A278', width: '100%', position: 'relative', zIndex: 1 }} />
 
       {/* Header */}
-      <div style={{ backgroundColor: 'white', borderBottom: '0.5px solid #ebebeb', padding: '14px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-        <img
-          src="/logo.png"
-          alt="Collective Realty Co."
-          style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
-        />
-        <span style={{ fontSize: '11px', color: '#bbb', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Agent Portal</span>
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <LuxuryHeader showTrainingCenter={false} />
       </div>
 
       {/* Main content */}
