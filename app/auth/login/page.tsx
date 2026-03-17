@@ -10,6 +10,7 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect')
   const authError = searchParams.get('error')
+  const showEmailLogin = searchParams.get('dev') === 'true'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -83,6 +84,7 @@ function LoginForm() {
         {microsoftLoading ? 'Redirecting...' : 'Sign in with Microsoft'}
       </button>
 
+      {showEmailLogin && (
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-luxury-gray-5" />
@@ -90,9 +92,9 @@ function LoginForm() {
         <div className="relative flex justify-center text-xs text-luxury-gray-3">
           <span className="bg-white px-2">or sign in with email</span>
         </div>
-      </div>
+      </div>)}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {showEmailLogin && <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label htmlFor="email" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">
             Email
@@ -137,7 +139,7 @@ function LoginForm() {
         >
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
-      </form>
+      </form>}
     </div>
   )
 }
