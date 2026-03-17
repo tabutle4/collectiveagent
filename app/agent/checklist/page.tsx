@@ -80,7 +80,7 @@ function MLSSetupCard({ item, isCompleted, onComplete }: { item: ChecklistItem, 
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
+              <span className={`text-sm font-medium ${isCompleted ? 'text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
                 {item.label}
               </span>
               {item.priority === 'high' && !isCompleted && (
@@ -343,7 +343,7 @@ export default function AgentChecklistPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
+                            <span className={`text-sm font-medium ${isCompleted ? 'text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
                               {item.label}
                             </span>
                             {item.priority === 'high' && !isCompleted && (
