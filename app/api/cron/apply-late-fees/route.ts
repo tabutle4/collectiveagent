@@ -66,6 +66,18 @@ export async function GET(request: NextRequest) {
 
           if (updateRes.ok) {
             applied++
+            // Resend the invoice so agent is notified of the late fee
+            await fetch('https://api.payload.com/payment_links/', {
+              method: 'POST',
+              headers: {
+                'Authorization': plAuth(),
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: new URLSearchParams({
+                invoice_id: inv.id,
+                customer_id: agent.payload_payee_id,
+              }),
+            })
           } else {
             const errData = await updateRes.json()
             errors.push(`${agent.preferred_first_name || agent.first_name} (inv ${inv.id}): ${errData.message}`)
