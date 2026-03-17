@@ -18,6 +18,7 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [planDetails, setPlanDetails] = useState<any>(null)
+  const [commissionPlans, setCommissionPlans] = useState<any[]>([])
   const [personalForm, setPersonalForm] = useState({
     preferred_first_name: '', preferred_last_name: '', personal_email: '', personal_phone: '',
     instagram_handle: '', tiktok_handle: '', threads_handle: '', youtube_url: '', linkedin_url: '', facebook_url: '',
@@ -89,6 +90,8 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
         const meData = await meRes.json()
         targetId = meData.user.id
       }
+      const { data: plans } = await supabase.from('commission_plans').select('id, name').eq('is_active', true).order('name')
+      setCommissionPlans(plans || [])
       const { data, error } = await supabase.from('users').select('*').eq('id', targetId).single()
       if (error) throw error
       if (!data) throw new Error('User not found')
@@ -298,7 +301,12 @@ export default function ProfilePage({ userId, isAdmin = false }: ProfilePageProp
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">Team</label><input className="input-luxury" value={reForm.team_name} onChange={(e) => handleReChange('team_name', e.target.value)} /></div>
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">Team Lead</label><input className="input-luxury" value={reForm.team_lead} onChange={(e) => handleReChange('team_lead', e.target.value)} /></div>
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">Division(s)</label><input className="input-luxury" value={reForm.division} onChange={(e) => handleReChange('division', e.target.value)} /></div>
-                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Commission Plan</label><input className="input-luxury" value={reForm.commission_plan} onChange={(e) => handleReChange('commission_plan', e.target.value)} /></div>
+                  <div><label className="block text-xs text-luxury-gray-3 mb-1">Commission Plan</label>
+                    <select className="select-luxury" value={reForm.commission_plan} onChange={(e) => handleReChange('commission_plan', e.target.value)}>
+                      <option value="">Select plan...</option>
+                      {commissionPlans.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    </select>
+                  </div>
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">License #</label><input className="input-luxury" value={reForm.license_number} onChange={(e) => handleReChange('license_number', e.target.value)} /></div>
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">MLS ID</label><input className="input-luxury" value={reForm.mls_id} onChange={(e) => handleReChange('mls_id', e.target.value)} /></div>
                   <div><label className="block text-xs text-luxury-gray-3 mb-1">NRDS ID</label><input className="input-luxury" value={reForm.nrds_id} onChange={(e) => handleReChange('nrds_id', e.target.value)} /></div>
