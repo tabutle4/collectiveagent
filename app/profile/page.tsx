@@ -3,8 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import LuxuryHeader from '@/components/shared/LuxuryHeader'
-import PageContainer from '@/components/shared/PageContainer'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 
 type ProfilePageProps = {
@@ -50,11 +48,7 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
     if (!value) return ''
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return value
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const checkAuthAndLoadUser = async () => {
@@ -77,14 +71,8 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
         .eq('id', userIdToLoad)
         .single()
 
-      if (userError) {
-        console.error('Error fetching user data:', userError)
-        throw new Error('Failed to load profile')
-      }
-
-      if (!freshUserData) {
-        throw new Error('User not found')
-      }
+      if (userError) throw new Error('Failed to load profile')
+      if (!freshUserData) throw new Error('User not found')
 
       setUser(freshUserData)
       setHeadshotUrl(freshUserData.headshot_url || null)
@@ -150,20 +138,15 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
         shirt_size: personalForm.shirt_size.trim() || null,
       }
 
-      const { error } = await supabase
-        .from('users')
-        .update(updates)
-        .eq('id', user.id)
+      const { error } = await supabase.from('users').update(updates).eq('id', user.id)
 
       if (error) {
-        console.error('Error updating profile:', error)
         setSaveError('Failed to save changes. Please try again.')
       } else {
         setSaveSuccess('Personal information updated.')
         await checkAuthAndLoadUser()
       }
     } catch (e) {
-      console.error('Error updating profile:', e)
       setSaveError('Failed to save changes. Please try again.')
     } finally {
       setSaving(false)
@@ -172,39 +155,35 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
 
   if (loading) {
     return (
-      <PageContainer>
-        <div className="card-section text-center py-12">
-          <p className="text-luxury-gray-2">Loading your profile...</p>
-        </div>
-      </PageContainer>
+      <div className="card-section text-center py-12">
+        <p className="text-luxury-gray-2">Loading profile...</p>
+      </div>
     )
   }
 
   if (!user) {
     return (
-      <PageContainer>
-        <div className="card-section text-center py-12">
-          <p className="text-red-600">Failed to load profile. Please try again.</p>
-          <button
-            onClick={() => router.push('/auth/login')}
-            className="mt-4 px-4 py-2 text-sm rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90"
-          >
-            Go to Login
-          </button>
-        </div>
-      </PageContainer>
+      <div className="card-section text-center py-12">
+        <p className="text-red-600">Failed to load profile. Please try again.</p>
+        <button
+          onClick={() => router.push('/auth/login')}
+          className="mt-4 px-4 py-2 text-sm rounded bg-luxury-black text-white hover:opacity-90"
+        >
+          Go to Login
+        </button>
+      </div>
     )
   }
 
   const roles = user.role ? [user.role] : []
-  const isUserAdmin = user.role === 'Admin'
-  const isAgent = user.role === 'Agent'
 
   return (
-    <PageContainer>
-      <div className="mb-8">
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" style={{ fontWeight: '600' }}>
-          My Profile
+    <div>
+      <div className="mb-6">
+        <h2 className="page-title">
+          {isAdmin
+            ? `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
+            : 'My Profile'}
         </h2>
       </div>
 
@@ -216,14 +195,8 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
           firstName={user.preferred_first_name || user.first_name || ''}
           lastName={user.preferred_last_name || user.last_name || ''}
           initialCrop={user.headshot_crop || null}
-          onUploadComplete={(url) => {
-            setHeadshotUrl(url)
-            checkAuthAndLoadUser()
-          }}
-          onRemove={() => {
-            setHeadshotUrl(null)
-            checkAuthAndLoadUser()
-          }}
+          onUploadComplete={(url) => { setHeadshotUrl(url); checkAuthAndLoadUser() }}
+          onRemove={() => { setHeadshotUrl(null); checkAuthAndLoadUser() }}
           size="large"
         />
         <p className="text-xs text-luxury-gray-3 mt-4">
@@ -326,7 +299,7 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
           <button
             onClick={handleSavePersonal}
             disabled={saving}
-            className="px-4 py-2 text-sm rounded transition-colors bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm rounded bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving...' : 'Save Personal Info'}
           </button>
@@ -388,12 +361,7 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
         <p className="text-xs text-luxury-gray-3 mt-4">
           Real estate information is managed by the office. Contact an administrator if something looks incorrect.
         </p>
-        {isAdmin && isAgent && (
-          <p className="text-xs text-luxury-gray-3 mt-2">
-            You are both an admin and an agent. Use the admin dashboard to manage agent settings.
-          </p>
-        )}
       </div>
-    </PageContainer>
+    </div>
   )
 }
