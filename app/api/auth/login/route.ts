@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const sessionId = randomUUID()
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
 
-    await supabaseAdmin.from('sessions').insert({
+    await supabaseAdmin.from('sessions').insert({ is_valid: true,
       user_id: user.id,
       session_id: sessionId,
       expires_at: expiresAt.toISOString(),
