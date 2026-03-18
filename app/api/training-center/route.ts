@@ -33,11 +33,23 @@ async function graphGet(token: string, path: string, cache = true) {
   return res.json()
 }
 
+// Score result by how well name matches query (higher = more relevant)
+function relevanceScore(name: string, query: string): number {
+  const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls)$/i, '')
+  const q = query.toLowerCase()
+  if (n === q) return 100
+  if (n.startsWith(q)) return 80
+  if (n.includes(q)) return 60
+  // Check individual words
+  const words = q.split(/\s+/)
+  const matchedWords = words.filter(w => n.includes(w))
+  return (matchedWords.length / words.length) * 40
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')?.trim()
-
     const token = await getAccessToken()
 
     // --- SEARCH MODE ---
@@ -49,34 +61,35 @@ export async function GET(request: NextRequest) {
         graphGet(token, `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`, false),
       ])
 
-      const videos = (videoResults?.value || [])
-        .filter((item: any) => item.file)
-        .map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          webUrl: item.webUrl,
-          lastModified: item.lastModifiedDateTime,
-          lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-          folder: item.parentReference?.name || 'Video',
-          type: 'video',
-        }))
+      // Combine all results into one list with type tag, sort by relevance
+      const allResults = [
+        ...(videoResults?.value || [])
+          .filter((item: any) => item.file)
+          .map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            webUrl: item.webUrl,
+            lastModified: item.lastModifiedDateTime,
+            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+            folder: item.parentReference?.name || 'Video',
+            type: 'video' as const,
+            score: relevanceScore(item.name, query),
+          })),
+        ...[...(docResults?.value || []), ...(agentResResults?.value || [])]
+          .filter((item: any) => item.file && !item.name?.startsWith('~'))
+          .map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            webUrl: item.webUrl,
+            lastModified: item.lastModifiedDateTime,
+            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+            category: item.parentReference?.name || 'General',
+            type: 'document' as const,
+            score: relevanceScore(item.name, query),
+          })),
+      ].sort((a, b) => b.score - a.score)
 
-      const docs = [
-        ...(docResults?.value || []),
-        ...(agentResResults?.value || []),
-      ]
-        .filter((item: any) => item.file && !item.name?.startsWith('~'))
-        .map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          webUrl: item.webUrl,
-          lastModified: item.lastModifiedDateTime,
-          lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-          category: item.parentReference?.name || 'General',
-          type: 'document',
-        }))
-
-      return NextResponse.json({ searchResults: { videos, docs }, query })
+      return NextResponse.json({ searchResults: allResults, query })
     }
 
     // --- DEFAULT MODE ---
@@ -95,7 +108,7 @@ export async function GET(request: NextRequest) {
         childCount: folder.folder?.childCount || 0,
       }))
 
-    // Recent recordings - get top 3 from each folder, then sort globally
+    // Recent recordings
     const recentVideos: any[] = []
     for (const folder of videoLibraryFolders.slice(0, 12)) {
       const folderContents = await graphGet(
@@ -121,7 +134,6 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
       .slice(0, 6)
 
-    // Fetch thumbnails in parallel
     const recentRecordings = await Promise.all(
       top6.map(async (video) => {
         try {
@@ -134,7 +146,7 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Recent resources - get Agent Resources folders, then fetch files from each in parallel
+    // Recent resources
     const agentResFoldersData = await graphGet(
       token,
       `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/children?$select=id,name,folder&$top=50`

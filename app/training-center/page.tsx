@@ -57,9 +57,16 @@ interface VideoFolder {
   childCount: number
 }
 
-interface SearchResults {
-  videos: any[]
-  docs: any[]
+interface SearchResult {
+  id: string
+  name: string
+  webUrl: string
+  lastModified: string
+  lastModifiedBy: string
+  type: 'video' | 'document'
+  folder?: string
+  category?: string
+  score: number
 }
 
 function formatDate(dateStr: string) {
@@ -90,7 +97,7 @@ export default function TrainingCenterPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedNav, setExpandedNav] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResults | null>(null)
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
@@ -274,58 +281,61 @@ export default function TrainingCenterPage() {
 
         {/* SEARCH RESULTS */}
         {searchQuery.trim() ? (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {searching ? (
               <div className="container-card text-center py-12 text-xs text-luxury-gray-3">Searching...</div>
             ) : searchResults ? (
               <>
-                {searchResults.videos.length > 0 && (
+                {/* Result count + SharePoint search link */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-luxury-gray-3">
+                    {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+                  </p>
+                  <a
+                    href={`${SHAREPOINT_BASE}/_layouts/15/search.aspx/siteall?q=${encodeURIComponent(searchQuery)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary flex items-center gap-1"
+                  >
+                    Open in Training Center Search
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+
+                {searchResults.length > 0 ? (
                   <div className="container-card">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Video size={16} className="text-luxury-accent" />
-                      <h2 className="text-sm font-semibold text-luxury-gray-1 uppercase tracking-wider">
-                        Videos ({searchResults.videos.length})
-                      </h2>
-                    </div>
                     <div className="divide-y divide-luxury-gray-5/30">
-                      {searchResults.videos.map((v) => (
-                        <a key={v.id} href={v.webUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
-                          <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
+                      {searchResults.map((result) => (
+                        <a
+                          key={result.id}
+                          href={result.webUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                        >
+                          {result.type === 'video' ? (
+                            <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <span className="text-base flex-shrink-0 leading-none">{getFileIcon(result.name)}</span>
+                          )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-luxury-gray-1">{formatVideoName(v.name)}</p>
-                            <p className="text-xs text-luxury-gray-3">{v.folder} · {formatDate(v.lastModified)}</p>
+                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
+                              {result.type === 'video' ? formatVideoName(result.name) : formatFileName(result.name)}
+                            </p>
+                            <p className="text-xs text-luxury-gray-3">
+                              {result.type === 'video' ? result.folder : result.category}
+                              {' · '}
+                              <span className="capitalize">{result.type}</span>
+                              {' · '}
+                              {formatDate(result.lastModified)}
+                            </p>
                           </div>
                           <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity" />
                         </a>
                       ))}
                     </div>
                   </div>
-                )}
-                {searchResults.docs.length > 0 && (
-                  <div className="container-card">
-                    <div className="flex items-center gap-2 mb-4">
-                      <FileText size={16} className="text-luxury-accent" />
-                      <h2 className="text-sm font-semibold text-luxury-gray-1 uppercase tracking-wider">
-                        Documents ({searchResults.docs.length})
-                      </h2>
-                    </div>
-                    <div className="divide-y divide-luxury-gray-5/30">
-                      {searchResults.docs.map((d) => (
-                        <a key={d.id} href={d.webUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
-                          <span className="text-base flex-shrink-0">{getFileIcon(d.name)}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-luxury-gray-1">{formatFileName(d.name)}</p>
-                            <p className="text-xs text-luxury-gray-3">{d.category} · {formatDate(d.lastModified)}</p>
-                          </div>
-                          <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity" />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {searchResults.videos.length === 0 && searchResults.docs.length === 0 && (
+                ) : (
                   <div className="container-card text-center py-12 text-xs text-luxury-gray-3">
                     No results found for "{searchQuery}"
                   </div>
@@ -412,7 +422,7 @@ export default function TrainingCenterPage() {
                 )}
               </div>
 
-              {/* Resources + Video Library - stack on mobile */}
+              {/* Resources + Video Library */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Recently Uploaded Resources */}
