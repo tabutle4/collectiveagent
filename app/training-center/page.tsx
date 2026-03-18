@@ -19,23 +19,23 @@ import {
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 const NAV_SECTIONS = [
-  { label: 'About Training Center', href: `${SHAREPOINT_BASE}/SitePages/About-Training-Center.aspx` },
+  { label: 'About Training Center', href: `${SHAREPOINT_BASE}/SitePages/About%20the%20Training%20Center.aspx` },
   {
     label: 'Compliance & Commission Overview',
-    href: `${SHAREPOINT_BASE}/SitePages/Commission-Plans.aspx`,
+    href: `${SHAREPOINT_BASE}/SitePages/Compliance-and-Commission-Disbursement-Guide.aspx`,
     children: [
       { label: 'Commission Plans & Fees', href: `${SHAREPOINT_BASE}/SitePages/Commission-Plans.aspx` },
-      { label: 'Compliance Overview', href: `${SHAREPOINT_BASE}/SitePages/Compliance-Overview.aspx` },
+      { label: 'Compliance Overview', href: `${SHAREPOINT_BASE}/SitePages/Compliance-and-Commission-Disbursement-Guide.aspx` },
     ],
   },
-  { label: 'Policies & Procedures', href: `${SHAREPOINT_BASE}/SitePages/Policies-and-Procedures.aspx` },
-  { label: 'Agent Onboarding Jumpstart', href: `${SHAREPOINT_BASE}/SitePages/Agent-Onboarding-Jumpstart.aspx` },
+  { label: 'Policies & Procedures', href: `${SHAREPOINT_BASE}/SitePages/Brokerage%20Policies%20and%20Procedures.aspx` },
+  { label: 'Agent Onboarding Jumpstart', href: `${SHAREPOINT_BASE}/SitePages/Agent%20Onboarding.aspx` },
   { label: 'Quick Links', href: `${SHAREPOINT_BASE}/SitePages/Quick-Links.aspx` },
-  { label: 'How-To Guides', href: `${SHAREPOINT_BASE}/SitePages/How-To-Guides.aspx` },
+  { label: 'How-To Guides', href: `${SHAREPOINT_BASE}/SitePages/How-To-Guides(1).aspx` },
   { label: 'Forms', href: `${SHAREPOINT_BASE}/SitePages/Forms.aspx` },
   { label: 'Agent Resources', href: `${SHAREPOINT_BASE}/SitePages/Agent-Resources.aspx` },
   { label: 'Sample Documents', href: `${SHAREPOINT_BASE}/SitePages/Sample-Documents.aspx` },
-  { label: 'Agent Readiness Checklist', href: `${SHAREPOINT_BASE}/SitePages/Agent-Readiness-Checklist.aspx` },
+  { label: 'Agent Readiness Checklist', href: 'https://collectiverealtyco-my.sharepoint.com/:u:/p/tarab/IQBKkyjR2GzzSq6MhLk6-Fw_Afo2GvqYIK46kxAtfhN_mHQ?e=hNn8we' },
   { label: 'Help', href: `${SHAREPOINT_BASE}/SitePages/Help.aspx` },
 ]
 
