@@ -274,7 +274,7 @@ export default function TrainingCenterPage() {
                         </span>
                       </div>
                       <div className="p-3">
-                        <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-1 line-clamp-2">
+                        <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-1">
                           {formatVideoName(rec.name)}
                         </p>
                         <div className="flex items-center gap-1 text-xs text-luxury-gray-3">
