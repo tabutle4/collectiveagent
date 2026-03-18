@@ -5,7 +5,7 @@ import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import {
   BookOpen, Video, FileText, ExternalLink, ChevronRight,
-  Folder, Clock, User, Play, AlertCircle, Search, Loader2,
+  Folder, Clock, User, Play, AlertCircle, Search, Loader2, Menu, X,
 } from 'lucide-react'
 
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
@@ -92,6 +92,7 @@ export default function TrainingCenterPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null)
   const [searching, setSearching] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -111,70 +112,136 @@ export default function TrainingCenterPage() {
     fetchData()
   }, [])
 
-  // Debounced search
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults(null)
-      return
-    }
+    if (!searchQuery.trim()) { setSearchResults(null); return }
     const timer = setTimeout(async () => {
       setSearching(true)
       try {
         const res = await fetch(`/api/training-center?q=${encodeURIComponent(searchQuery)}`)
         const data = await res.json()
         setSearchResults(data.searchResults || null)
-      } catch {
-        setSearchResults(null)
-      } finally {
-        setSearching(false)
-      }
+      } catch { setSearchResults(null) }
+      finally { setSearching(false) }
     }, 500)
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  const NavContent = () => (
+    <>
+      <div className="px-4 py-3 border-b border-luxury-gray-5">
+        <p className="section-title mb-0">Site Navigation</p>
+      </div>
+      <nav className="py-2">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.label}>
+            {section.children ? (
+              <>
+                <button
+                  onClick={() => setExpandedNav(expandedNav === section.label ? null : section.label)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-left transition-colors hover:bg-luxury-light text-luxury-gray-2"
+                >
+                  <span>{section.label}</span>
+                  <ChevronRight
+                    size={12}
+                    className="text-luxury-gray-3 transition-transform"
+                    style={{ transform: expandedNav === section.label ? 'rotate(90deg)' : 'none' }}
+                  />
+                </button>
+                {expandedNav === section.label && (
+                  <div className="pl-3 pb-1">
+                    {section.children.map((child) => (
+                      <a
+                        key={child.label}
+                        href={child.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 hover:bg-luxury-light transition-colors"
+                        onClick={() => setMobileNavOpen(false)}
+                      >
+                        <ChevronRight size={10} className="text-luxury-accent" />
+                        {child.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <a
+                href={section.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between px-4 py-2.5 text-xs text-luxury-gray-2 hover:text-luxury-gray-1 hover:bg-luxury-light transition-colors group"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <span>{section.label}</span>
+                <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity" />
+              </a>
+            )}
+          </div>
+        ))}
+      </nav>
+      <div className="px-4 py-3 border-t border-luxury-gray-5">
+        <a
+          href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Calendars.aspx"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-primary w-full flex items-center justify-center gap-2"
+          onClick={() => setMobileNavOpen(false)}
+        >
+          Coaching Calendar
+          <ExternalLink size={11} />
+        </a>
+      </div>
+    </>
+  )
 
   return (
     <div className="min-h-screen flex flex-col bg-luxury-light">
       <LuxuryHeader />
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 pt-24">
-      <div className="mb-4">
-  <a href="/agent/dashboard" className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
-    <ChevronRight size={12} className="rotate-180" />
-    Back to Collective Agent
-  </a>
-</div>
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-6 pt-20 md:pt-24">
+
+        {/* Back link */}
+        <div className="mb-4">
+          <a href="/agent/dashboard" className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+            <ChevronRight size={12} className="rotate-180" />
+            Back to Collective Agent
+          </a>
+        </div>
 
         {/* Header Banner */}
-        <div className="card-dark rounded-xl mb-6 p-8 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <BookOpen size={24} className="text-luxury-accent" />
-              <h1 className="page-title text-white">Training Center</h1>
+        <div className="card-dark rounded-xl mb-6 p-6 md:p-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <BookOpen size={22} className="text-luxury-accent" />
+                <h1 className="page-title text-white">Training Center</h1>
+              </div>
+              <p className="text-xs text-white/60">
+                Coaching recordings, resources, guides, and everything you need to grow your business.
+              </p>
             </div>
-            <p className="text-xs text-white/60">
-              Coaching recordings, resources, guides, and everything you need to grow your business.
-            </p>
+            <a
+              href={SHAREPOINT_BASE}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary flex items-center gap-2 self-start md:self-auto"
+            >
+              Open Full Training Center
+              <ExternalLink size={12} />
+            </a>
           </div>
-          <a
-            href={SHAREPOINT_BASE}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-secondary flex items-center gap-2"
-          >
-            Open Full Training Center
-            <ExternalLink size={12} />
-          </a>
         </div>
 
         {error && (
           <div className="alert-warning flex items-center gap-2 mb-4">
             <AlertCircle size={14} />
-            Could not load live data from SharePoint.{' '}
-            <a href={SHAREPOINT_BASE} target="_blank" className="underline">Open Training Center directly →</a>
+            Could not load live data.{' '}
+            <a href={SHAREPOINT_BASE} target="_blank" className="underline">Open Training Center →</a>
           </div>
         )}
 
-        {/* Search Bar */}
+        {/* Search */}
         <div className="relative mb-6">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
           <input
@@ -189,16 +256,29 @@ export default function TrainingCenterPage() {
           )}
         </div>
 
+        {/* Mobile Nav Toggle */}
+        <div className="md:hidden mb-4">
+          <button
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            className="btn btn-secondary w-full flex items-center justify-between"
+          >
+            <span>Site Navigation</span>
+            {mobileNavOpen ? <X size={14} /> : <Menu size={14} />}
+          </button>
+          {mobileNavOpen && (
+            <div className="card-luxury rounded-xl overflow-hidden mt-2">
+              <NavContent />
+            </div>
+          )}
+        </div>
+
         {/* SEARCH RESULTS */}
         {searchQuery.trim() ? (
           <div className="space-y-6">
             {searching ? (
-              <div className="container-card text-center py-12 text-xs text-luxury-gray-3">
-                Searching...
-              </div>
+              <div className="container-card text-center py-12 text-xs text-luxury-gray-3">Searching...</div>
             ) : searchResults ? (
               <>
-                {/* Video Results */}
                 {searchResults.videos.length > 0 && (
                   <div className="container-card">
                     <div className="flex items-center gap-2 mb-4">
@@ -209,13 +289,8 @@ export default function TrainingCenterPage() {
                     </div>
                     <div className="divide-y divide-luxury-gray-5/30">
                       {searchResults.videos.map((v) => (
-                        <a
-                          key={v.id}
-                          href={v.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
-                        >
+                        <a key={v.id} href={v.webUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
                           <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-luxury-gray-1">{formatVideoName(v.name)}</p>
@@ -227,8 +302,6 @@ export default function TrainingCenterPage() {
                     </div>
                   </div>
                 )}
-
-                {/* Document Results */}
                 {searchResults.docs.length > 0 && (
                   <div className="container-card">
                     <div className="flex items-center gap-2 mb-4">
@@ -239,13 +312,8 @@ export default function TrainingCenterPage() {
                     </div>
                     <div className="divide-y divide-luxury-gray-5/30">
                       {searchResults.docs.map((d) => (
-                        <a
-                          key={d.id}
-                          href={d.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
-                        >
+                        <a key={d.id} href={d.webUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
                           <span className="text-base flex-shrink-0">{getFileIcon(d.name)}</span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-luxury-gray-1">{formatFileName(d.name)}</p>
@@ -257,7 +325,6 @@ export default function TrainingCenterPage() {
                     </div>
                   </div>
                 )}
-
                 {searchResults.videos.length === 0 && searchResults.docs.length === 0 && (
                   <div className="container-card text-center py-12 text-xs text-luxury-gray-3">
                     No results found for "{searchQuery}"
@@ -269,72 +336,12 @@ export default function TrainingCenterPage() {
         ) : (
 
           /* DEFAULT VIEW */
-          <div className="flex gap-6">
+          <div className="flex flex-col md:flex-row gap-6">
 
-            {/* Left Nav */}
-            <div className="w-56 flex-shrink-0">
+            {/* Left Nav - desktop only */}
+            <div className="hidden md:block w-56 flex-shrink-0">
               <div className="card-luxury rounded-xl overflow-hidden sticky top-6">
-                <div className="px-4 py-3 border-b border-luxury-gray-5">
-                  <p className="section-title mb-0">Site Navigation</p>
-                </div>
-                <nav className="py-2">
-                  {NAV_SECTIONS.map((section) => (
-                    <div key={section.label}>
-                      {section.children ? (
-                        <>
-                          <button
-                            onClick={() => setExpandedNav(expandedNav === section.label ? null : section.label)}
-                            className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-left transition-colors hover:bg-luxury-light text-luxury-gray-2"
-                          >
-                            <span>{section.label}</span>
-                            <ChevronRight
-                              size={12}
-                              className="text-luxury-gray-3 transition-transform"
-                              style={{ transform: expandedNav === section.label ? 'rotate(90deg)' : 'none' }}
-                            />
-                          </button>
-                          {expandedNav === section.label && (
-                            <div className="pl-3 pb-1">
-                              {section.children.map((child) => (
-                                <a
-                                  key={child.label}
-                                  href={child.href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2 px-4 py-2 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 hover:bg-luxury-light transition-colors"
-                                >
-                                  <ChevronRight size={10} className="text-luxury-accent" />
-                                  {child.label}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <a
-                          href={section.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between px-4 py-2.5 text-xs text-luxury-gray-2 hover:text-luxury-gray-1 hover:bg-luxury-light transition-colors group"
-                        >
-                          <span>{section.label}</span>
-                          <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity" />
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </nav>
-                <div className="px-4 py-3 border-t border-luxury-gray-5">
-                  <a
-                    href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Calendars.aspx"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary w-full flex items-center justify-center gap-2"
-                  >
-                    Coaching Calendar
-                    <ExternalLink size={11} />
-                  </a>
-                </div>
+                <NavContent />
               </div>
             </div>
 
@@ -356,11 +363,11 @@ export default function TrainingCenterPage() {
                 </div>
 
                 {loading ? (
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     {[...Array(3)].map((_, i) => <div key={i} className="inner-card animate-pulse h-48" />)}
                   </div>
                 ) : recordings.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     {recordings.map((rec) => (
                       <a
                         key={rec.id}
@@ -400,13 +407,13 @@ export default function TrainingCenterPage() {
                 ) : (
                   <div className="inner-card text-center py-8 text-xs text-luxury-gray-3">
                     No recordings found.{' '}
-                    <a href={SHAREPOINT_BASE} target="_blank" className="text-luxury-accent hover:underline">Browse SharePoint directly →</a>
+                    <a href={SHAREPOINT_BASE} target="_blank" className="text-luxury-accent hover:underline">Browse SharePoint →</a>
                   </div>
                 )}
               </div>
 
-              {/* Resources + Video Library */}
-              <div className="grid grid-cols-2 gap-6">
+              {/* Resources + Video Library - stack on mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Recently Uploaded Resources */}
                 <div className="container-card">
@@ -429,18 +436,11 @@ export default function TrainingCenterPage() {
                   ) : resources.length > 0 ? (
                     <div className="divide-y divide-luxury-gray-5/30">
                       {resources.map((res) => (
-                        <a
-                          key={res.id}
-                          href={res.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
-                        >
+                        <a key={res.id} href={res.webUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
                           <span className="text-base flex-shrink-0">{getFileIcon(res.name)}</span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
-                              {formatFileName(res.name)}
-                            </p>
+                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">{formatFileName(res.name)}</p>
                             <p className="text-xs text-luxury-gray-3">{res.category} · {formatDate(res.lastModified)}</p>
                           </div>
                           <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity" />
@@ -468,13 +468,8 @@ export default function TrainingCenterPage() {
                   ) : videoFolders.length > 0 ? (
                     <div className="divide-y divide-luxury-gray-5/30">
                       {videoFolders.map((folder) => (
-                        <a
-                          key={folder.id}
-                          href={folder.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
-                        >
+                        <a key={folder.id} href={folder.webUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
                           <div className="flex items-center gap-2">
                             <Folder size={14} className="text-luxury-accent" />
                             <span className="text-xs font-medium text-luxury-gray-1">{folder.name}</span>
