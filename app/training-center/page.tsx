@@ -115,7 +115,7 @@ export default function TrainingCenterPage() {
     <div className="min-h-screen flex flex-col bg-luxury-light">
       <LuxuryHeader />
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 pt-16">
         {/* Header Banner */}
         <div className="card-dark rounded-xl mb-6 p-8 flex items-center justify-between">
           <div>
