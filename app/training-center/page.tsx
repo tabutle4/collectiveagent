@@ -206,7 +206,7 @@ export default function TrainingCenterPage() {
               </nav>
               <div className="px-4 py-3 border-t border-luxury-gray-5">
                 <a
-                  href="https://collectiverealtyco.setmore.com/services/1fe35e59-6d4f-4392-8227-c831b31cefd0"
+                  href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Calendars.aspx"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-primary w-full flex items-center justify-center gap-2"
