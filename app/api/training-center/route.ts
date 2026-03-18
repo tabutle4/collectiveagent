@@ -147,27 +147,41 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Recent resources - use SharePoint REST API to get most recently modified
-    // files across ALL folders in Agent Resources in a single call
-    const spData = await spGet(
+    // Recent resources - get folders then fetch files from each in parallel
+    const agentResFoldersData = await graphGet(
       token,
-      `${SP_BASE}/_api/web/lists/getbytitle('Agent Resources')/items?$select=FileLeafRef,FileRef,Modified,Editor/Title,FileDirRef&$expand=Editor&$orderby=Modified desc&$filter=FSObjType eq 0&$top=8`
+      `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/children?$select=id,name,folder&$top=50`
+    )
+    const agentResFolders = (agentResFoldersData?.value || []).filter((i: any) => i.folder)
+
+    const folderFiles = await Promise.all(
+      agentResFolders.map((folder: any) =>
+        graphGet(
+          token,
+          `/drives/${AGENT_RESOURCES_DRIVE_ID}/items/${folder.id}/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$orderby=lastModifiedDateTime desc&$top=3`
+        )
+      )
     )
 
-    const recentResources = (spData?.d?.results || [])
+    const recentResources = folderFiles
+      .flatMap((r: any) => r?.value || [])
       .filter((item: any) =>
-        item.FileLeafRef &&
-        !item.FileLeafRef.startsWith('~') &&
-        !item.FileLeafRef.endsWith('.mp4') &&
-        !item.FileLeafRef.endsWith('.mov')
+        item.file &&
+        !item.name?.startsWith('~') &&
+        !item.name?.endsWith('.mp4') &&
+        !item.name?.endsWith('.mov')
       )
+      .sort((a: any, b: any) =>
+        new Date(b.lastModifiedDateTime).getTime() - new Date(a.lastModifiedDateTime).getTime()
+      )
+      .slice(0, 8)
       .map((item: any) => ({
-        id: item.FileRef,
-        name: item.FileLeafRef,
-        webUrl: `https://collectiverealtyco.sharepoint.com${item.FileRef}`,
-        lastModified: item.Modified,
-        lastModifiedBy: item.Editor?.Title || 'Office Support',
-        category: item.FileDirRef?.split('/').pop() || 'General',
+        id: item.id,
+        name: item.name,
+        webUrl: item.webUrl,
+        lastModified: item.lastModifiedDateTime,
+        lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+        category: item.parentReference?.name || 'General',
       }))
 
     return NextResponse.json({ recentRecordings, recentResources, videoLibraryFolders })
