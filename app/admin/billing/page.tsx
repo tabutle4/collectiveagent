@@ -25,7 +25,6 @@ export default function AdminBillingPage() {
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
   const payloadScriptLoaded = useRef(false)
 
-  // Load Payload.js for in-person custom invoice checkout only
   useEffect(() => {
     if (payloadScriptLoaded.current) return
     const script = document.createElement('script')
@@ -119,7 +118,6 @@ export default function AdminBillingPage() {
   const formatCurrency = (amount: number) =>
     typeof amount === 'number' ? `$${amount.toFixed(2)}` : `$${amount}`
 
-  // Send an existing open invoice to the agent via Payload email
   const sendInvoice = async (agentId: string, invoiceId: string) => {
     setSending(`invoice-${invoiceId}`)
     try {
@@ -138,7 +136,6 @@ export default function AdminBillingPage() {
     }
   }
 
-  // Send a receipt for a paid invoice
   const sendReceipt = async (agentId: string, invoiceId: string) => {
     setSending(`receipt-${invoiceId}`)
     try {
@@ -157,12 +154,33 @@ export default function AdminBillingPage() {
     }
   }
 
-  // Create a custom invoice and send it to the agent
+  const sendMonthlyInvoice = async (agentId: string) => {
+    setCreatingInvoice(agentId)
+    try {
+      const invoiceRes = await fetch('/api/payload/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: agentId, type: 'monthly' }),
+      })
+      const invoiceData = await invoiceRes.json()
+      if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
+      await fetch('/api/payload/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
+      })
+      await refreshAgentData(agentId)
+    } catch (err: any) {
+      alert(err.message || 'Failed to send monthly invoice')
+    } finally {
+      setCreatingInvoice(null)
+    }
+  }
+
   const createAndSendCustomInvoice = async (agentId: string) => {
     if (!customAmount || !customDesc) return
     setCreatingInvoice(agentId)
     try {
-      // Create invoice
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,14 +193,11 @@ export default function AdminBillingPage() {
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
-
-      // Send it
       await fetch('/api/payload/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
       })
-
       setShowCustomForm(null)
       setCustomAmount('')
       setCustomDesc('')
@@ -334,7 +349,6 @@ export default function AdminBillingPage() {
                                       onClick={() => sendInvoice(agent.id, inv.id)}
                                       disabled={sending === `invoice-${inv.id}`}
                                       className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
-                                      title="Send invoice to agent"
                                     >
                                       <Send size={11} />
                                       {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
@@ -347,6 +361,22 @@ export default function AdminBillingPage() {
                         )}
                       </div>
 
+                      {/* Monthly Invoice - only show if overdue */}
+                      {monthlyStatus === 'overdue' && (
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-luxury-gray-2">Monthly Fee Invoice</p>
+                            <button
+                              onClick={() => sendMonthlyInvoice(agent.id)}
+                              disabled={creatingInvoice === agent.id}
+                              className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                            >
+                              {creatingInvoice === agent.id ? 'Sending...' : 'Send $50 Monthly Invoice'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Custom Invoice */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
@@ -358,7 +388,6 @@ export default function AdminBillingPage() {
                             {showCustomForm === agent.id ? 'Cancel' : '+ New'}
                           </button>
                         </div>
-
                         {showCustomForm === agent.id && (
                           <div className="inner-card space-y-2">
                             <div className="grid grid-cols-2 gap-2">
