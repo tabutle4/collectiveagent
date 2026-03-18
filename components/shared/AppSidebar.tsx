@@ -8,7 +8,7 @@ import {
   Briefcase, Receipt, UsersRound, DollarSign,
   Settings, Menu, X, ChevronRight,
   Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser, ClipboardList,
-  BarChart3
+  BarChart3, BookOpen
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 
@@ -39,8 +39,9 @@ const adminNav: NavItem[] = [
   { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
-  { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3, BookOpen, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
   { href: '/admin/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
@@ -49,11 +50,14 @@ const agentNav: NavItem[] = [
   { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
   { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: '/roster', label: 'Roster', icon: FileText },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
   { href: '/roster', label: 'Roster', icon: FileText, external: true },
-  { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
+  { href: '/agent/reports', label: 'Reports', icon: BarChart3, BookOpen, disabled: true },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
@@ -72,6 +76,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: '/roster', label: 'Roster', icon: FileText },
   ]
   const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
   const logo = logoUrl || '/logo.png'
