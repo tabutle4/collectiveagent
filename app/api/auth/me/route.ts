@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const { data: dbUser } = await supabaseAdmin
       .from('users')
-      .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, role, roles, office, commission_plan, full_nav_access, status, is_active, headshot_url, headshot_crop, qualifying_transaction_count, cap_progress, join_date')
+      .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name, role, roles, office, commission_plan, full_nav_access, status, is_active, headshot_url, headshot_crop, qualifying_transaction_count, cap_progress, join_date, division, monthly_fee_paid_through')
       .eq('id', session.user.id)
       .single()
 
