@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
+const SP_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 const VIDEOS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5HhDhOCHtNrRZpFFzbL3M8m'
 const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4Y7SqWCeUeROfqY'
@@ -27,6 +28,18 @@ async function getAccessToken(): Promise<string> {
 async function graphGet(token: string, path: string, cache = true) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
+    next: cache ? { revalidate: 300 } : { revalidate: 0 },
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
+async function spGet(token: string, url: string, cache = true) {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json;odata=verbose',
+    },
     next: cache ? { revalidate: 300 } : { revalidate: 0 },
   })
   if (!res.ok) return null
@@ -134,33 +147,27 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Recent resources - search inside folders
-    const [docsData, agentResData] = await Promise.all([
-      graphGet(token, `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='*')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=30`),
-      graphGet(token, `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='*')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=30`),
-    ])
+    // Recent resources - use SharePoint REST API to get most recently modified
+    // files across ALL folders in Agent Resources in a single call
+    const spData = await spGet(
+      token,
+      `${SP_BASE}/_api/web/lists/getbytitle('Agent Resources')/items?$select=FileLeafRef,FileRef,Modified,Editor/Title,FileDirRef&$expand=Editor&$orderby=Modified desc&$filter=FSObjType eq 0&$top=8`
+    )
 
-    const recentResources = [
-      ...(docsData?.value || []),
-      ...(agentResData?.value || []),
-    ]
+    const recentResources = (spData?.d?.results || [])
       .filter((item: any) =>
-        item.file &&
-        !item.name?.startsWith('~') &&
-        !item.name?.endsWith('.mp4') &&
-        !item.name?.endsWith('.mov')
+        item.FileLeafRef &&
+        !item.FileLeafRef.startsWith('~') &&
+        !item.FileLeafRef.endsWith('.mp4') &&
+        !item.FileLeafRef.endsWith('.mov')
       )
-      .sort((a: any, b: any) =>
-        new Date(b.lastModifiedDateTime).getTime() - new Date(a.lastModifiedDateTime).getTime()
-      )
-      .slice(0, 8)
       .map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        webUrl: item.webUrl,
-        lastModified: item.lastModifiedDateTime,
-        lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-        category: item.parentReference?.name || 'General',
+        id: item.FileRef,
+        name: item.FileLeafRef,
+        webUrl: `https://collectiverealtyco.sharepoint.com${item.FileRef}`,
+        lastModified: item.Modified,
+        lastModifiedBy: item.Editor?.Title || 'Office Support',
+        category: item.FileDirRef?.split('/').pop() || 'General',
       }))
 
     return NextResponse.json({ recentRecordings, recentResources, videoLibraryFolders })
