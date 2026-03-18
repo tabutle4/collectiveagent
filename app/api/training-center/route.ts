@@ -106,11 +106,11 @@ export async function GET(request: NextRequest) {
     const [docsData, agentResData] = await Promise.all([
       graphGet(
         token,
-        `/drives/${DOCUMENTS_DRIVE_ID}/root/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,folder,parentReference&$orderby=lastModifiedDateTime desc&$top=20`
+        `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='*')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$orderby=lastModifiedDateTime desc&$top=30`
       ),
       graphGet(
         token,
-        `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,folder,parentReference&$orderby=lastModifiedDateTime desc&$top=20`
+        `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='*')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$orderby=lastModifiedDateTime desc&$top=30`
       ),
     ])
 
