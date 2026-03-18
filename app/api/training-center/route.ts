@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
-const SP_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 const VIDEOS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5HhDhOCHtNrRZpFFzbL3M8m'
 const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4Y7SqWCeUeROfqY'
@@ -28,18 +27,6 @@ async function getAccessToken(): Promise<string> {
 async function graphGet(token: string, path: string, cache = true) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
-    next: cache ? { revalidate: 300 } : { revalidate: 0 },
-  })
-  if (!res.ok) return null
-  return res.json()
-}
-
-async function spGet(token: string, url: string, cache = true) {
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json;odata=verbose',
-    },
     next: cache ? { revalidate: 300 } : { revalidate: 0 },
   })
   if (!res.ok) return null
@@ -147,7 +134,7 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Recent resources - get folders then fetch files from each in parallel
+    // Recent resources - get Agent Resources folders, then fetch files from each in parallel
     const agentResFoldersData = await graphGet(
       token,
       `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/children?$select=id,name,folder&$top=50`
