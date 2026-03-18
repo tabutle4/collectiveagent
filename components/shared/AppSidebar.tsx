@@ -54,7 +54,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
-  { href: '/roster', label: 'Roster', icon: FileText, external: true },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
