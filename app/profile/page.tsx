@@ -56,14 +56,21 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
       let userIdToLoad = adminUserId || null
 
       if (!userIdToLoad) {
-        const userStr = localStorage.getItem('user')
-        if (!userStr) {
-          router.push('/auth/login')
-          return
-        }
-        const userData = JSON.parse(userStr)
-        userIdToLoad = userData.id
-      }
+  const userStr = localStorage.getItem('user')
+  if (userStr) {
+    const userData = JSON.parse(userStr)
+    userIdToLoad = userData.id
+  } else {
+    // Fall back to session API (for password login)
+    const meRes = await fetch('/api/auth/me')
+    if (!meRes.ok) {
+      router.push('/auth/login')
+      return
+    }
+    const meData = await meRes.json()
+    userIdToLoad = meData.user?.id
+  }
+}
 
       const { data: freshUserData, error: userError } = await supabase
         .from('users')
