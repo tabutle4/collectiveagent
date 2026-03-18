@@ -179,14 +179,14 @@ export default function PublicRosterPage() {
       </svg>
 
       {/* Top accent bar */}
-      <div style={{ height: '3px', backgroundColor: '#C5A278', width: '100%', position: 'relative', zIndex: 1 }} />
+      <div style={{ height: '3px', backgroundColor: '#C5A278', width: '100%', position: 'relative', zIndex: 10 }} />
 
-      {/* Header */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      {/* Header - sticky so it stays on top while scrolling */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F9F9F9' }}>
         <LuxuryHeader showTrainingCenter={false} />
       </div>
 
-      {/* Roster Content */}
+      {/* Roster Content - no extra padding needed since header is sticky not fixed */}
       <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
         {loading ? (
           <div className="flex items-center justify-center py-24">
