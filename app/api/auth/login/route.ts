@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const userRole = user.role || ''
     const redirectPath = userRole === 'admin' || userRole === 'broker' || userRole === 'operations' || userRole === 'tc'
       ? '/admin/dashboard'
-      : '/agent/dashboard'
+      : '/agent/profile'
 
     const response = NextResponse.json({
       message: 'Login successful',
