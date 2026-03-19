@@ -41,8 +41,6 @@ interface CheckRecord {
   status: CheckStatus
   notes?: string | null
   transaction_id?: string | null
-  check_image_url?: string | null
-  onedrive_folder_url?: string | null
   check_payouts: Payout[]
 }
 
@@ -62,13 +60,7 @@ interface DashboardData {
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
-const fmtShort = (n: number) => {
-  const abs = Math.abs(n)
-  const sign = n < 0 ? '-' : ''
-  if (abs >= 1000000) return `${sign}$${(abs / 1000000).toFixed(1)}M`
-  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(0)}K`
-  return fmt(n)
-}
+const fmtShort = (n: number) => fmt(n)
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—'

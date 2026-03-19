@@ -138,15 +138,33 @@ export async function POST(request: NextRequest) {
     // Update US Bank balance
     if (action === 'update_balance') {
       const { balance } = body
-      const { error } = await supabase
-        .from('company_settings')
-        .update({
-          us_bank_balance: parseFloat(balance),
-          us_bank_balance_updated_at: new Date().toISOString(),
-        })
-        .not('id', 'is', null)
 
-      if (error) throw error
+      // First try to update existing row
+      const { data: existing } = await supabase
+        .from('company_settings')
+        .select('id')
+        .limit(1)
+        .single()
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('company_settings')
+          .update({
+            us_bank_balance: parseFloat(balance),
+            us_bank_balance_updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('company_settings')
+          .insert({
+            us_bank_balance: parseFloat(balance),
+            us_bank_balance_updated_at: new Date().toISOString(),
+          })
+        if (error) throw error
+      }
+
       return NextResponse.json({ success: true })
     }
 

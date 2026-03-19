@@ -9,14 +9,14 @@ const supabase = createClient(
 // Get Graph access token using client credentials (same auth your calendar route uses)
 async function getGraphToken(): Promise<string> {
   const res = await fetch(
-    `https://login.microsoftonline.com/${process.env.GRAPH_TENANT_ID}/oauth2/v2.0/token`,
+    `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: process.env.GRAPH_CLIENT_ID!,
-        client_secret: process.env.GRAPH_CLIENT_SECRET!,
+        client_id: process.env.MICROSOFT_CLIENT_ID!,
+        client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
         scope: 'https://graph.microsoft.com/.default',
       }),
     }
@@ -52,7 +52,7 @@ async function uploadToOneDrive(
       Authorization: `Bearer ${token}`,
       'Content-Type': contentType,
     },
-    body: fileBuffer as unknown as BodyInit,
+    body: fileBuffer,
   })
 
   if (!uploadRes.ok) {
