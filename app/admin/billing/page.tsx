@@ -283,7 +283,6 @@ export default function AdminBillingPage() {
         debt_type: 'brokerage_credit',
         description: creditDesc,
         amount_owed: parseFloat(creditAmount),
-        amount_remaining: parseFloat(creditAmount),
         date_incurred: new Date().toISOString().split('T')[0],
         status: 'outstanding',
       })
