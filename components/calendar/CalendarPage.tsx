@@ -309,9 +309,14 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                     <div
                       key={idx}
                       className={`min-h-[52px] sm:min-h-[72px] p-1 border-b border-r border-luxury-gray-5/20 ${day ? 'cursor-pointer active:bg-luxury-light' : ''} ${isWeekend && day ? 'bg-luxury-gray-5/10' : ''}`}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (!day) return
-                        setSelectedDay({ day, events: getEventsForDay(day) })
+                        const isMobile = window.innerWidth < 768
+                        if (isMobile) {
+                          setSelectedDay({ day, events: getEventsForDay(day) })
+                        } else if (isAdmin) {
+                          openNewForm(day)
+                        }
                       }}
                     >
                       {day && (
