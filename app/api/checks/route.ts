@@ -81,8 +81,11 @@ export async function GET(request: NextRequest) {
         .select(`
           id, property_address, check_from, check_amount, received_date,
           deposited_date, cleared_date, compliance_complete_date,
-          brokerage_amount, crc_transferred, status, notes,
+          brokerage_amount, crc_transferred, status, notes, check_image_url,
           transaction_id,
+          transactions!checks_received_transaction_id_fkey (
+            onedrive_folder_url
+          ),
           check_payouts (
             id, payee_type, payee_name, user_id, amount, payment_status,
             payment_method, payment_date, payment_reference
@@ -92,7 +95,13 @@ export async function GET(request: NextRequest) {
         .order('cleared_date', { ascending: false })
 
       if (error) throw error
-      return NextResponse.json({ checks: data || [] })
+      // Flatten the transaction join so onedrive_folder_url is directly on the check
+      const checks = (data || []).map((c: any) => ({
+        ...c,
+        onedrive_folder_url: (c.transactions as any)?.onedrive_folder_url || null,
+        transactions: undefined,
+      }))
+      return NextResponse.json({ checks })
     }
 
     // History — fully paid
