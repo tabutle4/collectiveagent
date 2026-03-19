@@ -352,7 +352,7 @@ export default function AdminTransactionDetailPage() {
   ]
 
   return (
-    <div className="flex flex-col lg:flex-row gap-0 -mx-4 -mt-4 md:-mx-6 md:-mt-6 min-h-screen">
+    <div className="flex flex-col -mx-4 -mt-4 md:-mx-6 md:-mt-6">
 
       {saving && (
         <div className="fixed top-4 right-4 bg-luxury-gray-1 text-white px-4 py-2 rounded text-xs z-50 shadow-lg">
@@ -361,7 +361,7 @@ export default function AdminTransactionDetailPage() {
       )}
 
       {/* ── Mobile Header + Tab Bar ───────────────────────────────────────── */}
-      <div className="lg:hidden border-b border-luxury-gray-5 bg-luxury-light">
+      <div className="border-b border-luxury-gray-5 bg-luxury-light">
         <div className="p-3">
           <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors">
             <ArrowLeft size={13} /> Back to Transactions
@@ -396,7 +396,7 @@ export default function AdminTransactionDetailPage() {
       </div>
 
       {/* ── Left Sidebar ───────────────────────────────────────────────────── */}
-      <div className="hidden lg:flex w-52 flex-shrink-0 border-r border-luxury-gray-5 bg-luxury-light flex-col" style={{ minHeight: '100vh' }}>
+      <div className="hidden">
         <div className="p-4">
           <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors">
             <ArrowLeft size={13} /> Back to Transactions
@@ -449,10 +449,10 @@ export default function AdminTransactionDetailPage() {
       </div>
 
       {/* ── Main Content + Right Panel ──────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-w-0">
+      <div className="flex flex-col md:flex-row min-w-0">
 
         {/* Main content */}
-        <div className="flex-1 overflow-auto p-4 md:p-6 min-w-0">
+        <div className="flex-1 p-4 md:p-6 min-w-0">
 
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
@@ -1012,7 +1012,7 @@ export default function AdminTransactionDetailPage() {
         </div>
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
-        <div className="lg:w-72 lg:flex-shrink-0 border-t lg:border-t-0 lg:border-l border-luxury-gray-5 overflow-auto p-4 space-y-3 bg-white">
+        <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
 
           {/* Agent Profile */}
           {primaryAgent && (
