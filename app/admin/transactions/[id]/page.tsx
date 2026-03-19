@@ -982,7 +982,7 @@ export default function TransactionDetailPage() {
   useEffect(() => {
 
     try {
-      if (user?.role !== 'Admin') {
+      if (user?.role !== 'admin') {
         router.push('/auth/login')
         return
       }
