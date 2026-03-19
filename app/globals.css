@@ -329,21 +329,6 @@
   }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .header-luxury {
-    @apply bg-luxury-dark-2 text-white;
-  }
-
-  .header-title {
-    @apply text-white;
-  }
-
-  .header-subtitle {
-    @apply text-white/70;
-  }
-}
-
 /* Global font size overrides */
 @layer base {
   .text-xs {
