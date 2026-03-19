@@ -352,7 +352,7 @@ export default function AdminTransactionDetailPage() {
   ]
 
   return (
-    <div className="flex gap-0 min-h-screen -mx-4 -mt-4 md:-mx-8 md:-mt-8">
+    <div className="flex flex-col lg:flex-row gap-0 -mx-4 -mt-4 md:-mx-6 md:-mt-6 min-h-screen">
 
       {saving && (
         <div className="fixed top-4 right-4 bg-luxury-gray-1 text-white px-4 py-2 rounded text-xs z-50 shadow-lg">
@@ -360,8 +360,43 @@ export default function AdminTransactionDetailPage() {
         </div>
       )}
 
+      {/* ── Mobile Header + Tab Bar ───────────────────────────────────────── */}
+      <div className="lg:hidden border-b border-luxury-gray-5 bg-luxury-light">
+        <div className="p-3">
+          <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors">
+            <ArrowLeft size={13} /> Back to Transactions
+          </button>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-luxury-gray-1 leading-tight">{addrStreet}</p>
+              {addrCity && <p className="text-xs text-luxury-gray-3">{addrCity}</p>}
+            </div>
+            <StatusBadge status={txn.status as TransactionStatus} />
+          </div>
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">{txn.transaction_type}</span>
+            {txn.office_location && <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">{txn.office_location}</span>}
+          </div>
+        </div>
+        <div className="flex overflow-x-auto px-3 pb-0 gap-0 border-t border-luxury-gray-5/50">
+          {navTabs.filter(t => t.show).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-2.5 text-xs whitespace-nowrap border-b-2 transition-colors flex-shrink-0 ${
+                activeTab === tab.key
+                  ? 'border-luxury-accent text-luxury-accent font-semibold'
+                  : 'border-transparent text-luxury-gray-3 hover:text-luxury-gray-1'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Left Sidebar ───────────────────────────────────────────────────── */}
-      <div className="w-56 flex-shrink-0 border-r border-luxury-gray-5 bg-luxury-light flex flex-col" style={{ minHeight: '100vh' }}>
+      <div className="hidden lg:flex w-52 flex-shrink-0 border-r border-luxury-gray-5 bg-luxury-light flex-col" style={{ minHeight: '100vh' }}>
         <div className="p-4">
           <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors">
             <ArrowLeft size={13} /> Back to Transactions
@@ -414,10 +449,10 @@ export default function AdminTransactionDetailPage() {
       </div>
 
       {/* ── Main Content + Right Panel ──────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col lg:flex-row overflow-hidden min-w-0">
 
         {/* Main content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-4 md:p-6 min-w-0">
 
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
@@ -977,7 +1012,7 @@ export default function AdminTransactionDetailPage() {
         </div>
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
-        <div className="w-72 flex-shrink-0 border-l border-luxury-gray-5 overflow-auto p-4 space-y-3 bg-white">
+        <div className="lg:w-72 lg:flex-shrink-0 border-t lg:border-t-0 lg:border-l border-luxury-gray-5 overflow-auto p-4 space-y-3 bg-white">
 
           {/* Agent Profile */}
           {primaryAgent && (
