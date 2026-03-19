@@ -540,21 +540,16 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
             </div>
 
             <div className="flex gap-2 mt-5">
-              <a
-                href={(() => {
-                  const start = encodeURIComponent(selectedEvent.start.dateTime || selectedEvent.start.date)
-                  const end = encodeURIComponent(selectedEvent.end.dateTime || selectedEvent.end.date)
-                  const subject = encodeURIComponent(selectedEvent.subject || '')
-                  const location = encodeURIComponent(selectedEvent.location?.displayName || '')
-                  const body = encodeURIComponent(selectedEvent.body?.content?.replace(/<[^>]*>/g, '') || '')
-                  return `https://outlook.office.com/calendar/action/compose?startdt=${start}&enddt=${end}&subject=${subject}&location=${location}&body=${body}`
-                })()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary text-xs flex-1 text-center"
-              >
-                Add to My Calendar
-              </a>
+              {selectedEvent.webLink && (
+                <a
+                  href={selectedEvent.webLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary text-xs flex-1 text-center"
+                >
+                  Open in Outlook
+                </a>
+              )}
               {isAdmin && (
                 <>
                   <button
