@@ -189,6 +189,25 @@ export default function AdminBillingPage() {
     }
   }
 
+  const voidInvoice = async (agentId: string, invoiceId: string) => {
+    if (!confirm('Void this invoice? The agent will no longer be able to pay it.')) return
+    setSending(`void-${invoiceId}`)
+    try {
+      const res = await fetch('/api/payload/void-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, user_id: agentId }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to void invoice')
+      await refreshAgentData(agentId)
+    } catch (err: any) {
+      alert(err.message || 'Failed to void invoice')
+    } finally {
+      setSending(null)
+    }
+  }
+
   const sendReceipt = async (agentId: string, invoiceId: string) => {
     setSending(`receipt-${invoiceId}`)
     try {
@@ -258,7 +277,7 @@ export default function AdminBillingPage() {
     if (!creditAmount || !creditDesc) return
     setSavingCredit(agentId)
     try {
-      await supabase.from('agent_debts').insert({
+      const { error } = await supabase.from('agent_debts').insert({
         agent_id: agentId,
         record_type: 'credit',
         debt_type: 'brokerage_credit',
@@ -268,6 +287,7 @@ export default function AdminBillingPage() {
         date_incurred: new Date().toISOString().split('T')[0],
         status: 'outstanding',
       })
+      if (error) throw new Error(error.message)
       setShowCreditForm(null)
       setCreditAmount('')
       setCreditDesc('')
@@ -514,12 +534,10 @@ export default function AdminBillingPage() {
                                       </div>
                                       <div className="flex items-center gap-2 ml-4">
                                         <p className="text-sm font-semibold text-orange-600">{formatCurrency(record.amount_remaining ?? record.amount_owed)}</p>
-                                        {!isInvoiced && (
-                                          <>
-                                            <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
-                                            <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
-                                          </>
-                                        )}
+                                        <>
+                                          <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
+                                          <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                                        </>
                                         {agent.payload_payee_id && !isInvoiced && (
                                           <button
                                             onClick={() => sendDebtInvoice(agent.id, record)}
@@ -643,6 +661,13 @@ export default function AdminBillingPage() {
                                           <Send size={11} />
                                           {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
                                         </button>
+                                        <button
+                                          onClick={() => voidInvoice(agent.id, inv.id)}
+                                          disabled={sending === `void-${inv.id}`}
+                                          className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
+                                        >
+                                          {sending === `void-${inv.id}` ? 'Voiding...' : 'Void'}
+                                        </button>
                                       </div>
                                     </div>
                                   </div>
@@ -722,7 +747,7 @@ export default function AdminBillingPage() {
                                   disabled={!customAmount || !customDesc || creatingInvoice === agent.id}
                                   className="btn btn-primary text-xs w-full disabled:opacity-50"
                                 >
-                                  {creatingInvoice === agent.id ? 'Creating & Sending...' : 'Create & Send to Agent'}
+                                  {creatingInvoice === agent.id ? 'Sending...' : 'Send Invoice'}
                                 </button>
                               </div>
                             )}
