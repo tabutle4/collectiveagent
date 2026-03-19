@@ -117,6 +117,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [activeTab, setActiveTab] = useState<'calendar' | 'schedule'>('calendar')
+  const [selectedDay, setSelectedDay] = useState<{ day: number; events: any[] } | null>(null)
   const [form, setForm] = useState({
     title: '',
     date: '',
@@ -308,7 +309,10 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                     <div
                       key={idx}
                       className={`min-h-[52px] sm:min-h-[72px] p-1 border-b border-r border-luxury-gray-5/20 ${day ? 'cursor-pointer active:bg-luxury-light' : ''} ${isWeekend && day ? 'bg-luxury-gray-5/10' : ''}`}
-                      onClick={() => isAdmin && day ? openNewForm(day) : undefined}
+                      onClick={() => {
+                        if (!day) return
+                        setSelectedDay({ day, events: getEventsForDay(day) })
+                      }}
                     >
                       {day && (
                         <>
@@ -453,6 +457,63 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                       <span className="text-xs">{session.platform}</span>
                     </div>
                     <span className="text-xs text-luxury-gray-3 text-right ml-2">{session.audience}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Day events drawer ─── */}
+      {selectedDay && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30" onClick={() => setSelectedDay(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[75vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-luxury-gray-4" />
+            </div>
+            <div className="flex items-center justify-between px-6 py-3 border-b border-luxury-gray-5/30 flex-shrink-0">
+              <div>
+                <p className="text-xs text-luxury-gray-3">{MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</p>
+                <h3 className="text-sm font-semibold text-luxury-gray-1">{selectedDay.day}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    onClick={() => { setSelectedDay(null); openNewForm(selectedDay.day) }}
+                    className="btn btn-primary flex items-center gap-1.5 text-xs px-3 py-1.5"
+                  >
+                    <Plus size={12} />
+                    Add Event
+                  </button>
+                )}
+                <button onClick={() => setSelectedDay(null)} className="p-1 text-luxury-gray-3 hover:text-luxury-gray-1">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto px-6 py-3 space-y-2">
+              {selectedDay.events.map(event => (
+                <div
+                  key={event.id}
+                  onClick={() => { setSelectedDay(null); setSelectedEvent(event) }}
+                  className="inner-card cursor-pointer active:bg-luxury-light transition-colors"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-1 self-stretch rounded-full bg-luxury-accent flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-luxury-gray-1">{event.subject}</p>
+                      {!event.isAllDay && event.start.dateTime && (
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">{formatTime(event.start.dateTime)} — {formatTime(event.end.dateTime)}</p>
+                      )}
+                      {event.isAllDay && (
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">All day</p>
+                      )}
+                      {event.location?.displayName && (
+                        <p className="text-xs text-luxury-gray-3 truncate mt-0.5">{event.location.displayName}</p>
+                      )}
+                    </div>
+                    <ChevronRight size={14} className="text-luxury-gray-4 flex-shrink-0 mt-0.5" />
                   </div>
                 </div>
               ))}
