@@ -34,7 +34,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
   { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
-  { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
+  { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign },
   { href: '/admin/billing', label: 'Billing', icon: Wallet },
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
