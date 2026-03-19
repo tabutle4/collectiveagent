@@ -70,7 +70,7 @@ export default function AdminBillingPage() {
     const [{ data }, { data: debtData, count: openDebtsCount }] = await Promise.all([
       supabase
         .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
+        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, monthly_fee_waived, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
         .eq('status', 'active')
         .order('first_name'),
       supabase
@@ -117,10 +117,38 @@ export default function AdminBillingPage() {
   }
 
   const refreshAgentData = async (agentId: string) => {
-    const updated = { ...agentData }
-    delete updated[agentId]
-    setAgentData(updated)
-    await loadAgentData(agentId)
+    setAgentData(prev => {
+      const updated = { ...prev }
+      delete updated[agentId]
+      return updated
+    })
+    setLoadingAgent(agentId)
+    try {
+      const [invoiceRes, receiptRes, { data: debts }] = await Promise.all([
+        fetch(`/api/payload/open-invoices?user_id=${agentId}`),
+        fetch(`/api/payload/receipts?user_id=${agentId}`),
+        supabase
+          .from('agent_debts')
+          .select('id, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes')
+          .eq('agent_id', agentId)
+          .eq('status', 'outstanding')
+          .order('date_incurred', { ascending: false }),
+      ])
+      const invoices = await invoiceRes.json()
+      const receipts = await receiptRes.json()
+      setAgentData(prev => ({
+        ...prev,
+        [agentId]: {
+          invoices: invoices.invoices || [],
+          receipts: receipts.receipts || [],
+          debts: debts || [],
+        },
+      }))
+    } catch {
+      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [], debts: [] } }))
+    } finally {
+      setLoadingAgent(null)
+    }
     const { data: debtData, count } = await supabase
       .from('agent_debts')
       .select('agent_id', { count: 'exact' })
@@ -140,7 +168,7 @@ export default function AdminBillingPage() {
   }
 
   const getMonthlyStatus = (agent: any) => {
-    if (agent.division) return 'waived'
+    if (agent.monthly_fee_waived) return 'waived'
     if (!agent.monthly_fee_paid_through) return 'unpaid'
     const paidThrough = new Date(agent.monthly_fee_paid_through)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
@@ -206,19 +234,15 @@ export default function AdminBillingPage() {
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
-
-      // Update the debt record to link the Payload invoice
       await supabase
         .from('agent_debts')
         .update({ notes: `${debt.notes || ''} | Payload invoice: ${invoiceData.invoice_id}`.trim() })
         .eq('id', debt.id)
-
       await fetch('/api/payload/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
       })
-
       await refreshAgentData(agentId)
     } catch (err: any) {
       alert(err.message || 'Failed to send debt invoice')
@@ -340,7 +364,7 @@ export default function AdminBillingPage() {
       <h1 className="page-title mb-6">BILLING</h1>
 
       {/* Stats - all clickable */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
           onClick={() => setStatusFilter(null)}
@@ -436,7 +460,7 @@ export default function AdminBillingPage() {
                     <p className="text-xs text-luxury-gray-3">Loading...</p>
                   )}
 
-                  {!loadingAgent && data && (
+                  {loadingAgent !== agent.id && data && (
                     <>
                       {/* Outstanding Debts */}
                       {data.debts.length > 0 && (

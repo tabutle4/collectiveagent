@@ -13,20 +13,21 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createClient()
 
-    // Get all active non-division agents with a Payload customer ID
+    // Get all active agents with a Payload customer ID who are NOT fee waived
     const { data: agents } = await supabase
       .from('users')
       .select('id, payload_payee_id, first_name, preferred_first_name, last_name, preferred_last_name')
       .eq('status', 'active')
-      .is('division', null)
+      .eq('monthly_fee_waived', false)
       .not('payload_payee_id', 'is', null)
 
     if (!agents?.length) {
       return NextResponse.json({ success: true, message: 'No eligible agents', created: 0 })
     }
 
-    // Due date is the 5th of this month
     const now = new Date()
+    const monthName = now.toLocaleString('default', { month: 'long' })
+    const year = now.getFullYear()
     const dueDate = new Date(now.getFullYear(), now.getMonth(), 5).toISOString().split('T')[0]
 
     let created = 0
@@ -36,7 +37,6 @@ export async function GET(request: NextRequest) {
     for (const agent of agents) {
       try {
         // Check if they already have an unpaid monthly invoice this month
-        // to avoid duplicates if cron runs more than once
         const checkRes = await fetch(
           `https://api.payload.com/invoices/?customer_id=${agent.payload_payee_id}&status=unpaid&limit=5`,
           { headers: { 'Authorization': plAuth() } }
@@ -63,8 +63,9 @@ export async function GET(request: NextRequest) {
             'due_date': dueDate,
             'processing_id': process.env.PAYLOAD_PROCESSING_ID!,
             'customer_id': agent.payload_payee_id,
+            'description': `${monthName} ${year} Monthly Brokerage Fee`,
             'items[0][type]': 'Monthly Fee',
-            'items[0][description]': 'Monthly brokerage fee',
+            'items[0][description]': `${monthName} ${year} Monthly Brokerage Fee`,
             'items[0][amount]': '50',
             'items[0][entry_type]': 'charge',
           }),
@@ -96,7 +97,6 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`Monthly invoices: ${created} created, ${skipped} skipped, ${errors.length} errors`)
-
     return NextResponse.json({
       success: true,
       created,

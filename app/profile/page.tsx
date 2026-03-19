@@ -16,8 +16,10 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
   const [loading, setLoading] = useState(true)
   const [headshotUrl, setHeadshotUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [savingBilling, setSavingBilling] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [billingSuccess, setBillingSuccess] = useState<string | null>(null)
   const [personalForm, setPersonalForm] = useState({
     preferred_first_name: '',
     preferred_last_name: '',
@@ -39,6 +41,10 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
     shirt_type: '',
     shirt_size: '',
   })
+  const [billingForm, setBillingForm] = useState({
+    monthly_fee_waived: false,
+    waive_processing_fees: false,
+  })
 
   useEffect(() => {
     checkAuthAndLoadUser()
@@ -56,21 +62,20 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
       let userIdToLoad = adminUserId || null
 
       if (!userIdToLoad) {
-  const userStr = localStorage.getItem('user')
-  if (userStr) {
-    const userData = JSON.parse(userStr)
-    userIdToLoad = userData.id
-  } else {
-    // Fall back to session API (for password login)
-    const meRes = await fetch('/api/auth/me')
-    if (!meRes.ok) {
-      router.push('/auth/login')
-      return
-    }
-    const meData = await meRes.json()
-    userIdToLoad = meData.user?.id
-  }
-}
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          const userData = JSON.parse(userStr)
+          userIdToLoad = userData.id
+        } else {
+          const meRes = await fetch('/api/auth/me')
+          if (!meRes.ok) {
+            router.push('/auth/login')
+            return
+          }
+          const meData = await meRes.json()
+          userIdToLoad = meData.user?.id
+        }
+      }
 
       const { data: freshUserData, error: userError } = await supabase
         .from('users')
@@ -103,6 +108,10 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
         date_of_birth: freshUserData.date_of_birth || '',
         shirt_type: freshUserData.shirt_type || '',
         shirt_size: freshUserData.shirt_size || '',
+      })
+      setBillingForm({
+        monthly_fee_waived: freshUserData.monthly_fee_waived || false,
+        waive_processing_fees: freshUserData.waive_processing_fees || false,
       })
       setLoading(false)
     } catch (error: any) {
@@ -157,6 +166,29 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
       setSaveError('Failed to save changes. Please try again.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveBilling = async () => {
+    if (!user) return
+    setSavingBilling(true)
+    setBillingSuccess(null)
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          monthly_fee_waived: billingForm.monthly_fee_waived,
+          waive_processing_fees: billingForm.waive_processing_fees,
+        })
+        .eq('id', user.id)
+
+      if (error) throw error
+      setBillingSuccess('Billing settings updated.')
+      await checkAuthAndLoadUser()
+    } catch (e) {
+      setBillingSuccess('Failed to save billing settings.')
+    } finally {
+      setSavingBilling(false)
     }
   }
 
@@ -368,6 +400,77 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
         <p className="text-xs text-luxury-gray-3 mt-4">
           Real estate information is managed by the office. Contact an administrator if something looks incorrect.
         </p>
+      </div>
+
+      {/* Billing section — admin sees toggles, agent sees read-only */}
+      <div className="card-section mt-6">
+        <h3 className="text-base font-medium text-luxury-gray-1 mb-4">Billing</h3>
+
+        {isAdmin ? (
+          <>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-luxury-gray-1">Monthly Fee Waived</p>
+                  <p className="text-xs text-luxury-gray-3">Agent will not be invoiced for the $50 monthly fee</p>
+                </div>
+                <button
+                  onClick={() => setBillingForm(prev => ({ ...prev, monthly_fee_waived: !prev.monthly_fee_waived }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.monthly_fee_waived ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.monthly_fee_waived ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-luxury-gray-1">Processing Fees Waived</p>
+                  <p className="text-xs text-luxury-gray-3">Transaction processing fees will not be deducted from commissions</p>
+                </div>
+                <button
+                  onClick={() => setBillingForm(prev => ({ ...prev, waive_processing_fees: !prev.waive_processing_fees }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.waive_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_processing_fees ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+            {billingSuccess && (
+              <p className={`text-xs mt-3 ${billingSuccess.includes('Failed') ? 'text-red-600' : 'text-green-700'}`}>
+                {billingSuccess}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleSaveBilling}
+                disabled={savingBilling}
+                className="px-4 py-2 text-sm rounded bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingBilling ? 'Saving...' : 'Save Billing Settings'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm text-luxury-gray-2">Monthly Fee</label>
+              <input
+                className="input-luxury bg-gray-50"
+                value={user.monthly_fee_waived ? 'Waived' : '$50/month'}
+                readOnly
+                disabled
+              />
+            </div>
+            <div>
+              <label className="text-sm text-luxury-gray-2">Processing Fees</label>
+              <input
+                className="input-luxury bg-gray-50"
+                value={user.waive_processing_fees ? 'Waived' : 'Standard'}
+                readOnly
+                disabled
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
