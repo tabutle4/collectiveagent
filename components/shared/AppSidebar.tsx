@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  LayoutDashboard, UserCog, Calendar, Search, Wallet,
+  LayoutDashboard, UserCog, CalendarDays, Megaphone, Search, Wallet,
   Briefcase, Receipt, UsersRound, DollarSign,
   Settings, Menu, X, ChevronRight,
   Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser, ClipboardList,
@@ -36,7 +36,8 @@ const adminNav: NavItem[] = [
   { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
   { href: '/admin/checks', label: 'Checks', icon: CircleDollarSign, disabled: true },
   { href: '/admin/billing', label: 'Billing', icon: Wallet },
-  { href: '/admin/campaigns', label: 'Campaigns', icon: Calendar },
+  { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
@@ -51,6 +52,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
   { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
+  { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
@@ -75,6 +77,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
+    { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   ]
