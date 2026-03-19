@@ -187,7 +187,7 @@ export default function PublicRosterPage() {
       </div>
 
       {/* Roster Content - no extra padding needed since header is sticky not fixed */}
-      <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+      <div style={{ flex: 1, position: 'relative', zIndex: 1, paddingTop: '86px' }}>
         {loading ? (
           <div className="flex items-center justify-center py-24">
             <p className="text-gray-500 text-sm">Loading agent roster...</p>

@@ -8,12 +8,14 @@ type InvoiceType = 'onboarding' | 'monthly' | 'custom'
 
 export async function POST(request: NextRequest) {
   try {
-    const { user_id, type, amount, description }: {
-      user_id: string
-      type: InvoiceType
-      amount?: number
-      description?: string
-    } = await request.json()
+    const { user_id, type, amount, description, month, year: invoiceYear }: {
+  user_id: string
+  type: InvoiceType
+  amount?: number
+  description?: string
+  month?: string
+  year?: number
+} = await request.json()
 
     if (!user_id || !type) {
       return NextResponse.json({ error: 'user_id and type are required' }, { status: 400 })
@@ -62,8 +64,8 @@ export async function POST(request: NextRequest) {
       }
     } else if (type === 'monthly') {
       const now = new Date()
-const monthName = now.toLocaleString('default', { month: 'long' })
-const year = now.getFullYear()
+const monthName = month || now.toLocaleString('default', { month: 'long' })
+const year = invoiceYear || now.getFullYear()
 params.append('items[0][type]', 'Monthly Fee')
 params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][amount]', '50')
