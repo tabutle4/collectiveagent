@@ -22,21 +22,25 @@ export default function AdminBillingPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
-  const [agentData, setAgentData] = useState<Record<string, { invoices: any[], receipts: any[], debts: any[] }>>({})
+  const [agentData, setAgentData] = useState<Record<string, { invoices: any[], receipts: any[], records: any[] }>>({})
   const [loadingAgent, setLoadingAgent] = useState<string | null>(null)
   const [sending, setSending] = useState<string | null>(null)
   const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
+  const [showCreditForm, setShowCreditForm] = useState<string | null>(null)
+  const [creditAmount, setCreditAmount] = useState('')
+  const [creditDesc, setCreditDesc] = useState('')
+  const [savingCredit, setSavingCredit] = useState<string | null>(null)
   const [showMonthlyForm, setShowMonthlyForm] = useState<string | null>(null)
   const [invoiceMonth, setInvoiceMonth] = useState(MONTHS[new Date().getMonth()])
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
   const [openDebtAgentIds, setOpenDebtAgentIds] = useState<string[]>([])
-  const [editingDebt, setEditingDebt] = useState<string | null>(null)
-  const [editDebtDesc, setEditDebtDesc] = useState('')
-  const [editDebtAmount, setEditDebtAmount] = useState('')
+  const [editingRecord, setEditingRecord] = useState<string | null>(null)
+  const [editDesc, setEditDesc] = useState('')
+  const [editAmount, setEditAmount] = useState('')
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -85,32 +89,34 @@ export default function AdminBillingPage() {
     setLoading(false)
   }
 
+  const fetchAgentRecords = async (agentId: string) => {
+    const [invoiceRes, receiptRes, { data: records }] = await Promise.all([
+      fetch(`/api/payload/open-invoices?user_id=${agentId}`),
+      fetch(`/api/payload/receipts?user_id=${agentId}`),
+      supabase
+        .from('agent_debts')
+        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes')
+        .eq('agent_id', agentId)
+        .eq('status', 'outstanding')
+        .order('date_incurred', { ascending: false }),
+    ])
+    const invoices = await invoiceRes.json()
+    const receipts = await receiptRes.json()
+    return {
+      invoices: invoices.invoices || [],
+      receipts: receipts.receipts || [],
+      records: records || [],
+    }
+  }
+
   const loadAgentData = async (agentId: string) => {
     if (agentData[agentId]) return
     setLoadingAgent(agentId)
     try {
-      const [invoiceRes, receiptRes, { data: debts }] = await Promise.all([
-        fetch(`/api/payload/open-invoices?user_id=${agentId}`),
-        fetch(`/api/payload/receipts?user_id=${agentId}`),
-        supabase
-          .from('agent_debts')
-          .select('id, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes')
-          .eq('agent_id', agentId)
-          .eq('status', 'outstanding')
-          .order('date_incurred', { ascending: false }),
-      ])
-      const invoices = await invoiceRes.json()
-      const receipts = await receiptRes.json()
-      setAgentData(prev => ({
-        ...prev,
-        [agentId]: {
-          invoices: invoices.invoices || [],
-          receipts: receipts.receipts || [],
-          debts: debts || [],
-        },
-      }))
+      const result = await fetchAgentRecords(agentId)
+      setAgentData(prev => ({ ...prev, [agentId]: result }))
     } catch {
-      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [], debts: [] } }))
+      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [], records: [] } }))
     } finally {
       setLoadingAgent(null)
     }
@@ -124,28 +130,10 @@ export default function AdminBillingPage() {
     })
     setLoadingAgent(agentId)
     try {
-      const [invoiceRes, receiptRes, { data: debts }] = await Promise.all([
-        fetch(`/api/payload/open-invoices?user_id=${agentId}`),
-        fetch(`/api/payload/receipts?user_id=${agentId}`),
-        supabase
-          .from('agent_debts')
-          .select('id, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes')
-          .eq('agent_id', agentId)
-          .eq('status', 'outstanding')
-          .order('date_incurred', { ascending: false }),
-      ])
-      const invoices = await invoiceRes.json()
-      const receipts = await receiptRes.json()
-      setAgentData(prev => ({
-        ...prev,
-        [agentId]: {
-          invoices: invoices.invoices || [],
-          receipts: receipts.receipts || [],
-          debts: debts || [],
-        },
-      }))
+      const result = await fetchAgentRecords(agentId)
+      setAgentData(prev => ({ ...prev, [agentId]: result }))
     } catch {
-      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [], debts: [] } }))
+      setAgentData(prev => ({ ...prev, [agentId]: { invoices: [], receipts: [], records: [] } }))
     } finally {
       setLoadingAgent(null)
     }
@@ -158,7 +146,7 @@ export default function AdminBillingPage() {
     setOpenDebtAgentIds((debtData || []).map((d: any) => d.agent_id))
   }
 
-  const toggleAgent = (agentId: string, hasPayloadId: boolean) => {
+  const toggleAgent = (agentId: string) => {
     if (expandedAgent === agentId) {
       setExpandedAgent(null)
     } else {
@@ -219,8 +207,8 @@ export default function AdminBillingPage() {
     }
   }
 
-  const sendDebtInvoice = async (agentId: string, debt: any) => {
-    setSending(`debt-${debt.id}`)
+  const sendDebtInvoice = async (agentId: string, record: any) => {
+    setSending(`debt-${record.id}`)
     try {
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
@@ -228,16 +216,16 @@ export default function AdminBillingPage() {
         body: JSON.stringify({
           user_id: agentId,
           type: 'custom',
-          amount: debt.amount_remaining ?? debt.amount_owed,
-          description: debt.description || 'Outstanding balance',
+          amount: record.amount_remaining ?? record.amount_owed,
+          description: record.description || 'Outstanding balance',
         }),
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
       await supabase
         .from('agent_debts')
-        .update({ notes: `${debt.notes || ''} | Payload invoice: ${invoiceData.invoice_id}`.trim() })
-        .eq('id', debt.id)
+        .update({ notes: `${record.notes || ''} | Payload invoice: ${invoiceData.invoice_id}`.trim() })
+        .eq('id', record.id)
       await fetch('/api/payload/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,19 +239,44 @@ export default function AdminBillingPage() {
     }
   }
 
-  const deleteDebt = async (agentId: string, debtId: string) => {
-    if (!confirm('Delete this debt record? This cannot be undone.')) return
-    await supabase.from('agent_debts').delete().eq('id', debtId)
+  const deleteRecord = async (agentId: string, recordId: string) => {
+    if (!confirm('Delete this record? This cannot be undone.')) return
+    await supabase.from('agent_debts').delete().eq('id', recordId)
     await refreshAgentData(agentId)
   }
 
-  const updateDebt = async (agentId: string, debtId: string, description: string, amount: number) => {
+  const updateRecord = async (agentId: string, recordId: string, description: string, amount: number) => {
     await supabase
       .from('agent_debts')
       .update({ description, amount_owed: amount })
-      .eq('id', debtId)
-    setEditingDebt(null)
+      .eq('id', recordId)
+    setEditingRecord(null)
     await refreshAgentData(agentId)
+  }
+
+  const addCredit = async (agentId: string) => {
+    if (!creditAmount || !creditDesc) return
+    setSavingCredit(agentId)
+    try {
+      await supabase.from('agent_debts').insert({
+        agent_id: agentId,
+        record_type: 'credit',
+        debt_type: 'brokerage_credit',
+        description: creditDesc,
+        amount_owed: parseFloat(creditAmount),
+        amount_remaining: parseFloat(creditAmount),
+        date_incurred: new Date().toISOString().split('T')[0],
+        status: 'outstanding',
+      })
+      setShowCreditForm(null)
+      setCreditAmount('')
+      setCreditDesc('')
+      await refreshAgentData(agentId)
+    } catch (err: any) {
+      alert(err.message || 'Failed to add credit')
+    } finally {
+      setSavingCredit(null)
+    }
   }
 
   const sendMonthlyInvoice = async (agentId: string) => {
@@ -341,7 +354,6 @@ export default function AdminBillingPage() {
       const name = `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
       return name.includes(q) || a.email.toLowerCase().includes(q)
     })()
-
     const matchesFilter = (() => {
       if (!statusFilter) return true
       if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
@@ -349,7 +361,6 @@ export default function AdminBillingPage() {
       if (statusFilter === 'monthlyUnpaid') return getMonthlyStatus(a) === 'unpaid'
       return true
     })()
-
     return matchesSearch && matchesFilter
   })
 
@@ -363,7 +374,6 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      {/* Stats - all clickable */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
@@ -399,7 +409,6 @@ export default function AdminBillingPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="container-card mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
@@ -413,19 +422,23 @@ export default function AdminBillingPage() {
         </div>
       </div>
 
-      {/* Agent List */}
       <div className="space-y-3">
         {filtered.map(agent => {
           const name = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
           const monthlyStatus = getMonthlyStatus(agent)
           const isExpanded = expandedAgent === agent.id
           const data = agentData[agent.id]
+          const debts = data?.records.filter((r: any) => r.record_type !== 'credit') || []
+          const credits = data?.records.filter((r: any) => r.record_type === 'credit') || []
+          const totalDebts = debts.reduce((sum: number, d: any) => sum + (d.amount_remaining ?? d.amount_owed), 0)
+          const totalCredits = credits.reduce((sum: number, c: any) => sum + (c.amount_remaining ?? c.amount_owed), 0)
+          const netBalance = totalDebts - totalCredits
 
           return (
             <div key={agent.id} className="container-card">
               <div
                 className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleAgent(agent.id, !!agent.payload_payee_id)}
+                onClick={() => toggleAgent(agent.id)}
               >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-1">
@@ -462,95 +475,59 @@ export default function AdminBillingPage() {
 
                   {loadingAgent !== agent.id && data && (
                     <>
-                      {/* Outstanding Debts */}
-                      {data.debts.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Outstanding Balances</p>
+                      {/* Outstanding Balances */}
+                      <div>
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Outstanding Balances</p>
+                        {debts.length === 0 ? (
+                          <p className="text-xs text-luxury-gray-3">No outstanding balances.</p>
+                        ) : (
                           <div className="space-y-2">
-                            {data.debts.map((debt: any) => {
-                              const isInvoiced = debt.notes && debt.notes.includes('Payload invoice:')
-                              const isEditing = editingDebt === debt.id
+                            {debts.map((record: any) => {
+                              const isInvoiced = record.notes && record.notes.includes('Payload invoice:')
+                              const isEditing = editingRecord === record.id
                               return (
-                                <div key={debt.id} className="inner-card border border-orange-100 bg-orange-50/30">
+                                <div key={record.id} className="inner-card border border-orange-100 bg-orange-50/30">
                                   {isEditing ? (
                                     <div className="space-y-2">
                                       <div className="grid grid-cols-2 gap-2">
                                         <div>
                                           <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
-                                          <input
-                                            type="number"
-                                            value={editDebtAmount}
-                                            onChange={e => setEditDebtAmount(e.target.value)}
-                                            className="input-luxury text-xs"
-                                          />
+                                          <input type="number" value={editAmount} onChange={e => setEditAmount(e.target.value)} className="input-luxury text-xs" />
                                         </div>
                                         <div>
                                           <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
-                                          <input
-                                            type="text"
-                                            value={editDebtDesc}
-                                            onChange={e => setEditDebtDesc(e.target.value)}
-                                            className="input-luxury text-xs"
-                                          />
+                                          <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)} className="input-luxury text-xs" />
                                         </div>
                                       </div>
                                       <div className="flex gap-2">
-                                        <button
-                                          onClick={() => updateDebt(agent.id, debt.id, editDebtDesc, parseFloat(editDebtAmount))}
-                                          className="btn btn-primary text-xs"
-                                        >
-                                          Save
-                                        </button>
-                                        <button
-                                          onClick={() => setEditingDebt(null)}
-                                          className="btn btn-secondary text-xs"
-                                        >
-                                          Cancel
-                                        </button>
+                                        <button onClick={() => updateRecord(agent.id, record.id, editDesc, parseFloat(editAmount))} className="btn btn-primary text-xs">Save</button>
+                                        <button onClick={() => setEditingRecord(null)} className="btn btn-secondary text-xs">Cancel</button>
                                       </div>
                                     </div>
                                   ) : (
                                     <div className="flex items-start justify-between">
                                       <div>
-                                        <p className="text-xs font-semibold text-luxury-gray-1">{debt.description}</p>
-                                        <p className="text-xs text-luxury-gray-3 mt-0.5">Since {formatDate(debt.date_incurred)}</p>
-                                        {debt.debt_type === 'brokermint_balance' && (
-                                          <p className="text-xs text-luxury-gray-3">Migrated from Brokermint</p>
-                                        )}
-                                        {isInvoiced && (
-                                          <p className="text-xs text-green-600 mt-0.5">Invoice sent</p>
-                                        )}
+                                        <p className="text-xs font-semibold text-luxury-gray-1">{record.description}</p>
+                                        <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(record.date_incurred)}</p>
+                                        {record.debt_type === 'brokermint_balance' && <p className="text-xs text-luxury-gray-3">Migrated from Brokermint</p>}
+                                        {isInvoiced && <p className="text-xs text-green-600 mt-0.5">Invoice sent</p>}
                                       </div>
                                       <div className="flex items-center gap-2 ml-4">
-                                        <p className="text-sm font-semibold text-orange-600">{formatCurrency(debt.amount_remaining ?? debt.amount_owed)}</p>
+                                        <p className="text-sm font-semibold text-orange-600">{formatCurrency(record.amount_remaining ?? record.amount_owed)}</p>
                                         {!isInvoiced && (
                                           <>
-                                            <button
-                                              onClick={() => {
-                                                setEditingDebt(debt.id)
-                                                setEditDebtDesc(debt.description || '')
-                                                setEditDebtAmount(String(debt.amount_owed))
-                                              }}
-                                              className="text-xs text-luxury-gray-3 hover:text-luxury-accent"
-                                            >
-                                              Edit
-                                            </button>
-                                            <button
-                                              onClick={() => deleteDebt(agent.id, debt.id)}
-                                              className="text-xs text-red-400 hover:text-red-600"
-                                            >
-                                              Delete
-                                            </button>
+                                            <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
+                                            <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
                                           </>
                                         )}
                                         {agent.payload_payee_id && !isInvoiced && (
                                           <button
-                                            onClick={() => sendDebtInvoice(agent.id, debt)}
-                                            disabled={sending === `debt-${debt.id}`}
+                                            onClick={() => sendDebtInvoice(agent.id, record)}
+                                            disabled={sending === `debt-${record.id}`}
                                             className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
                                           >
                                             <Send size={11} />
-                                            {sending === `debt-${debt.id}` ? 'Sending...' : 'Invoice'}
+                                            {sending === `debt-${record.id}` ? 'Sending...' : 'Invoice'}
                                           </button>
                                         )}
                                       </div>
@@ -560,6 +537,70 @@ export default function AdminBillingPage() {
                               )
                             })}
                           </div>
+                        )}
+                      </div>
+
+                      {/* Brokerage Credits */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-luxury-gray-2">Brokerage Credits</p>
+                          <button
+                            onClick={() => setShowCreditForm(showCreditForm === agent.id ? null : agent.id)}
+                            className="text-xs text-luxury-accent hover:underline"
+                          >
+                            {showCreditForm === agent.id ? 'Cancel' : '+ Add Credit'}
+                          </button>
+                        </div>
+                        {showCreditForm === agent.id && (
+                          <div className="inner-card space-y-2 mb-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
+                                <input type="number" value={creditAmount} onChange={e => setCreditAmount(e.target.value)} className="input-luxury text-xs" placeholder="0.00" />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
+                                <input type="text" value={creditDesc} onChange={e => setCreditDesc(e.target.value)} className="input-luxury text-xs" placeholder="e.g. Monthly fee credit" />
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => addCredit(agent.id)}
+                              disabled={!creditAmount || !creditDesc || savingCredit === agent.id}
+                              className="btn btn-primary text-xs w-full disabled:opacity-50"
+                            >
+                              {savingCredit === agent.id ? 'Saving...' : 'Add Credit'}
+                            </button>
+                          </div>
+                        )}
+                        {credits.length === 0 ? (
+                          <p className="text-xs text-luxury-gray-3">No credits on file.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {credits.map((credit: any) => (
+                              <div key={credit.id} className="inner-card border border-green-100 bg-green-50/30">
+                                <div className="flex items-start justify-between">
+                                  <div>
+                                    <p className="text-xs font-semibold text-luxury-gray-1">{credit.description}</p>
+                                    <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(credit.date_incurred)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <p className="text-sm font-semibold text-green-600">-{formatCurrency(credit.amount_remaining ?? credit.amount_owed)}</p>
+                                    <button onClick={() => deleteRecord(agent.id, credit.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Net Balance */}
+                      {(debts.length > 0 || credits.length > 0) && (
+                        <div className="inner-card flex items-center justify-between">
+                          <p className="text-xs font-semibold text-luxury-gray-2">Net Balance</p>
+                          <p className={`text-sm font-bold ${netBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {netBalance > 0 ? formatCurrency(netBalance) : `-${formatCurrency(Math.abs(netBalance))}`}
+                          </p>
                         </div>
                       )}
 
@@ -583,9 +624,7 @@ export default function AdminBillingPage() {
                                     <div className="flex items-start justify-between">
                                       <div>
                                         <p className="text-xs font-semibold text-luxury-gray-1">{inv.description}</p>
-                                        {inv.due_date && (
-                                          <p className="text-xs text-luxury-gray-3 mt-0.5">Due {formatDate(inv.due_date)}</p>
-                                        )}
+                                        {inv.due_date && <p className="text-xs text-luxury-gray-3 mt-0.5">Due {formatDate(inv.due_date)}</p>}
                                         {inv.items?.length > 1 && (
                                           <div className="mt-1 space-y-0.5">
                                             {inv.items.filter((i: any) => i.entry_type === 'charge').map((i: any, idx: number) => (
@@ -629,26 +668,14 @@ export default function AdminBillingPage() {
                                   <div className="grid grid-cols-2 gap-2">
                                     <div>
                                       <label className="block text-xs text-luxury-gray-3 mb-1">Month</label>
-                                      <select
-                                        value={invoiceMonth}
-                                        onChange={e => setInvoiceMonth(e.target.value)}
-                                        className="select-luxury text-xs"
-                                      >
-                                        {MONTHS.map(m => (
-                                          <option key={m} value={m}>{m}</option>
-                                        ))}
+                                      <select value={invoiceMonth} onChange={e => setInvoiceMonth(e.target.value)} className="select-luxury text-xs">
+                                        {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
                                       </select>
                                     </div>
                                     <div>
                                       <label className="block text-xs text-luxury-gray-3 mb-1">Year</label>
-                                      <select
-                                        value={invoiceYear}
-                                        onChange={e => setInvoiceYear(parseInt(e.target.value))}
-                                        className="select-luxury text-xs"
-                                      >
-                                        {[2024, 2025, 2026].map(y => (
-                                          <option key={y} value={y}>{y}</option>
-                                        ))}
+                                      <select value={invoiceYear} onChange={e => setInvoiceYear(parseInt(e.target.value))} className="select-luxury text-xs">
+                                        {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
                                       </select>
                                     </div>
                                   </div>
@@ -683,23 +710,11 @@ export default function AdminBillingPage() {
                                 <div className="grid grid-cols-2 gap-2">
                                   <div>
                                     <label className="block text-xs text-luxury-gray-3 mb-1">Amount ($)</label>
-                                    <input
-                                      type="number"
-                                      value={customAmount}
-                                      onChange={e => setCustomAmount(e.target.value)}
-                                      className="input-luxury text-xs"
-                                      placeholder="0.00"
-                                    />
+                                    <input type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)} className="input-luxury text-xs" placeholder="0.00" />
                                   </div>
                                   <div>
                                     <label className="block text-xs text-luxury-gray-3 mb-1">Description</label>
-                                    <input
-                                      type="text"
-                                      value={customDesc}
-                                      onChange={e => setCustomDesc(e.target.value)}
-                                      className="input-luxury text-xs"
-                                      placeholder="e.g. HAR dues reimbursement"
-                                    />
+                                    <input type="text" value={customDesc} onChange={e => setCustomDesc(e.target.value)} className="input-luxury text-xs" placeholder="e.g. HAR dues reimbursement" />
                                   </div>
                                 </div>
                                 <button

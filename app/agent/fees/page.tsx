@@ -15,6 +15,8 @@ export default function AgentFeesPage() {
   const [loading, setLoading] = useState(true)
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [receipts, setReceipts] = useState<any[]>([])
+  const [debts, setDebts] = useState<any[]>([])
+  const [credits, setCredits] = useState<any[]>([])
   const [paying, setPaying] = useState<string | null>(null)
   const payloadScriptLoaded = useRef(false)
 
@@ -45,25 +47,35 @@ export default function AgentFeesPage() {
   }, [user?.id])
 
   const loadData = async () => {
-    const { data } = await supabase
+    const { data: userData } = await supabase
       .from('users')
-      .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, division')
+      .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, monthly_fee_waived, payload_payee_id, division')
       .eq('id', user.id)
       .single()
-    if (data) setUser((prev: any) => ({ ...prev, ...data }))
+    if (userData) setUser((prev: any) => ({ ...prev, ...userData }))
 
-    const [invoiceRes, receiptRes] = await Promise.all([
+    const [invoiceRes, receiptRes, { data: records }] = await Promise.all([
       fetch(`/api/payload/open-invoices?user_id=${user.id}`),
       fetch(`/api/payload/receipts?user_id=${user.id}`),
+      supabase
+        .from('agent_debts')
+        .select('id, record_type, description, amount_owed, amount_remaining, date_incurred, notes')
+        .eq('agent_id', user.id)
+        .eq('status', 'outstanding')
+        .order('date_incurred', { ascending: false }),
     ])
+
     const invoiceData = await invoiceRes.json()
     const receiptData = await receiptRes.json()
     setOpenInvoices(invoiceData.invoices || [])
     setReceipts(receiptData.receipts || [])
+    setDebts((records || []).filter((r: any) => r.record_type !== 'credit'))
+    setCredits((records || []).filter((r: any) => r.record_type === 'credit'))
     setLoading(false)
   }
 
   const getMonthlyStatus = () => {
+    if (user?.monthly_fee_waived) return 'waived'
     if (!user?.monthly_fee_paid_through) return 'unpaid'
     const paidThrough = new Date(user.monthly_fee_paid_through)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
@@ -79,6 +91,10 @@ export default function AgentFeesPage() {
 
   const formatCurrency = (amount: number) =>
     typeof amount === 'number' ? `$${amount.toFixed(2)}` : `$${amount}`
+
+  const totalDebts = debts.reduce((sum, d) => sum + (d.amount_remaining ?? d.amount_owed), 0)
+  const totalCredits = credits.reduce((sum, c) => sum + (c.amount_remaining ?? c.amount_owed), 0)
+  const netBalance = totalDebts - totalCredits
 
   const openCheckout = async (invoice: any) => {
     setPaying(invoice.id)
@@ -161,12 +177,22 @@ export default function AgentFeesPage() {
         <div className="flex items-start justify-between mb-3">
           <div>
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Monthly Fee</p>
-            <p className="text-sm font-semibold text-luxury-gray-1">$50 / month</p>
-            {user?.monthly_fee_paid_through && (
+            {monthlyStatus === 'waived' ? (
+              <p className="text-sm font-semibold text-luxury-gray-1">Waived</p>
+            ) : (
+              <p className="text-sm font-semibold text-luxury-gray-1">$50 / month</p>
+            )}
+            {user?.monthly_fee_paid_through && monthlyStatus !== 'waived' && (
               <p className="text-xs text-luxury-gray-3 mt-1">Paid through {formatDate(user.monthly_fee_paid_through)}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
+            {monthlyStatus === 'waived' && (
+              <>
+                <CheckCircle2 size={18} className="text-green-600" />
+                <span className="text-xs font-medium text-green-600">Waived</span>
+              </>
+            )}
             {monthlyStatus === 'current' && (
               <>
                 <CheckCircle2 size={18} className="text-green-600" />
@@ -188,17 +214,68 @@ export default function AgentFeesPage() {
           </div>
         </div>
 
-        {user?.division ? (
-          <div className="bg-green-50 border border-green-200 rounded p-3">
-            <p className="text-xs font-medium text-green-700">Your monthly fee has been waived due to your division status.</p>
-          </div>
-        ) : (
+        {monthlyStatus !== 'waived' && (
           <div className="inner-card">
             <p className="text-xs font-medium text-luxury-gray-2 mb-1">Prefer Zelle?</p>
             <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> — include your name in the memo.</p>
           </div>
         )}
       </div>
+
+      {/* Outstanding Balances */}
+      {debts.length > 0 && (
+        <div className="container-card mb-4">
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Outstanding Balances</h2>
+          <div className="space-y-2">
+            {debts.map((debt) => (
+              <div key={debt.id} className="inner-card border border-orange-100 bg-orange-50/30">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-luxury-gray-1">{debt.description}</p>
+                    <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(debt.date_incurred)}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-orange-600 ml-4">{formatCurrency(debt.amount_remaining ?? debt.amount_owed)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Brokerage Credits */}
+      {credits.length > 0 && (
+        <div className="container-card mb-4">
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Brokerage Credits</h2>
+          <div className="space-y-2">
+            {credits.map((credit) => (
+              <div key={credit.id} className="inner-card border border-green-100 bg-green-50/30">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-luxury-gray-1">{credit.description}</p>
+                    <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(credit.date_incurred)}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-green-600 ml-4">-{formatCurrency(credit.amount_remaining ?? credit.amount_owed)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Net Balance */}
+      {(debts.length > 0 || credits.length > 0) && (
+        <div className="container-card mb-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Net Balance</p>
+            <p className={`text-sm font-bold ${netBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+              {netBalance > 0 ? formatCurrency(netBalance) : `-${formatCurrency(Math.abs(netBalance))}`}
+            </p>
+          </div>
+          {netBalance < 0 && (
+            <p className="text-xs text-luxury-gray-3 mt-1">You have a credit on file. It will be applied to your next invoice.</p>
+          )}
+        </div>
+      )}
 
       {/* Open Invoices */}
       {openInvoices.length > 0 && (
@@ -213,7 +290,6 @@ export default function AgentFeesPage() {
                     {inv.due_date && (
                       <p className="text-xs text-luxury-gray-3 mt-0.5">Due {formatDate(inv.due_date)}</p>
                     )}
-                    {/* Show line items if more than one */}
                     {inv.items?.length > 1 && (
                       <div className="mt-1.5 space-y-0.5">
                         {inv.items.filter((item: any) => item.entry_type === 'charge').map((item: any, i: number) => (
