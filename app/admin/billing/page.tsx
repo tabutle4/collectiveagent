@@ -33,6 +33,7 @@ export default function AdminBillingPage() {
   const [invoiceMonth, setInvoiceMonth] = useState(MONTHS[new Date().getMonth()])
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
+  const [openDebtAgentIds, setOpenDebtAgentIds] = useState<string[]>([])
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export default function AdminBillingPage() {
 
   const loadAgents = async () => {
     setLoading(true)
-    const [{ data }, { count: openDebtsCount }] = await Promise.all([
+    const [{ data }, { data: debtData, count: openDebtsCount }] = await Promise.all([
       supabase
         .from('users')
         .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
@@ -71,12 +72,13 @@ export default function AdminBillingPage() {
         .order('first_name'),
       supabase
         .from('agent_debts')
-        .select('*', { count: 'exact', head: true })
+        .select('agent_id', { count: 'exact' })
         .eq('status', 'outstanding')
         .eq('debt_type', 'custom_invoice'),
     ])
     setAgents(data || [])
     setOpenCustomInvoices(openDebtsCount || 0)
+    setOpenDebtAgentIds((debtData || []).map((d: any) => d.agent_id))
     setLoading(false)
   }
 
@@ -109,13 +111,13 @@ export default function AdminBillingPage() {
     delete updated[agentId]
     setAgentData(updated)
     await loadAgentData(agentId)
-    // Refresh open custom invoices count
-    const { count } = await supabase
+    const { data: debtData, count } = await supabase
       .from('agent_debts')
-      .select('*', { count: 'exact', head: true })
+      .select('agent_id', { count: 'exact' })
       .eq('status', 'outstanding')
       .eq('debt_type', 'custom_invoice')
     setOpenCustomInvoices(count || 0)
+    setOpenDebtAgentIds((debtData || []).map((d: any) => d.agent_id))
   }
 
   const toggleAgent = (agentId: string, hasPayloadId: boolean) => {
@@ -257,6 +259,8 @@ export default function AdminBillingPage() {
 
     const matchesFilter = (() => {
       if (!statusFilter) return true
+      if (statusFilter === 'all') return true
+      if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
       if (statusFilter === 'monthlyOverdue') return getMonthlyStatus(a) === 'overdue'
       if (statusFilter === 'monthlyUnpaid') return getMonthlyStatus(a) === 'unpaid'
       return true
@@ -275,15 +279,23 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      {/* Stats */}
+      {/* Stats - all clickable */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="container-card text-center">
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
+          onClick={() => setStatusFilter(null)}
+        >
           <p className="text-xs text-luxury-gray-3 mb-1">Total Agents</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
+          {statusFilter === null && <p className="text-xs text-luxury-accent mt-1">All agents</p>}
         </div>
-        <div className="container-card text-center">
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openCustomInvoices' ? 'ring-2 ring-orange-400' : ''}`}
+          onClick={() => toggleFilter('openCustomInvoices')}
+        >
           <p className="text-xs text-luxury-gray-3 mb-1">Open Custom Invoices</p>
           <p className="text-2xl font-semibold text-orange-500">{stats.openCustomInvoices}</p>
+          {statusFilter === 'openCustomInvoices' && <p className="text-xs text-orange-400 mt-1">Filtering ✕</p>}
         </div>
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`}
