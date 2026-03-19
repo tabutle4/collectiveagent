@@ -257,12 +257,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
       {/* Upcoming events list */}
       {!loading && events.length > 0 && (
         <div className="container-card">
-          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Upcoming</p>
+          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">{MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</p>
           <div className="space-y-2">
-            {events
-              .filter(e => new Date(e.start.dateTime || e.start.date) >= new Date(new Date().setHours(0,0,0,0)))
-              .slice(0, 10)
-              .map(event => (
+            {events.map(event => (
               <div
                 key={event.id}
                 onClick={() => { setSelectedEvent(event); setShowForm(false) }}
