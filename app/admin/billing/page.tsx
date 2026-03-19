@@ -3,11 +3,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CheckCircle2, AlertCircle, Clock, Search, ChevronDown, ChevronUp, Send, Receipt } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, Receipt } from 'lucide-react'
 
 declare global {
   interface Window { Payload: any }
 }
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
 
 export default function AdminBillingPage() {
   const router = useRouter()
@@ -15,6 +20,7 @@ export default function AdminBillingPage() {
   const [agents, setAgents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
   const [agentData, setAgentData] = useState<Record<string, { invoices: any[], receipts: any[] }>>({})
   const [loadingAgent, setLoadingAgent] = useState<string | null>(null)
@@ -23,6 +29,9 @@ export default function AdminBillingPage() {
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
+  const [showMonthlyForm, setShowMonthlyForm] = useState<string | null>(null)
+  const [invoiceMonth, setInvoiceMonth] = useState(MONTHS[new Date().getMonth()])
+  const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -160,7 +169,12 @@ export default function AdminBillingPage() {
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: agentId, type: 'monthly' }),
+        body: JSON.stringify({
+          user_id: agentId,
+          type: 'monthly',
+          month: invoiceMonth,
+          year: invoiceYear,
+        }),
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
@@ -169,6 +183,7 @@ export default function AdminBillingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
       })
+      setShowMonthlyForm(null)
       await refreshAgentData(agentId)
     } catch (err: any) {
       alert(err.message || 'Failed to send monthly invoice')
@@ -209,18 +224,34 @@ export default function AdminBillingPage() {
     }
   }
 
-  const filtered = agents.filter(a => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    const name = `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
-    return name.includes(q) || a.email.toLowerCase().includes(q)
-  })
-
   const stats = {
     total: agents.length,
     onboardingUnpaid: agents.filter(a => !a.onboarding_fee_paid).length,
     monthlyOverdue: agents.filter(a => getMonthlyStatus(a) === 'overdue').length,
     monthlyUnpaid: agents.filter(a => getMonthlyStatus(a) === 'unpaid').length,
+  }
+
+  const filtered = agents.filter(a => {
+    const matchesSearch = (() => {
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      const name = `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
+      return name.includes(q) || a.email.toLowerCase().includes(q)
+    })()
+
+    const matchesFilter = (() => {
+      if (!statusFilter) return true
+      if (statusFilter === 'onboardingUnpaid') return !a.onboarding_fee_paid
+      if (statusFilter === 'monthlyOverdue') return getMonthlyStatus(a) === 'overdue'
+      if (statusFilter === 'monthlyUnpaid') return getMonthlyStatus(a) === 'unpaid'
+      return true
+    })()
+
+    return matchesSearch && matchesFilter
+  })
+
+  const toggleFilter = (filter: string) => {
+    setStatusFilter(prev => prev === filter ? null : filter)
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
@@ -229,23 +260,35 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      {/* Stats */}
+      {/* Stats - clickable filters */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="container-card text-center">
           <p className="text-xs text-luxury-gray-3 mb-1">Total Agents</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
         </div>
-        <div className="container-card text-center">
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'onboardingUnpaid' ? 'ring-2 ring-red-400' : ''}`}
+          onClick={() => toggleFilter('onboardingUnpaid')}
+        >
           <p className="text-xs text-luxury-gray-3 mb-1">Onboarding Unpaid</p>
           <p className="text-2xl font-semibold text-red-500">{stats.onboardingUnpaid}</p>
+          {statusFilter === 'onboardingUnpaid' && <p className="text-xs text-red-400 mt-1">Filtering ✕</p>}
         </div>
-        <div className="container-card text-center">
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`}
+          onClick={() => toggleFilter('monthlyOverdue')}
+        >
           <p className="text-xs text-luxury-gray-3 mb-1">Monthly Overdue</p>
           <p className="text-2xl font-semibold text-red-500">{stats.monthlyOverdue}</p>
+          {statusFilter === 'monthlyOverdue' && <p className="text-xs text-red-400 mt-1">Filtering ✕</p>}
         </div>
-        <div className="container-card text-center">
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyUnpaid' ? 'ring-2 ring-luxury-accent' : ''}`}
+          onClick={() => toggleFilter('monthlyUnpaid')}
+        >
           <p className="text-xs text-luxury-gray-3 mb-1">Monthly No Invoice Yet</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.monthlyUnpaid}</p>
+          {statusFilter === 'monthlyUnpaid' && <p className="text-xs text-luxury-accent mt-1">Filtering ✕</p>}
         </div>
       </div>
 
@@ -273,7 +316,6 @@ export default function AdminBillingPage() {
 
           return (
             <div key={agent.id} className="container-card">
-              {/* Agent row */}
               <div
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => toggleAgent(agent.id, !!agent.payload_payee_id)}
@@ -304,7 +346,6 @@ export default function AdminBillingPage() {
                 </div>
               </div>
 
-              {/* Expanded */}
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-5">
 
@@ -361,19 +402,58 @@ export default function AdminBillingPage() {
                         )}
                       </div>
 
-                      {/* Monthly Invoice - only show if overdue */}
+                      {/* Monthly Invoice */}
                       {monthlyStatus === 'overdue' && (
                         <div>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-2">
                             <p className="text-xs font-semibold text-luxury-gray-2">Monthly Fee Invoice</p>
                             <button
-                              onClick={() => sendMonthlyInvoice(agent.id)}
-                              disabled={creatingInvoice === agent.id}
-                              className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                              onClick={() => setShowMonthlyForm(showMonthlyForm === agent.id ? null : agent.id)}
+                              className="text-xs text-luxury-accent hover:underline"
                             >
-                              {creatingInvoice === agent.id ? 'Sending...' : 'Send $50 Monthly Invoice'}
+                              {showMonthlyForm === agent.id ? 'Cancel' : '+ Send Monthly Invoice'}
                             </button>
                           </div>
+                          {showMonthlyForm === agent.id && (
+                            <div className="inner-card space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-xs text-luxury-gray-3 mb-1">Month</label>
+                                  <select
+                                    value={invoiceMonth}
+                                    onChange={e => setInvoiceMonth(e.target.value)}
+                                    className="select-luxury text-xs"
+                                  >
+                                    {MONTHS.map(m => (
+                                      <option key={m} value={m}>{m}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs text-luxury-gray-3 mb-1">Year</label>
+                                  <select
+                                    value={invoiceYear}
+                                    onChange={e => setInvoiceYear(parseInt(e.target.value))}
+                                    className="select-luxury text-xs"
+                                  >
+                                    {[2024, 2025, 2026].map(y => (
+                                      <option key={y} value={y}>{y}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              <p className="text-xs text-luxury-gray-3">
+                                Will send: <span className="font-medium text-luxury-gray-1">{invoiceMonth} {invoiceYear} Monthly Brokerage Fee — $50</span>
+                              </p>
+                              <button
+                                onClick={() => sendMonthlyInvoice(agent.id)}
+                                disabled={creatingInvoice === agent.id}
+                                className="btn btn-primary text-xs w-full disabled:opacity-50"
+                              >
+                                {creatingInvoice === agent.id ? 'Sending...' : 'Create & Send Monthly Invoice'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -459,6 +539,12 @@ export default function AdminBillingPage() {
             </div>
           )
         })}
+
+        {filtered.length === 0 && (
+          <div className="container-card text-center py-12">
+            <p className="text-sm text-luxury-gray-3">No agents found</p>
+          </div>
+        )}
       </div>
     </div>
   )
