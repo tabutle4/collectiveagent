@@ -456,7 +456,7 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
-            <div className="space-y-4 max-w-2xl">
+            <div className="space-y-4">
               <h1 className="page-title">OVERVIEW</h1>
 
               {/* Transaction Info */}
@@ -589,7 +589,7 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── COMMISSIONS TAB ──────────────────────────────────────────── */}
           {activeTab === 'commissions' && (
-            <div className="max-w-2xl space-y-4">
+            <div className="space-y-4">
               <h1 className="page-title">COMMISSIONS</h1>
               <div className="container-card">
                 <div className="grid grid-cols-3 gap-3 mb-4">
@@ -652,7 +652,7 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── CHECK & PAYOUTS TAB ──────────────────────────────────────── */}
           {activeTab === 'check_payouts' && leaseTransaction && (
-            <div className="max-w-2xl space-y-4">
+            <div className="space-y-4">
               <h1 className="page-title">CHECK & PAYOUTS</h1>
 
               {/* No check yet */}
@@ -985,7 +985,7 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── CONTACTS TAB ─────────────────────────────────────────────── */}
           {activeTab === 'contacts' && (
-            <div className="max-w-2xl space-y-4">
+            <div className="space-y-4">
               <h1 className="page-title">CONTACTS</h1>
               <div className="container-card">
                 <p className="text-xs text-luxury-gray-3 text-center py-6">Contact management coming soon.</p>
@@ -995,7 +995,7 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── DOCUMENTS TAB ────────────────────────────────────────────── */}
           {activeTab === 'documents' && (
-            <div className="max-w-2xl space-y-4">
+            <div className="space-y-4">
               <h1 className="page-title">DOCUMENTS</h1>
               {txn.onedrive_folder_url && (
                 <div className="container-card">
