@@ -61,8 +61,11 @@ export async function POST(request: NextRequest) {
         params.append('items[1][entry_type]', 'charge')
       }
     } else if (type === 'monthly') {
-      params.append('items[0][type]', 'Monthly Fee')
-      params.append('items[0][description]', 'Monthly brokerage fee')
+      const now = new Date()
+const monthName = now.toLocaleString('default', { month: 'long' })
+const year = now.getFullYear()
+params.append('items[0][type]', 'Monthly Fee')
+params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][amount]', '50')
       params.append('items[0][entry_type]', 'charge')
     } else {
