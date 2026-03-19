@@ -257,9 +257,12 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
       {/* Upcoming events list */}
       {!loading && events.length > 0 && (
         <div className="container-card">
-          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">This Month</p>
+          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Upcoming</p>
           <div className="space-y-2">
-            {events.slice(0, 10).map(event => (
+            {events
+              .filter(e => new Date(e.start.dateTime || e.start.date) >= new Date(new Date().setHours(0,0,0,0)))
+              .slice(0, 10)
+              .map(event => (
               <div
                 key={event.id}
                 onClick={() => { setSelectedEvent(event); setShowForm(false) }}
@@ -316,10 +319,13 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                   <p className="text-xs text-luxury-gray-2">{selectedEvent.location.displayName}</p>
                 </div>
               )}
-              {selectedEvent.body?.content && selectedEvent.body.content.trim() && (
+              {selectedEvent.body?.content && selectedEvent.body.content.replace(/<[^>]*>/g, '').trim() && (
                 <div className="flex items-start gap-2">
                   <FileText size={14} className="text-luxury-gray-3 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-luxury-gray-2 whitespace-pre-wrap">{selectedEvent.body.content.replace(/<[^>]*>/g, '').trim()}</p>
+                  <div
+                    className="text-xs text-luxury-gray-2 [&_a]:text-luxury-accent [&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: selectedEvent.body.content }}
+                  />
                 </div>
               )}
             </div>
