@@ -328,7 +328,14 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                             {dayEvents.slice(0, 2).map((event, i) => (
                               <div
                                 key={i}
-                                onClick={e => { e.stopPropagation(); setSelectedEvent(event); setShowForm(false) }}
+                                onClick={e => {
+                                  const isMobile = window.innerWidth < 768
+                                  if (!isMobile) {
+                                    e.stopPropagation()
+                                    setSelectedEvent(event)
+                                    setShowForm(false)
+                                  }
+                                }}
                                 className="block w-full sm:w-auto"
                               >
                                 {/* Mobile: dot indicator */}
