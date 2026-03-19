@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock, Video, Users, Star } from 'lucide-react'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -10,6 +10,102 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 type CalendarPageProps = {
   isAdmin?: boolean
 }
+
+const COACHING_SESSIONS = [
+  {
+    day: 'Tuesdays',
+    time: '12 PM – 1 PM',
+    title: 'Industry Intelligence & Market Mastery Meeting',
+    description: 'Stay ahead with market data, industry news, and trends to position yourself as a market expert.',
+    platform: 'In Person & Zoom',
+    audience: 'All Agents',
+    highlight: false,
+  },
+  {
+    day: 'Tuesdays',
+    time: '1 PM – 2 PM',
+    title: 'Next Level Lead Gen & Marketing Coaching',
+    description: 'Build a consistent pipeline with lead generation strategies, marketing tactics, and accountability.',
+    platform: 'In Person & Zoom',
+    audience: 'All Agents',
+    highlight: false,
+  },
+  {
+    day: 'Wednesdays',
+    time: '10 AM – 11 AM',
+    title: 'New Agent Coaching Circle',
+    description: 'For agents in onboarding or working toward their first 5 deals. Tackle your checklist, answer questions, and troubleshoot roadblocks together.',
+    platform: 'In Person & Zoom',
+    audience: 'New Agents',
+    highlight: true,
+  },
+  {
+    day: 'Thursdays',
+    time: '10 AM – 11 AM',
+    title: 'Convert & Close Coaching',
+    description: 'Turn leads into clients and contracts into closings. Scripts, objection handling, and real-world scenarios.',
+    platform: 'In Person & Zoom',
+    audience: 'All Agents',
+    highlight: false,
+  },
+  {
+    day: 'Thursdays',
+    time: '11 AM – 12 PM',
+    title: 'Seasoned Agent Coaching Circle',
+    description: 'For producing agents focused on scaling, sustaining momentum, and growing their business.',
+    platform: 'In Person & Zoom',
+    audience: 'Experienced Agents',
+    highlight: true,
+  },
+]
+
+const DIVISION_SESSIONS = [
+  {
+    day: 'Last Wednesdays',
+    time: '12 PM – 1 PM',
+    title: 'Monthly Apartment Locator Q&A',
+    host: 'Maureen Eno',
+    description: 'Live Q&A on lease transactions and apartment locator best practices.',
+    platform: 'Zoom',
+    audience: 'All Agents',
+  },
+  {
+    day: 'Wednesdays – Weekly',
+    time: '1 PM – 2 PM',
+    title: 'Collective Access Division Coaching – Dallas',
+    host: 'Terraneka Hill',
+    description: 'Sharpen buyer qualification, lending conversations, community targeting, and accountability to drive consistent closings.',
+    platform: 'Zoom',
+    audience: 'All Agents',
+  },
+  {
+    day: 'Last Thursdays',
+    time: '12 PM – 1 PM',
+    title: 'Monthly Lease Training',
+    host: 'Briana Thomas',
+    description: 'Hands-on training to build and grow your apartment locator business.',
+    platform: 'Zoom',
+    audience: 'All Agents',
+  },
+  {
+    day: 'Fridays – Weekly',
+    time: '1 PM – 2 PM',
+    title: 'Collective Access Division Coaching – Houston',
+    host: 'Eric Roberts',
+    description: 'Sharpen buyer qualification, lending conversations, community targeting, and accountability to drive consistent closings.',
+    platform: 'Zoom',
+    audience: 'All Agents',
+  },
+  {
+    day: '2nd & 4th Fridays',
+    time: '11 AM – 12 PM',
+    title: 'Navigating the Training Center, Compliance & Onboarding',
+    host: null,
+    description: 'Get your questions answered and ensure you\'re fully set up for success.',
+    platform: 'Microsoft Teams',
+    audience: 'Onboarding Agents · All Agents Welcome',
+  },
+]
 
 export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const router = useRouter()
@@ -22,6 +118,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [editingEvent, setEditingEvent] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [activeTab, setActiveTab] = useState<'calendar' | 'schedule'>('calendar')
   const [form, setForm] = useState({
     title: '',
     date: '',
@@ -172,9 +269,10 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="page-title">CALENDAR</h1>
-        {isAdmin && (
+        {isAdmin && activeTab === 'calendar' && (
           <button onClick={() => openNewForm()} className="btn btn-primary flex items-center gap-2 text-sm">
             <Plus size={15} />
             Add Event
@@ -182,107 +280,222 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
         )}
       </div>
 
-      {/* Month navigation */}
-      <div className="container-card mb-4">
-        <div className="flex items-center justify-between">
-          <button onClick={prevMonth} className="p-1.5 rounded hover:bg-luxury-light transition-colors">
-            <ChevronLeft size={18} className="text-luxury-gray-2" />
-          </button>
-          <h2 className="text-sm font-semibold text-luxury-gray-1">
-            {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </h2>
-          <button onClick={nextMonth} className="p-1.5 rounded hover:bg-luxury-light transition-colors">
-            <ChevronRight size={18} className="text-luxury-gray-2" />
-          </button>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-luxury-light rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setActiveTab('calendar')}
+          className={`text-xs font-semibold px-4 py-1.5 rounded-md transition-colors ${
+            activeTab === 'calendar'
+              ? 'bg-white text-luxury-gray-1 shadow-sm'
+              : 'text-luxury-gray-3 hover:text-luxury-gray-2'
+          }`}
+        >
+          Calendar
+        </button>
+        <button
+          onClick={() => setActiveTab('schedule')}
+          className={`text-xs font-semibold px-4 py-1.5 rounded-md transition-colors ${
+            activeTab === 'schedule'
+              ? 'bg-white text-luxury-gray-1 shadow-sm'
+              : 'text-luxury-gray-3 hover:text-luxury-gray-2'
+          }`}
+        >
+          Coaching & Training
+        </button>
       </div>
 
-      {/* Calendar grid */}
-      <div className="container-card mb-4">
-        {/* Day headers */}
-        <div className="grid grid-cols-7 mb-2">
-          {DAYS.map(d => (
-            <div key={d} className="text-center text-xs font-semibold text-luxury-gray-3 py-1">{d}</div>
-          ))}
-        </div>
-
-        {/* Day cells */}
-        {loading ? (
-          <div className="text-center py-12 text-xs text-luxury-gray-3">Loading...</div>
-        ) : (
-          <div className="grid grid-cols-7 gap-px bg-luxury-gray-5/30">
-            {days.map((day, idx) => {
-              const dayEvents = day ? getEventsForDay(day) : []
-              return (
-                <div
-                  key={idx}
-                  className={`bg-white min-h-[80px] p-1.5 ${day ? 'cursor-pointer hover:bg-luxury-light transition-colors' : ''}`}
-                  onClick={() => isAdmin && day ? openNewForm(day) : undefined}
-                >
-                  {day && (
-                    <>
-                      <span className={`text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full mb-1 ${
-                        isToday(day)
-                          ? 'bg-luxury-accent text-white'
-                          : 'text-luxury-gray-2'
-                      }`}>
-                        {day}
-                      </span>
-                      <div className="space-y-0.5">
-                        {dayEvents.slice(0, 3).map((event, i) => (
-                          <div
-                            key={i}
-                            onClick={e => { e.stopPropagation(); setSelectedEvent(event); setShowForm(false) }}
-                            className="text-xs bg-luxury-accent/10 text-luxury-accent rounded px-1 py-0.5 truncate cursor-pointer hover:bg-luxury-accent/20 transition-colors"
-                          >
-                            {!event.isAllDay && event.start.dateTime && (
-                              <span className="font-medium">{formatTime(event.start.dateTime)} </span>
-                            )}
-                            {event.subject}
-                          </div>
-                        ))}
-                        {dayEvents.length > 3 && (
-                          <p className="text-xs text-luxury-gray-3 pl-1">+{dayEvents.length - 3} more</p>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )
-            })}
+      {/* ─── CALENDAR TAB ─── */}
+      {activeTab === 'calendar' && (
+        <>
+          {/* Month navigation */}
+          <div className="container-card mb-4">
+            <div className="flex items-center justify-between">
+              <button onClick={prevMonth} className="p-1.5 rounded hover:bg-luxury-light transition-colors">
+                <ChevronLeft size={18} className="text-luxury-gray-2" />
+              </button>
+              <h2 className="text-sm font-semibold text-luxury-gray-1">
+                {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
+              </h2>
+              <button onClick={nextMonth} className="p-1.5 rounded hover:bg-luxury-light transition-colors">
+                <ChevronRight size={18} className="text-luxury-gray-2" />
+              </button>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Upcoming events list */}
-      {!loading && events.length > 0 && (
-        <div className="container-card">
-          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">{MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</p>
-          <div className="space-y-2">
-            {events.map(event => (
-              <div
-                key={event.id}
-                onClick={() => { setSelectedEvent(event); setShowForm(false) }}
-                className="inner-card cursor-pointer hover:bg-luxury-light transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-luxury-gray-1 truncate">{event.subject}</p>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-xs text-luxury-gray-3">{formatEventDate(event)}</span>
-                      {!event.isAllDay && event.start.dateTime && (
-                        <span className="text-xs text-luxury-gray-3">
-                          {formatTime(event.start.dateTime)} — {formatTime(event.end.dateTime)}
-                        </span>
+          {/* Calendar grid */}
+          <div className="container-card mb-4">
+            <div className="grid grid-cols-7 mb-2">
+              {DAYS.map(d => (
+                <div key={d} className="text-center text-xs font-semibold text-luxury-gray-3 py-1">{d}</div>
+              ))}
+            </div>
+
+            {loading ? (
+              <div className="text-center py-12 text-xs text-luxury-gray-3">Loading...</div>
+            ) : (
+              <div className="grid grid-cols-7 gap-px bg-luxury-gray-5/30">
+                {days.map((day, idx) => {
+                  const dayEvents = day ? getEventsForDay(day) : []
+                  return (
+                    <div
+                      key={idx}
+                      className={`bg-white min-h-[80px] p-1.5 ${day ? 'cursor-pointer hover:bg-luxury-light transition-colors' : ''}`}
+                      onClick={() => isAdmin && day ? openNewForm(day) : undefined}
+                    >
+                      {day && (
+                        <>
+                          <span className={`text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full mb-1 ${
+                            isToday(day)
+                              ? 'bg-luxury-accent text-white'
+                              : 'text-luxury-gray-2'
+                          }`}>
+                            {day}
+                          </span>
+                          <div className="space-y-0.5">
+                            {dayEvents.slice(0, 3).map((event, i) => (
+                              <div
+                                key={i}
+                                onClick={e => { e.stopPropagation(); setSelectedEvent(event); setShowForm(false) }}
+                                className="text-xs bg-luxury-accent/10 text-luxury-accent rounded px-1 py-0.5 truncate cursor-pointer hover:bg-luxury-accent/20 transition-colors"
+                              >
+                                {!event.isAllDay && event.start.dateTime && (
+                                  <span className="font-medium">{formatTime(event.start.dateTime)} </span>
+                                )}
+                                {event.subject}
+                              </div>
+                            ))}
+                            {dayEvents.length > 3 && (
+                              <p className="text-xs text-luxury-gray-3 pl-1">+{dayEvents.length - 3} more</p>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
-                    {event.location?.displayName && (
-                      <p className="text-xs text-luxury-gray-3 mt-0.5 truncate">{event.location.displayName}</p>
-                    )}
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Upcoming events list */}
+          {!loading && events.length > 0 && (
+            <div className="container-card">
+              <p className="text-xs font-semibold text-luxury-gray-2 mb-3">{MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}</p>
+              <div className="space-y-2">
+                {events.map(event => (
+                  <div
+                    key={event.id}
+                    onClick={() => { setSelectedEvent(event); setShowForm(false) }}
+                    className="inner-card cursor-pointer hover:bg-luxury-light transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-luxury-gray-1 truncate">{event.subject}</p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-luxury-gray-3">{formatEventDate(event)}</span>
+                          {!event.isAllDay && event.start.dateTime && (
+                            <span className="text-xs text-luxury-gray-3">
+                              {formatTime(event.start.dateTime)} — {formatTime(event.end.dateTime)}
+                            </span>
+                          )}
+                        </div>
+                        {event.location?.displayName && (
+                          <p className="text-xs text-luxury-gray-3 mt-0.5 truncate">{event.location.displayName}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── COACHING & TRAINING TAB ─── */}
+      {activeTab === 'schedule' && (
+        <div className="space-y-4">
+
+          {/* Info banner */}
+          <div className="container-card border-l-2 border-luxury-accent">
+            <p className="text-xs text-luxury-gray-2 leading-relaxed">
+              In-person attendance is strongly encouraged. Come with questions, laptops, phones, wins, and challenges to share. Sessions start promptly.
+            </p>
+            <div className="flex flex-wrap gap-4 mt-2">
+              <a href="https://visit.collectiverealtyco.com/training" target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent font-semibold hover:underline">
+                Zoom Link (Training)
+              </a>
+              <a href="https://visit.collectiverealtyco.com/calendars" target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent font-semibold hover:underline">
+                Full Calendars
+              </a>
+              <span className="text-xs text-luxury-gray-3">Recordings available in the Training Center.</span>
+            </div>
+          </div>
+
+          {/* Coaching Brokerage Sessions */}
+          <div>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Coaching Sessions</p>
+            <div className="space-y-2">
+              {COACHING_SESSIONS.map((session, i) => (
+                <div key={i} className="inner-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-semibold text-luxury-accent">{session.day}</span>
+                        <span className="text-xs text-luxury-gray-3">{session.time}</span>
+                        {session.highlight && (
+                          <span className="text-xs bg-luxury-accent/10 text-luxury-accent rounded-full px-2 py-0.5 font-medium">
+                            {session.audience}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-semibold text-luxury-gray-1 mb-0.5">{session.title}</p>
+                      <p className="text-xs text-luxury-gray-3 leading-relaxed">{session.description}</p>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="flex items-center gap-1 justify-end text-luxury-gray-3">
+                        <Video size={11} />
+                        <span className="text-xs">{session.platform}</span>
+                      </div>
+                      {!session.highlight && (
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">{session.audience}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+
+          {/* Division & Training Sessions */}
+          <div>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Division & Training Sessions</p>
+            <div className="space-y-2">
+              {DIVISION_SESSIONS.map((session, i) => (
+                <div key={i} className="inner-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-semibold text-luxury-accent">{session.day}</span>
+                        <span className="text-xs text-luxury-gray-3">{session.time}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-luxury-gray-1 mb-0.5">{session.title}</p>
+                      {session.host && (
+                        <p className="text-xs text-luxury-gray-3 mb-0.5">with {session.host}</p>
+                      )}
+                      <p className="text-xs text-luxury-gray-3 leading-relaxed">{session.description}</p>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <div className="flex items-center gap-1 justify-end text-luxury-gray-3">
+                        <Video size={11} />
+                        <span className="text-xs">{session.platform}</span>
+                      </div>
+                      <p className="text-xs text-luxury-gray-3 mt-0.5">{session.audience}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
