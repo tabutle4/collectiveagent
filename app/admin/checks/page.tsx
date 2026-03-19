@@ -41,6 +41,8 @@ interface CheckRecord {
   status: CheckStatus
   notes?: string | null
   transaction_id?: string | null
+  check_image_url?: string | null
+  onedrive_folder_url?: string | null
   check_payouts: Payout[]
 }
 
