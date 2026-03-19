@@ -300,13 +300,19 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
               : 'text-luxury-gray-3 hover:text-luxury-gray-2'
           }`}
         >
-          Coaching & Training
+          Coaching & Training Schedule
         </button>
       </div>
 
       {/* ─── CALENDAR TAB ─── */}
       {activeTab === 'calendar' && (
         <>
+          {/* Outlook tip banner */}
+          <div className="container-card border-l-2 border-luxury-accent mb-4">
+            <p className="text-xs font-semibold text-luxury-gray-1 mb-1">Want to see these events in your Outlook calendar?</p>
+            <p className="text-xs text-luxury-gray-2 leading-relaxed">In Outlook (web or mobile), go to your Calendar and look for <span className="font-semibold">Agents</span> under <span className="font-semibold">Groups</span> in the left sidebar. Check the box next to it and all events will show alongside your personal calendar automatically.</p>
+          </div>
+
           {/* Month navigation */}
           <div className="container-card mb-4">
             <div className="flex items-center justify-between">
@@ -540,16 +546,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
             </div>
 
             <div className="flex gap-2 mt-5">
-              {selectedEvent.webLink && (
-                <a
-                  href={selectedEvent.webLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary text-xs flex-1 text-center"
-                >
-                  Open in Outlook
-                </a>
-              )}
+
               {isAdmin && (
                 <>
                   <button
