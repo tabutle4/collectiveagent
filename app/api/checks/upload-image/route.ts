@@ -52,7 +52,7 @@ async function uploadToOneDrive(
       Authorization: `Bearer ${token}`,
       'Content-Type': contentType,
     },
-    body: fileBuffer,
+    body: fileBuffer as unknown as BodyInit,
   })
 
   if (!uploadRes.ok) {
