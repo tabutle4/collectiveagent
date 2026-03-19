@@ -300,7 +300,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
               : 'text-luxury-gray-3 hover:text-luxury-gray-2'
           }`}
         >
-          Coaching & Training Schedule
+          Coaching & Training
         </button>
       </div>
 
@@ -539,23 +539,40 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
               )}
             </div>
 
-            {isAdmin && (
-              <div className="flex gap-2 mt-5">
-                <button
-                  onClick={() => openEditForm(selectedEvent)}
-                  className="btn btn-secondary text-xs flex-1"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => deleteEvent(selectedEvent.id)}
-                  disabled={deleting}
-                  className="text-xs text-red-400 hover:text-red-600 px-4 disabled:opacity-50"
-                >
-                  {deleting ? 'Deleting...' : 'Delete'}
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2 mt-5">
+              <a
+                href={(() => {
+                  const start = encodeURIComponent(selectedEvent.start.dateTime || selectedEvent.start.date)
+                  const end = encodeURIComponent(selectedEvent.end.dateTime || selectedEvent.end.date)
+                  const subject = encodeURIComponent(selectedEvent.subject || '')
+                  const location = encodeURIComponent(selectedEvent.location?.displayName || '')
+                  const body = encodeURIComponent(selectedEvent.body?.content?.replace(/<[^>]*>/g, '') || '')
+                  return `https://outlook.office.com/calendar/action/compose?startdt=${start}&enddt=${end}&subject=${subject}&location=${location}&body=${body}`
+                })()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary text-xs flex-1 text-center"
+              >
+                Add to My Calendar
+              </a>
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => openEditForm(selectedEvent)}
+                    className="btn btn-secondary text-xs"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteEvent(selectedEvent.id)}
+                    disabled={deleting}
+                    className="text-xs text-red-400 hover:text-red-600 px-4 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting...' : 'Delete'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
