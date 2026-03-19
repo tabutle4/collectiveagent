@@ -9,13 +9,13 @@ type InvoiceType = 'onboarding' | 'monthly' | 'custom'
 export async function POST(request: NextRequest) {
   try {
     const { user_id, type, amount, description, month, year: invoiceYear }: {
-  user_id: string
-  type: InvoiceType
-  amount?: number
-  description?: string
-  month?: string
-  year?: number
-} = await request.json()
+      user_id: string
+      type: InvoiceType
+      amount?: number
+      description?: string
+      month?: string
+      year?: number
+    } = await request.json()
 
     if (!user_id || !type) {
       return NextResponse.json({ error: 'user_id and type are required' }, { status: 400 })
@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
     })
 
     if (type === 'onboarding') {
-      // Calculate prorated monthly fee
       const now = new Date()
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
       const remainingDays = daysInMonth - now.getDate() + 1
@@ -64,13 +63,14 @@ export async function POST(request: NextRequest) {
       }
     } else if (type === 'monthly') {
       const now = new Date()
-const monthName = month || now.toLocaleString('default', { month: 'long' })
-const year = invoiceYear || now.getFullYear()
-params.append('items[0][type]', 'Monthly Fee')
-params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
+      const monthName = month || now.toLocaleString('default', { month: 'long' })
+      const year = invoiceYear || now.getFullYear()
+      params.append('items[0][type]', 'Monthly Fee')
+      params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][amount]', '50')
       params.append('items[0][entry_type]', 'charge')
     } else {
+      // Custom invoice
       params.append('items[0][type]', description!)
       params.append('items[0][description]', description!)
       params.append('items[0][amount]', amount!.toString())
@@ -90,6 +90,21 @@ params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage F
     if (!res.ok) {
       console.error('Payload invoice creation failed:', data)
       return NextResponse.json({ error: data.message || 'Failed to create invoice' }, { status: 500 })
+    }
+
+    // For custom invoices, record in agent_debts
+    if (type === 'custom' && data.id) {
+      await supabase.from('agent_debts').insert({
+        agent_id: user_id,
+        debt_type: 'custom_invoice',
+        description: description,
+        amount_owed: amount,
+        amount_paid: 0,
+        date_incurred: today,
+        due_date: today,
+        status: 'outstanding',
+        notes: `Payload invoice ID: ${data.id}`,
+      })
     }
 
     return NextResponse.json({ success: true, invoice_id: data.id })

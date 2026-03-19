@@ -32,6 +32,7 @@ export default function AdminBillingPage() {
   const [showMonthlyForm, setShowMonthlyForm] = useState<string | null>(null)
   const [invoiceMonth, setInvoiceMonth] = useState(MONTHS[new Date().getMonth()])
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
+  const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -62,12 +63,20 @@ export default function AdminBillingPage() {
 
   const loadAgents = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('users')
-      .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
-      .eq('status', 'active')
-      .order('first_name')
+    const [{ data }, { count: openDebtsCount }] = await Promise.all([
+      supabase
+        .from('users')
+        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
+        .eq('status', 'active')
+        .order('first_name'),
+      supabase
+        .from('agent_debts')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'outstanding')
+        .eq('debt_type', 'custom_invoice'),
+    ])
     setAgents(data || [])
+    setOpenCustomInvoices(openDebtsCount || 0)
     setLoading(false)
   }
 
@@ -100,6 +109,13 @@ export default function AdminBillingPage() {
     delete updated[agentId]
     setAgentData(updated)
     await loadAgentData(agentId)
+    // Refresh open custom invoices count
+    const { count } = await supabase
+      .from('agent_debts')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'outstanding')
+      .eq('debt_type', 'custom_invoice')
+    setOpenCustomInvoices(count || 0)
   }
 
   const toggleAgent = (agentId: string, hasPayloadId: boolean) => {
@@ -226,7 +242,7 @@ export default function AdminBillingPage() {
 
   const stats = {
     total: agents.length,
-    onboardingUnpaid: agents.filter(a => !a.onboarding_fee_paid).length,
+    openCustomInvoices,
     monthlyOverdue: agents.filter(a => getMonthlyStatus(a) === 'overdue').length,
     monthlyUnpaid: agents.filter(a => getMonthlyStatus(a) === 'unpaid').length,
   }
@@ -241,7 +257,6 @@ export default function AdminBillingPage() {
 
     const matchesFilter = (() => {
       if (!statusFilter) return true
-      if (statusFilter === 'onboardingUnpaid') return !a.onboarding_fee_paid
       if (statusFilter === 'monthlyOverdue') return getMonthlyStatus(a) === 'overdue'
       if (statusFilter === 'monthlyUnpaid') return getMonthlyStatus(a) === 'unpaid'
       return true
@@ -260,19 +275,15 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      {/* Stats - clickable filters */}
+      {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="container-card text-center">
           <p className="text-xs text-luxury-gray-3 mb-1">Total Agents</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
         </div>
-        <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'onboardingUnpaid' ? 'ring-2 ring-red-400' : ''}`}
-          onClick={() => toggleFilter('onboardingUnpaid')}
-        >
-          <p className="text-xs text-luxury-gray-3 mb-1">Onboarding Unpaid</p>
-          <p className="text-2xl font-semibold text-red-500">{stats.onboardingUnpaid}</p>
-          {statusFilter === 'onboardingUnpaid' && <p className="text-xs text-red-400 mt-1">Filtering ✕</p>}
+        <div className="container-card text-center">
+          <p className="text-xs text-luxury-gray-3 mb-1">Open Custom Invoices</p>
+          <p className="text-2xl font-semibold text-orange-500">{stats.openCustomInvoices}</p>
         </div>
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`}
