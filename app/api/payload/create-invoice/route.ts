@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       const now = new Date()
       const monthName = month || now.toLocaleString('default', { month: 'long' })
       const year = invoiceYear || now.getFullYear()
+      params.append('description', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][type]', 'Monthly Fee')
       params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][amount]', '50')
