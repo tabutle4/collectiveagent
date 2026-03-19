@@ -28,19 +28,31 @@ async function getToken() {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('Calendar GET - GROUP_ID:', GROUP_ID)
+    console.log('Calendar GET - TENANT_ID:', TENANT_ID ? 'set' : 'missing')
+    console.log('Calendar GET - CLIENT_ID:', CLIENT_ID ? 'set' : 'missing')
+    console.log('Calendar GET - CLIENT_SECRET:', CLIENT_SECRET ? 'set' : 'missing')
+
     const token = await getToken()
+    console.log('Calendar GET - token obtained:', !!token)
+
     const { searchParams } = new URL(request.url)
     const start = searchParams.get('start') || new Date().toISOString()
     const end = searchParams.get('end') || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
 
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+    const url = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`
+    console.log('Calendar GET - fetching:', url)
+
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const data = await res.json()
-    if (!res.ok) return NextResponse.json({ error: data.error?.message || 'Failed to fetch events' }, { status: 500 })
+    console.log('Calendar GET - response status:', res.status)
+    if (!res.ok) {
+      console.error('Calendar GET - error:', JSON.stringify(data))
+      return NextResponse.json({ error: data.error?.message || 'Failed to fetch events', details: data }, { status: 500 })
+    }
     return NextResponse.json({ events: data.value || [] })
   } catch (err: any) {
+    console.error('Calendar GET - exception:', err.message)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
