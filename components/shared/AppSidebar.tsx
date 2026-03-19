@@ -75,7 +75,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
-  { href: '/roster', label: 'Roster', icon: FileText },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   ]
   const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
   const logo = logoUrl || '/logo.png'
