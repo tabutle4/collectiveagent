@@ -273,7 +273,7 @@ export default function TrainingCenterPage() {
             {mobileNavOpen ? <X size={14} /> : <Menu size={14} />}
           </button>
           {mobileNavOpen && (
-            <div className="card-luxury rounded-xl overflow-hidden mt-2">
+            <div className="container-card mt-2 p-0 overflow-hidden">
               <NavContent />
             </div>
           )}
@@ -350,7 +350,7 @@ export default function TrainingCenterPage() {
 
             {/* Left Nav - desktop only */}
             <div className="hidden md:block w-56 flex-shrink-0">
-              <div className="card-luxury rounded-xl overflow-hidden sticky top-6">
+              <div className="container-card sticky top-6 p-0 overflow-hidden">
                 <NavContent />
               </div>
             </div>
