@@ -42,6 +42,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   { href: '/admin/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
@@ -54,6 +55,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
@@ -75,6 +77,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   ]
   const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
