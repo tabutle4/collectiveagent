@@ -300,7 +300,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
               : 'text-luxury-gray-3 hover:text-luxury-gray-2'
           }`}
         >
-          Coaching & Training
+          Coaching & Training Schedule
         </button>
       </div>
 
@@ -425,10 +425,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
               <a href="https://visit.collectiverealtyco.com/training" target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent font-semibold hover:underline">
                 Zoom Link (Training)
               </a>
-              <a href="https://visit.collectiverealtyco.com/calendars" target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent font-semibold hover:underline">
-                Full Calendars
+              <a href="https://agent.collectiverealtyco.com/training-center" target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent font-semibold hover:underline">
+                Session Recordings
               </a>
-              <span className="text-xs text-luxury-gray-3">Recordings available in the Training Center.</span>
             </div>
           </div>
 
