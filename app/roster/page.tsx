@@ -49,7 +49,7 @@ export default function PublicRosterPage() {
 
         const combinedHtml = `
           <style>${styles}</style>
-          <div style="padding: 24px; padding-top: 100px; background: transparent;">
+          <div style="padding-top: 20px; background: transparent;">
             ${bodyContent}
           </div>
         `
