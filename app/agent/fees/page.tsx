@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 
 declare global {
   interface Window { Payload: any }
@@ -89,8 +89,10 @@ export default function AgentFeesPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
-  const formatCurrency = (amount: number) =>
-    typeof amount === 'number' ? `$${amount.toFixed(2)}` : `$${amount}`
+  const formatCurrency = (amount: any) => {
+    const num = parseFloat(amount)
+    return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`
+  }
 
   const totalDebts = debts.reduce((sum, d) => sum + (d.amount_remaining ?? d.amount_owed), 0)
   const totalCredits = credits.reduce((sum, c) => sum + (c.amount_remaining ?? c.amount_owed), 0)
@@ -328,7 +330,20 @@ export default function AgentFeesPage() {
                   <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
                   <p className="text-xs text-luxury-gray-3">{formatDate(r.paid_at)}</p>
                 </div>
-                <p className="text-sm font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
+                <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                  <p className="text-sm font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
+                  {r.url && (
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-luxury-gray-3 hover:text-luxury-accent"
+                      title="View receipt"
+                    >
+                      <ExternalLink size={13} />
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>
