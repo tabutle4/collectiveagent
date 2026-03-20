@@ -43,6 +43,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: data.message || 'Failed to send invoice' }, { status: 500 })
     }
 
+    // Store payment link for receipt display
+    if (data.url) {
+      await supabase.from('payment_links').insert({
+        agent_id: user_id,
+        invoice_id,
+        payment_link_id: data.id,
+        url: data.url,
+        description: data.description || null,
+        amount: data.amount || null,
+        status: data.status || 'active',
+      })
+    }
+
     return NextResponse.json({ success: true, payment_link_id: data.id })
   } catch (error: any) {
     console.error('Error sending invoice:', error)

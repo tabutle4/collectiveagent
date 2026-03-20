@@ -26,28 +26,22 @@ export async function GET(request: NextRequest) {
     if (!res.ok) return NextResponse.json({ receipts: [] })
 
     const data = await res.json()
+
     const receipts = await Promise.all((data.values || []).map(async (inv: any) => {
-  let url = null
-  if (inv.payment_link_id) {
-    try {
-      const plRes = await fetch(
-        `https://api.payload.com/payment_links/${inv.payment_link_id}`,
-        { headers: { 'Authorization': authHeader() } }
-      )
-      if (plRes.ok) {
-        const plData = await plRes.json()
-        url = plData.url || null
+      const { data: pl } = await supabase
+        .from('payment_links')
+        .select('url')
+        .eq('invoice_id', inv.id)
+        .single()
+
+      return {
+        id: inv.id,
+        amount: parseFloat(inv.total_paid) || 0,
+        paid_at: inv.paid_timestamp || null,
+        description: inv.items?.[0]?.type || 'Payment',
+        url: pl?.url || null,
       }
-    } catch {}
-  }
-  return {
-    id: inv.id,
-    amount: parseFloat(inv.total_paid) || 0,
-    paid_at: inv.paid_timestamp || inv.paid_at,
-    description: inv.items?.[0]?.type || 'Payment',
-    url,
-  }
-}))
+    }))
 
     return NextResponse.json({ receipts })
   } catch (error: any) {
