@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       return {
         id: inv.id,
         amount: parseFloat(inv.total_paid) || 0,
-        paid_at: inv.paid_timestamp || null,
+        paid_at: inv.paid_timestamp || inv.modified_at || null,
         description: inv.items?.[0]?.type || 'Payment',
         url: pl?.url || null,
       }
