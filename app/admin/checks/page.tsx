@@ -47,8 +47,9 @@ interface CheckRecord {
 }
 
 interface DashboardData {
-  us_bank_balance: number
-  us_bank_balance_updated_at: string | null
+  bank_balance: number
+  bank_balance_updated_at: string | null
+  funds_on_hold: number
   on_hold: number
   processed_payouts: number
   pending_payouts: number
@@ -363,10 +364,14 @@ export default function AdminChecksPage() {
   }
 
   const updateCheck = async (checkId: string, updates: Partial<CheckRecord>) => {
-    await fetch('/api/checks', {
+    const { check_payouts, check_image_url, onedrive_folder_url, ...safeUpdates } = updates as any
+    const finalUpdates = { ...safeUpdates }
+    if (check_image_url !== undefined) finalUpdates.check_image_url = check_image_url
+    const res = await fetch('/api/checks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_check', check_id: checkId, updates }),
+      body: JSON.stringify({ action: 'update_check', check_id: checkId, updates: finalUpdates }),
     })
+    const data = await res.json()
     setEditingCheck(null)
     loadAll()
   }
@@ -745,8 +750,8 @@ export default function AdminChecksPage() {
         <div className="container-card mb-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Balance</p>
-            {dashboard.us_bank_balance_updated_at && (
-              <p className="text-xs text-luxury-gray-3">Updated {fmtDate(dashboard.us_bank_balance_updated_at)}</p>
+            {dashboard.bank_balance_updated_at && (
+              <p className="text-xs text-luxury-gray-3">Updated {fmtDate(dashboard.bank_balance_updated_at)}</p>
             )}
           </div>
 
@@ -769,12 +774,12 @@ export default function AdminChecksPage() {
               </div>
             ) : (
               <button
-                onClick={() => { setEditingBalance(true); setBalanceInput(dashboard.us_bank_balance.toString()) }}
+                onClick={() => { setEditingBalance(true); setBalanceInput(dashboard.bank_balance.toString()) }}
                 className="flex items-center gap-2 group"
               >
                 <div className="text-left">
-                  <p className="text-xs text-luxury-gray-3 mb-0.5">US Bank Balance</p>
-                  <p className="text-3xl font-bold text-luxury-gray-1">{fmtShort(dashboard.us_bank_balance)}</p>
+                  <p className="text-xs text-luxury-gray-3 mb-0.5">Bank Balance</p>
+                  <p className="text-3xl font-bold text-luxury-gray-1">{fmtShort(dashboard.bank_balance)}</p>
                 </div>
                 <Edit2 size={13} className="text-luxury-gray-3 group-hover:text-luxury-accent flex-shrink-0" />
               </button>
@@ -784,7 +789,7 @@ export default function AdminChecksPage() {
           {/* Metrics — 2 col always */}
           <div className="grid grid-cols-2 gap-2 mb-3">
             {[
-              { label: 'On Hold', value: dashboard.on_hold, color: 'text-luxury-gray-1' },
+              { label: 'On Hold', value: dashboard.funds_on_hold, color: 'text-luxury-gray-1' },
               { label: 'Processed', value: dashboard.processed_payouts, color: 'text-blue-600' },
               { label: 'Pending', value: dashboard.pending_payouts, color: 'text-orange-500' },
               { label: 'CRC Owed', value: dashboard.crc_not_transferred, color: 'text-yellow-600' },

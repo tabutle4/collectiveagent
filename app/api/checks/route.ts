@@ -19,14 +19,14 @@ export async function GET(request: NextRequest) {
         { data: processedPayouts },
         { data: pendingPayouts },
       ] = await Promise.all([
-        supabase.from('company_settings').select('us_bank_balance, us_bank_balance_updated_at').single(),
+        supabase.from('company_settings').select('bank_balance, bank_balance_updated_at, funds_on_hold').single(),
         supabase.from('checks_received').select('check_amount').in('status', ['received', 'deposited']),
         supabase.from('check_payouts').select('amount').eq('payment_status', 'processed'),
         supabase.from('check_payouts').select('amount').eq('payment_status', 'pending'),
       ])
 
-      const usBankBalance = settings?.us_bank_balance || 0
-      const usBankBalanceUpdatedAt = settings?.us_bank_balance_updated_at || null
+      const bankBalance = settings?.bank_balance || 0
+      const bankBalanceUpdatedAt = settings?.bank_balance_updated_at || null
       const onHold = (onHoldChecks || []).reduce((sum, c) => sum + parseFloat(c.check_amount || '0'), 0)
       const processed = (processedPayouts || []).reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0)
       const pending = (pendingPayouts || []).reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0)
@@ -41,16 +41,17 @@ export async function GET(request: NextRequest) {
       const crcNotTransferred = (crcChecks || []).reduce((sum, c) => sum + parseFloat(c.brokerage_amount || '0'), 0)
 
       return NextResponse.json({
-        us_bank_balance: usBankBalance,
-        us_bank_balance_updated_at: usBankBalanceUpdatedAt,
+        bank_balance: bankBalance,
+        bank_balance_updated_at: bankBalanceUpdatedAt,
+        funds_on_hold: settings?.funds_on_hold || 0,
         on_hold: onHold,
         processed_payouts: processed,
         pending_payouts: pending,
         crc_not_transferred: crcNotTransferred,
         // Q1: Can available balance cover what's already going out?
-        coverage_check: usBankBalance - processed,
+        coverage_check: bankBalance - processed,
         // Q2: Can total funds cover everything owed?
-        total_exposure: (usBankBalance + onHold) - (processed + pending),
+        total_exposure: (bankBalance + onHold) - (processed + pending),
       })
     }
 
@@ -150,8 +151,8 @@ export async function POST(request: NextRequest) {
         const { error } = await supabase
           .from('company_settings')
           .update({
-            us_bank_balance: parseFloat(balance),
-            us_bank_balance_updated_at: new Date().toISOString(),
+            bank_balance: parseFloat(balance),
+            bank_balance_updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id)
         if (error) throw error
@@ -159,8 +160,8 @@ export async function POST(request: NextRequest) {
         const { error } = await supabase
           .from('company_settings')
           .insert({
-            us_bank_balance: parseFloat(balance),
-            us_bank_balance_updated_at: new Date().toISOString(),
+            bank_balance: parseFloat(balance),
+            bank_balance_updated_at: new Date().toISOString(),
           })
         if (error) throw error
       }
