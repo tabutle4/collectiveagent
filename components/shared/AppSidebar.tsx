@@ -27,7 +27,7 @@ interface AppSidebarProps {
 
 const adminNav: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/transactions', label: 'Transactions', icon: Receipt },
   { href: '/admin/users', label: 'Agents', icon: UserCog },
   { href: '/admin/team-agreements', label: 'Teams', icon: UsersRound },
   { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
@@ -49,7 +49,7 @@ const adminNav: NavItem[] = [
 
 const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/agent/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/transactions', label: 'Transactions', icon: Receipt },
   { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },

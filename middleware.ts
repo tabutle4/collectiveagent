@@ -31,8 +31,15 @@ const ADMIN_PATHS = ['/admin']
 const AGENT_PATHS = ['/agent']
 const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc']
 
+// Paths accessible to all authenticated users regardless of role
+const SHARED_PATHS = ['/transactions']
+
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(path => pathname.startsWith(path))
+}
+
+function isSharedPath(pathname: string): boolean {
+  return SHARED_PATHS.some(path => pathname.startsWith(path))
 }
 
 export async function middleware(request: NextRequest) {
@@ -71,10 +78,19 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Role-based access control
   const userRole = session.user.role?.toLowerCase() || ''
   const isAdminRole = ADMIN_ROLES.includes(userRole)
 
+  // Shared paths — accessible to all authenticated users, no role redirect
+  if (isSharedPath(pathname)) {
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set('x-user-id', session.user.id)
+    requestHeaders.set('x-user-email', session.user.email)
+    requestHeaders.set('x-user-role', session.user.role)
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+
+  // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
     return NextResponse.redirect(new URL('/agent/dashboard', request.url))
   }

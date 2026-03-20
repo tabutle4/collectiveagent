@@ -363,7 +363,7 @@ export default function AdminTransactionDetailPage() {
       {/* ── Mobile Header + Tab Bar ───────────────────────────────────────── */}
       <div className="border-b border-luxury-gray-5 bg-luxury-light">
         <div className="p-3">
-          <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors">
+          <button onClick={() => router.push('/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors">
             <ArrowLeft size={13} /> Back to Transactions
           </button>
           <div className="flex items-center justify-between">
@@ -398,7 +398,7 @@ export default function AdminTransactionDetailPage() {
       {/* ── Left Sidebar ───────────────────────────────────────────────────── */}
       <div className="hidden">
         <div className="p-4">
-          <button onClick={() => router.push('/admin/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors">
+          <button onClick={() => router.push('/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors">
             <ArrowLeft size={13} /> Back to Transactions
           </button>
 

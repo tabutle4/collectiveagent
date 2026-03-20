@@ -163,7 +163,7 @@ export default function EditTransactionPage() {
         supabase.from('transaction_internal_agents').select('*').eq('transaction_id', txnId),
       ])
 
-      if (txnRes.error || !txnRes.data) { router.push('/agent/transactions'); return }
+      if (txnRes.error || !txnRes.data) { router.push('/transactions'); return }
       const txn = txnRes.data
       setTransaction(txn)
       setTransactionTypes(typesRes.data || [])
@@ -462,7 +462,7 @@ export default function EditTransactionPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <button onClick={() => router.push('/agent/transactions')} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors mb-1 block">← Back to Transactions</button>
+          <button onClick={() => router.push('/transactions')} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors mb-1 block">← Back to Transactions</button>
           <div className="flex items-center gap-3">
             <h1 className="page-title">{form.street_address ? buildPropertyAddress(form.street_address, form.unit_suite, form.city, form.state_code, form.zip_code) : 'EDIT TRANSACTION'}</h1>
             <StatusBadge status={transaction.status as TransactionStatus} />
