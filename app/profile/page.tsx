@@ -62,11 +62,7 @@ export default function ProfilePage({ userId: adminUserId, isAdmin = false }: Pr
       let userIdToLoad = adminUserId || null
 
       if (!userIdToLoad) {
-        const userStr = localStorage.getItem('user')
-        if (userStr) {
-          const userData = JSON.parse(userStr)
-          userIdToLoad = userData.id
-        } else {
+        {
           const meRes = await fetch('/api/auth/me')
           if (!meRes.ok) {
             router.push('/auth/login')
