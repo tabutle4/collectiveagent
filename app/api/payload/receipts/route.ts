@@ -27,11 +27,12 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json()
     const receipts = (data.values || []).map((inv: any) => ({
-      id: inv.id,
-      amount: parseFloat(inv.amount) || 0,
-      paid_at: inv.paid_at,
-      description: inv.items?.[0]?.type || 'Payment',
-    }))
+  id: inv.id,
+  amount: parseFloat(inv.amount) || 0,
+  paid_at: inv.paid_at,
+  description: inv.items?.[0]?.type || 'Payment',
+  url: inv.url || null,  // receipt/payment link URL from Payload
+}))
 
     return NextResponse.json({ receipts })
   } catch (error: any) {

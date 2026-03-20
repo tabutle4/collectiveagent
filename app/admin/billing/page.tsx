@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Search, ChevronDown, ChevronUp, Send, Receipt } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, ExternalLink } from 'lucide-react'
 
 declare global {
   interface Window { Payload: any }
@@ -168,8 +168,10 @@ export default function AdminBillingPage() {
     return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
-  const formatCurrency = (amount: number) =>
-    typeof amount === 'number' ? `$${amount.toFixed(2)}` : `$${amount}`
+  const formatCurrency = (amount: any) => {
+    const num = parseFloat(amount)
+    return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`
+  }
 
   const sendInvoice = async (agentId: string, invoiceId: string) => {
     setSending(`invoice-${invoiceId}`)
@@ -203,24 +205,6 @@ export default function AdminBillingPage() {
       await refreshAgentData(agentId)
     } catch (err: any) {
       alert(err.message || 'Failed to void invoice')
-    } finally {
-      setSending(null)
-    }
-  }
-
-  const sendReceipt = async (agentId: string, invoiceId: string) => {
-    setSending(`receipt-${invoiceId}`)
-    try {
-      const res = await fetch('/api/payload/send-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice_id: invoiceId, user_id: agentId }),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error || 'Failed to send')
-      alert('Receipt sent successfully.')
-    } catch (err: any) {
-      alert(err.message || 'Failed to send receipt')
     } finally {
       setSending(null)
     }
@@ -533,10 +517,8 @@ export default function AdminBillingPage() {
                                       </div>
                                       <div className="flex items-center gap-2 ml-4">
                                         <p className="text-sm font-semibold text-orange-600">{formatCurrency(record.amount_remaining ?? record.amount_owed)}</p>
-                                        <>
-                                          <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
-                                          <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
-                                        </>
+                                        <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
+                                        <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
                                         {agent.payload_payee_id && !isInvoiced && (
                                           <button
                                             onClick={() => sendDebtInvoice(agent.id, record)}
@@ -767,14 +749,17 @@ export default function AdminBillingPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <p className="text-xs font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
-                                      <button
-                                        onClick={() => sendReceipt(agent.id, r.id)}
-                                        disabled={sending === `receipt-${r.id}`}
-                                        className="text-luxury-gray-3 hover:text-luxury-accent disabled:opacity-50"
-                                        title="Resend receipt to agent"
-                                      >
-                                        <Receipt size={13} />
-                                      </button>
+                                      {r.url && (
+                                        <a
+                                          href={r.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-luxury-gray-3 hover:text-luxury-accent"
+                                          title="View receipt"
+                                        >
+                                          <ExternalLink size={13} />
+                                        </a>
+                                      )}
                                     </div>
                                   </div>
                                 ))}
