@@ -158,7 +158,8 @@ export default function AdminBillingPage() {
   const getMonthlyStatus = (agent: any) => {
     if (agent.monthly_fee_waived) return 'waived'
     if (!agent.monthly_fee_paid_through) return 'unpaid'
-    const paidThrough = new Date(agent.monthly_fee_paid_through)
+    const [y, m, d] = agent.monthly_fee_paid_through.split('-').map(Number)
+const paidThrough = new Date(y, m - 1, d)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
     return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }

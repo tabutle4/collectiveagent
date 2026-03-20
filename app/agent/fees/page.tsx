@@ -77,7 +77,8 @@ export default function AgentFeesPage() {
   const getMonthlyStatus = () => {
     if (user?.monthly_fee_waived) return 'waived'
     if (!user?.monthly_fee_paid_through) return 'unpaid'
-    const paidThrough = new Date(user.monthly_fee_paid_through)
+    const [y, m, d] = user.monthly_fee_paid_through.split('-').map(Number)
+const paidThrough = new Date(y, m - 1, d)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
     return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }
