@@ -72,7 +72,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  const isAdmin = pathname?.startsWith('/admin')
+  const isAdmin = user ? ['admin', 'broker', 'operations', 'tc'].includes((user.role || '').toLowerCase()) : pathname?.startsWith('/admin')
   const restrictedAgentNav: NavItem[] = [
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
