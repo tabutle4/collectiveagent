@@ -171,7 +171,7 @@ export default function CreateTransactionPage() {
       finally { setLoading(false) }
     }
     load()
-  }, [])
+  }, [user])
 
   // Load required docs when type changes
   useEffect(() => {
