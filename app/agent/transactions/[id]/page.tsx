@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Save, FileText, Upload, Check, X, Plus, Trash2, ArrowLeft } from 'lucide-react'
 import { ProcessingFeeType } from '@/lib/transactions/types'
-import { getVisibleSlides, TENANT_TYPES, LOAN_TYPES, LEAD_SOURCES, FLYER_DIVISIONS, SlideConfig } from '@/lib/transactions/constants'
+import { getVisibleSlides, LOAN_TYPES, LEAD_SOURCES, FLYER_DIVISIONS, LegacySlideConfig as SlideConfig } from '@/lib/transactions/constants'
 import SummaryPanel from '@/components/transactions/SummaryPanel'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
@@ -608,7 +608,10 @@ export default function EditTransactionPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 {form.is_lease && (
-                  <div><label className="field-label">Tenant Type</label><select className="select-luxury" value={form.tenant_transaction_type} onChange={(e) => updateForm('tenant_transaction_type', e.target.value)} disabled={isLocked}><option value="">Select...</option>{TENANT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+                  <div><label className="field-label">Tenant Type</label><select className="select-luxury" value={form.tenant_transaction_type} onChange={(e) => updateForm('tenant_transaction_type', e.target.value)} disabled={isLocked}><option value="">Select...</option>
+                      <option value="apartment">Apartment</option>
+                      <option value="tenant_not_apartment">Tenant (not apartment)</option>
+                      <option value="simplyhome">SimplyHome Rental</option></select></div>
                 )}
                 {!form.is_lease && (
                   <div><label className="field-label">Loan Type</label><select className="select-luxury" value={form.loan_type} onChange={(e) => updateForm('loan_type', e.target.value)} disabled={isLocked}><option value="">Select...</option>{LOAN_TYPES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}</select></div>
