@@ -374,7 +374,7 @@ export default function AgentTransactionDetailPage() {
                           updateForm('transaction_type', selected.id)
                           updateForm('transaction_type_name', selected.name)
                           updateForm('is_lease', selected.is_lease)
-                          updateForm('processing_fee', selected.fee || 0)
+                          updateForm('processing_fee', selected.processing_fee || 0)
                           updateForm('processing_fee_type_id', selected.id)
                         }
                       }}
