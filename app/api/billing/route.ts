@@ -9,27 +9,61 @@ export async function GET(request: NextRequest) {
     const session = await verifySessionToken(sessionToken)
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
+    const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const agentId = searchParams.get('agent_id')
+    const status = searchParams.get('status')
+    const debtType = searchParams.get('debt_type')
 
-    const supabase = createClient()
-
-    let query = supabase
-      .from('agent_debts')
-      .select('*')
-      .order('date_incurred', { ascending: false })
-
+    // Called with ?agent_id=xxx — return records for that agent
     if (agentId) {
-      query = query.eq('agent_id', agentId)
+      let query = supabase
+        .from('agent_debts')
+        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id')
+        .eq('agent_id', agentId)
+        .order('date_incurred', { ascending: false })
+
+      if (status) query = query.eq('status', status)
+
+      const { data: records } = await query
+      return NextResponse.json({ records: records || [] })
     }
 
-    const { data, error } = await query
-    if (error) throw error
+    // Called with ?status=outstanding&debt_type=custom_invoice — return all matching debt records
+    if (status || debtType) {
+      let query = supabase
+        .from('agent_debts')
+        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id')
+        .order('date_incurred', { ascending: false })
 
-    return NextResponse.json({ records: data || [] })
-  } catch (err: any) {
-    console.error('Billing GET error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+      if (status) query = query.eq('status', status)
+      if (debtType) query = query.eq('debt_type', debtType)
+
+      const { data: records } = await query
+      return NextResponse.json({ records: records || [] })
+    }
+
+    // No params — return agent list + open debt counts (original overview endpoint)
+    const [agentsRes, debtRes] = await Promise.all([
+      supabase
+        .from('users')
+        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, monthly_fee_waived, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
+        .eq('status', 'active')
+        .order('first_name'),
+      supabase
+        .from('agent_debts')
+        .select('agent_id', { count: 'exact' })
+        .eq('status', 'outstanding')
+        .eq('debt_type', 'custom_invoice'),
+    ])
+
+    return NextResponse.json({
+      agents: agentsRes.data || [],
+      openCustomInvoices: debtRes.count || 0,
+      openDebtAgentIds: (debtRes.data || []).map((d: any) => d.agent_id),
+    })
+  } catch (error) {
+    return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })
   }
 }
 
@@ -40,46 +74,40 @@ export async function POST(request: NextRequest) {
     const session = await verifySessionToken(sessionToken)
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
+    const supabase = createClient()
     const body = await request.json()
     const { action } = body
-    const supabase = createClient()
 
+    // Page sends: create, { record: { agent_id, record_type, debt_type, description, amount_owed, ... } }
     if (action === 'create') {
       const { record } = body
-      const { data, error } = await supabase
-        .from('agent_debts')
-        .insert(record)
-        .select()
-        .single()
-      if (error) throw error
-      return NextResponse.json({ record: data })
-    }
-
-    if (action === 'update') {
-      const { id, updates } = body
-      const { data, error } = await supabase
-        .from('agent_debts')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single()
-      if (error) throw error
-      return NextResponse.json({ record: data })
-    }
-
-    if (action === 'delete') {
-      const { id } = body
-      const { error } = await supabase
-        .from('agent_debts')
-        .delete()
-        .eq('id', id)
-      if (error) throw error
+      const { error } = await supabase.from('agent_debts').insert({
+        ...record,
+        date_incurred: record.date_incurred || new Date().toISOString().split('T')[0],
+        status: 'outstanding',
+      })
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-  } catch (err: any) {
-    console.error('Billing POST error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    // Page sends: update, { id, updates: { description, amount_owed } } or { id, updates: { notes } }
+    if (action === 'update') {
+      const { id, updates } = body
+      const { error } = await supabase.from('agent_debts').update(updates).eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ success: true })
+    }
+
+    // Page sends: delete, { id }
+    if (action === 'delete') {
+      const { id } = body
+      const { error } = await supabase.from('agent_debts').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })
   }
 }
