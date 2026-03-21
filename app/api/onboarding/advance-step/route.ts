@@ -22,14 +22,15 @@ export async function POST(request: NextRequest) {
     const completedAtField = `step_${step}_completed_at`
     const nextStep = step + 1
 
-    await supabase
-      .from('onboarding_sessions')
-      .upsert({
+    await supabase.from('onboarding_sessions').upsert(
+      {
         user_id: prospect.id,
         current_step: nextStep,
         [completedAtField]: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' })
+      },
+      { onConflict: 'user_id' }
+    )
 
     return NextResponse.json({ success: true, next_step: nextStep })
   } catch (error: any) {

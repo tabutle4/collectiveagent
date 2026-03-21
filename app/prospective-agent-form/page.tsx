@@ -9,7 +9,7 @@ export default function ProspectiveAgentForm() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  
+
   const [formData, setFormData] = useState({
     // Contact Information
     first_name: '',
@@ -20,18 +20,18 @@ export default function ProspectiveAgentForm() {
     email: '',
     location: '',
     instagram_handle: '',
-    
+
     // MLS Information
     mls_choice: '',
     association_status: '',
     previous_brokerage: '',
-    
+
     // Expectations
     expectations: '',
     accountability: '',
     lead_generation: '',
     additional_info: '',
-    
+
     // Referral & Team
     how_heard: '',
     how_heard_other: '',
@@ -39,9 +39,11 @@ export default function ProspectiveAgentForm() {
     joining_team: '',
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target
-    
+
     // For phone field, strip all non-digits and limit to 10 digits
     if (name === 'phone') {
       const digitsOnly = value.replace(/\D/g, '')
@@ -49,14 +51,14 @@ export default function ProspectiveAgentForm() {
       setFormData(prev => ({ ...prev, [name]: limitedDigits }))
       return
     }
-    
+
     setFormData(prev => ({ ...prev, [name]: value }))
-    
+
     // Clear previous brokerage if switching to new agent
     if (name === 'association_status' && value === 'new_agent') {
       setFormData(prev => ({ ...prev, previous_brokerage: '' }))
     }
-    
+
     // Clear how_heard_other if not selecting "Other"
     if (name === 'how_heard' && value !== 'Other') {
       setFormData(prev => ({ ...prev, how_heard_other: '' }))
@@ -74,7 +76,7 @@ export default function ProspectiveAgentForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    
+
     // Format names before submission
     const formattedData = {
       ...formData,
@@ -83,14 +85,14 @@ export default function ProspectiveAgentForm() {
       preferred_first_name: formatNameToTitleCase(formData.preferred_first_name),
       preferred_last_name: formatNameToTitleCase(formData.preferred_last_name),
     }
-    
+
     // Validate phone number is exactly 10 digits
     const phoneDigits = formattedData.phone.replace(/\D/g, '')
     if (phoneDigits.length !== 10) {
       setError('Phone number must be exactly 10 digits')
       return
     }
-    
+
     setLoading(true)
 
     try {
@@ -109,7 +111,9 @@ export default function ProspectiveAgentForm() {
       }
 
       // Redirect to success page
-      router.push(`/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}`)
+      router.push(
+        `/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}`
+      )
     } catch (err) {
       setError('An error occurred. Please try again.')
       setLoading(false)
@@ -118,33 +122,29 @@ export default function ProspectiveAgentForm() {
 
   return (
     <PageContainer>
-
-      
       <div className="max-w-3xl mx-auto px-6 py-12" style={{ paddingTop: '100px' }}>
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-light mb-3 tracking-wide">
-            Prospective Agent Form
-          </h2>
+          <h2 className="text-2xl font-light mb-3 tracking-wide">Prospective Agent Form</h2>
           <p className="text-sm text-luxury-gray-2 max-w-2xl mx-auto">
             Interested in joining Collective Realty Co.?
             <br />
             Please share some details about your background and career objectives below.
           </p>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="space-y-8">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
               {error}
             </div>
           )}
-          
+
           {/* Contact Information */}
           <div className="card-section">
             <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">
               Contact Information
             </h3>
-            
+
             <div className="grid md:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="first_name" className="block text-sm mb-2 text-luxury-gray-1">
@@ -160,7 +160,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="last_name" className="block text-sm mb-2 text-luxury-gray-1">
                   Last Name (Legal) *
@@ -175,9 +175,12 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
-                <label htmlFor="preferred_first_name" className="block text-sm mb-2 text-luxury-gray-1">
+                <label
+                  htmlFor="preferred_first_name"
+                  className="block text-sm mb-2 text-luxury-gray-1"
+                >
                   Preferred First Name *
                 </label>
                 <input
@@ -191,9 +194,12 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
-                <label htmlFor="preferred_last_name" className="block text-sm mb-2 text-luxury-gray-1">
+                <label
+                  htmlFor="preferred_last_name"
+                  className="block text-sm mb-2 text-luxury-gray-1"
+                >
                   Preferred Last Name *
                 </label>
                 <input
@@ -207,7 +213,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="phone" className="block text-sm mb-2 text-luxury-gray-1">
                   Phone * <span className="text-xs text-luxury-gray-3">(10 digits only)</span>
@@ -224,7 +230,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="email" className="block text-sm mb-2 text-luxury-gray-1">
                   Email *
@@ -240,7 +246,7 @@ export default function ProspectiveAgentForm() {
                 />
               </div>
             </div>
-            
+
             <div className="mt-6">
               <label className="block text-sm mb-3 text-luxury-gray-1">
                 Where are you located? *
@@ -282,7 +288,7 @@ export default function ProspectiveAgentForm() {
                 </label>
               </div>
             </div>
-            
+
             <div className="mt-6">
               <label htmlFor="instagram_handle" className="block text-sm mb-2 text-luxury-gray-1">
                 Instagram Handle
@@ -298,13 +304,11 @@ export default function ProspectiveAgentForm() {
               />
             </div>
           </div>
-          
+
           {/* MLS Information */}
           <div className="card-section">
-            <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">
-              MLS Information
-            </h3>
-            
+            <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">MLS Information</h3>
+
             <div>
               <label className="block text-sm mb-3 text-luxury-gray-1">
                 Which MLS will you join? *
@@ -346,7 +350,7 @@ export default function ProspectiveAgentForm() {
                 </label>
               </div>
             </div>
-            
+
             <div className="mt-6">
               <label className="block text-sm mb-3 text-luxury-gray-1">
                 Select option that describes your association status *
@@ -373,14 +377,20 @@ export default function ProspectiveAgentForm() {
                     onChange={handleChange}
                     className="mr-3 mt-1"
                   />
-                  <span>I was previously a member of {formData.mls_choice || '[selected MLS]'} with another brokerage</span>
+                  <span>
+                    I was previously a member of {formData.mls_choice || '[selected MLS]'} with
+                    another brokerage
+                  </span>
                 </label>
               </div>
             </div>
-            
+
             {formData.association_status === 'previous_member' && (
               <div className="mt-6">
-                <label htmlFor="previous_brokerage" className="block text-sm mb-2 text-luxury-gray-1">
+                <label
+                  htmlFor="previous_brokerage"
+                  className="block text-sm mb-2 text-luxury-gray-1"
+                >
                   What was your previous brokerage? *
                 </label>
                 <input
@@ -395,13 +405,11 @@ export default function ProspectiveAgentForm() {
               </div>
             )}
           </div>
-          
+
           {/* Your Expectations */}
           <div className="card-section">
-            <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">
-              Your Expectations
-            </h3>
-            
+            <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">Your Expectations</h3>
+
             <div className="space-y-6">
               <div>
                 <label htmlFor="expectations" className="block text-sm mb-2 text-luxury-gray-1">
@@ -416,7 +424,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="accountability" className="block text-sm mb-2 text-luxury-gray-1">
                   Do you want to be held accountable? *
@@ -430,7 +438,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="lead_generation" className="block text-sm mb-2 text-luxury-gray-1">
                   How do you plan to produce business leads? *
@@ -444,7 +452,7 @@ export default function ProspectiveAgentForm() {
                   required
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="additional_info" className="block text-sm mb-2 text-luxury-gray-1">
                   Is there anything you would like to add? *
@@ -460,13 +468,13 @@ export default function ProspectiveAgentForm() {
               </div>
             </div>
           </div>
-          
+
           {/* Referral & Team Information */}
           <div className="card-section">
             <h3 className="text-xl font-light mb-6 tracking-luxury uppercase">
               Referral & Team Information
             </h3>
-            
+
             <div className="space-y-6">
               <div>
                 <label htmlFor="how_heard" className="block text-sm mb-2 text-luxury-gray-1">
@@ -488,10 +496,13 @@ export default function ProspectiveAgentForm() {
                   <option value="Other">Other</option>
                 </select>
               </div>
-              
+
               {formData.how_heard === 'Other' && (
                 <div>
-                  <label htmlFor="how_heard_other" className="block text-sm mb-2 text-luxury-gray-1">
+                  <label
+                    htmlFor="how_heard_other"
+                    className="block text-sm mb-2 text-luxury-gray-1"
+                  >
                     If other, please describe:
                   </label>
                   <input
@@ -504,7 +515,7 @@ export default function ProspectiveAgentForm() {
                   />
                 </div>
               )}
-              
+
               <div>
                 <label htmlFor="referring_agent" className="block text-sm mb-2 text-luxury-gray-1">
                   If an agent referred you, please list their name below
@@ -518,10 +529,11 @@ export default function ProspectiveAgentForm() {
                   className="input-luxury"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="joining_team" className="block text-sm mb-2 text-luxury-gray-1">
-                  Are you joining a team after onboarding? If so, please list the team name or team lead below
+                  Are you joining a team after onboarding? If so, please list the team name or team
+                  lead below
                 </label>
                 <input
                   id="joining_team"
@@ -534,19 +546,15 @@ export default function ProspectiveAgentForm() {
               </div>
             </div>
           </div>
-          
+
           <div className="text-center pt-6">
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary px-16"
-            >
+            <button type="submit" disabled={loading} className="btn btn-primary px-16">
               {loading ? 'Submitting...' : 'Submit Form'}
             </button>
           </div>
         </form>
       </div>
-      
+
       <div className="bg-gradient-to-br from-luxury-dark-3 to-luxury-dark-2 py-12 mt-16">
         <p className="text-center text-luxury-gray-4 text-sm italic tracking-luxury">
           © 2025 Collective Realty Co. All rights reserved.

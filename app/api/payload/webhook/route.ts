@@ -20,35 +20,43 @@ export async function POST(request: NextRequest) {
       if (!user) return NextResponse.json({ received: true })
 
       // Check if this invoice contains an onboarding fee line item
-      const hasOnboardingItem = data.items?.some((item: any) =>
-        item.type === 'Onboarding Fee'
-      )
+      const hasOnboardingItem = data.items?.some((item: any) => item.type === 'Onboarding Fee')
       if (hasOnboardingItem && !user.onboarding_fee_paid) {
-        await supabase.from('users').update({
-          onboarding_fee_paid: true,
-          onboarding_fee_paid_date: data.paid_at?.split('T')[0] ?? new Date().toISOString().split('T')[0],
-        }).eq('id', user.id)
+        await supabase
+          .from('users')
+          .update({
+            onboarding_fee_paid: true,
+            onboarding_fee_paid_date:
+              data.paid_at?.split('T')[0] ?? new Date().toISOString().split('T')[0],
+          })
+          .eq('id', user.id)
         console.log('Marked onboarding fee paid for user:', user.id)
       }
 
       // Check if this invoice contains a monthly fee
-      const hasMonthlyItem = data.items?.some((item: any) =>
-        item.type === 'Monthly Fee' || item.type === 'Monthly Fee (Prorated)'
+      const hasMonthlyItem = data.items?.some(
+        (item: any) => item.type === 'Monthly Fee' || item.type === 'Monthly Fee (Prorated)'
       )
       if (hasMonthlyItem) {
         const now = new Date()
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-        await supabase.from('users').update({
-          monthly_fee_paid_through: endOfMonth,
-        }).eq('id', user.id)
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          .toISOString()
+          .split('T')[0]
+        await supabase
+          .from('users')
+          .update({
+            monthly_fee_paid_through: endOfMonth,
+          })
+          .eq('id', user.id)
         console.log('Updated monthly fee paid through for user:', user.id)
       }
 
       // Check if this is a custom invoice — mark agent_debt resolved
-      const hasCustomItem = data.items?.some((item: any) =>
-        item.type !== 'Onboarding Fee' &&
-        item.type !== 'Monthly Fee' &&
-        item.type !== 'Monthly Fee (Prorated)'
+      const hasCustomItem = data.items?.some(
+        (item: any) =>
+          item.type !== 'Onboarding Fee' &&
+          item.type !== 'Monthly Fee' &&
+          item.type !== 'Monthly Fee (Prorated)'
       )
       if (hasCustomItem && data.id) {
         // Find matching debt by Payload invoice ID stored in notes
@@ -61,11 +69,14 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (debt) {
-          await supabase.from('agent_debts').update({
-            status: 'resolved',
-            amount_paid: debt.amount_owed,
-            date_resolved: data.paid_at?.split('T')[0] ?? new Date().toISOString().split('T')[0],
-          }).eq('id', debt.id)
+          await supabase
+            .from('agent_debts')
+            .update({
+              status: 'resolved',
+              amount_paid: debt.amount_owed,
+              date_resolved: data.paid_at?.split('T')[0] ?? new Date().toISOString().split('T')[0],
+            })
+            .eq('id', debt.id)
           console.log('Marked agent debt resolved:', debt.id)
         }
       }
@@ -81,10 +92,15 @@ export async function POST(request: NextRequest) {
 
       if (user) {
         const now = new Date()
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-        await supabase.from('users').update({
-          monthly_fee_paid_through: endOfMonth,
-        }).eq('id', user.id)
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          .toISOString()
+          .split('T')[0]
+        await supabase
+          .from('users')
+          .update({
+            monthly_fee_paid_through: endOfMonth,
+          })
+          .eq('id', user.id)
         console.log('Updated monthly fee via autopay for user:', user.id)
       }
     }

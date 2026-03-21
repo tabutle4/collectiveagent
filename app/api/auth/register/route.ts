@@ -4,28 +4,23 @@ import { hashPassword } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const {
-      email,
-      password,
-      first_name,
-      last_name,
-      preferred_first_name,
-      preferred_last_name,
-    } = await request.json()
+    const { email, password, first_name, last_name, preferred_first_name, preferred_last_name } =
+      await request.json()
 
     // Validation
-    if (!email || !password || !first_name || !last_name || !preferred_first_name || !preferred_last_name) {
-      return NextResponse.json(
-        { error: 'All fields are required' },
-        { status: 400 }
-      )
+    if (
+      !email ||
+      !password ||
+      !first_name ||
+      !last_name ||
+      !preferred_first_name ||
+      !preferred_last_name
+    ) {
+      return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
     }
 
     if (password.length < 8) {
-      return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
     // Check if any users exist
@@ -54,10 +49,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
     }
 
     // Hash password
@@ -92,9 +84,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Registration error:', error)
-    return NextResponse.json(
-      { error: 'An error occurred during registration' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'An error occurred during registration' }, { status: 500 })
   }
 }

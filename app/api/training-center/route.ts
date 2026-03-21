@@ -4,7 +4,8 @@ const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 
 const VIDEOS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5HhDhOCHtNrRZpFFzbL3M8m'
 const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4Y7SqWCeUeROfqY'
-const AGENT_RESOURCES_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
+const AGENT_RESOURCES_DRIVE_ID =
+  'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch(
@@ -56,9 +57,21 @@ export async function GET(request: NextRequest) {
     if (query) {
       const encoded = encodeURIComponent(query)
       const [videoResults, docResults, agentResResults] = await Promise.all([
-        graphGet(token, `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`, false),
-        graphGet(token, `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`, false),
-        graphGet(token, `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`, false),
+        graphGet(
+          token,
+          `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
+          false
+        ),
+        graphGet(
+          token,
+          `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
+          false
+        ),
+        graphGet(
+          token,
+          `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
+          false
+        ),
       ])
 
       // Combine all results into one list with type tag, sort by relevance
@@ -135,10 +148,14 @@ export async function GET(request: NextRequest) {
       .slice(0, 6)
 
     const recentRecordings = await Promise.all(
-      top6.map(async (video) => {
+      top6.map(async video => {
         try {
-          const thumbData = await graphGet(token, `/drives/${VIDEOS_DRIVE_ID}/items/${video.id}/thumbnails`)
-          const thumbnail = thumbData?.value?.[0]?.medium?.url || thumbData?.value?.[0]?.large?.url || null
+          const thumbData = await graphGet(
+            token,
+            `/drives/${VIDEOS_DRIVE_ID}/items/${video.id}/thumbnails`
+          )
+          const thumbnail =
+            thumbData?.value?.[0]?.medium?.url || thumbData?.value?.[0]?.large?.url || null
           return { ...video, thumbnail }
         } catch {
           return video
@@ -164,14 +181,16 @@ export async function GET(request: NextRequest) {
 
     const recentResources = folderFiles
       .flatMap((r: any) => r?.value || [])
-      .filter((item: any) =>
-        item.file &&
-        !item.name?.startsWith('~') &&
-        !item.name?.endsWith('.mp4') &&
-        !item.name?.endsWith('.mov')
+      .filter(
+        (item: any) =>
+          item.file &&
+          !item.name?.startsWith('~') &&
+          !item.name?.endsWith('.mp4') &&
+          !item.name?.endsWith('.mov')
       )
-      .sort((a: any, b: any) =>
-        new Date(b.lastModifiedDateTime).getTime() - new Date(a.lastModifiedDateTime).getTime()
+      .sort(
+        (a: any, b: any) =>
+          new Date(b.lastModifiedDateTime).getTime() - new Date(a.lastModifiedDateTime).getTime()
       )
       .slice(0, 8)
       .map((item: any) => ({

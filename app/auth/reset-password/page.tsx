@@ -27,7 +27,7 @@ function ResetPasswordContent() {
         const response = await fetch('/api/auth/verify-reset-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
+          body: JSON.stringify({ token }),
         })
         if (response.ok) {
           setValidToken(true)
@@ -60,7 +60,7 @@ function ResetPasswordContent() {
       const response = await fetch('/api/auth/update-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password })
+        body: JSON.stringify({ token, password }),
       })
       if (response.ok) {
         alert('Password updated successfully! Please log in.')
@@ -77,9 +77,7 @@ function ResetPasswordContent() {
   }
 
   if (checkingToken) {
-    return (
-      <div className="text-center text-sm text-luxury-gray-3">Verifying reset token...</div>
-    )
+    return <div className="text-center text-sm text-luxury-gray-3">Verifying reset token...</div>
   }
 
   if (!validToken) {
@@ -87,11 +85,17 @@ function ResetPasswordContent() {
       <>
         <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Invalid Reset Link</h1>
         <p className="text-sm text-red-600 mb-6">{error}</p>
-        <button onClick={() => router.push('/auth/forgot-password')} className="btn btn-primary w-full">
+        <button
+          onClick={() => router.push('/auth/forgot-password')}
+          className="btn btn-primary w-full"
+        >
           Request New Reset Link
         </button>
         <div className="mt-4 text-center">
-          <Link href="/auth/login" className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors">
+          <Link
+            href="/auth/login"
+            className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
+          >
             Back to Sign In
           </Link>
         </div>
@@ -105,22 +109,56 @@ function ResetPasswordContent() {
       <p className="text-sm text-luxury-gray-3 mb-10">Enter your new password below</p>
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded text-sm">{error}</div>
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded text-sm">
+            {error}
+          </div>
         )}
         <div>
-          <label htmlFor="password" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">New Password</label>
-          <input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input-luxury" required minLength={6} />
+          <label htmlFor="password" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">
+            New Password
+          </label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="input-luxury"
+            required
+            minLength={6}
+          />
         </div>
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">Confirm New Password</label>
-          <input type="password" id="confirmPassword" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input-luxury" required minLength={6} />
+          <label
+            htmlFor="confirmPassword"
+            className="block text-sm mb-1.5 text-luxury-gray-2 font-medium"
+          >
+            Confirm New Password
+          </label>
+          <input
+            type="password"
+            id="confirmPassword"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            className="input-luxury"
+            required
+            minLength={6}
+          />
         </div>
-        <button type="submit" disabled={loading} className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed">
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           {loading ? 'Updating...' : 'Update Password'}
         </button>
       </form>
       <div className="mt-4 text-center">
-        <Link href="/auth/login" className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors">Back to Sign In</Link>
+        <Link
+          href="/auth/login"
+          className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
+        >
+          Back to Sign In
+        </Link>
       </div>
     </>
   )
@@ -135,7 +173,9 @@ export default function ResetPasswordPage() {
       <div className="flex-1 flex items-center justify-center px-4 -mt-16">
         <div className="w-full max-w-lg">
           <div className="bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 p-10">
-            <Suspense fallback={<div className="text-center text-sm text-luxury-gray-3">Loading...</div>}>
+            <Suspense
+              fallback={<div className="text-center text-sm text-luxury-gray-3">Loading...</div>}
+            >
               <ResetPasswordContent />
             </Suspense>
           </div>

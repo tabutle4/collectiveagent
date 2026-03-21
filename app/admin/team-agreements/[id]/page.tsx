@@ -2,7 +2,15 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Plus, X, AlertCircle, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react'
 import Link from 'next/link'
 
 interface Agent {
@@ -86,18 +94,22 @@ interface TeamAgreement {
   team_members: TeamMember[]
 }
 
-export default function TeamAgreementFormPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+export default function TeamAgreementFormPage({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string }
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
+
   // Handle both Promise and sync params (Next.js 15+ vs 14)
   const resolvedParams = typeof params === 'object' && 'then' in params ? use(params) : params
   const id = resolvedParams.id
-  
+
   const isEdit = id !== 'new' && searchParams.get('edit') === 'true'
   const isNew = id === 'new'
   const isView = id !== 'new' && !isEdit
-  
+
   const [user, setUser] = useState<any>(null)
   useEffect(() => {
     const fetchUser = async () => {
@@ -122,7 +134,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   const [success, setSuccess] = useState(false)
   const [agreementData, setAgreementData] = useState<any>(null) // Store full agreement data for view mode
   const [expandedMembers, setExpandedMembers] = useState<Record<number, boolean>>({}) // Track which team members are expanded in view mode
-  
+
   const [formData, setFormData] = useState({
     team_name: '',
     team_lead_id: '',
@@ -132,7 +144,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     agreement_document_url: '',
     notes: '',
   })
-  
+
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
 
   useEffect(() => {
@@ -163,37 +175,42 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     try {
       // Sanitize UUID helper function
       const sanitizeUUID = (value: any): string => {
-        if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+        if (
+          !value ||
+          value === 'undefined' ||
+          value === '' ||
+          (typeof value === 'string' && value.trim() === '')
+        ) {
           return ''
         }
         return typeof value === 'string' ? value.trim() : String(value)
       }
-      
+
       if (!id || id === 'new') {
         setLoading(false)
         return
       }
-      
+
       const response = await fetch(`/api/team-agreements/${id}`)
       const data = await response.json()
-      
+
       console.log('API Response:', { status: response.status, data })
-      
+
       if (!response.ok) {
         throw new Error(data.error || `Failed to load agreement: ${response.status}`)
       }
-      
+
       if (data.agreement) {
         const agreement = data.agreement
         console.log('Loaded agreement:', agreement)
-        
+
         setAgreementData(agreement) // Store full agreement data for view mode
         console.log('agreementData set to:', agreement)
         console.log('team_name:', agreement.team_name)
         console.log('team_lead_name:', agreement.team_lead_name)
         console.log('effective_date:', agreement.effective_date)
         console.log('team_members count:', agreement.team_members?.length || 0)
-        
+
         // Parse dates - handle both ISO strings and date-only strings (YYYY-MM-DD)
         const parseDate = (dateStr: string | null | undefined): string => {
           if (!dateStr) return ''
@@ -204,7 +221,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           // Otherwise, try to parse ISO string and extract date part
           return dateStr.split('T')[0]
         }
-        
+
         setFormData({
           team_name: agreement.team_name || '',
           team_lead_id: sanitizeUUID(agreement.team_lead_id),
@@ -214,12 +231,12 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           agreement_document_url: agreement.agreement_document_url || '',
           notes: agreement.notes || '',
         })
-        
+
         // Format team members with new splits structure
         const members = (agreement.team_members || []).map((m: any) => {
           // Use splits from database or initialize with defaults
           let splits: SplitsData = m.splits || initializeSplits()
-          
+
           // Ensure structure is complete (handle any missing plans)
           if (!splits.sales?.custom) {
             splits = {
@@ -239,12 +256,12 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               },
             }
           }
-          
+
           // Get agent name from the agent relation
           const agentName = m.agent
             ? `${m.agent.preferred_first_name || m.agent.first_name || ''} ${m.agent.preferred_last_name || m.agent.last_name || ''}`.trim()
             : ''
-          
+
           return {
             id: m.id,
             agent_id: sanitizeUUID(m.agent_id),
@@ -252,7 +269,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             joined_date: m.joined_date ? m.joined_date.split('T')[0] : '',
             left_date: m.left_date ? m.left_date.split('T')[0] : null,
             splits: splits,
-            active_sales_plan: (m.active_sales_plan || 'no_cap') as 'new_agent' | 'no_cap' | 'cap' | 'custom',
+            active_sales_plan: (m.active_sales_plan || 'no_cap') as
+              | 'new_agent'
+              | 'no_cap'
+              | 'cap'
+              | 'custom',
             active_lease_plan: (m.active_lease_plan || 'standard') as 'standard' | 'custom',
             expandedSections: {
               sales_new_agent: false, // Default: collapsed
@@ -373,7 +394,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     setTeamMembers(prev => {
       const updated = [...prev]
       const member = { ...updated[index] }
-      
+
       if (!member.splits) {
         member.splits = JSON.parse(JSON.stringify(splitTemplates))
       } else {
@@ -385,7 +406,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           },
         }
       }
-      
+
       updated[index] = member
       return updated
     })
@@ -395,7 +416,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     setTeamMembers(prev => {
       const updated = [...prev]
       const member = { ...updated[index] }
-      
+
       if (!member.splits) {
         member.splits = JSON.parse(JSON.stringify(splitTemplates))
       } else {
@@ -407,7 +428,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           },
         }
       }
-      
+
       updated[index] = member
       return updated
     })
@@ -418,22 +439,25 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   }
 
   const addTeamMember = () => {
-    setTeamMembers(prev => [...prev, {
-      agent_id: '',
-      joined_date: formData.effective_date || new Date().toISOString().split('T')[0],
-      left_date: null,
-      splits: initializeSplits(),
-      active_sales_plan: 'no_cap',
-      active_lease_plan: 'standard',
-      expandedSections: {
-        sales_new_agent: false, // Default: collapsed
-        sales_no_cap: false,
-        sales_cap: false,
-        sales_custom: false,
-        lease_standard: false, // Default: collapsed
-        lease_custom: false,
+    setTeamMembers(prev => [
+      ...prev,
+      {
+        agent_id: '',
+        joined_date: formData.effective_date || new Date().toISOString().split('T')[0],
+        left_date: null,
+        splits: initializeSplits(),
+        active_sales_plan: 'no_cap',
+        active_lease_plan: 'standard',
+        expandedSections: {
+          sales_new_agent: false, // Default: collapsed
+          sales_no_cap: false,
+          sales_cap: false,
+          sales_custom: false,
+          lease_standard: false, // Default: collapsed
+          lease_custom: false,
+        },
       },
-    }])
+    ])
   }
 
   const removeTeamMember = (index: number) => {
@@ -483,12 +507,16 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     setTeamMembers(prev => {
       const updated = [...prev]
       const member = { ...updated[index] }
-      
+
       if (!member.splits) {
         member.splits = initializeSplits()
       }
-      
-      if (transactionType === 'sales' && plan && (plan === 'new_agent' || plan === 'no_cap' || plan === 'cap' || plan === 'custom')) {
+
+      if (
+        transactionType === 'sales' &&
+        plan &&
+        (plan === 'new_agent' || plan === 'no_cap' || plan === 'cap' || plan === 'custom')
+      ) {
         member.splits = {
           ...member.splits,
           sales: {
@@ -502,7 +530,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             },
           },
         }
-      } else if (transactionType === 'lease' && plan && (plan === 'standard' || plan === 'custom')) {
+      } else if (
+        transactionType === 'lease' &&
+        plan &&
+        (plan === 'standard' || plan === 'custom')
+      ) {
         member.splits = {
           ...member.splits,
           lease: {
@@ -517,7 +549,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           },
         }
       }
-      
+
       updated[index] = member
       return updated
     })
@@ -534,20 +566,24 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
   }
 
   // Check if a plan is valid (all splits total 100%)
-  const planIsValid = (planSplits: any, plan: string, transactionType: 'sales' | 'lease'): boolean => {
+  const planIsValid = (
+    planSplits: any,
+    plan: string,
+    transactionType: 'sales' | 'lease'
+  ): boolean => {
     if (!planSplits) return true // Empty plans are valid
-    
+
     const sources: Array<'team_lead' | 'own' | 'firm'> = ['team_lead', 'own', 'firm']
-    
+
     for (const source of sources) {
       const split = planSplits[source]
       if (!split) continue
-      
+
       const total = getSplitTotal(split)
       if (Math.abs(total - 100) > 0.01) {
         return false
       }
-      
+
       // Check minimum firm percentage (skip for custom plans)
       if (plan !== 'custom') {
         const minFirm = getMinFirmPercent(transactionType, plan as any, source)
@@ -556,7 +592,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         }
       }
     }
-    
+
     return true
   }
 
@@ -564,37 +600,37 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     if (!member.splits) {
       return 'Splits must be initialized for all team members'
     }
-    
+
     // Validate all sales plans (only validate custom if it has data)
-    const salesPlans: Array<{ plan: 'new_agent' | 'no_cap' | 'cap' | 'custom', label: string }> = [
+    const salesPlans: Array<{ plan: 'new_agent' | 'no_cap' | 'cap' | 'custom'; label: string }> = [
       { plan: 'new_agent', label: 'Sales - New Agent (70/30)' },
       { plan: 'no_cap', label: 'Sales - No Cap (85/15)' },
       { plan: 'cap', label: 'Sales - Cap (70/30)' },
       { plan: 'custom', label: 'Sales - Custom Plan' },
     ]
-    
+
     for (const { plan, label } of salesPlans) {
       const planSplits = member.splits.sales?.[plan]
       if (!planSplits) continue
-      
+
       // Skip validation for custom plans if they have no data
       if (plan === 'custom' && !planHasData(planSplits)) {
         continue
       }
-      
-      const sources: Array<{ source: 'team_lead' | 'own' | 'firm', label: string }> = [
+
+      const sources: Array<{ source: 'team_lead' | 'own' | 'firm'; label: string }> = [
         { source: 'team_lead', label: 'Lead from Team Lead' },
         { source: 'own', label: "Agent's Own Lead" },
         { source: 'firm', label: 'Lead from Firm' },
       ]
-      
+
       for (const { source, label: sourceLabel } of sources) {
         const split = planSplits[source]
         const total = getSplitTotal(split)
         if (Math.abs(total - 100) > 0.01) {
           return `${label} - ${sourceLabel}: splits must total 100% (currently ${total.toFixed(1)}%)`
         }
-        
+
         // Check minimum firm percentage (skip for custom plans)
         if (plan !== 'custom') {
           const minFirm = minFirmPercentages.sales[plan]?.[source]
@@ -604,35 +640,35 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         }
       }
     }
-    
+
     // Validate lease splits (only validate custom if it has data)
-    const leasePlans: Array<{ plan: 'standard' | 'custom', label: string }> = [
+    const leasePlans: Array<{ plan: 'standard' | 'custom'; label: string }> = [
       { plan: 'standard', label: 'Lease - Standard (85/15)' },
       { plan: 'custom', label: 'Lease - Custom Plan' },
     ]
-    
+
     for (const { plan, label } of leasePlans) {
       const planSplits = member.splits.lease?.[plan]
       if (!planSplits) continue
-      
+
       // Skip validation for custom plans if they have no data
       if (plan === 'custom' && !planHasData(planSplits)) {
         continue
       }
-      
-      const sources: Array<{ source: 'team_lead' | 'own' | 'firm', label: string }> = [
+
+      const sources: Array<{ source: 'team_lead' | 'own' | 'firm'; label: string }> = [
         { source: 'team_lead', label: 'Lead from Team Lead' },
         { source: 'own', label: "Agent's Own Lead" },
         { source: 'firm', label: 'Lead from Firm' },
       ]
-      
+
       for (const { source, label: sourceLabel } of sources) {
         const split = planSplits[source]
         const total = getSplitTotal(split)
         if (Math.abs(total - 100) > 0.01) {
           return `${label} - ${sourceLabel}: splits must total 100% (currently ${total.toFixed(1)}%)`
         }
-        
+
         // Check minimum firm percentage (skip for custom plans)
         if (plan !== 'custom') {
           const minFirm = minFirmPercentages.lease[plan]?.[source]
@@ -642,7 +678,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         }
       }
     }
-    
+
     return null
   }
 
@@ -662,32 +698,32 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     if (teamMembers.length === 0) {
       return 'At least one team member is required'
     }
-    
+
     // Check that team lead is not in members
     const teamLeadInMembers = teamMembers.some(m => m.agent_id === formData.team_lead_id)
     if (teamLeadInMembers) {
       return 'Team lead cannot be added as a team member. The team lead is separate from team members.'
     }
-    
+
     // Check for duplicate agents
     const agentIds = teamMembers.map(m => m.agent_id).filter(id => id)
     const uniqueIds = new Set(agentIds)
     if (agentIds.length !== uniqueIds.size) {
       return 'Cannot have duplicate agents on the same team'
     }
-    
+
     // Validate all members have agent selected
     for (let i = 0; i < teamMembers.length; i++) {
       if (!teamMembers[i].agent_id) {
         return `Team member ${i + 1} must have an agent selected`
       }
-      
+
       const splitError = validateSplits(teamMembers[i])
       if (splitError) {
         return splitError
       }
     }
-    
+
     return null
   }
 
@@ -695,15 +731,15 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     e.preventDefault()
     setError(null)
     setSuccess(false)
-    
+
     const validationError = validateForm()
     if (validationError) {
       setError(validationError)
       return
     }
-    
+
     setSaving(true)
-    
+
     try {
       // Helper function to sanitize UUID values
       const sanitizeUUID = (value: string | null | undefined): string | null => {
@@ -712,7 +748,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         }
         return value.trim()
       }
-      
+
       const payload = {
         ...formData,
         team_lead_id: sanitizeUUID(formData.team_lead_id),
@@ -733,18 +769,18 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             active_lease_plan: m.active_lease_plan || 'standard',
           })),
       }
-      
+
       const url = isNew ? '/api/team-agreements' : `/api/team-agreements/${id}`
       const method = isNew ? 'POST' : 'PUT'
-      
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      
+
       const data = await response.json()
-      
+
       if (response.ok) {
         setSuccess(true)
         setTimeout(() => {
@@ -781,7 +817,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     if (transactionType === 'lease' && plan && (plan === 'standard' || plan === 'custom')) {
       return minFirmPercentages.lease[plan]?.[source]
     }
-    if (transactionType === 'sales' && plan && (plan === 'new_agent' || plan === 'no_cap' || plan === 'cap' || plan === 'custom')) {
+    if (
+      transactionType === 'sales' &&
+      plan &&
+      (plan === 'new_agent' || plan === 'no_cap' || plan === 'cap' || plan === 'custom')
+    ) {
       return minFirmPercentages.sales[plan]?.[source]
     }
     return undefined
@@ -838,7 +878,9 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-luxury-gray-2">Team Name</label>
-              <p className="text-luxury-black">{agreementData?.team_name || formData.team_name || 'N/A'}</p>
+              <p className="text-luxury-black">
+                {agreementData?.team_name || formData.team_name || 'N/A'}
+              </p>
             </div>
             <div>
               <label className="text-sm text-luxury-gray-2">Status</label>
@@ -847,23 +889,34 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             <div>
               <label className="text-sm text-luxury-gray-2">Team Lead</label>
               <p className="text-luxury-black">
-                {agreementData?.team_lead_name || agents.find(a => a.id === formData.team_lead_id)?.displayName || 'N/A'}
+                {agreementData?.team_lead_name ||
+                  agents.find(a => a.id === formData.team_lead_id)?.displayName ||
+                  'N/A'}
               </p>
             </div>
             <div>
               <label className="text-sm text-luxury-gray-2">Effective Date</label>
               <p className="text-luxury-black">
-                {agreementData?.effective_date 
-                  ? new Date(agreementData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
-                  : formData.effective_date 
-                    ? new Date(formData.effective_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                {agreementData?.effective_date
+                  ? new Date(agreementData.effective_date + 'T00:00:00').toLocaleDateString(
+                      'en-US',
+                      { year: 'numeric', month: '2-digit', day: '2-digit' }
+                    )
+                  : formData.effective_date
+                    ? new Date(formData.effective_date + 'T00:00:00').toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                      })
                     : 'N/A'}
               </p>
             </div>
             <div>
               <label className="text-sm text-luxury-gray-2">Expiration Date</label>
               <p className="text-luxury-black">
-                {formData.expiration_date ? new Date(formData.expiration_date).toLocaleDateString() : 'N/A'}
+                {formData.expiration_date
+                  ? new Date(formData.expiration_date).toLocaleDateString()
+                  : 'N/A'}
               </p>
             </div>
             {formData.notes && (
@@ -873,22 +926,22 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               </div>
             )}
             {/* Team Documents - Only visible to admins and team lead */}
-            {(user?.role === 'Admin' || user?.id === agreementData?.team_lead_id) && 
-             agreementData?.agreement_document_url && (
-              <div className="md:col-span-2">
-                <label className="text-sm text-luxury-gray-2">Team Documents</label>
-                <p>
-                  <a
-                    href={agreementData.agreement_document_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-luxury-black underline inline-flex items-center gap-1"
-                  >
-                    📁 View Team Documents
-                  </a>
-                </p>
-              </div>
-            )}
+            {(user?.role === 'Admin' || user?.id === agreementData?.team_lead_id) &&
+              agreementData?.agreement_document_url && (
+                <div className="md:col-span-2">
+                  <label className="text-sm text-luxury-gray-2">Team Documents</label>
+                  <p>
+                    <a
+                      href={agreementData.agreement_document_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-luxury-black underline inline-flex items-center gap-1"
+                    >
+                      📁 View Team Documents
+                    </a>
+                  </p>
+                </div>
+              )}
           </div>
         </div>
 
@@ -902,15 +955,24 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               {teamMembers.map((member, index) => {
                 const agent = agents.find(a => a.id === member.agent_id)
                 const isExpanded = expandedMembers[index] || false
-                const joinedDate = member.joined_date 
-                  ? new Date(member.joined_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                const joinedDate = member.joined_date
+                  ? new Date(member.joined_date + 'T00:00:00').toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                    })
                   : 'N/A'
-                
+
                 return (
-                  <div key={index} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                  <div
+                    key={index}
+                    className="border border-luxury-gray-5 rounded-lg overflow-hidden"
+                  >
                     {/* Accordion Header */}
                     <button
-                      onClick={() => setExpandedMembers(prev => ({ ...prev, [index]: !prev[index] }))}
+                      onClick={() =>
+                        setExpandedMembers(prev => ({ ...prev, [index]: !prev[index] }))
+                      }
                       className="w-full flex items-center justify-between p-4 hover:bg-luxury-light transition-colors text-left"
                     >
                       <div className="flex items-center gap-3">
@@ -923,13 +985,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                           <h3 className="text-base font-medium text-luxury-black">
                             {agent?.displayName || 'Unknown Agent'}
                           </h3>
-                          <p className="text-sm text-luxury-gray-2 mt-0.5">
-                            Joined: {joinedDate}
-                          </p>
+                          <p className="text-sm text-luxury-gray-2 mt-0.5">Joined: {joinedDate}</p>
                         </div>
                       </div>
                     </button>
-                    
+
                     {/* Accordion Content */}
                     {isExpanded && (
                       <div className="px-4 pb-4 border-t border-luxury-gray-5">
@@ -942,8 +1002,11 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                             <div>
                               <label className="text-luxury-gray-2">Left Date</label>
                               <p className="text-luxury-black">
-                                {member.left_date 
-                                  ? new Date(member.left_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                                {member.left_date
+                                  ? new Date(member.left_date + 'T00:00:00').toLocaleDateString(
+                                      'en-US',
+                                      { year: 'numeric', month: '2-digit', day: '2-digit' }
+                                    )
                                   : 'N/A'}
                               </p>
                             </div>
@@ -954,74 +1017,138 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                           <div className="space-y-4 mt-4">
                             {/* Sales Splits */}
                             <div>
-                              <h4 className="text-sm font-medium text-luxury-black mb-3">Sales Commission Splits</h4>
-                          {(['new_agent', 'no_cap', 'cap', 'custom'] as const).map(plan => {
-                            const planLabel = plan === 'new_agent' ? 'New Agent (70/30)' : plan === 'no_cap' ? 'No Cap (85/15)' : plan === 'cap' ? 'Cap (70/30)' : 'Custom Plan'
-                            const planSplits = member.splits?.sales?.[plan]
-                            if (!planSplits) return null
-                            // Only show if custom has non-zero values or if it's a standard plan
-                            if (plan === 'custom') {
-                              const hasValues = Object.values(planSplits).some(split => 
-                                (split?.agent || 0) + (split?.team_lead || 0) + (split?.firm || 0) > 0
-                              )
-                              if (!hasValues) return null
-                            }
-                            return (
-                              <div key={plan} className="mb-4">
-                                <div className="text-xs font-semibold text-luxury-gray-2 mb-2">{planLabel}</div>
-                                {(['team_lead', 'own', 'firm'] as const).map(source => {
-                                  const split = planSplits[source]
-                                  const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
-                                  return (
-                                    <div key={source} className="mb-2 ml-4 p-2 bg-luxury-light rounded text-xs">
-                                      <div className="font-medium text-luxury-gray-2 mb-1">{sourceLabel}</div>
-                                      <div className="space-y-1">
-                                        <div><span className="text-luxury-gray-2">Agent:</span> {split?.agent || 0}%</div>
-                                        <div><span className="text-luxury-gray-2">Team Lead:</span> {split?.team_lead || 0}%</div>
-                                        <div><span className="text-luxury-gray-2">Firm:</span> {split?.firm || 0}%</div>
-                                      </div>
-                                    </div>
+                              <h4 className="text-sm font-medium text-luxury-black mb-3">
+                                Sales Commission Splits
+                              </h4>
+                              {(['new_agent', 'no_cap', 'cap', 'custom'] as const).map(plan => {
+                                const planLabel =
+                                  plan === 'new_agent'
+                                    ? 'New Agent (70/30)'
+                                    : plan === 'no_cap'
+                                      ? 'No Cap (85/15)'
+                                      : plan === 'cap'
+                                        ? 'Cap (70/30)'
+                                        : 'Custom Plan'
+                                const planSplits = member.splits?.sales?.[plan]
+                                if (!planSplits) return null
+                                // Only show if custom has non-zero values or if it's a standard plan
+                                if (plan === 'custom') {
+                                  const hasValues = Object.values(planSplits).some(
+                                    split =>
+                                      (split?.agent || 0) +
+                                        (split?.team_lead || 0) +
+                                        (split?.firm || 0) >
+                                      0
                                   )
-                                })}
-                              </div>
-                            )
+                                  if (!hasValues) return null
+                                }
+                                return (
+                                  <div key={plan} className="mb-4">
+                                    <div className="text-xs font-semibold text-luxury-gray-2 mb-2">
+                                      {planLabel}
+                                    </div>
+                                    {(['team_lead', 'own', 'firm'] as const).map(source => {
+                                      const split = planSplits[source]
+                                      const sourceLabel =
+                                        source === 'team_lead'
+                                          ? 'Lead from Team Lead'
+                                          : source === 'own'
+                                            ? "Agent's Own Lead"
+                                            : 'Lead from Firm'
+                                      return (
+                                        <div
+                                          key={source}
+                                          className="mb-2 ml-4 p-2 bg-luxury-light rounded text-xs"
+                                        >
+                                          <div className="font-medium text-luxury-gray-2 mb-1">
+                                            {sourceLabel}
+                                          </div>
+                                          <div className="space-y-1">
+                                            <div>
+                                              <span className="text-luxury-gray-2">Agent:</span>{' '}
+                                              {split?.agent || 0}%
+                                            </div>
+                                            <div>
+                                              <span className="text-luxury-gray-2">Team Lead:</span>{' '}
+                                              {split?.team_lead || 0}%
+                                            </div>
+                                            <div>
+                                              <span className="text-luxury-gray-2">Firm:</span>{' '}
+                                              {split?.firm || 0}%
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
                               })}
                             </div>
 
                             {/* Lease Splits */}
                             {member.splits.lease && (
                               <div>
-                                <h4 className="text-sm font-medium text-luxury-black mb-3">Lease Commission Splits</h4>
-                            {(['standard', 'custom'] as const).map(plan => {
-                              const planLabel = plan === 'standard' ? 'Standard (85/15)' : 'Custom Plan'
-                              const planSplits = member.splits?.lease?.[plan]
-                              if (!planSplits) return null
-                              // Only show custom if it has non-zero values
-                              if (plan === 'custom') {
-                                const hasValues = Object.values(planSplits).some(split => 
-                                  (split?.agent || 0) + (split?.team_lead || 0) + (split?.firm || 0) > 0
-                                )
-                                if (!hasValues) return null
-                              }
-                              return (
-                                <div key={plan} className="mb-4">
-                                  <div className="text-xs font-semibold text-luxury-gray-2 mb-2">{planLabel}</div>
-                                  {(['team_lead', 'own', 'firm'] as const).map(source => {
-                                    const split = planSplits[source]
-                                    const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
-                                    return (
-                                      <div key={source} className="mb-2 ml-4 p-2 bg-luxury-light rounded text-xs">
-                                        <div className="font-medium text-luxury-gray-2 mb-1">{sourceLabel}</div>
-                                        <div className="space-y-1">
-                                          <div><span className="text-luxury-gray-2">Agent:</span> {split?.agent || 0}%</div>
-                                          <div><span className="text-luxury-gray-2">Team Lead:</span> {split?.team_lead || 0}%</div>
-                                          <div><span className="text-luxury-gray-2">Firm:</span> {split?.firm || 0}%</div>
-                                        </div>
-                                      </div>
+                                <h4 className="text-sm font-medium text-luxury-black mb-3">
+                                  Lease Commission Splits
+                                </h4>
+                                {(['standard', 'custom'] as const).map(plan => {
+                                  const planLabel =
+                                    plan === 'standard' ? 'Standard (85/15)' : 'Custom Plan'
+                                  const planSplits = member.splits?.lease?.[plan]
+                                  if (!planSplits) return null
+                                  // Only show custom if it has non-zero values
+                                  if (plan === 'custom') {
+                                    const hasValues = Object.values(planSplits).some(
+                                      split =>
+                                        (split?.agent || 0) +
+                                          (split?.team_lead || 0) +
+                                          (split?.firm || 0) >
+                                        0
                                     )
-                                  })}
-                                </div>
-                              )
+                                    if (!hasValues) return null
+                                  }
+                                  return (
+                                    <div key={plan} className="mb-4">
+                                      <div className="text-xs font-semibold text-luxury-gray-2 mb-2">
+                                        {planLabel}
+                                      </div>
+                                      {(['team_lead', 'own', 'firm'] as const).map(source => {
+                                        const split = planSplits[source]
+                                        const sourceLabel =
+                                          source === 'team_lead'
+                                            ? 'Lead from Team Lead'
+                                            : source === 'own'
+                                              ? "Agent's Own Lead"
+                                              : 'Lead from Firm'
+                                        return (
+                                          <div
+                                            key={source}
+                                            className="mb-2 ml-4 p-2 bg-luxury-light rounded text-xs"
+                                          >
+                                            <div className="font-medium text-luxury-gray-2 mb-1">
+                                              {sourceLabel}
+                                            </div>
+                                            <div className="space-y-1">
+                                              <div>
+                                                <span className="text-luxury-gray-2">Agent:</span>{' '}
+                                                {split?.agent || 0}%
+                                              </div>
+                                              <div>
+                                                <span className="text-luxury-gray-2">
+                                                  Team Lead:
+                                                </span>{' '}
+                                                {split?.team_lead || 0}%
+                                              </div>
+                                              <div>
+                                                <span className="text-luxury-gray-2">Firm:</span>{' '}
+                                                {split?.firm || 0}%
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )
                                 })}
                               </div>
                             )}
@@ -1076,7 +1203,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
         {/* SECTION 1: Basic Info */}
         <div className="card-section">
           <h2 className="text-lg font-medium text-luxury-black mb-4">Basic Information</h2>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className="block text-sm text-luxury-gray-2 mb-1">
@@ -1085,7 +1212,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               <input
                 type="text"
                 value={formData.team_name}
-                onChange={(e) => handleInputChange('team_name', e.target.value)}
+                onChange={e => handleInputChange('team_name', e.target.value)}
                 className="input-luxury"
                 required
               />
@@ -1097,7 +1224,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               </label>
               <select
                 value={formData.team_lead_id}
-                onChange={(e) => handleInputChange('team_lead_id', e.target.value)}
+                onChange={e => handleInputChange('team_lead_id', e.target.value)}
                 className="select-luxury"
                 required
               >
@@ -1111,12 +1238,10 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             </div>
 
             <div>
-              <label className="block text-sm text-luxury-gray-2 mb-1">
-                Status
-              </label>
+              <label className="block text-sm text-luxury-gray-2 mb-1">Status</label>
               <select
                 value={formData.status}
-                onChange={(e) => handleInputChange('status', e.target.value)}
+                onChange={e => handleInputChange('status', e.target.value)}
                 className="select-luxury"
               >
                 <option value="active">Active</option>
@@ -1132,20 +1257,18 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               <input
                 type="date"
                 value={formData.effective_date}
-                onChange={(e) => handleInputChange('effective_date', e.target.value)}
+                onChange={e => handleInputChange('effective_date', e.target.value)}
                 className="input-luxury"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm text-luxury-gray-2 mb-1">
-                Expiration Date
-              </label>
+              <label className="block text-sm text-luxury-gray-2 mb-1">Expiration Date</label>
               <input
                 type="date"
                 value={formData.expiration_date}
-                onChange={(e) => handleInputChange('expiration_date', e.target.value)}
+                onChange={e => handleInputChange('expiration_date', e.target.value)}
                 className="input-luxury"
                 min={formData.effective_date}
               />
@@ -1158,19 +1281,17 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
               <input
                 type="url"
                 value={formData.agreement_document_url}
-                onChange={(e) => handleInputChange('agreement_document_url', e.target.value)}
+                onChange={e => handleInputChange('agreement_document_url', e.target.value)}
                 className="input-luxury"
                 placeholder="https://..."
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm text-luxury-gray-2 mb-1">
-                Notes
-              </label>
+              <label className="block text-sm text-luxury-gray-2 mb-1">Notes</label>
               <textarea
                 value={formData.notes}
-                onChange={(e) => handleInputChange('notes', e.target.value)}
+                onChange={e => handleInputChange('notes', e.target.value)}
                 className="textarea-luxury"
                 rows={4}
               />
@@ -1200,7 +1321,7 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
             <div className="space-y-6">
               {teamMembers.map((member, index) => {
                 const agent = agents.find(a => a.id === member.agent_id)
-                
+
                 return (
                   <div key={index} className="border border-luxury-gray-5 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-4">
@@ -1223,11 +1344,13 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                         </label>
                         <select
                           value={member.agent_id}
-                          onChange={(e) => {
+                          onChange={e => {
                             const selectedAgentId = e.target.value
                             // Check if selected agent is the team lead
                             if (selectedAgentId === formData.team_lead_id) {
-                              setError('Team lead cannot be added as a team member. The team lead is separate from team members.')
+                              setError(
+                                'Team lead cannot be added as a team member. The team lead is separate from team members.'
+                              )
                               return
                             }
                             updateTeamMember(index, 'agent_id', selectedAgentId)
@@ -1247,28 +1370,25 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                         </select>
                       </div>
 
-
                       <div>
-                        <label className="block text-sm text-luxury-gray-2 mb-1">
-                          Joined Date
-                        </label>
+                        <label className="block text-sm text-luxury-gray-2 mb-1">Joined Date</label>
                         <input
                           type="date"
                           value={member.joined_date}
-                          onChange={(e) => updateTeamMember(index, 'joined_date', e.target.value)}
+                          onChange={e => updateTeamMember(index, 'joined_date', e.target.value)}
                           className="input-luxury"
                           max={formData.expiration_date || undefined}
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm text-luxury-gray-2 mb-1">
-                          Left Date
-                        </label>
+                        <label className="block text-sm text-luxury-gray-2 mb-1">Left Date</label>
                         <input
                           type="date"
                           value={member.left_date || ''}
-                          onChange={(e) => updateTeamMember(index, 'left_date', e.target.value || null)}
+                          onChange={e =>
+                            updateTeamMember(index, 'left_date', e.target.value || null)
+                          }
                           className="input-luxury"
                           min={member.joined_date}
                           max={formData.expiration_date || undefined}
@@ -1281,19 +1401,45 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                       <div className="space-y-2">
                         {/* Sales Plans Accordion */}
                         {[
-                          { id: 'sales_new_agent', label: 'Sales - New Agent (70/30)', plan: 'new_agent' as const, type: 'sales' as const },
-                          { id: 'sales_no_cap', label: 'Sales - No Cap (85/15)', plan: 'no_cap' as const, type: 'sales' as const },
-                          { id: 'sales_cap', label: 'Sales - Cap (70/30)', plan: 'cap' as const, type: 'sales' as const },
-                          { id: 'sales_custom', label: 'Sales - Custom Plan', plan: 'custom' as const, type: 'sales' as const },
+                          {
+                            id: 'sales_new_agent',
+                            label: 'Sales - New Agent (70/30)',
+                            plan: 'new_agent' as const,
+                            type: 'sales' as const,
+                          },
+                          {
+                            id: 'sales_no_cap',
+                            label: 'Sales - No Cap (85/15)',
+                            plan: 'no_cap' as const,
+                            type: 'sales' as const,
+                          },
+                          {
+                            id: 'sales_cap',
+                            label: 'Sales - Cap (70/30)',
+                            plan: 'cap' as const,
+                            type: 'sales' as const,
+                          },
+                          {
+                            id: 'sales_custom',
+                            label: 'Sales - Custom Plan',
+                            plan: 'custom' as const,
+                            type: 'sales' as const,
+                          },
                         ].map(({ id, label, plan, type }) => {
-                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? false
-                          const planSplits = member.splits?.sales?.[plan] || splitTemplates.sales[plan]
+                          const isExpanded =
+                            member.expandedSections?.[id as keyof typeof member.expandedSections] ??
+                            false
+                          const planSplits =
+                            member.splits?.sales?.[plan] || splitTemplates.sales[plan]
                           const isValid = planIsValid(planSplits, plan, type)
                           const hasData = planHasData(planSplits)
                           const isCustom = plan === 'custom'
-                          
+
                           return (
-                            <div key={id} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                            <div
+                              key={id}
+                              className="border border-luxury-gray-5 rounded-lg overflow-hidden"
+                            >
                               {/* Accordion Header */}
                               <button
                                 type="button"
@@ -1306,18 +1452,19 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   ) : (
                                     <ChevronRight size={18} className="text-luxury-gray-2" />
                                   )}
-                                  <span className="text-sm font-medium text-luxury-black">{label}</span>
-                                  {hasData && (
-                                    isValid ? (
+                                  <span className="text-sm font-medium text-luxury-black">
+                                    {label}
+                                  </span>
+                                  {hasData &&
+                                    (isValid ? (
                                       <CheckCircle size={16} className="text-green-600" />
                                     ) : (
                                       <X size={16} className="text-red-600" />
-                                    )
-                                  )}
+                                    ))}
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={(e) => {
+                                  onClick={e => {
                                     e.stopPropagation()
                                     if (!isCustom) {
                                       applySalesTemplate(index, plan)
@@ -1333,48 +1480,85 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   Auto-fill
                                 </button>
                               </button>
-                              
+
                               {/* Accordion Content */}
                               {isExpanded && (
                                 <div className="p-4 bg-luxury-light border-t border-luxury-gray-5 space-y-4">
                                   {(['team_lead', 'own', 'firm'] as const).map(source => {
                                     const split = planSplits[source]
-                                    const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
+                                    const sourceLabel =
+                                      source === 'team_lead'
+                                        ? 'Lead from Team Lead'
+                                        : source === 'own'
+                                          ? "Agent's Own Lead"
+                                          : 'Lead from Firm'
                                     const minFirm = getMinFirmPercent(type, plan, source)
                                     const splitTotal = getSplitTotal(split)
                                     const splitStatus = getSplitStatus(splitTotal)
-                                    
+
                                     return (
-                                      <div key={source} className="bg-white p-4 rounded border border-luxury-gray-5">
-                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
+                                      <div
+                                        key={source}
+                                        className="bg-white p-4 rounded border border-luxury-gray-5"
+                                      >
+                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">
+                                          {sourceLabel}
+                                        </h4>
                                         <div className="grid grid-cols-3 gap-3">
                                           <div>
-                                            <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Agent %
+                                            </label>
                                             <input
                                               type="number"
                                               min="0"
                                               max="100"
                                               step="0.1"
                                               value={split?.agent || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'agent', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'agent',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                           <div>
-                                            <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Team Lead %
+                                            </label>
                                             <input
                                               type="number"
                                               min="0"
                                               max="100"
                                               step="0.1"
                                               value={split?.team_lead || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'team_lead', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'team_lead',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                           <div>
                                             <label className="block text-xs text-luxury-gray-2 mb-1">
-                                              Firm % {minFirm && !isCustom && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
+                                              Firm %{' '}
+                                              {minFirm && !isCustom && (
+                                                <span className="text-luxury-gray-3">
+                                                  (min: {minFirm}%)
+                                                </span>
+                                              )}
                                             </label>
                                             <input
                                               type="number"
@@ -1382,12 +1566,23 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                               max="100"
                                               step="0.1"
                                               value={split?.firm || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'firm', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'firm',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                         </div>
-                                        <div className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}>
+                                        <div
+                                          className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}
+                                        >
                                           <span>Total: {splitTotal.toFixed(1)}%</span>
                                           {splitStatus.valid ? (
                                             <CheckCircle size={14} className="text-green-600" />
@@ -1407,17 +1602,33 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
 
                         {/* Lease Plans Accordion */}
                         {[
-                          { id: 'lease_standard', label: 'Leases - Standard (85/15)', plan: 'standard' as const, type: 'lease' as const },
-                          { id: 'lease_custom', label: 'Leases - Custom Plan', plan: 'custom' as const, type: 'lease' as const },
+                          {
+                            id: 'lease_standard',
+                            label: 'Leases - Standard (85/15)',
+                            plan: 'standard' as const,
+                            type: 'lease' as const,
+                          },
+                          {
+                            id: 'lease_custom',
+                            label: 'Leases - Custom Plan',
+                            plan: 'custom' as const,
+                            type: 'lease' as const,
+                          },
                         ].map(({ id, label, plan, type }) => {
-                          const isExpanded = member.expandedSections?.[id as keyof typeof member.expandedSections] ?? (id === 'lease_standard')
-                          const planSplits = member.splits?.lease?.[plan] || splitTemplates.lease[plan]
+                          const isExpanded =
+                            member.expandedSections?.[id as keyof typeof member.expandedSections] ??
+                            id === 'lease_standard'
+                          const planSplits =
+                            member.splits?.lease?.[plan] || splitTemplates.lease[plan]
                           const isValid = planIsValid(planSplits, plan, type)
                           const hasData = planHasData(planSplits)
                           const isCustom = plan === 'custom'
-                          
+
                           return (
-                            <div key={id} className="border border-luxury-gray-5 rounded-lg overflow-hidden">
+                            <div
+                              key={id}
+                              className="border border-luxury-gray-5 rounded-lg overflow-hidden"
+                            >
                               {/* Accordion Header */}
                               <button
                                 type="button"
@@ -1430,18 +1641,19 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   ) : (
                                     <ChevronRight size={18} className="text-luxury-gray-2" />
                                   )}
-                                  <span className="text-sm font-medium text-luxury-black">{label}</span>
-                                  {hasData && (
-                                    isValid ? (
+                                  <span className="text-sm font-medium text-luxury-black">
+                                    {label}
+                                  </span>
+                                  {hasData &&
+                                    (isValid ? (
                                       <CheckCircle size={16} className="text-green-600" />
                                     ) : (
                                       <X size={16} className="text-red-600" />
-                                    )
-                                  )}
+                                    ))}
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={(e) => {
+                                  onClick={e => {
                                     e.stopPropagation()
                                     if (!isCustom) {
                                       applyLeaseTemplate(index, plan)
@@ -1457,48 +1669,85 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                   Auto-fill
                                 </button>
                               </button>
-                              
+
                               {/* Accordion Content */}
                               {isExpanded && (
                                 <div className="p-4 bg-luxury-light border-t border-luxury-gray-5 space-y-4">
                                   {(['team_lead', 'own', 'firm'] as const).map(source => {
                                     const split = planSplits[source]
-                                    const sourceLabel = source === 'team_lead' ? 'Lead from Team Lead' : source === 'own' ? "Agent's Own Lead" : 'Lead from Firm'
+                                    const sourceLabel =
+                                      source === 'team_lead'
+                                        ? 'Lead from Team Lead'
+                                        : source === 'own'
+                                          ? "Agent's Own Lead"
+                                          : 'Lead from Firm'
                                     const minFirm = getMinFirmPercent(type, plan, source)
                                     const splitTotal = getSplitTotal(split)
                                     const splitStatus = getSplitStatus(splitTotal)
-                                    
+
                                     return (
-                                      <div key={source} className="bg-white p-4 rounded border border-luxury-gray-5">
-                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">{sourceLabel}</h4>
+                                      <div
+                                        key={source}
+                                        className="bg-white p-4 rounded border border-luxury-gray-5"
+                                      >
+                                        <h4 className="text-sm font-semibold text-luxury-black mb-3">
+                                          {sourceLabel}
+                                        </h4>
                                         <div className="grid grid-cols-3 gap-3">
                                           <div>
-                                            <label className="block text-xs text-luxury-gray-2 mb-1">Agent %</label>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Agent %
+                                            </label>
                                             <input
                                               type="number"
                                               min="0"
                                               max="100"
                                               step="0.1"
                                               value={split?.agent || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'agent', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'agent',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                           <div>
-                                            <label className="block text-xs text-luxury-gray-2 mb-1">Team Lead %</label>
+                                            <label className="block text-xs text-luxury-gray-2 mb-1">
+                                              Team Lead %
+                                            </label>
                                             <input
                                               type="number"
                                               min="0"
                                               max="100"
                                               step="0.1"
                                               value={split?.team_lead || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'team_lead', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'team_lead',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                           <div>
                                             <label className="block text-xs text-luxury-gray-2 mb-1">
-                                              Firm % {minFirm && !isCustom && <span className="text-luxury-gray-3">(min: {minFirm}%)</span>}
+                                              Firm %{' '}
+                                              {minFirm && !isCustom && (
+                                                <span className="text-luxury-gray-3">
+                                                  (min: {minFirm}%)
+                                                </span>
+                                              )}
                                             </label>
                                             <input
                                               type="number"
@@ -1506,12 +1755,23 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
                                               max="100"
                                               step="0.1"
                                               value={split?.firm || 0}
-                                              onChange={(e) => updateSplit(index, type, plan, source, 'firm', parseFloat(e.target.value) || 0)}
+                                              onChange={e =>
+                                                updateSplit(
+                                                  index,
+                                                  type,
+                                                  plan,
+                                                  source,
+                                                  'firm',
+                                                  parseFloat(e.target.value) || 0
+                                                )
+                                              }
                                               className="input-luxury text-sm"
                                             />
                                           </div>
                                         </div>
-                                        <div className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}>
+                                        <div
+                                          className={`text-xs mt-2 flex items-center gap-2 ${splitStatus.className}`}
+                                        >
                                           <span>Total: {splitTotal.toFixed(1)}%</span>
                                           {splitStatus.valid ? (
                                             <CheckCircle size={14} className="text-green-600" />
@@ -1557,4 +1817,3 @@ export default function TeamAgreementFormPage({ params }: { params: Promise<{ id
     </div>
   )
 }
-

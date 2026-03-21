@@ -3,7 +3,7 @@ import { Montserrat, Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/lib/context/AuthContext'
 
-const montserrat = Montserrat({ 
+const montserrat = Montserrat({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-montserrat',
@@ -24,17 +24,11 @@ export const metadata: Metadata = {
       { url: '/favicon-32.png', type: 'image/png', sizes: '32x32' },
       { url: '/favicon-64.png', type: 'image/png', sizes: '64x64' },
     ],
-    apple: [
-      { url: '/apple-touch-icon.png', type: 'image/png', sizes: '180x180' },
-    ],
+    apple: [{ url: '/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
@@ -50,9 +44,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Collective Agent" />
       </head>
       <body className={`${montserrat.className} ${inter.variable}`} suppressHydrationWarning>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   )

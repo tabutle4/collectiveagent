@@ -60,7 +60,7 @@ export default function RegisterPage() {
         preferred_first_name: formatNameToTitleCase(formData.preferred_first_name),
         preferred_last_name: formatNameToTitleCase(formData.preferred_last_name),
       }
-      
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,7 +84,7 @@ export default function RegisterPage() {
 
       // Store user in localStorage
       localStorage.setItem('user', JSON.stringify(data.user))
-      
+
       // Redirect to admin dashboard
       router.push('/admin/dashboard')
     } catch (err) {
@@ -95,8 +95,6 @@ export default function RegisterPage() {
 
   return (
     <PageContainer>
-
-      
       <div className="max-w-md mx-auto py-16">
         <h2 className="text-2xl font-light text-center mb-4 tracking-luxury">
           Create First Admin Account
@@ -104,14 +102,14 @@ export default function RegisterPage() {
         <p className="text-sm text-center text-luxury-gray-2 mb-8">
           This registration is only for the first admin user
         </p>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
               {error}
             </div>
           )}
-          
+
           <div>
             <label htmlFor="first_name" className="block text-sm mb-2 text-luxury-gray-1">
               First Name (Legal) *
@@ -127,7 +125,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="last_name" className="block text-sm mb-2 text-luxury-gray-1">
               Last Name (Legal) *
@@ -143,7 +141,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="preferred_first_name" className="block text-sm mb-2 text-luxury-gray-1">
               Preferred First Name *
@@ -159,7 +157,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="preferred_last_name" className="block text-sm mb-2 text-luxury-gray-1">
               Preferred Last Name *
@@ -175,7 +173,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="email" className="block text-sm mb-2 text-luxury-gray-1">
               Email *
@@ -190,7 +188,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="password" className="block text-sm mb-2 text-luxury-gray-1">
               Password * <span className="text-xs text-luxury-gray-3">(min 8 characters)</span>
@@ -205,7 +203,7 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
+
           <div>
             <label htmlFor="confirmPassword" className="block text-sm mb-2 text-luxury-gray-1">
               Confirm Password *
@@ -220,15 +218,11 @@ export default function RegisterPage() {
               required
             />
           </div>
-          
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary w-full"
-          >
+
+          <button type="submit" disabled={loading} className="btn btn-primary w-full">
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>
-          
+
           <div className="text-center">
             <Link
               href="/auth/login"

@@ -11,10 +11,7 @@ export async function POST(request: NextRequest) {
     const { userId } = body
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
     // Verify user is admin
@@ -26,10 +23,7 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get all active coordinations
@@ -75,7 +69,6 @@ export async function POST(request: NextRequest) {
       errors,
       errorDetails: errors > 0 ? errorDetails : undefined,
     })
-
   } catch (error: any) {
     console.error('Error fixing folder links:', error)
     return NextResponse.json(
@@ -84,4 +77,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -8,7 +8,14 @@ type InvoiceType = 'onboarding' | 'monthly' | 'custom'
 
 export async function POST(request: NextRequest) {
   try {
-    const { user_id, type, amount, description, month, year: invoiceYear }: {
+    const {
+      user_id,
+      type,
+      amount,
+      description,
+      month,
+      year: invoiceYear,
+    }: {
       user_id: string
       type: InvoiceType
       amount?: number
@@ -21,7 +28,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'user_id and type are required' }, { status: 400 })
     }
     if (type === 'custom' && (!amount || !description)) {
-      return NextResponse.json({ error: 'amount and description are required for custom invoices' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'amount and description are required for custom invoices' },
+        { status: 400 }
+      )
     }
 
     const supabase = createClient()
@@ -32,15 +42,18 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!user?.payload_payee_id) {
-      return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Agent does not have a Payload customer ID.' },
+        { status: 400 }
+      )
     }
 
     const today = new Date().toISOString().split('T')[0]
     const params = new URLSearchParams({
-      'type': 'bill',
-      'due_date': today,
-      'processing_id': process.env.PAYLOAD_PROCESSING_ID!,
-      'customer_id': user.payload_payee_id,
+      type: 'bill',
+      due_date: today,
+      processing_id: process.env.PAYLOAD_PROCESSING_ID!,
+      customer_id: user.payload_payee_id,
     })
 
     if (type === 'onboarding') {
@@ -57,7 +70,10 @@ export async function POST(request: NextRequest) {
 
       if (proratedFee > 0) {
         params.append('items[1][type]', 'Monthly Fee (Prorated)')
-        params.append('items[1][description]', `Prorated monthly fee — ${remainingDays} days remaining in ${monthName}`)
+        params.append(
+          'items[1][description]',
+          `Prorated monthly fee — ${remainingDays} days remaining in ${monthName}`
+        )
         params.append('items[1][amount]', proratedFee.toString())
         params.append('items[1][entry_type]', 'charge')
       }
@@ -81,7 +97,7 @@ export async function POST(request: NextRequest) {
     const res = await fetch('https://api.payload.com/invoices/', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params,
@@ -90,7 +106,10 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     if (!res.ok) {
       console.error('Payload invoice creation failed:', data)
-      return NextResponse.json({ error: data.message || 'Failed to create invoice' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.message || 'Failed to create invoice' },
+        { status: 500 }
+      )
     }
 
     // For custom invoices, record in agent_debts
@@ -111,6 +130,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, invoice_id: data.id })
   } catch (error: any) {
     console.error('Error creating invoice:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create invoice' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to create invoice' },
+      { status: 500 }
+    )
   }
 }

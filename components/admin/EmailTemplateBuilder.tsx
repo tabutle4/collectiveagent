@@ -27,7 +27,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
         has_html: !!template.html_content,
         html_length: template.html_content?.length || 0,
       })
-      
+
       setName(template.name || '')
       setDescription(template.description || '')
       setCategory(template.category || 'campaign')
@@ -37,7 +37,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       setLogoUrl(template.logo_url || '/logo-white.png')
       setIsDefault(template.is_default || false)
       setIsActive(template.is_active ?? true)
-      
+
       console.log('State synced. Current values:', {
         name: template.name || '',
         subjectLine: template.subject_line || '',
@@ -45,7 +45,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       })
     }
   }, [template])
-  
+
   // Debug: Log current state values
   useEffect(() => {
     console.log('EmailTemplateBuilder state:', {
@@ -55,7 +55,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       buttonDisabled: !name?.trim() || !subjectLine?.trim() || !htmlContent?.trim(),
     })
   }, [name, subjectLine, htmlContent])
-  
+
   const [activeTab, setActiveTab] = useState<'code' | 'preview'>('code')
   const [previewHtml, setPreviewHtml] = useState('')
   const [saving, setSaving] = useState(false)
@@ -81,8 +81,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
     if (htmlContent) {
       const varMatches = htmlContent.match(/\{\{(\w+)\}\}/g)
       if (varMatches) {
-        const extractedVars = varMatches
-        .map((match: string) => match.replace(/[{}]/g, ''))
+        const extractedVars = varMatches.map((match: string) => match.replace(/[{}]/g, ''))
         //           .filter((v, i, arr) => arr.indexOf(v) === i)
         setVariables(extractedVars)
       }
@@ -98,10 +97,10 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
 
     try {
       // Always include logo_url in variables for preview, even if not in template's variables list
-      const previewVariables = variables.includes('logo_url') 
-        ? variables 
+      const previewVariables = variables.includes('logo_url')
+        ? variables
         : [...variables, 'logo_url']
-      
+
       const response = await fetch('/api/email-templates/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -211,13 +210,13 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           }
         })();
       </script>
-    `;
-    
+    `
+
     // Inject style and script before closing body tag
     if (html.includes('</body>')) {
-      return html.replace('</body>', editableScript + '</body>');
+      return html.replace('</body>', editableScript + '</body>')
     }
-    return html + editableScript;
+    return html + editableScript
   }
 
   // Generate preview when switching to preview tab or content changes
@@ -263,7 +262,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
 
       // Replace the body content in the original HTML with the edited content
       const originalHtml = htmlContent
-      
+
       // Extract body content from original
       const bodyMatch = originalHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i)
       if (bodyMatch) {
@@ -272,7 +271,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           /<body[^>]*>[\s\S]*<\/body>/i,
           bodyMatch[0].replace(bodyMatch[1], editedHtml)
         )
-        
+
         // Update HTML content
         setHtmlContent(updatedHtml)
       }
@@ -299,57 +298,58 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
 
   const insertVariable = (varName: string) => {
     const placeholder = `{{${varName}}}`
-    setHtmlContent((prev: string) => prev + placeholder)  }
+    setHtmlContent((prev: string) => prev + placeholder)
+  }
 
   // Protect variable placeholders when editing HTML or subject
   const protectVariables = (newValue: string, currentValue: string, fieldName: string): boolean => {
     // Extract all variables from the new content
     const newVarMatches = newValue.match(/\{\{(\w+)\}\}/g)
-    const newVariables = newVarMatches 
-      ? newVarMatches.map(m => m.replace(/[{}]/g, ''))
-          .filter((v, i, arr) => arr.indexOf(v) === i)
+    const newVariables = newVarMatches
+      ? newVarMatches.map(m => m.replace(/[{}]/g, '')).filter((v, i, arr) => arr.indexOf(v) === i)
       : []
-    
+
     // Get existing variables from current content
     const existingVarMatches = currentValue.match(/\{\{(\w+)\}\}/g)
     const existingVariables = existingVarMatches
-      ? existingVarMatches.map(m => m.replace(/[{}]/g, ''))
+      ? existingVarMatches
+          .map(m => m.replace(/[{}]/g, ''))
           .filter((v, i, arr) => arr.indexOf(v) === i)
       : []
-    
+
     // Check if any variables were deleted
     const deletedVariables = existingVariables.filter(v => !newVariables.includes(v))
-    
+
     if (deletedVariables.length > 0) {
       // Warn user and prevent deletion
       const confirmDelete = window.confirm(
         `Warning: You are about to delete variable placeholders from the ${fieldName}: ${deletedVariables.map(v => `{{${v}}}`).join(', ')}\n\n` +
-        `These variables are used in the email template. Deleting them may cause errors.\n\n` +
-        `Do you want to continue?`
+          `These variables are used in the email template. Deleting them may cause errors.\n\n` +
+          `Do you want to continue?`
       )
-      
+
       return confirmDelete
     }
-    
+
     return true
   }
 
   const handleHtmlContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value
     const currentValue = htmlContent
-    
+
     // Update ref to track previous value
     if (!previousHtmlContentRef.current) {
       previousHtmlContentRef.current = currentValue
     }
-    
+
     // Check if variables are being deleted
     if (!protectVariables(newValue, currentValue, 'HTML content')) {
       // Force reset by updating the key to recreate the textarea with original value
       setTextareaResetKey(prev => prev + 1)
       return
     }
-    
+
     // Update ref and allow the change
     previousHtmlContentRef.current = newValue
     setHtmlContent(newValue)
@@ -358,13 +358,13 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
   const handleSubjectLineChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
     const currentValue = subjectLine
-    
+
     // Check if variables are being deleted
     if (!protectVariables(newValue, currentValue, 'subject line')) {
       // Don't update if user cancels
       return
     }
-    
+
     setSubjectLine(newValue)
   }
 
@@ -396,7 +396,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
         is_default: isDefault,
         is_active: isActive,
       })
-      
+
       await onSave({
         name: name.trim(),
         description: description?.trim() || null,
@@ -408,7 +408,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
         is_default: isDefault,
         is_active: isActive,
       })
-      
+
       console.log('Template saved successfully')
     } catch (err: any) {
       console.error('Save error:', err)
@@ -429,7 +429,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       {/* Template Settings */}
       <div className="container-card space-y-6">
         <h3 className="text-lg font-medium tracking-wide">Template Settings</h3>
-        
+
         <div className="grid md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium mb-2">
@@ -438,7 +438,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               className="input-luxury"
               placeholder="Campaign Email Template"
               required
@@ -446,12 +446,10 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Category
-            </label>
+            <label className="block text-sm font-medium mb-2">Category</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={e => setCategory(e.target.value)}
               className="select-luxury"
             >
               <option value="campaign">Campaign</option>
@@ -462,13 +460,11 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-2">
-              Description (Optional)
-            </label>
+            <label className="block text-sm font-medium mb-2">Description (Optional)</label>
             <input
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={e => setDescription(e.target.value)}
               className="input-luxury"
               placeholder="Template description"
             />
@@ -492,13 +488,11 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-2">
-              Logo URL
-            </label>
+            <label className="block text-sm font-medium mb-2">Logo URL</label>
             <input
               type="text"
               value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
+              onChange={e => setLogoUrl(e.target.value)}
               className="input-luxury"
               placeholder="/logo-white.png"
             />
@@ -509,7 +503,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
               <input
                 type="checkbox"
                 checked={isDefault}
-                onChange={(e) => setIsDefault(e.target.checked)}
+                onChange={e => setIsDefault(e.target.checked)}
                 className="w-4 h-4"
               />
               <span className="text-sm font-medium">Set as default for category</span>
@@ -521,7 +515,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
               <input
                 type="checkbox"
                 checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
+                onChange={e => setIsActive(e.target.checked)}
                 className="w-4 h-4"
               />
               <span className="text-sm font-medium">Template is active</span>
@@ -537,7 +531,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           Click a variable to insert it into your HTML content at the cursor position
         </p>
         <div className="grid md:grid-cols-2 gap-3">
-          {availableVariables.map((variable) => (
+          {availableVariables.map(variable => (
             <button
               key={variable.name}
               onClick={() => insertVariable(variable.name)}
@@ -640,8 +634,8 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
           <div className="border border-luxury-gray-5 rounded p-4 bg-white">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-luxury-gray-2">
-                {previewEditMode 
-                  ? 'Edit mode enabled - click on text to edit (variable placeholders are protected)' 
+                {previewEditMode
+                  ? 'Edit mode enabled - click on text to edit (variable placeholders are protected)'
                   : 'Preview mode - click "Edit Preview" to make text editable'}
               </p>
               <button
@@ -674,9 +668,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
                 />
               </div>
             ) : (
-              <div className="text-center py-12 text-luxury-gray-2">
-                Generate preview...
-              </div>
+              <div className="text-center py-12 text-luxury-gray-2">Generate preview...</div>
             )}
           </div>
         )}
@@ -686,7 +678,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={(e) => {
+          onClick={e => {
             e.preventDefault()
             handleSave()
           }}
@@ -706,4 +698,3 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
     </div>
   )
 }
-

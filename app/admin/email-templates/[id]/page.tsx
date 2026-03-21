@@ -38,7 +38,7 @@ export default function EditEmailTemplatePage() {
   const handleSave = async (templateData: any) => {
     try {
       console.log('Updating template:', params.id, templateData)
-      
+
       const response = await fetch(`/api/email-templates/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -46,7 +46,7 @@ export default function EditEmailTemplatePage() {
       })
 
       const data = await response.json()
-      
+
       console.log('Update response:', { status: response.status, ok: response.ok, data })
 
       if (!response.ok) {
@@ -62,15 +62,16 @@ export default function EditEmailTemplatePage() {
       // Update template state with fresh data from server
       setTemplate(data.template)
       console.log('Template updated successfully:', data.template)
-      
+
       // Refresh from server to ensure we have latest
       await fetchTemplate()
-      
+
       // Show success message
       alert('Template updated successfully!')
     } catch (error: any) {
       console.error('Error updating template:', error)
-      const errorMessage = error?.message || 'Failed to update template. Please check the console for details.'
+      const errorMessage =
+        error?.message || 'Failed to update template. Please check the console for details.'
       alert(errorMessage)
       throw error // Re-throw so EmailTemplateBuilder can catch it
     }
@@ -84,7 +85,10 @@ export default function EditEmailTemplatePage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Template not found</p>
-        <Link href="/admin/email-templates" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
+        <Link
+          href="/admin/email-templates"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block"
+        >
           Back to Templates
         </Link>
       </div>
@@ -100,7 +104,7 @@ export default function EditEmailTemplatePage() {
         >
           ← Back to Templates
         </Link>
-        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
+        <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6">
           Edit: {template.name}
         </h2>
       </div>
@@ -109,4 +113,3 @@ export default function EditEmailTemplatePage() {
     </div>
   )
 }
-

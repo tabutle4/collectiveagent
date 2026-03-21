@@ -50,7 +50,14 @@ interface AdminTaskCompletion {
   notes: string | null
 }
 
-type FilterStatus = 'all' | 'locked' | 'unlocked' | 'ready' | 'complete' | 'pending_admin' | 'incomplete'
+type FilterStatus =
+  | 'all'
+  | 'locked'
+  | 'unlocked'
+  | 'ready'
+  | 'complete'
+  | 'pending_admin'
+  | 'incomplete'
 
 export default function AdminOnboardingPage() {
   const router = useRouter()
@@ -59,7 +66,9 @@ export default function AdminOnboardingPage() {
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [completions, setCompletions] = useState<Record<string, Record<string, Completion>>>({})
   const [adminTasks, setAdminTasks] = useState<AdminTask[]>([])
-  const [adminCompletions, setAdminCompletions] = useState<Record<string, Record<string, AdminTaskCompletion>>>({})
+  const [adminCompletions, setAdminCompletions] = useState<
+    Record<string, Record<string, AdminTaskCompletion>>
+  >({})
   const [loading, setLoading] = useState(true)
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
@@ -72,10 +81,15 @@ export default function AdminOnboardingPage() {
     const fetchUser = async () => {
       try {
         const res = await fetch('/api/auth/me')
-        if (!res.ok) { router.push('/auth/login'); return }
+        if (!res.ok) {
+          router.push('/auth/login')
+          return
+        }
         const data = await res.json()
         setUser(data.user)
-      } catch { router.push('/auth/login') }
+      } catch {
+        router.push('/auth/login')
+      }
     }
     fetchUser()
   }, [router])
@@ -117,8 +131,10 @@ export default function AdminOnboardingPage() {
   }
 
   const preAccessComplete = (agent: Agent) =>
-    agent.onboarding_fee_paid && agent.accepted_trec &&
-    agent.independent_contractor_agreement_signed && agent.w9_completed
+    agent.onboarding_fee_paid &&
+    agent.accepted_trec &&
+    agent.independent_contractor_agreement_signed &&
+    agent.w9_completed
 
   const getAgentStatus = (agent: Agent): FilterStatus => {
     const agentCompletions = completions[agent.id] || {}
@@ -149,14 +165,36 @@ export default function AdminOnboardingPage() {
     setToggling(key)
     try {
       const isCompleted = !!completions[agentId]?.[item.id]
-      await apiPost('toggle_checklist', { user_id: agentId, checklist_item_id: item.id, completing: !isCompleted })
+      await apiPost('toggle_checklist', {
+        user_id: agentId,
+        checklist_item_id: item.id,
+        completing: !isCompleted,
+      })
       if (isCompleted) {
-        setCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][item.id]; return next })
+        setCompletions(prev => {
+          const next = { ...prev, [agentId]: { ...prev[agentId] } }
+          delete next[agentId][item.id]
+          return next
+        })
       } else {
-        setCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [item.id]: { user_id: agentId, checklist_item_id: item.id, completed_at: new Date().toISOString(), completed_by: user.id } } }))
+        setCompletions(prev => ({
+          ...prev,
+          [agentId]: {
+            ...prev[agentId],
+            [item.id]: {
+              user_id: agentId,
+              checklist_item_id: item.id,
+              completed_at: new Date().toISOString(),
+              completed_by: user.id,
+            },
+          },
+        }))
       }
-    } catch (e) { console.error('Error toggling item:', e) }
-    finally { setToggling(null) }
+    } catch (e) {
+      console.error('Error toggling item:', e)
+    } finally {
+      setToggling(null)
+    }
   }
 
   const toggleAdminTask = async (agentId: string, task: AdminTask) => {
@@ -165,21 +203,44 @@ export default function AdminOnboardingPage() {
     setToggling(key)
     try {
       const isCompleted = !!adminCompletions[agentId]?.[task.id]
-      await apiPost('toggle_admin_task', { user_id: agentId, task_id: task.id, completing: !isCompleted })
+      await apiPost('toggle_admin_task', {
+        user_id: agentId,
+        task_id: task.id,
+        completing: !isCompleted,
+      })
       if (isCompleted) {
-        setAdminCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][task.id]; return next })
+        setAdminCompletions(prev => {
+          const next = { ...prev, [agentId]: { ...prev[agentId] } }
+          delete next[agentId][task.id]
+          return next
+        })
       } else {
-        setAdminCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [task.id]: { user_id: agentId, task_id: task.id, completed_at: new Date().toISOString(), completed_by: user.id, notes: null } } }))
+        setAdminCompletions(prev => ({
+          ...prev,
+          [agentId]: {
+            ...prev[agentId],
+            [task.id]: {
+              user_id: agentId,
+              task_id: task.id,
+              completed_at: new Date().toISOString(),
+              completed_by: user.id,
+              notes: null,
+            },
+          },
+        }))
       }
-    } catch (e) { console.error('Error toggling admin task:', e) }
-    finally { setToggling(null) }
+    } catch (e) {
+      console.error('Error toggling admin task:', e)
+    } finally {
+      setToggling(null)
+    }
   }
 
   const saveNote = async (agentId: string, taskId: string) => {
     await apiPost('update_task_notes', { user_id: agentId, task_id: taskId, notes: noteText })
     setAdminCompletions(prev => ({
       ...prev,
-      [agentId]: { ...prev[agentId], [taskId]: { ...prev[agentId][taskId], notes: noteText } }
+      [agentId]: { ...prev[agentId], [taskId]: { ...prev[agentId][taskId], notes: noteText } },
     }))
     setAddingNote(null)
     setNoteText('')
@@ -187,28 +248,33 @@ export default function AdminOnboardingPage() {
 
   const togglePreAccessStep = async (agentId: string, field: string, current: boolean) => {
     const updates: Record<string, any> = { [field]: !current }
-    if (field === 'onboarding_fee_paid' && !current) updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
+    if (field === 'onboarding_fee_paid' && !current)
+      updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
     await apiPost('update_user', { user_id: agentId, updates })
-    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, [field]: !current } : a))
+    setAgents(prev => prev.map(a => (a.id === agentId ? { ...a, [field]: !current } : a)))
   }
 
   const toggleNavAccess = async (agentId: string, current: boolean) => {
     await apiPost('toggle_nav_access', { user_id: agentId, current })
-    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, full_nav_access: !current } : a))
+    setAgents(prev => prev.map(a => (a.id === agentId ? { ...a, full_nav_access: !current } : a)))
   }
 
   const toggleAgent = (id: string) => setExpandedAgents(prev => ({ ...prev, [id]: !prev[id] }))
 
-  const sections = items.reduce((acc, item) => {
-    if (!acc[item.section]) acc[item.section] = { title: item.section_title, items: [] }
-    acc[item.section].items.push(item)
-    return acc
-  }, {} as Record<string, { title: string; items: ChecklistItem[] }>)
+  const sections = items.reduce(
+    (acc, item) => {
+      if (!acc[item.section]) acc[item.section] = { title: item.section_title, items: [] }
+      acc[item.section].items.push(item)
+      return acc
+    },
+    {} as Record<string, { title: string; items: ChecklistItem[] }>
+  )
 
   const filtered = agents.filter(a => {
     if (search.trim()) {
       const q = search.toLowerCase()
-      const name = `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
+      const name =
+        `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
       if (!name.includes(q) && !a.email.toLowerCase().includes(q)) return false
     }
     if (filter === 'all') return true
@@ -228,9 +294,15 @@ export default function AdminOnboardingPage() {
   const statusBadge: Record<FilterStatus, { label: string; className: string }> = {
     all: { label: '', className: '' },
     locked: { label: 'Locked', className: 'bg-gray-50 border-gray-200 text-gray-600' },
-    ready: { label: 'Ready to Unlock', className: 'bg-yellow-50 border-yellow-200 text-yellow-700' },
+    ready: {
+      label: 'Ready to Unlock',
+      className: 'bg-yellow-50 border-yellow-200 text-yellow-700',
+    },
     unlocked: { label: 'Unlocked', className: 'bg-blue-50 border-blue-200 text-blue-700' },
-    pending_admin: { label: 'Pending Admin Setup', className: 'bg-orange-50 border-orange-200 text-orange-700' },
+    pending_admin: {
+      label: 'Pending Admin Setup',
+      className: 'bg-orange-50 border-orange-200 text-orange-700',
+    },
     incomplete: { label: 'In Progress', className: 'bg-blue-50 border-blue-200 text-blue-700' },
     complete: { label: 'Complete', className: 'bg-green-50 border-green-200 text-green-700' },
   }
@@ -238,7 +310,9 @@ export default function AdminOnboardingPage() {
   const stats = {
     total: agents.length,
     complete: agents.filter(a => getAgentStatus(a) === 'complete').length,
-    inProgress: agents.filter(a => ['unlocked', 'incomplete', 'pending_admin'].includes(getAgentStatus(a))).length,
+    inProgress: agents.filter(a =>
+      ['unlocked', 'incomplete', 'pending_admin'].includes(getAgentStatus(a))
+    ).length,
     ready: agents.filter(a => getAgentStatus(a) === 'ready').length,
   }
 
@@ -249,16 +323,37 @@ export default function AdminOnboardingPage() {
       <h1 className="page-title mb-6">ONBOARDING</h1>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Total</p><p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p></div>
-        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Ready to Unlock</p><p className="text-2xl font-semibold text-yellow-600">{stats.ready}</p></div>
-        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">In Progress</p><p className="text-2xl font-semibold text-luxury-accent">{stats.inProgress}</p></div>
-        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Complete</p><p className="text-2xl font-semibold text-green-600">{stats.complete}</p></div>
+        <div className="container-card text-center">
+          <p className="text-xs text-luxury-gray-3 mb-1">Total</p>
+          <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
+        </div>
+        <div className="container-card text-center">
+          <p className="text-xs text-luxury-gray-3 mb-1">Ready to Unlock</p>
+          <p className="text-2xl font-semibold text-yellow-600">{stats.ready}</p>
+        </div>
+        <div className="container-card text-center">
+          <p className="text-xs text-luxury-gray-3 mb-1">In Progress</p>
+          <p className="text-2xl font-semibold text-luxury-accent">{stats.inProgress}</p>
+        </div>
+        <div className="container-card text-center">
+          <p className="text-xs text-luxury-gray-3 mb-1">Complete</p>
+          <p className="text-2xl font-semibold text-green-600">{stats.complete}</p>
+        </div>
       </div>
 
       <div className="container-card mb-4 space-y-3">
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
-          <input type="text" placeholder="Search agents..." value={search} onChange={e => setSearch(e.target.value)} className="input-luxury pl-8" />
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3"
+          />
+          <input
+            type="text"
+            placeholder="Search agents..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="input-luxury pl-8"
+          />
         </div>
         <div className="flex gap-2 flex-wrap">
           {filterOptions.map(opt => (
@@ -267,7 +362,11 @@ export default function AdminOnboardingPage() {
               onClick={() => setFilter(opt.value)}
               className={`text-xs px-3 py-1.5 rounded border transition-colors ${filter === opt.value ? 'btn-primary' : 'btn-secondary'}`}
             >
-              {opt.label} ({opt.value === 'all' ? agents.length : agents.filter(a => getAgentStatus(a) === opt.value).length})
+              {opt.label} (
+              {opt.value === 'all'
+                ? agents.length
+                : agents.filter(a => getAgentStatus(a) === opt.value).length}
+              )
             </button>
           ))}
         </div>
@@ -287,31 +386,48 @@ export default function AdminOnboardingPage() {
 
           return (
             <div key={agent.id} className="container-card">
-              <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleAgent(agent.id)}>
+              <div
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => toggleAgent(agent.id)}
+              >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
-                      <span className={`text-xs px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded border ${badge.className}`}>
+                        {badge.label}
+                      </span>
                     </div>
                     <p className="text-xs text-luxury-gray-3">{agent.email}</p>
                   </div>
                   <div className="text-right flex-shrink-0 text-xs text-luxury-gray-3">
-                    <p>Checklist {completedCount}/{items.length}</p>
-                    <p>Admin {adminCompletedCount}/{adminTasks.length}</p>
+                    <p>
+                      Checklist {completedCount}/{items.length}
+                    </p>
+                    <p>
+                      Admin {adminCompletedCount}/{adminTasks.length}
+                    </p>
                   </div>
                 </div>
                 <div className="ml-4">
-                  {isExpanded ? <ChevronUp size={16} className="text-luxury-gray-3" /> : <ChevronDown size={16} className="text-luxury-gray-3" />}
+                  {isExpanded ? (
+                    <ChevronUp size={16} className="text-luxury-gray-3" />
+                  ) : (
+                    <ChevronDown size={16} className="text-luxury-gray-3" />
+                  )}
                 </div>
               </div>
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
-                  <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress}%` }} /></div>
+                  <div className="progress-bar">
+                    <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                  </div>
 
                   <div className="inner-card">
-                    <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Pre-Access Steps</p>
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-3">
+                      Pre-Access Steps
+                    </p>
                     <div className="space-y-2">
                       {[
                         { field: 'onboarding_fee_paid', label: 'Onboarding Fee Paid' },
@@ -321,9 +437,21 @@ export default function AdminOnboardingPage() {
                       ].map(({ field, label }) => {
                         const isComplete = !!(agent as any)[field]
                         return (
-                          <div key={field} className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors" onClick={() => togglePreAccessStep(agent.id, field, isComplete)}>
-                            {isComplete ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" /> : <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />}
-                            <span className={`text-xs ${isComplete ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{label}</span>
+                          <div
+                            key={field}
+                            className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors"
+                            onClick={() => togglePreAccessStep(agent.id, field, isComplete)}
+                          >
+                            {isComplete ? (
+                              <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                            )}
+                            <span
+                              className={`text-xs ${isComplete ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
+                            >
+                              {label}
+                            </span>
                           </div>
                         )
                       })}
@@ -333,7 +461,9 @@ export default function AdminOnboardingPage() {
                   <div className="inner-card">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-semibold text-luxury-gray-2">Admin Setup Tasks</p>
-                      <span className="text-xs text-luxury-gray-3">{adminCompletedCount}/{adminTasks.length}</span>
+                      <span className="text-xs text-luxury-gray-3">
+                        {adminCompletedCount}/{adminTasks.length}
+                      </span>
                     </div>
                     <div className="space-y-2">
                       {adminTasks.map(task => {
@@ -343,28 +473,65 @@ export default function AdminOnboardingPage() {
                         const isAddingNote = addingNote === taskKey
                         return (
                           <div key={task.id}>
-                            <div className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors" onClick={() => toggleAdminTask(agent.id, task)}>
-                              {toggling === taskKey
-                                ? <Circle size={14} className="text-luxury-gray-3 animate-pulse flex-shrink-0" />
-                                : isCompleted
-                                  ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
-                                  : <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
-                              }
-                              <span className={`text-xs flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{task.label}</span>
+                            <div
+                              className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors"
+                              onClick={() => toggleAdminTask(agent.id, task)}
+                            >
+                              {toggling === taskKey ? (
+                                <Circle
+                                  size={14}
+                                  className="text-luxury-gray-3 animate-pulse flex-shrink-0"
+                                />
+                              ) : isCompleted ? (
+                                <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+                              ) : (
+                                <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                              )}
+                              <span
+                                className={`text-xs flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
+                              >
+                                {task.label}
+                              </span>
                               {isCompleted && (
-                                <button onClick={e => { e.stopPropagation(); setAddingNote(isAddingNote ? null : taskKey); setNoteText(completion.notes || '') }} className="text-xs text-luxury-accent hover:underline flex-shrink-0">
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setAddingNote(isAddingNote ? null : taskKey)
+                                    setNoteText(completion.notes || '')
+                                  }}
+                                  className="text-xs text-luxury-accent hover:underline flex-shrink-0"
+                                >
                                   {completion.notes ? 'Edit note' : 'Add note'}
                                 </button>
                               )}
                             </div>
                             {isCompleted && completion.notes && !isAddingNote && (
-                              <p className="text-xs text-luxury-gray-3 ml-7 mt-0.5 italic">{completion.notes}</p>
+                              <p className="text-xs text-luxury-gray-3 ml-7 mt-0.5 italic">
+                                {completion.notes}
+                              </p>
                             )}
                             {isAddingNote && (
                               <div className="ml-7 mt-1 flex gap-2">
-                                <input type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note..." className="input-luxury text-xs flex-1" autoFocus />
-                                <button onClick={() => saveNote(agent.id, task.id)} className="btn btn-primary text-xs">Save</button>
-                                <button onClick={() => setAddingNote(null)} className="btn btn-secondary text-xs">Cancel</button>
+                                <input
+                                  type="text"
+                                  value={noteText}
+                                  onChange={e => setNoteText(e.target.value)}
+                                  placeholder="Add a note..."
+                                  className="input-luxury text-xs flex-1"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => saveNote(agent.id, task.id)}
+                                  className="btn btn-primary text-xs"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setAddingNote(null)}
+                                  className="btn btn-secondary text-xs"
+                                >
+                                  Cancel
+                                </button>
                               </div>
                             )}
                           </div>
@@ -379,28 +546,55 @@ export default function AdminOnboardingPage() {
                       onClick={() => toggleNavAccess(agent.id, agent.full_nav_access)}
                       className={`text-xs px-3 py-1 rounded border transition-colors ${agent.full_nav_access ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'btn-secondary'}`}
                     >
-                      {agent.full_nav_access ? 'Full Access — Click to Restrict' : 'Restricted — Click to Grant Full Access'}
+                      {agent.full_nav_access
+                        ? 'Full Access — Click to Restrict'
+                        : 'Restricted — Click to Grant Full Access'}
                     </button>
                   </div>
 
                   {Object.entries(sections).map(([sectionKey, section]) => {
-                    const sectionCompleted = section.items.filter(i => agentCompletions[i.id]).length
+                    const sectionCompleted = section.items.filter(
+                      i => agentCompletions[i.id]
+                    ).length
                     return (
                       <div key={sectionKey}>
                         <div className="flex items-center gap-2 mb-2">
-                          <p className="text-xs font-semibold text-luxury-gray-2">{section.title}</p>
-                          <span className="text-xs text-luxury-gray-3">{sectionCompleted}/{section.items.length}</span>
+                          <p className="text-xs font-semibold text-luxury-gray-2">
+                            {section.title}
+                          </p>
+                          <span className="text-xs text-luxury-gray-3">
+                            {sectionCompleted}/{section.items.length}
+                          </span>
                         </div>
                         <div className="space-y-1.5">
                           {section.items.map(item => {
                             const isCompleted = !!agentCompletions[item.id]
                             const key = `${agent.id}-${item.id}`
                             return (
-                              <div key={item.id} className={`flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-luxury-light transition-colors ${isCompleted ? 'opacity-60' : ''}`} onClick={() => toggleItem(agent.id, item)}>
-                                {toggling === key ? <Circle size={14} className="text-luxury-gray-3 animate-pulse" /> : isCompleted ? <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" /> : <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />}
-                                <span className={`text-xs ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{item.label}</span>
+                              <div
+                                key={item.id}
+                                className={`flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-luxury-light transition-colors ${isCompleted ? 'opacity-60' : ''}`}
+                                onClick={() => toggleItem(agent.id, item)}
+                              >
+                                {toggling === key ? (
+                                  <Circle size={14} className="text-luxury-gray-3 animate-pulse" />
+                                ) : isCompleted ? (
+                                  <CheckCircle2
+                                    size={14}
+                                    className="text-green-600 flex-shrink-0"
+                                  />
+                                ) : (
+                                  <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
+                                )}
+                                <span
+                                  className={`text-xs ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
+                                >
+                                  {item.label}
+                                </span>
                                 {item.priority === 'high' && !isCompleted && (
-                                  <span className="text-xs px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 ml-auto">Priority</span>
+                                  <span className="text-xs px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 ml-auto">
+                                    Priority
+                                  </span>
                                 )}
                               </div>
                             )
@@ -416,7 +610,9 @@ export default function AdminOnboardingPage() {
         })}
 
         {filtered.length === 0 && (
-          <div className="container-card text-center py-12"><p className="text-sm text-luxury-gray-3">No agents found</p></div>
+          <div className="container-card text-center py-12">
+            <p className="text-sm text-luxury-gray-3">No agents found</p>
+          </div>
         )}
       </div>
     </div>

@@ -10,10 +10,7 @@ export async function POST(request: NextRequest) {
     const { reportId, userId } = body
 
     if (!reportId || !userId) {
-      return NextResponse.json(
-        { error: 'Report ID and User ID are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Report ID and User ID are required' }, { status: 400 })
     }
 
     // Verify user is admin
@@ -25,10 +22,7 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // First, get the report to find the file names
@@ -39,10 +33,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (reportFetchError || !report) {
-      return NextResponse.json(
-        { error: 'Report not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Report not found' }, { status: 404 })
     }
 
     // Get the coordination to find the listing
@@ -53,19 +44,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (coordError || !coordination) {
-      return NextResponse.json(
-        { error: 'Coordination not found for this report' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Coordination not found for this report' }, { status: 404 })
     }
 
     // Get the listing to get the property address
     const listing = await getListingById(coordination.listing_id)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found for this report' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found for this report' }, { status: 404 })
     }
 
     // Delete files from OneDrive if they exist
@@ -79,11 +64,16 @@ export async function POST(request: NextRequest) {
       // We need to construct the full filename as it was uploaded
       if (report.report_file_name) {
         // Extract the date from week_start_date to match the upload filename format
-        const dateLabel = report.week_start_date ? new Date(report.week_start_date).toISOString().split('T')[0].replace(/[/\\?%*:|"<>]/g, '-') : ''
+        const dateLabel = report.week_start_date
+          ? new Date(report.week_start_date)
+              .toISOString()
+              .split('T')[0]
+              .replace(/[/\\?%*:|"<>]/g, '-')
+          : ''
         // The uploaded filename format is: Showing_Report_${dateLabel}_${originalFileName}
         // Check if the filename already has the prefix, if not, add it
-        const file1Name = report.report_file_name.startsWith('Showing_Report_') 
-          ? report.report_file_name 
+        const file1Name = report.report_file_name.startsWith('Showing_Report_')
+          ? report.report_file_name
           : `Showing_Report_${dateLabel}_${report.report_file_name}`
         const file1Path = `${folderPath}/${file1Name}`
         await graphClient.deleteFile(file1Path)
@@ -91,9 +81,14 @@ export async function POST(request: NextRequest) {
 
       // Delete file 2 if it exists
       if (report.report_file_name_2) {
-        const dateLabel = report.week_start_date ? new Date(report.week_start_date).toISOString().split('T')[0].replace(/[/\\?%*:|"<>]/g, '-') : ''
-        const file2Name = report.report_file_name_2.startsWith('Traffic_Report_') 
-          ? report.report_file_name_2 
+        const dateLabel = report.week_start_date
+          ? new Date(report.week_start_date)
+              .toISOString()
+              .split('T')[0]
+              .replace(/[/\\?%*:|"<>]/g, '-')
+          : ''
+        const file2Name = report.report_file_name_2.startsWith('Traffic_Report_')
+          ? report.report_file_name_2
           : `Traffic_Report_${dateLabel}_${report.report_file_name_2}`
         const file2Path = `${folderPath}/${file2Name}`
         await graphClient.deleteFile(file2Path)
@@ -101,7 +96,10 @@ export async function POST(request: NextRequest) {
     } catch (onedriveError: any) {
       // Log OneDrive deletion errors but don't fail the request
       // The file might already be deleted or not exist
-      console.error('Error deleting files from OneDrive (continuing with database deletion):', onedriveError)
+      console.error(
+        'Error deleting files from OneDrive (continuing with database deletion):',
+        onedriveError
+      )
     }
 
     // Delete the weekly report from database
@@ -112,17 +110,13 @@ export async function POST(request: NextRequest) {
 
     if (deleteError) {
       console.error('Error deleting weekly report:', deleteError)
-      return NextResponse.json(
-        { error: 'Failed to delete weekly report' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to delete weekly report' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Weekly report and files deleted successfully'
+      message: 'Weekly report and files deleted successfully',
     })
-
   } catch (error: any) {
     console.error('Error in delete weekly report API:', error)
     return NextResponse.json(
@@ -131,4 +125,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -16,4 +16,3 @@ export default function CampaignBuilderWithIdPage() {
 
   return <div>Redirecting...</div>
 }
-

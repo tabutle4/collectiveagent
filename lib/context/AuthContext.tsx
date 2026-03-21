@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true)
       setError(null)
       const response = await fetch('/api/auth/me')
-      
+
       if (!response.ok) {
         // Not authenticated - this is expected on public pages
         setUser(null)
@@ -86,16 +86,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      permissions,
-      loading,
-      error,
-      hasPermission,
-      hasAnyPermission,
-      hasAllPermissions,
-      refetch: fetchAuth
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        permissions,
+        loading,
+        error,
+        hasPermission,
+        hasAnyPermission,
+        hasAllPermissions,
+        refetch: fetchAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )

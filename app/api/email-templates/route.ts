@@ -6,11 +6,11 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
-    
+
     let query = supabase
       .from('email_templates')
       .select('*')
-        // Exclude archived templates
+      // Exclude archived templates
       .order('created_at', { ascending: false })
 
     if (category) {
@@ -24,10 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ templates: data || [] })
   } catch (error) {
     console.error('Get email templates error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch email templates' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch email templates' }, { status: 500 })
   }
 }
 
@@ -64,17 +61,19 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('email_templates')
-      .insert([{
-        name,
-        description: description || null,
-        category: category || 'campaign',
-        html_content,
-        subject_line,
-        variables: variables || [],
-        logo_url: logo_url || '/logo.png',
-        is_default: is_default || false,
-        is_active: true,
-      }])
+      .insert([
+        {
+          name,
+          description: description || null,
+          category: category || 'campaign',
+          html_content,
+          subject_line,
+          variables: variables || [],
+          logo_url: logo_url || '/logo.png',
+          is_default: is_default || false,
+          is_active: true,
+        },
+      ])
       .select()
       .single()
 
@@ -83,10 +82,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ template: data })
   } catch (error) {
     console.error('Create email template error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create email template' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create email template' }, { status: 500 })
   }
 }
-

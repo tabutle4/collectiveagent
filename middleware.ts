@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySessionToken } from '@/lib/session'
+import { ADMIN_ROLES, PATHS, RoleName } from '@/lib/constants'
 
 const PUBLIC_PATHS = [
   '/auth/login',
@@ -27,12 +28,8 @@ const PUBLIC_PATHS = [
   '/logo-white.png',
 ]
 
-const ADMIN_PATHS = ['/admin']
-const AGENT_PATHS = ['/agent']
-const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
-
 // Paths accessible to all authenticated users regardless of role
-const SHARED_PATHS = ['/transactions']
+const SHARED_PATHS = ['/transactions', '/training-center', '/profile']
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(path => pathname.startsWith(path))
@@ -79,7 +76,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const userRole = session.user.role?.toLowerCase() || ''
-  const isAdminRole = ADMIN_ROLES.includes(userRole)
+  const isAdminRole = ADMIN_ROLES.includes(userRole as RoleName)
 
   // Shared paths — accessible to all authenticated users, no role redirect
   if (isSharedPath(pathname)) {
@@ -106,12 +103,10 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set('x-user-role', session.user.role)
 
   return NextResponse.next({
-    request: { headers: requestHeaders }
+    request: { headers: requestHeaders },
   })
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|logo.png|public/).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|public/).*)'],
 }

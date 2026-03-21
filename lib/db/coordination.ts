@@ -13,9 +13,9 @@ export async function createCoordination(data: {
   payment_due_date?: string | null
 }): Promise<ListingCoordination | null> {
   const supabase = createClient()
-  
+
   const magicLink = await generateMagicLink(data.listing_id, data.seller_email)
-  
+
   // Check if agent is Courtney Okanlomo
   let isCourtneyOkanlomo = false
   try {
@@ -24,20 +24,22 @@ export async function createCoordination(data: {
       .select('preferred_first_name, preferred_last_name, first_name, last_name')
       .eq('id', data.agent_id)
       .single()
-    
+
     if (agentData) {
-      const agentName = `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
+      const agentName =
+        `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
       isCourtneyOkanlomo = agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
     }
   } catch (error) {
     console.error('Error checking agent name:', error)
   }
-  
+
   // Auto-mark broker listings and Courtney Okanlomo's deals as paid
   const isBrokerListing = data.payment_method === 'broker_listing'
   const servicePaid = isBrokerListing || isCourtneyOkanlomo ? true : false
-  const paymentDate = (isBrokerListing || isCourtneyOkanlomo) ? new Date().toISOString().split('T')[0] : null
-  
+  const paymentDate =
+    isBrokerListing || isCourtneyOkanlomo ? new Date().toISOString().split('T')[0] : null
+
   const { data: coordination, error } = await supabase
     .from('listing_coordination')
     .insert({
@@ -58,93 +60,98 @@ export async function createCoordination(data: {
     })
     .select()
     .single()
-  
+
   if (error) {
     console.error('Error creating coordination:', error)
     return null
   }
-  
+
   return coordination
 }
 
-export async function getCoordinationByListingId(listingId: string): Promise<ListingCoordination | null> {
+export async function getCoordinationByListingId(
+  listingId: string
+): Promise<ListingCoordination | null> {
   const supabase = createClient()
-  
+
   const { data, error } = await supabase
     .from('listing_coordination')
     .select('*')
     .eq('listing_id', listingId)
     .single()
-  
+
   if (error) {
     console.error('Error fetching coordination:', error)
     return null
   }
-  
+
   return data
 }
 
 export async function getCoordinationById(id: string): Promise<ListingCoordination | null> {
   const supabase = createClient()
-  
+
   const { data, error } = await supabase
     .from('listing_coordination')
     .select('*')
     .eq('id', id)
     .single()
-  
+
   if (error) {
     console.error('Error fetching coordination:', error)
     return null
   }
-  
+
   return data
 }
 
 export async function getAllActiveCoordinations(): Promise<ListingCoordination[]> {
   const supabase = createClient()
-  
+
   const { data, error } = await supabase
     .from('listing_coordination')
     .select('*')
     .eq('is_active', true)
     .order('created_at', { ascending: false })
-  
+
   if (error) {
     console.error('Error fetching active coordinations:', error)
     return []
   }
-  
+
   return data || []
 }
 
-export async function updateCoordination(id: string, updates: Partial<ListingCoordination>): Promise<boolean> {
+export async function updateCoordination(
+  id: string,
+  updates: Partial<ListingCoordination>
+): Promise<boolean> {
   const supabase = createClient()
-  
+
   const { error } = await supabase
     .from('listing_coordination')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
-  
+
   if (error) {
     console.error('Error updating coordination:', error)
     return false
   }
-  
+
   return true
 }
 
 export async function deactivateCoordination(id: string): Promise<boolean> {
-  return updateCoordination(id, { 
+  return updateCoordination(id, {
     is_active: false,
-    end_date: new Date().toISOString().split('T')[0]
+    end_date: new Date().toISOString().split('T')[0],
   })
 }
 
 export async function reactivateCoordination(id: string): Promise<boolean> {
-  return updateCoordination(id, { 
+  return updateCoordination(id, {
     is_active: true,
-    end_date: null
+    end_date: null,
   })
 }
 
@@ -159,41 +166,47 @@ export async function createWeeklyReport(data: {
   feedback?: string
 }): Promise<CoordinationWeeklyReport | null> {
   const supabase = createClient()
-  
+
   const { data: report, error } = await supabase
     .from('coordination_weekly_reports')
     .insert(data)
     .select()
     .single()
-  
+
   if (error) {
     console.error('Error creating weekly report:', error)
     return null
   }
-  
+
   return report
 }
 
-export async function getCoordinationReports(coordinationId: string): Promise<CoordinationWeeklyReport[]> {
+export async function getCoordinationReports(
+  coordinationId: string
+): Promise<CoordinationWeeklyReport[]> {
   const supabase = createClient()
-  
+
   const { data, error } = await supabase
     .from('coordination_weekly_reports')
     .select('*')
     .eq('coordination_id', coordinationId)
     .order('week_start_date', { ascending: false })
-  
+
   if (error) {
     console.error('Error fetching coordination reports:', error)
     return []
   }
-  
+
   return data || []
 }
 
-export async function markReportAsSent(reportId: string, emailId: string, sentTo: any): Promise<boolean> {
+export async function markReportAsSent(
+  reportId: string,
+  emailId: string,
+  sentTo: any
+): Promise<boolean> {
   const supabase = createClient()
-  
+
   const { error } = await supabase
     .from('coordination_weekly_reports')
     .update({
@@ -201,15 +214,14 @@ export async function markReportAsSent(reportId: string, emailId: string, sentTo
       email_sent_at: new Date().toISOString(),
       email_id: emailId,
       email_status: 'sent',
-      sent_to: sentTo
+      sent_to: sentTo,
     })
     .eq('id', reportId)
-  
+
   if (error) {
     console.error('Error marking report as sent:', error)
     return false
   }
-  
+
   return true
 }
-

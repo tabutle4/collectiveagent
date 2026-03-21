@@ -50,17 +50,16 @@ async function checkUserCounts() {
   // Count by active status
   const activeUsers = allUsers?.filter(u => u.is_active === true) || []
   const inactiveUsers = allUsers?.filter(u => u.is_active === false) || []
-  
+
   console.log(`Active users: ${activeUsers.length}`)
   console.log(`Inactive users: ${inactiveUsers.length}\n`)
 
   // Count by role
-  const usersWithAgentRole = allUsers?.filter(u => 
-    u.roles && Array.isArray(u.roles) && u.roles.includes('agent')
-  ) || []
-  
-  const activeUsersWithAgentRole = activeUsers.filter(u => 
-    u.roles && Array.isArray(u.roles) && u.roles.includes('agent')
+  const usersWithAgentRole =
+    allUsers?.filter(u => u.roles && Array.isArray(u.roles) && u.roles.includes('agent')) || []
+
+  const activeUsersWithAgentRole = activeUsers.filter(
+    u => u.roles && Array.isArray(u.roles) && u.roles.includes('agent')
   )
 
   console.log(`Users with 'agent' role: ${usersWithAgentRole.length}`)
@@ -77,8 +76,8 @@ async function checkUserCounts() {
   }
 
   // Show active users without agent role
-  const activeNonAgents = activeUsers.filter(u => 
-    !u.roles || !Array.isArray(u.roles) || !u.roles.includes('agent')
+  const activeNonAgents = activeUsers.filter(
+    u => !u.roles || !Array.isArray(u.roles) || !u.roles.includes('agent')
   )
   if (activeNonAgents.length > 0) {
     console.log(`ℹ️  Active users WITHOUT 'agent' role (${activeNonAgents.length}):`)
@@ -94,7 +93,9 @@ async function checkUserCounts() {
   console.log(`Total users: ${allUsers?.length || 0}`)
   console.log(`Active users: ${activeUsers.length}`)
   console.log(`Users with 'agent' role: ${usersWithAgentRole.length}`)
-  console.log(`✅ Active users with 'agent' role (roster count): ${activeUsersWithAgentRole.length}`)
+  console.log(
+    `✅ Active users with 'agent' role (roster count): ${activeUsersWithAgentRole.length}`
+  )
   console.log('='.repeat(60))
 }
 
@@ -103,8 +104,7 @@ checkUserCounts()
     console.log('\n✅ Check complete')
     process.exit(0)
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('❌ Error:', error)
     process.exit(1)
   })
-

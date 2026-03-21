@@ -3,8 +3,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import {
-  ArrowLeft, ExternalLink, Camera, Check, X, ChevronDown, ChevronUp,
-  AlertCircle, Building2, User, DollarSign, FileText, ClipboardList, Send
+  ArrowLeft,
+  ExternalLink,
+  Camera,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  Building2,
+  User,
+  DollarSign,
+  FileText,
+  ClipboardList,
+  Send,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
@@ -13,16 +25,26 @@ import StatusBadge from '@/components/transactions/StatusBadge'
 
 const fmt$ = (n: number | null | undefined) => {
   if (n == null) return '--'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(Number(n))
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(Number(n))
 }
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '--'
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 const fmtName = (u: any) =>
-  u ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim() : ''
+  u
+    ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
+    : ''
 
 const isLease = (txnType: string | null) => {
   if (!txnType) return false
@@ -64,10 +86,15 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function CheckImageUpload({
-  checkId, existingUrl, transactionFolderPath, onUploaded,
+  checkId,
+  existingUrl,
+  transactionFolderPath,
+  onUploaded,
 }: {
-  checkId?: string; existingUrl?: string | null
-  transactionFolderPath?: string | null; onUploaded: (url: string) => void
+  checkId?: string
+  existingUrl?: string | null
+  transactionFolderPath?: string | null
+  onUploaded: (url: string) => void
 }) {
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(existingUrl || null)
@@ -99,22 +126,45 @@ function CheckImageUpload({
       {previewUrl ? (
         <div className="relative mt-1">
           <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-            <img src={previewUrl} alt="Check" className="w-full max-h-40 object-cover rounded-lg border border-luxury-gray-5" />
+            <img
+              src={previewUrl}
+              alt="Check"
+              className="w-full max-h-40 object-cover rounded-lg border border-luxury-gray-5"
+            />
           </a>
-          <label className={`absolute bottom-2 right-2 bg-white/90 border border-luxury-gray-5 rounded-lg px-2 py-1 flex items-center gap-1 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-            <Camera size={11} />{uploading ? 'Uploading...' : 'Replace'}
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <label
+            className={`absolute bottom-2 right-2 bg-white/90 border border-luxury-gray-5 rounded-lg px-2 py-1 flex items-center gap-1 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            <Camera size={11} />
+            {uploading ? 'Uploading...' : 'Replace'}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+            />
           </label>
         </div>
       ) : (
-        <label className={`mt-1 flex flex-col items-center justify-center gap-1.5 w-full py-5 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-          {uploading ? <p className="text-xs text-luxury-gray-3">Uploading...</p> : (
+        <label
+          className={`mt-1 flex flex-col items-center justify-center gap-1.5 w-full py-5 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+        >
+          {uploading ? (
+            <p className="text-xs text-luxury-gray-3">Uploading...</p>
+          ) : (
             <>
               <Camera size={18} className="text-luxury-gray-3" />
               <p className="text-xs text-luxury-gray-3">Upload check photo</p>
             </>
           )}
-          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
+          />
         </label>
       )}
     </div>
@@ -146,13 +196,17 @@ export default function AdminTransactionDetailPage() {
 
   // Right panel section toggles
   const [expandedSections, setExpandedSections] = useState({
-    transaction: true, agent: true, billing: true, team: true, referrals: true,
+    transaction: true,
+    agent: true,
+    billing: true,
+    team: true,
+    referrals: true,
   })
 
   // Auth
   useEffect(() => {
     fetch('/api/auth/me')
-      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(r => (r.ok ? r.json() : Promise.reject()))
       .then(d => setUser(d.user))
       .catch(() => router.push('/auth/login'))
   }, [router])
@@ -190,7 +244,9 @@ export default function AdminTransactionDetailPage() {
         body: JSON.stringify({ action: 'update_transaction', updates }),
       })
       setData((prev: any) => ({ ...prev, transaction: { ...prev.transaction, ...updates } }))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const updateCheck = async (updates: any) => {
@@ -204,7 +260,9 @@ export default function AdminTransactionDetailPage() {
       })
       setData((prev: any) => ({ ...prev, check: { ...prev.check, ...updates } }))
       setEditCheckData((prev: any) => ({ ...prev, ...updates }))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const toggleChecklist = async (itemId: string, currentlyComplete: boolean) => {
@@ -224,11 +282,18 @@ export default function AdminTransactionDetailPage() {
         ...prev,
         checklist: prev.checklist.map((item: any) =>
           item.id === itemId
-            ? { ...item, completion: !currentlyComplete ? { completed_by: user?.id, completed_at: new Date().toISOString() } : null }
+            ? {
+                ...item,
+                completion: !currentlyComplete
+                  ? { completed_by: user?.id, completed_at: new Date().toISOString() }
+                  : null,
+              }
             : item
         ),
       }))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const addPayout = async () => {
@@ -249,7 +314,9 @@ export default function AdminTransactionDetailPage() {
         check: { ...prev.check, check_payouts: [...(prev.check.check_payouts || []), json.payout] },
       }))
       setNewPayoutForm(null)
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const deletePayout = async (payoutId: string) => {
@@ -263,9 +330,14 @@ export default function AdminTransactionDetailPage() {
       })
       setData((prev: any) => ({
         ...prev,
-        check: { ...prev.check, check_payouts: prev.check.check_payouts.filter((p: any) => p.id !== payoutId) },
+        check: {
+          ...prev.check,
+          check_payouts: prev.check.check_payouts.filter((p: any) => p.id !== payoutId),
+        },
       }))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const sendEmailAgent = async () => {
@@ -281,7 +353,9 @@ export default function AdminTransactionDetailPage() {
       alert('Email sent.')
     } catch {
       alert('Failed to send email.')
-    } finally { setSendingEmail(false) }
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   // ── Computed values ──────────────────────────────────────────────────────────
@@ -295,12 +369,13 @@ export default function AdminTransactionDetailPage() {
   const settings = data?.company_settings
   const agents = data?.agents || []
 
-  const payByDate = check?.cleared_date
-    ? addBusinessDays(new Date(check.cleared_date), 10)
-    : null
+  const payByDate = check?.cleared_date ? addBusinessDays(new Date(check.cleared_date), 10) : null
   const daysUntilPay = payByDate ? getDaysUntil(payByDate.toISOString()) : null
 
-  const totalPayouts = (check?.check_payouts || []).reduce((s: number, p: any) => s + parseFloat(p.amount || 0), 0)
+  const totalPayouts = (check?.check_payouts || []).reduce(
+    (s: number, p: any) => s + parseFloat(p.amount || 0),
+    0
+  )
   const checkAmount = parseFloat(check?.check_amount || 0)
   const payoutBalance = checkAmount - totalPayouts
 
@@ -326,17 +401,19 @@ export default function AdminTransactionDetailPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  if (!user || loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-sm text-luxury-gray-3">Loading...</p>
-    </div>
-  )
+  if (!user || loading)
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-sm text-luxury-gray-3">Loading...</p>
+      </div>
+    )
 
-  if (!txn) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-sm text-luxury-gray-3">Transaction not found.</p>
-    </div>
-  )
+  if (!txn)
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-sm text-luxury-gray-3">Transaction not found.</p>
+      </div>
+    )
 
   const addr = txn.property_address || 'No address'
   const addrParts = addr.split(',')
@@ -353,7 +430,6 @@ export default function AdminTransactionDetailPage() {
 
   return (
     <div className="flex flex-col -mx-4 -mt-4 md:-mx-6 md:-mt-6">
-
       {saving && (
         <div className="fixed top-4 right-4 bg-luxury-gray-1 text-white px-4 py-2 rounded text-xs z-50 shadow-lg">
           Saving...
@@ -363,7 +439,10 @@ export default function AdminTransactionDetailPage() {
       {/* ── Mobile Header + Tab Bar ───────────────────────────────────────── */}
       <div className="border-b border-luxury-gray-5 bg-luxury-light">
         <div className="p-3">
-          <button onClick={() => router.push('/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors">
+          <button
+            onClick={() => router.push('/transactions')}
+            className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-2 transition-colors"
+          >
             <ArrowLeft size={13} /> Back to Transactions
           </button>
           <div className="flex items-center justify-between">
@@ -374,38 +453,51 @@ export default function AdminTransactionDetailPage() {
             <StatusBadge status={txn.status as TransactionStatus} />
           </div>
           <div className="flex gap-1 mt-1.5 flex-wrap">
-            <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">{txn.transaction_type}</span>
-            {txn.office_location && <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">{txn.office_location}</span>}
+            <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
+              {txn.transaction_type}
+            </span>
+            {txn.office_location && (
+              <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
+                {txn.office_location}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex overflow-x-auto px-3 pb-0 gap-0 border-t border-luxury-gray-5/50">
-          {navTabs.filter(t => t.show).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-2.5 text-xs whitespace-nowrap border-b-2 transition-colors flex-shrink-0 ${
-                activeTab === tab.key
-                  ? 'border-luxury-accent text-luxury-accent font-semibold'
-                  : 'border-transparent text-luxury-gray-3 hover:text-luxury-gray-1'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {navTabs
+            .filter(t => t.show)
+            .map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-2.5 text-xs whitespace-nowrap border-b-2 transition-colors flex-shrink-0 ${
+                  activeTab === tab.key
+                    ? 'border-luxury-accent text-luxury-accent font-semibold'
+                    : 'border-transparent text-luxury-gray-3 hover:text-luxury-gray-1'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
         </div>
       </div>
 
       {/* ── Left Sidebar ───────────────────────────────────────────────────── */}
       <div className="hidden">
         <div className="p-4">
-          <button onClick={() => router.push('/transactions')} className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors">
+          <button
+            onClick={() => router.push('/transactions')}
+            className="flex items-center gap-1.5 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 mb-5 transition-colors"
+          >
             <ArrowLeft size={13} /> Back to Transactions
           </button>
 
           {/* Property card */}
           <div className="container-card mb-4 p-3">
             <p className="text-sm font-semibold text-luxury-gray-1 leading-tight">{addrStreet}</p>
-            {addrCity && <p className="text-xs text-luxury-gray-3 mt-0.5 leading-tight">{addrCity}</p>}
+            {addrCity && (
+              <p className="text-xs text-luxury-gray-3 mt-0.5 leading-tight">{addrCity}</p>
+            )}
             <div className="mt-2">
               <StatusBadge status={txn.status as TransactionStatus} />
             </div>
@@ -423,37 +515,37 @@ export default function AdminTransactionDetailPage() {
 
           {/* Nav */}
           <nav className="space-y-0.5">
-            {navTabs.filter(t => t.show).map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`w-full text-left px-3 py-2 rounded text-xs transition-colors ${
-                  activeTab === tab.key
-                    ? 'bg-luxury-accent text-white font-semibold'
-                    : 'text-luxury-gray-2 hover:bg-luxury-gray-5/40'
-                }`}
-              >
-                {tab.label}
-                {tab.key === 'check_payouts' && check && (
-                  <span className="ml-1 text-xs opacity-70">
-                    ({(check.check_payouts || []).length})
-                  </span>
-                )}
-                {tab.key === 'check_payouts' && !check && (
-                  <span className="ml-1 text-xs opacity-50">(no check)</span>
-                )}
-              </button>
-            ))}
+            {navTabs
+              .filter(t => t.show)
+              .map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`w-full text-left px-3 py-2 rounded text-xs transition-colors ${
+                    activeTab === tab.key
+                      ? 'bg-luxury-accent text-white font-semibold'
+                      : 'text-luxury-gray-2 hover:bg-luxury-gray-5/40'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.key === 'check_payouts' && check && (
+                    <span className="ml-1 text-xs opacity-70">
+                      ({(check.check_payouts || []).length})
+                    </span>
+                  )}
+                  {tab.key === 'check_payouts' && !check && (
+                    <span className="ml-1 text-xs opacity-50">(no check)</span>
+                  )}
+                </button>
+              ))}
           </nav>
         </div>
       </div>
 
       {/* ── Main Content + Right Panel ──────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row min-w-0">
-
         {/* Main content */}
         <div className="flex-1 p-4 md:p-6 min-w-0">
-
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
@@ -465,26 +557,48 @@ export default function AdminTransactionDetailPage() {
                 <div className="space-y-0">
                   <FieldRow label="Property" value={txn.property_address} />
                   <FieldRow label="Type" value={txn.transaction_type} />
-                  <FieldRow label="Status" value={<StatusBadge status={txn.status as TransactionStatus} />} />
-                  <FieldRow label="Compliance" value={
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      txn.compliance_status === 'approved' ? 'bg-green-50 text-green-700' :
-                      txn.compliance_status === 'revision_requested' ? 'bg-orange-50 text-orange-700' :
-                      ['submitted', 'in_review'].includes(txn.compliance_status) ? 'bg-purple-50 text-purple-700' :
-                      'bg-luxury-light text-luxury-gray-3'
-                    }`}>
-                      {txn.compliance_status?.replace(/_/g, ' ') || 'not requested'}
-                    </span>
-                  } />
-                  <FieldRow label="Representing" value={txn.representation_type?.replace(/_/g, ' ')} />
+                  <FieldRow
+                    label="Status"
+                    value={<StatusBadge status={txn.status as TransactionStatus} />}
+                  />
+                  <FieldRow
+                    label="Compliance"
+                    value={
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded ${
+                          txn.compliance_status === 'approved'
+                            ? 'bg-green-50 text-green-700'
+                            : txn.compliance_status === 'revision_requested'
+                              ? 'bg-orange-50 text-orange-700'
+                              : ['submitted', 'in_review'].includes(txn.compliance_status)
+                                ? 'bg-purple-50 text-purple-700'
+                                : 'bg-luxury-light text-luxury-gray-3'
+                        }`}
+                      >
+                        {txn.compliance_status?.replace(/_/g, ' ') || 'not requested'}
+                      </span>
+                    }
+                  />
+                  <FieldRow
+                    label="Representing"
+                    value={txn.representation_type?.replace(/_/g, ' ')}
+                  />
                   <FieldRow label="Lead Source" value={txn.lead_source?.replace(/_/g, ' ')} />
                   <FieldRow label="Office" value={txn.office_location} />
                   {txn.mls_link && (
-                    <FieldRow label="MLS Link" value={
-                      <a href={txn.mls_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-luxury-accent hover:underline text-xs">
-                        View <ExternalLink size={10} />
-                      </a>
-                    } />
+                    <FieldRow
+                      label="MLS Link"
+                      value={
+                        <a
+                          href={txn.mls_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-luxury-accent hover:underline text-xs"
+                        >
+                          View <ExternalLink size={10} />
+                        </a>
+                      }
+                    />
                   )}
                 </div>
               </div>
@@ -496,7 +610,10 @@ export default function AdminTransactionDetailPage() {
                   {leaseTransaction ? (
                     <>
                       <FieldRow label="Monthly Rent" value={fmt$(txn.monthly_rent)} />
-                      <FieldRow label="Lease Term" value={txn.lease_term ? `${txn.lease_term} months` : null} />
+                      <FieldRow
+                        label="Lease Term"
+                        value={txn.lease_term ? `${txn.lease_term} months` : null}
+                      />
                       <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />
                     </>
                   ) : (
@@ -511,15 +628,34 @@ export default function AdminTransactionDetailPage() {
                   <FieldRow label="Listing Side" value={fmt$(txn.listing_side_commission)} />
                   <FieldRow label="Buying Side" value={fmt$(txn.buying_side_commission)} />
                   <FieldRow label="Office Gross" value={fmt$(txn.office_gross)} />
-                  <FieldRow label="Office Net" value={
-                    <span className="font-semibold text-green-600">{fmt$(txn.office_net)}</span>
-                  } />
-                  {txn.bonus_amount > 0 && <FieldRow label="Bonus" value={fmt$(txn.bonus_amount)} />}
-                  {txn.rebate_amount > 0 && <FieldRow label="Rebate" value={fmt$(txn.rebate_amount)} />}
+                  <FieldRow
+                    label="Office Net"
+                    value={
+                      <span className="font-semibold text-green-600">{fmt$(txn.office_net)}</span>
+                    }
+                  />
+                  {txn.bonus_amount > 0 && (
+                    <FieldRow label="Bonus" value={fmt$(txn.bonus_amount)} />
+                  )}
+                  {txn.rebate_amount > 0 && (
+                    <FieldRow label="Rebate" value={fmt$(txn.rebate_amount)} />
+                  )}
                   {txn.has_btsa && <FieldRow label="BTSA" value={fmt$(txn.btsa_amount)} />}
-                  {txn.expedite_requested && <FieldRow label="Expedite Fee" value={fmt$(txn.expedite_fee)} />}
-                  {txn.internal_referral && <FieldRow label="Internal Referral Fee" value={fmt$(txn.internal_referral_fee)} />}
-                  {txn.external_referral && <FieldRow label="External Referral Fee" value={fmt$(txn.external_referral_fee)} />}
+                  {txn.expedite_requested && (
+                    <FieldRow label="Expedite Fee" value={fmt$(txn.expedite_fee)} />
+                  )}
+                  {txn.internal_referral && (
+                    <FieldRow
+                      label="Internal Referral Fee"
+                      value={fmt$(txn.internal_referral_fee)}
+                    />
+                  )}
+                  {txn.external_referral && (
+                    <FieldRow
+                      label="External Referral Fee"
+                      value={fmt$(txn.external_referral_fee)}
+                    />
+                  )}
                 </div>
               </div>
 
@@ -529,12 +665,30 @@ export default function AdminTransactionDetailPage() {
                 <div className="space-y-0">
                   <FieldRow label="Created" value={fmtDate(txn.created_at)} />
                   <FieldRow label="Acceptance Date" value={fmtDate(txn.acceptance_date)} />
-                  {!leaseTransaction && <FieldRow label="Closing Date" value={fmtDate(txn.closing_date)} />}
-                  {leaseTransaction && <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />}
-                  {txn.compliance_submitted_at && <FieldRow label="Compliance Submitted" value={fmtDate(txn.compliance_submitted_at)} />}
-                  {txn.compliance_approved_at && <FieldRow label="Compliance Approved" value={fmtDate(txn.compliance_approved_at)} />}
-                  {txn.broker_approved_at && <FieldRow label="Broker Approved" value={fmtDate(txn.broker_approved_at)} />}
-                  {txn.goal_paydate && <FieldRow label="Goal Pay Date" value={fmtDate(txn.goal_paydate)} />}
+                  {!leaseTransaction && (
+                    <FieldRow label="Closing Date" value={fmtDate(txn.closing_date)} />
+                  )}
+                  {leaseTransaction && (
+                    <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />
+                  )}
+                  {txn.compliance_submitted_at && (
+                    <FieldRow
+                      label="Compliance Submitted"
+                      value={fmtDate(txn.compliance_submitted_at)}
+                    />
+                  )}
+                  {txn.compliance_approved_at && (
+                    <FieldRow
+                      label="Compliance Approved"
+                      value={fmtDate(txn.compliance_approved_at)}
+                    />
+                  )}
+                  {txn.broker_approved_at && (
+                    <FieldRow label="Broker Approved" value={fmtDate(txn.broker_approved_at)} />
+                  )}
+                  {txn.goal_paydate && (
+                    <FieldRow label="Goal Pay Date" value={fmtDate(txn.goal_paydate)} />
+                  )}
                 </div>
               </div>
 
@@ -570,12 +724,20 @@ export default function AdminTransactionDetailPage() {
                     {agents.map((a: any) => (
                       <div key={a.id} className="inner-card flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-luxury-gray-1">{fmtName(a.user)}</p>
-                          <p className="text-xs text-luxury-gray-3">{a.agent_role?.replace(/_/g, ' ')}</p>
+                          <p className="text-xs font-semibold text-luxury-gray-1">
+                            {fmtName(a.user)}
+                          </p>
+                          <p className="text-xs text-luxury-gray-3">
+                            {a.agent_role?.replace(/_/g, ' ')}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs font-semibold text-luxury-gray-1">{fmt$(a.agent_net)}</p>
-                          <p className={`text-xs ${a.payment_status === 'paid' ? 'text-green-600' : 'text-orange-500'}`}>
+                          <p className="text-xs font-semibold text-luxury-gray-1">
+                            {fmt$(a.agent_net)}
+                          </p>
+                          <p
+                            className={`text-xs ${a.payment_status === 'paid' ? 'text-green-600' : 'text-orange-500'}`}
+                          >
                             {a.payment_status || 'pending'}
                           </p>
                         </div>
@@ -595,12 +757,16 @@ export default function AdminTransactionDetailPage() {
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="inner-card text-center">
                     <p className="text-xs text-luxury-gray-3 mb-0.5">Office Gross</p>
-                    <p className="text-sm font-semibold text-luxury-gray-1">{fmt$(txn.office_gross)}</p>
+                    <p className="text-sm font-semibold text-luxury-gray-1">
+                      {fmt$(txn.office_gross)}
+                    </p>
                   </div>
                   <div className="inner-card text-center">
                     <p className="text-xs text-luxury-gray-3 mb-0.5">Total Paid Out</p>
                     <p className="text-sm font-semibold text-luxury-gray-1">
-                      {fmt$(agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0))}
+                      {fmt$(
+                        agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
+                      )}
                     </p>
                   </div>
                   <div className="inner-card text-center">
@@ -610,37 +776,68 @@ export default function AdminTransactionDetailPage() {
                 </div>
 
                 {agents.length === 0 ? (
-                  <p className="text-xs text-luxury-gray-3 text-center py-4">No agents on this transaction.</p>
+                  <p className="text-xs text-luxury-gray-3 text-center py-4">
+                    No agents on this transaction.
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {agents.map((a: any) => (
                       <div key={a.id} className="inner-card">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <p className="text-sm font-semibold text-luxury-gray-1">{fmtName(a.user)}</p>
-                            <p className="text-xs text-luxury-gray-3">{a.agent_role?.replace(/_/g, ' ')} · {a.commission_plan || '--'}</p>
+                            <p className="text-sm font-semibold text-luxury-gray-1">
+                              {fmtName(a.user)}
+                            </p>
+                            <p className="text-xs text-luxury-gray-3">
+                              {a.agent_role?.replace(/_/g, ' ')} · {a.commission_plan || '--'}
+                            </p>
                           </div>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            a.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'
-                          }`}>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded ${
+                              a.payment_status === 'paid'
+                                ? 'bg-green-50 text-green-700'
+                                : 'bg-orange-50 text-orange-700'
+                            }`}
+                          >
                             {a.payment_status || 'pending'}
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                           <FieldRow label="Basis" value={fmt$(a.agent_basis)} />
-                          <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : null} />
+                          <FieldRow
+                            label="Split"
+                            value={a.split_percentage ? `${a.split_percentage}%` : null}
+                          />
                           <FieldRow label="Agent Gross" value={fmt$(a.agent_gross)} />
-                          <FieldRow label="Processing Fee" value={a.processing_fee > 0 ? fmt$(a.processing_fee) : null} />
-                          <FieldRow label="Coaching Fee" value={a.coaching_fee > 0 ? fmt$(a.coaching_fee) : null} />
-                          <FieldRow label="Rebate" value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null} />
-                          <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
+                          <FieldRow
+                            label="Processing Fee"
+                            value={a.processing_fee > 0 ? fmt$(a.processing_fee) : null}
+                          />
+                          <FieldRow
+                            label="Coaching Fee"
+                            value={a.coaching_fee > 0 ? fmt$(a.coaching_fee) : null}
+                          />
+                          <FieldRow
+                            label="Rebate"
+                            value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null}
+                          />
+                          <FieldRow
+                            label="BTSA"
+                            value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null}
+                          />
                         </div>
                         <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 flex justify-between items-center">
-                          <span className="text-xs font-semibold text-luxury-gray-2">Agent Net</span>
-                          <span className="text-sm font-bold text-luxury-accent">{fmt$(a.agent_net)}</span>
+                          <span className="text-xs font-semibold text-luxury-gray-2">
+                            Agent Net
+                          </span>
+                          <span className="text-sm font-bold text-luxury-accent">
+                            {fmt$(a.agent_net)}
+                          </span>
                         </div>
                         {a.payment_date && (
-                          <p className="text-xs text-luxury-gray-3 mt-1">Paid {fmtDate(a.payment_date)}</p>
+                          <p className="text-xs text-luxury-gray-3 mt-1">
+                            Paid {fmtDate(a.payment_date)}
+                          </p>
                         )}
                       </div>
                     ))}
@@ -658,8 +855,13 @@ export default function AdminTransactionDetailPage() {
               {/* No check yet */}
               {!check && (
                 <div className="container-card text-center py-8">
-                  <p className="text-sm text-luxury-gray-3 mb-3">No check linked to this transaction yet.</p>
-                  <p className="text-xs text-luxury-gray-3">Link a check from the Checks page or it will auto-link when a check is created for this address.</p>
+                  <p className="text-sm text-luxury-gray-3 mb-3">
+                    No check linked to this transaction yet.
+                  </p>
+                  <p className="text-xs text-luxury-gray-3">
+                    Link a check from the Checks page or it will auto-link when a check is created
+                    for this address.
+                  </p>
                 </div>
               )}
 
@@ -668,24 +870,40 @@ export default function AdminTransactionDetailPage() {
                 <>
                   {/* Pay-by countdown */}
                   {payByDate && (
-                    <div className={`inner-card flex items-center gap-3 ${
-                      daysUntilPay != null && daysUntilPay <= 2 ? 'border border-red-200 bg-red-50/30' :
-                      daysUntilPay != null && daysUntilPay <= 5 ? 'border border-orange-200 bg-orange-50/30' :
-                      'border border-green-200 bg-green-50/30'
-                    }`}>
-                      <AlertCircle size={16} className={
-                        daysUntilPay != null && daysUntilPay <= 2 ? 'text-red-500' :
-                        daysUntilPay != null && daysUntilPay <= 5 ? 'text-orange-500' : 'text-green-600'
-                      } />
+                    <div
+                      className={`inner-card flex items-center gap-3 ${
+                        daysUntilPay != null && daysUntilPay <= 2
+                          ? 'border border-red-200 bg-red-50/30'
+                          : daysUntilPay != null && daysUntilPay <= 5
+                            ? 'border border-orange-200 bg-orange-50/30'
+                            : 'border border-green-200 bg-green-50/30'
+                      }`}
+                    >
+                      <AlertCircle
+                        size={16}
+                        className={
+                          daysUntilPay != null && daysUntilPay <= 2
+                            ? 'text-red-500'
+                            : daysUntilPay != null && daysUntilPay <= 5
+                              ? 'text-orange-500'
+                              : 'text-green-600'
+                        }
+                      />
                       <div>
                         <p className="text-xs font-semibold text-luxury-gray-1">
-                          Pay by {payByDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          Pay by{' '}
+                          {payByDate.toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
                         </p>
                         <p className="text-xs text-luxury-gray-3">
                           {daysUntilPay != null
-                            ? daysUntilPay <= 0 ? 'Overdue' : `${daysUntilPay} business day${daysUntilPay !== 1 ? 's' : ''} remaining`
-                            : '10 business days from clear date'
-                          }
+                            ? daysUntilPay <= 0
+                              ? 'Overdue'
+                              : `${daysUntilPay} business day${daysUntilPay !== 1 ? 's' : ''} remaining`
+                            : '10 business days from clear date'}
                         </p>
                       </div>
                     </div>
@@ -695,7 +913,10 @@ export default function AdminTransactionDetailPage() {
                   <div className="container-card">
                     <div className="flex items-center justify-between mb-3">
                       <SectionHeader>Check Details</SectionHeader>
-                      <button onClick={openEmailModal} className="btn btn-secondary text-xs flex items-center gap-1">
+                      <button
+                        onClick={openEmailModal}
+                        className="btn btn-secondary text-xs flex items-center gap-1"
+                      >
                         <Send size={11} /> Email Agent
                       </button>
                     </div>
@@ -708,7 +929,9 @@ export default function AdminTransactionDetailPage() {
                           step="0.01"
                           className="input-luxury text-xs"
                           value={editCheckData.check_amount || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, check_amount: e.target.value }))}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, check_amount: e.target.value }))
+                          }
                           onBlur={() => updateCheck({ check_amount: editCheckData.check_amount })}
                         />
                       </div>
@@ -718,7 +941,9 @@ export default function AdminTransactionDetailPage() {
                           type="text"
                           className="input-luxury text-xs"
                           value={editCheckData.check_from || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, check_from: e.target.value }))}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, check_from: e.target.value }))
+                          }
                           onBlur={() => updateCheck({ check_from: editCheckData.check_from })}
                         />
                       </div>
@@ -728,7 +953,9 @@ export default function AdminTransactionDetailPage() {
                           type="text"
                           className="input-luxury text-xs"
                           value={editCheckData.check_number || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, check_number: e.target.value }))}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, check_number: e.target.value }))
+                          }
                           onBlur={() => updateCheck({ check_number: editCheckData.check_number })}
                         />
                       </div>
@@ -738,7 +965,9 @@ export default function AdminTransactionDetailPage() {
                           type="date"
                           className="input-luxury text-xs"
                           value={editCheckData.received_date || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, received_date: e.target.value }))}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, received_date: e.target.value }))
+                          }
                           onBlur={() => updateCheck({ received_date: editCheckData.received_date })}
                         />
                       </div>
@@ -748,8 +977,12 @@ export default function AdminTransactionDetailPage() {
                           type="date"
                           className="input-luxury text-xs"
                           value={editCheckData.deposited_date || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, deposited_date: e.target.value }))}
-                          onBlur={() => updateCheck({ deposited_date: editCheckData.deposited_date })}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, deposited_date: e.target.value }))
+                          }
+                          onBlur={() =>
+                            updateCheck({ deposited_date: editCheckData.deposited_date })
+                          }
                         />
                       </div>
                       <div>
@@ -758,7 +991,9 @@ export default function AdminTransactionDetailPage() {
                           type="date"
                           className="input-luxury text-xs"
                           value={editCheckData.cleared_date || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, cleared_date: e.target.value }))}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({ ...p, cleared_date: e.target.value }))
+                          }
                           onBlur={() => updateCheck({ cleared_date: editCheckData.cleared_date })}
                         />
                       </div>
@@ -768,8 +1003,17 @@ export default function AdminTransactionDetailPage() {
                           type="date"
                           className="input-luxury text-xs"
                           value={editCheckData.compliance_complete_date || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, compliance_complete_date: e.target.value }))}
-                          onBlur={() => updateCheck({ compliance_complete_date: editCheckData.compliance_complete_date })}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({
+                              ...p,
+                              compliance_complete_date: e.target.value,
+                            }))
+                          }
+                          onBlur={() =>
+                            updateCheck({
+                              compliance_complete_date: editCheckData.compliance_complete_date,
+                            })
+                          }
                         />
                       </div>
                       <div>
@@ -779,8 +1023,15 @@ export default function AdminTransactionDetailPage() {
                           step="0.01"
                           className="input-luxury text-xs"
                           value={editCheckData.brokerage_amount || ''}
-                          onChange={e => setEditCheckData((p: any) => ({ ...p, brokerage_amount: e.target.value }))}
-                          onBlur={() => updateCheck({ brokerage_amount: editCheckData.brokerage_amount })}
+                          onChange={e =>
+                            setEditCheckData((p: any) => ({
+                              ...p,
+                              brokerage_amount: e.target.value,
+                            }))
+                          }
+                          onBlur={() =>
+                            updateCheck({ brokerage_amount: editCheckData.brokerage_amount })
+                          }
                         />
                       </div>
                     </div>
@@ -789,13 +1040,17 @@ export default function AdminTransactionDetailPage() {
                     <div className="flex items-center justify-between inner-card mb-3">
                       <div>
                         <p className="text-xs font-semibold text-luxury-gray-1">CRC Transferred</p>
-                        <p className="text-xs text-luxury-gray-3">Brokerage portion moved to CRC account</p>
+                        <p className="text-xs text-luxury-gray-3">
+                          Brokerage portion moved to CRC account
+                        </p>
                       </div>
                       <button
                         onClick={() => updateCheck({ crc_transferred: !check.crc_transferred })}
                         className={`relative w-10 h-5 rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-5'}`}
                       >
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${check.crc_transferred ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        <span
+                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${check.crc_transferred ? 'translate-x-5' : 'translate-x-0.5'}`}
+                        />
                       </button>
                     </div>
 
@@ -806,7 +1061,9 @@ export default function AdminTransactionDetailPage() {
                         className="input-luxury text-xs"
                         rows={2}
                         value={editCheckData.notes || ''}
-                        onChange={e => setEditCheckData((p: any) => ({ ...p, notes: e.target.value }))}
+                        onChange={e =>
+                          setEditCheckData((p: any) => ({ ...p, notes: e.target.value }))
+                        }
                         onBlur={() => updateCheck({ notes: editCheckData.notes })}
                       />
                     </div>
@@ -828,7 +1085,9 @@ export default function AdminTransactionDetailPage() {
                       <SectionHeader>Payouts</SectionHeader>
                       <div className="text-right">
                         <p className="text-xs text-luxury-gray-3">Balance</p>
-                        <p className={`text-sm font-bold ${payoutBalance < 0 ? 'text-red-500' : payoutBalance === 0 ? 'text-green-600' : 'text-luxury-accent'}`}>
+                        <p
+                          className={`text-sm font-bold ${payoutBalance < 0 ? 'text-red-500' : payoutBalance === 0 ? 'text-green-600' : 'text-luxury-accent'}`}
+                        >
                           {fmt$(payoutBalance)}
                         </p>
                       </div>
@@ -837,23 +1096,40 @@ export default function AdminTransactionDetailPage() {
                     {/* Summary row */}
                     <div className="inner-card flex justify-between items-center mb-3">
                       <span className="text-xs text-luxury-gray-3">Check Amount</span>
-                      <span className="text-xs font-semibold text-luxury-gray-1">{fmt$(checkAmount)}</span>
+                      <span className="text-xs font-semibold text-luxury-gray-1">
+                        {fmt$(checkAmount)}
+                      </span>
                     </div>
 
                     {(check.check_payouts || []).length === 0 && (
-                      <p className="text-xs text-luxury-gray-3 text-center py-3">No payouts added yet.</p>
+                      <p className="text-xs text-luxury-gray-3 text-center py-3">
+                        No payouts added yet.
+                      </p>
                     )}
 
                     <div className="space-y-2 mb-3">
                       {(check.check_payouts || []).map((p: any) => (
-                        <div key={p.id} className="inner-card flex items-center justify-between group">
+                        <div
+                          key={p.id}
+                          className="inner-card flex items-center justify-between group"
+                        >
                           <div>
-                            <p className="text-xs font-semibold text-luxury-gray-1">{p.payee_name || p.payee_type}</p>
-                            <p className="text-xs text-luxury-gray-3">{p.payee_type?.replace(/_/g, ' ')} · {p.payment_status}</p>
-                            {p.payment_date && <p className="text-xs text-luxury-gray-3">{fmtDate(p.payment_date)}</p>}
+                            <p className="text-xs font-semibold text-luxury-gray-1">
+                              {p.payee_name || p.payee_type}
+                            </p>
+                            <p className="text-xs text-luxury-gray-3">
+                              {p.payee_type?.replace(/_/g, ' ')} · {p.payment_status}
+                            </p>
+                            {p.payment_date && (
+                              <p className="text-xs text-luxury-gray-3">
+                                {fmtDate(p.payment_date)}
+                              </p>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-luxury-gray-1">{fmt$(p.amount)}</span>
+                            <span className="text-sm font-semibold text-luxury-gray-1">
+                              {fmt$(p.amount)}
+                            </span>
                             <button
                               onClick={() => deletePayout(p.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
@@ -874,11 +1150,22 @@ export default function AdminTransactionDetailPage() {
                             <select
                               className="select-luxury text-xs"
                               value={newPayoutForm.payee_type || ''}
-                              onChange={e => setNewPayoutForm((p: any) => ({ ...p, payee_type: e.target.value }))}
+                              onChange={e =>
+                                setNewPayoutForm((p: any) => ({ ...p, payee_type: e.target.value }))
+                              }
                             >
                               <option value="">Select...</option>
-                              {['agent', 'team_lead', 'referral_agent', 'referral_brokerage', 'rev_share_agent', 'ecommission'].map(t => (
-                                <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                              {[
+                                'agent',
+                                'team_lead',
+                                'referral_agent',
+                                'referral_brokerage',
+                                'rev_share_agent',
+                                'ecommission',
+                              ].map(t => (
+                                <option key={t} value={t}>
+                                  {t.replace(/_/g, ' ')}
+                                </option>
                               ))}
                             </select>
                           </div>
@@ -888,7 +1175,9 @@ export default function AdminTransactionDetailPage() {
                               type="text"
                               className="input-luxury text-xs"
                               value={newPayoutForm.payee_name || ''}
-                              onChange={e => setNewPayoutForm((p: any) => ({ ...p, payee_name: e.target.value }))}
+                              onChange={e =>
+                                setNewPayoutForm((p: any) => ({ ...p, payee_name: e.target.value }))
+                              }
                             />
                           </div>
                           <div>
@@ -898,7 +1187,9 @@ export default function AdminTransactionDetailPage() {
                               step="0.01"
                               className="input-luxury text-xs"
                               value={newPayoutForm.amount || ''}
-                              onChange={e => setNewPayoutForm((p: any) => ({ ...p, amount: e.target.value }))}
+                              onChange={e =>
+                                setNewPayoutForm((p: any) => ({ ...p, amount: e.target.value }))
+                              }
                             />
                           </div>
                           <div>
@@ -906,7 +1197,12 @@ export default function AdminTransactionDetailPage() {
                             <select
                               className="select-luxury text-xs"
                               value={newPayoutForm.payment_method || ''}
-                              onChange={e => setNewPayoutForm((p: any) => ({ ...p, payment_method: e.target.value }))}
+                              onChange={e =>
+                                setNewPayoutForm((p: any) => ({
+                                  ...p,
+                                  payment_method: e.target.value,
+                                }))
+                              }
                             >
                               <option value="">Select...</option>
                               <option value="ach">ACH</option>
@@ -915,14 +1211,26 @@ export default function AdminTransactionDetailPage() {
                             </select>
                           </div>
                         </div>
-                        {parseFloat(newPayoutForm.amount || 0) > payoutBalance + parseFloat(newPayoutForm.amount || 0) && (
+                        {parseFloat(newPayoutForm.amount || 0) >
+                          payoutBalance + parseFloat(newPayoutForm.amount || 0) && (
                           <p className="text-xs text-red-500 flex items-center gap-1">
                             <AlertCircle size={11} /> Amount exceeds remaining balance.
                           </p>
                         )}
                         <div className="flex gap-2">
-                          <button onClick={addPayout} className="btn btn-primary text-xs flex-1" disabled={!newPayoutForm.amount || !newPayoutForm.payee_type}>Add Payout</button>
-                          <button onClick={() => setNewPayoutForm(null)} className="btn btn-secondary text-xs">Cancel</button>
+                          <button
+                            onClick={addPayout}
+                            className="btn btn-primary text-xs flex-1"
+                            disabled={!newPayoutForm.amount || !newPayoutForm.payee_type}
+                          >
+                            Add Payout
+                          </button>
+                          <button
+                            onClick={() => setNewPayoutForm(null)}
+                            className="btn btn-secondary text-xs"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       </div>
                     ) : (
@@ -945,7 +1253,11 @@ export default function AdminTransactionDetailPage() {
                         <span className="section-title">
                           Checklist ({completedCount}/{checklist.length})
                         </span>
-                        {checklistExpanded ? <ChevronUp size={14} className="text-luxury-gray-3" /> : <ChevronDown size={14} className="text-luxury-gray-3" />}
+                        {checklistExpanded ? (
+                          <ChevronUp size={14} className="text-luxury-gray-3" />
+                        ) : (
+                          <ChevronDown size={14} className="text-luxury-gray-3" />
+                        )}
                       </button>
                       {checklistExpanded && (
                         <div className="space-y-1.5">
@@ -955,22 +1267,32 @@ export default function AdminTransactionDetailPage() {
                               className={`flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-colors ${item.completion ? 'bg-green-50/50' : 'hover:bg-luxury-light'}`}
                               onClick={() => toggleChecklist(item.id, !!item.completion)}
                             >
-                              <div className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}>
+                              <div
+                                className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}
+                              >
                                 {item.completion && <Check size={10} className="text-white" />}
                               </div>
                               <div className="flex-1">
-                                <p className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
+                                <p
+                                  className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}
+                                >
                                   {item.label}
                                 </p>
                                 {item.description && (
-                                  <p className="text-xs text-luxury-gray-3 mt-0.5">{item.description}</p>
+                                  <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                    {item.description}
+                                  </p>
                                 )}
                                 {item.section && (
-                                  <p className="text-xs text-luxury-gray-4 mt-0.5">{item.section}</p>
+                                  <p className="text-xs text-luxury-gray-4 mt-0.5">
+                                    {item.section}
+                                  </p>
                                 )}
                               </div>
                               {item.completion && (
-                                <p className="text-xs text-luxury-gray-3 shrink-0">{fmtDate(item.completion.completed_at)}</p>
+                                <p className="text-xs text-luxury-gray-3 shrink-0">
+                                  {fmtDate(item.completion.completed_at)}
+                                </p>
                               )}
                             </div>
                           ))}
@@ -988,7 +1310,9 @@ export default function AdminTransactionDetailPage() {
             <div className="space-y-4">
               <h1 className="page-title">CONTACTS</h1>
               <div className="container-card">
-                <p className="text-xs text-luxury-gray-3 text-center py-6">Contact management coming soon.</p>
+                <p className="text-xs text-luxury-gray-3 text-center py-6">
+                  Contact management coming soon.
+                </p>
               </div>
             </div>
           )}
@@ -999,13 +1323,20 @@ export default function AdminTransactionDetailPage() {
               <h1 className="page-title">DOCUMENTS</h1>
               {txn.onedrive_folder_url && (
                 <div className="container-card">
-                  <a href={txn.onedrive_folder_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-luxury-accent hover:underline text-sm">
+                  <a
+                    href={txn.onedrive_folder_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-luxury-accent hover:underline text-sm"
+                  >
                     <ExternalLink size={14} /> Open OneDrive Folder
                   </a>
                 </div>
               )}
               <div className="container-card">
-                <p className="text-xs text-luxury-gray-3 text-center py-6">Document management coming soon.</p>
+                <p className="text-xs text-luxury-gray-3 text-center py-6">
+                  Document management coming soon.
+                </p>
               </div>
             </div>
           )}
@@ -1013,33 +1344,61 @@ export default function AdminTransactionDetailPage() {
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
-
           {/* Agent Profile */}
           {primaryAgent && (
             <div className="container-card p-3">
-              <button className="flex items-center justify-between w-full mb-2" onClick={() => toggleSection('agent')}>
-                <span className="section-title flex items-center gap-1.5"><User size={12} /> Agent</span>
-                {expandedSections.agent ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+              <button
+                className="flex items-center justify-between w-full mb-2"
+                onClick={() => toggleSection('agent')}
+              >
+                <span className="section-title flex items-center gap-1.5">
+                  <User size={12} /> Agent
+                </span>
+                {expandedSections.agent ? (
+                  <ChevronUp size={12} className="text-luxury-gray-3" />
+                ) : (
+                  <ChevronDown size={12} className="text-luxury-gray-3" />
+                )}
               </button>
               {expandedSections.agent && (
                 <>
                   {primaryAgent.headshot_url && (
-                    <img src={primaryAgent.headshot_url} alt="" className="w-12 h-12 rounded-full object-cover object-top mb-2 border border-luxury-gray-5" />
+                    <img
+                      src={primaryAgent.headshot_url}
+                      alt=""
+                      className="w-12 h-12 rounded-full object-cover object-top mb-2 border border-luxury-gray-5"
+                    />
                   )}
-                  <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">{fmtName(primaryAgent)}</p>
-                  <p className="text-xs text-luxury-gray-3 mb-2">{primaryAgent.office_email || primaryAgent.email}</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">
+                    {fmtName(primaryAgent)}
+                  </p>
+                  <p className="text-xs text-luxury-gray-3 mb-2">
+                    {primaryAgent.office_email || primaryAgent.email}
+                  </p>
                   <div className="space-y-0">
                     <FieldRow label="Office" value={primaryAgent.office} />
                     <FieldRow label="Commission Plan" value={primaryAgent.commission_plan} />
                     <FieldRow label="Division" value={primaryAgent.division} />
                     <FieldRow label="License #" value={primaryAgent.license_number} />
-                    <FieldRow label="License Exp" value={fmtDate(primaryAgent.license_expiration)} />
+                    <FieldRow
+                      label="License Exp"
+                      value={fmtDate(primaryAgent.license_expiration)}
+                    />
                     <FieldRow label="NRDS ID" value={primaryAgent.nrds_id} />
                     <FieldRow label="MLS ID" value={primaryAgent.mls_id} />
                     <FieldRow label="Join Date" value={fmtDate(primaryAgent.join_date)} />
-                    {primaryAgent.cap_progress > 0 && <FieldRow label="Cap Progress" value={fmt$(primaryAgent.cap_progress)} />}
-                    {primaryAgent.qualifying_transaction_count > 0 && <FieldRow label="Qualifying Txns" value={primaryAgent.qualifying_transaction_count} />}
-                    {primaryAgent.waive_processing_fees && <FieldRow label="Processing Fees" value="Waived" />}
+                    {primaryAgent.cap_progress > 0 && (
+                      <FieldRow label="Cap Progress" value={fmt$(primaryAgent.cap_progress)} />
+                    )}
+                    {primaryAgent.qualifying_transaction_count > 0 && (
+                      <FieldRow
+                        label="Qualifying Txns"
+                        value={primaryAgent.qualifying_transaction_count}
+                      />
+                    )}
+                    {primaryAgent.waive_processing_fees && (
+                      <FieldRow label="Processing Fees" value="Waived" />
+                    )}
                     {primaryAgent.special_commission_notes && (
                       <div className="mt-2 p-2 bg-orange-50 rounded text-xs text-orange-700">
                         {primaryAgent.special_commission_notes}
@@ -1049,8 +1408,14 @@ export default function AdminTransactionDetailPage() {
                   {primaryAgent.revenue_share === 'yes' && (
                     <div className="mt-2 p-2 bg-luxury-light rounded">
                       <p className="text-xs font-semibold text-luxury-gray-2">Rev Share</p>
-                      <p className="text-xs text-luxury-gray-3">{primaryAgent.revenue_share_percentage ? `${primaryAgent.revenue_share_percentage}%` : 'Enrolled'}</p>
-                      {primaryAgent.referring_agent && <p className="text-xs text-luxury-gray-3">{primaryAgent.referring_agent}</p>}
+                      <p className="text-xs text-luxury-gray-3">
+                        {primaryAgent.revenue_share_percentage
+                          ? `${primaryAgent.revenue_share_percentage}%`
+                          : 'Enrolled'}
+                      </p>
+                      {primaryAgent.referring_agent && (
+                        <p className="text-xs text-luxury-gray-3">{primaryAgent.referring_agent}</p>
+                      )}
                     </div>
                   )}
                 </>
@@ -1061,9 +1426,18 @@ export default function AdminTransactionDetailPage() {
           {/* Agent Billing */}
           {agentBilling && (
             <div className="container-card p-3">
-              <button className="flex items-center justify-between w-full mb-2" onClick={() => toggleSection('billing')}>
-                <span className="section-title flex items-center gap-1.5"><DollarSign size={12} /> Agent Billing</span>
-                {expandedSections.billing ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+              <button
+                className="flex items-center justify-between w-full mb-2"
+                onClick={() => toggleSection('billing')}
+              >
+                <span className="section-title flex items-center gap-1.5">
+                  <DollarSign size={12} /> Agent Billing
+                </span>
+                {expandedSections.billing ? (
+                  <ChevronUp size={12} className="text-luxury-gray-3" />
+                ) : (
+                  <ChevronDown size={12} className="text-luxury-gray-3" />
+                )}
               </button>
               {expandedSections.billing && (
                 <>
@@ -1072,27 +1446,47 @@ export default function AdminTransactionDetailPage() {
                   ) : (
                     <>
                       {agentBilling.debts.map((d: any) => (
-                        <div key={d.id} className="inner-card border border-orange-100 bg-orange-50/20 mb-1.5">
+                        <div
+                          key={d.id}
+                          className="inner-card border border-orange-100 bg-orange-50/20 mb-1.5"
+                        >
                           <p className="text-xs font-medium text-luxury-gray-1">{d.description}</p>
                           <div className="flex justify-between mt-0.5">
-                            <span className="text-xs text-luxury-gray-3">{fmtDate(d.date_incurred)}</span>
-                            <span className="text-xs font-semibold text-orange-600">{fmt$(d.amount_remaining ?? d.amount_owed)}</span>
+                            <span className="text-xs text-luxury-gray-3">
+                              {fmtDate(d.date_incurred)}
+                            </span>
+                            <span className="text-xs font-semibold text-orange-600">
+                              {fmt$(d.amount_remaining ?? d.amount_owed)}
+                            </span>
                           </div>
                         </div>
                       ))}
                       {agentBilling.credits.map((c: any) => (
-                        <div key={c.id} className="inner-card border border-green-100 bg-green-50/20 mb-1.5">
+                        <div
+                          key={c.id}
+                          className="inner-card border border-green-100 bg-green-50/20 mb-1.5"
+                        >
                           <p className="text-xs font-medium text-luxury-gray-1">{c.description}</p>
                           <div className="flex justify-between mt-0.5">
-                            <span className="text-xs text-luxury-gray-3">{fmtDate(c.date_incurred)}</span>
-                            <span className="text-xs font-semibold text-green-600">-{fmt$(c.amount_remaining ?? c.amount_owed)}</span>
+                            <span className="text-xs text-luxury-gray-3">
+                              {fmtDate(c.date_incurred)}
+                            </span>
+                            <span className="text-xs font-semibold text-green-600">
+                              -{fmt$(c.amount_remaining ?? c.amount_owed)}
+                            </span>
                           </div>
                         </div>
                       ))}
                       <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-luxury-gray-5/50">
-                        <span className="text-xs font-semibold text-luxury-gray-2">Net Balance</span>
-                        <span className={`text-sm font-bold ${agentBilling.net_balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                          {agentBilling.net_balance > 0 ? fmt$(agentBilling.net_balance) : `-${fmt$(Math.abs(agentBilling.net_balance))}`}
+                        <span className="text-xs font-semibold text-luxury-gray-2">
+                          Net Balance
+                        </span>
+                        <span
+                          className={`text-sm font-bold ${agentBilling.net_balance > 0 ? 'text-orange-600' : 'text-green-600'}`}
+                        >
+                          {agentBilling.net_balance > 0
+                            ? fmt$(agentBilling.net_balance)
+                            : `-${fmt$(Math.abs(agentBilling.net_balance))}`}
                         </span>
                       </div>
                     </>
@@ -1105,22 +1499,55 @@ export default function AdminTransactionDetailPage() {
           {/* Team Info */}
           {teamInfo && (
             <div className="container-card p-3">
-              <button className="flex items-center justify-between w-full mb-2" onClick={() => toggleSection('team')}>
-                <span className="section-title flex items-center gap-1.5"><Building2 size={12} /> Team</span>
-                {expandedSections.team ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+              <button
+                className="flex items-center justify-between w-full mb-2"
+                onClick={() => toggleSection('team')}
+              >
+                <span className="section-title flex items-center gap-1.5">
+                  <Building2 size={12} /> Team
+                </span>
+                {expandedSections.team ? (
+                  <ChevronUp size={12} className="text-luxury-gray-3" />
+                ) : (
+                  <ChevronDown size={12} className="text-luxury-gray-3" />
+                )}
               </button>
               {expandedSections.team && (
                 <>
-                  <p className="text-sm font-semibold text-luxury-gray-1 mb-1">{teamInfo.agreement?.team_name}</p>
-                  {teamInfo.team_lead_name && <p className="text-xs text-luxury-gray-3 mb-2">Lead: {teamInfo.team_lead_name}</p>}
+                  <p className="text-sm font-semibold text-luxury-gray-1 mb-1">
+                    {teamInfo.agreement?.team_name}
+                  </p>
+                  {teamInfo.team_lead_name && (
+                    <p className="text-xs text-luxury-gray-3 mb-2">
+                      Lead: {teamInfo.team_lead_name}
+                    </p>
+                  )}
                   <div className="space-y-0">
                     <FieldRow label="Status" value={teamInfo.agreement?.status} />
-                    <FieldRow label="Effective" value={fmtDate(teamInfo.agreement?.effective_date)} />
-                    {teamInfo.agreement?.min_firm_sale_pct && <FieldRow label="Min Firm (Sales)" value={`${teamInfo.agreement.min_firm_sale_pct}%`} />}
-                    {teamInfo.agreement?.min_firm_lease_pct && <FieldRow label="Min Firm (Leases)" value={`${teamInfo.agreement.min_firm_lease_pct}%`} />}
+                    <FieldRow
+                      label="Effective"
+                      value={fmtDate(teamInfo.agreement?.effective_date)}
+                    />
+                    {teamInfo.agreement?.min_firm_sale_pct && (
+                      <FieldRow
+                        label="Min Firm (Sales)"
+                        value={`${teamInfo.agreement.min_firm_sale_pct}%`}
+                      />
+                    )}
+                    {teamInfo.agreement?.min_firm_lease_pct && (
+                      <FieldRow
+                        label="Min Firm (Leases)"
+                        value={`${teamInfo.agreement.min_firm_lease_pct}%`}
+                      />
+                    )}
                   </div>
                   {teamInfo.agreement?.agreement_document_url && (
-                    <a href={teamInfo.agreement.agreement_document_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-luxury-accent hover:underline text-xs mt-2">
+                    <a
+                      href={teamInfo.agreement.agreement_document_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-luxury-accent hover:underline text-xs mt-2"
+                    >
                       <FileText size={11} /> Team Agreement
                     </a>
                   )}
@@ -1132,27 +1559,56 @@ export default function AdminTransactionDetailPage() {
           {/* Referrals */}
           {(settings?.referral_tracking_url || settings?.crm_url) && (
             <div className="container-card p-3">
-              <button className="flex items-center justify-between w-full mb-2" onClick={() => toggleSection('referrals')}>
-                <span className="section-title flex items-center gap-1.5"><ClipboardList size={12} /> Referrals</span>
-                {expandedSections.referrals ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+              <button
+                className="flex items-center justify-between w-full mb-2"
+                onClick={() => toggleSection('referrals')}
+              >
+                <span className="section-title flex items-center gap-1.5">
+                  <ClipboardList size={12} /> Referrals
+                </span>
+                {expandedSections.referrals ? (
+                  <ChevronUp size={12} className="text-luxury-gray-3" />
+                ) : (
+                  <ChevronDown size={12} className="text-luxury-gray-3" />
+                )}
               </button>
               {expandedSections.referrals && (
                 <div className="space-y-2">
                   {settings?.referral_tracking_url && (
-                    <a href={settings.referral_tracking_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-luxury-accent hover:underline text-xs">
+                    <a
+                      href={settings.referral_tracking_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-luxury-accent hover:underline text-xs"
+                    >
                       <ExternalLink size={11} /> Referral Tracker (SharePoint)
                     </a>
                   )}
                   {settings?.crm_url && (
-                    <a href={settings.crm_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-luxury-accent hover:underline text-xs">
+                    <a
+                      href={settings.crm_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-luxury-accent hover:underline text-xs"
+                    >
                       <ExternalLink size={11} /> {settings.crm_name || 'CRM'}
                     </a>
                   )}
                   {txn.has_referral && (
                     <div className="inner-card">
-                      <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Referral on This Deal</p>
-                      {txn.internal_referral && <p className="text-xs text-luxury-gray-3">Internal: {fmt$(txn.internal_referral_fee)}</p>}
-                      {txn.external_referral && <p className="text-xs text-luxury-gray-3">External: {fmt$(txn.external_referral_fee)}</p>}
+                      <p className="text-xs font-semibold text-luxury-gray-2 mb-1">
+                        Referral on This Deal
+                      </p>
+                      {txn.internal_referral && (
+                        <p className="text-xs text-luxury-gray-3">
+                          Internal: {fmt$(txn.internal_referral_fee)}
+                        </p>
+                      )}
+                      {txn.external_referral && (
+                        <p className="text-xs text-luxury-gray-3">
+                          External: {fmt$(txn.external_referral_fee)}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1168,27 +1624,53 @@ export default function AdminTransactionDetailPage() {
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between p-4 border-b border-luxury-gray-5">
               <p className="text-sm font-semibold text-luxury-gray-1">Email Agent</p>
-              <button onClick={() => setShowEmailModal(false)}><X size={16} className="text-luxury-gray-3" /></button>
+              <button onClick={() => setShowEmailModal(false)}>
+                <X size={16} className="text-luxury-gray-3" />
+              </button>
             </div>
             <div className="p-4 space-y-3">
               <div>
                 <label className="field-label">To</label>
-                <input type="email" className="input-luxury text-xs" value={emailDraft.to} onChange={e => setEmailDraft(p => ({ ...p, to: e.target.value }))} />
+                <input
+                  type="email"
+                  className="input-luxury text-xs"
+                  value={emailDraft.to}
+                  onChange={e => setEmailDraft(p => ({ ...p, to: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Subject</label>
-                <input type="text" className="input-luxury text-xs" value={emailDraft.subject} onChange={e => setEmailDraft(p => ({ ...p, subject: e.target.value }))} />
+                <input
+                  type="text"
+                  className="input-luxury text-xs"
+                  value={emailDraft.subject}
+                  onChange={e => setEmailDraft(p => ({ ...p, subject: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Message</label>
-                <textarea className="input-luxury text-xs" rows={6} value={emailDraft.body} onChange={e => setEmailDraft(p => ({ ...p, body: e.target.value }))} />
+                <textarea
+                  className="input-luxury text-xs"
+                  rows={6}
+                  value={emailDraft.body}
+                  onChange={e => setEmailDraft(p => ({ ...p, body: e.target.value }))}
+                />
               </div>
             </div>
             <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
-              <button onClick={sendEmailAgent} disabled={sendingEmail} className="btn btn-primary text-xs flex-1 disabled:opacity-50">
+              <button
+                onClick={sendEmailAgent}
+                disabled={sendingEmail}
+                className="btn btn-primary text-xs flex-1 disabled:opacity-50"
+              >
                 {sendingEmail ? 'Sending...' : 'Send Email'}
               </button>
-              <button onClick={() => setShowEmailModal(false)} className="btn btn-secondary text-xs">Cancel</button>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className="btn btn-secondary text-xs"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

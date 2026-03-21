@@ -74,7 +74,10 @@ export default function ContactDrawer({ open, onClose }: ContactDrawerProps) {
       >
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-luxury-gray-5">
           <h2 className="text-base font-semibold text-luxury-gray-1">Contact Us</h2>
-          <button onClick={handleClose} className="text-luxury-gray-3 hover:text-luxury-gray-1 text-xl leading-none">
+          <button
+            onClick={handleClose}
+            className="text-luxury-gray-3 hover:text-luxury-gray-1 text-xl leading-none"
+          >
             ×
           </button>
         </div>
@@ -83,8 +86,12 @@ export default function ContactDrawer({ open, onClose }: ContactDrawerProps) {
           {sent ? (
             <div className="text-center py-6">
               <h3 className="text-base font-semibold text-luxury-gray-1 mb-2">Message Sent</h3>
-              <p className="text-sm text-luxury-gray-3 mb-6">We will get back to you as soon as possible.</p>
-              <button onClick={handleClose} className="btn btn-primary">Close</button>
+              <p className="text-sm text-luxury-gray-3 mb-6">
+                We will get back to you as soon as possible.
+              </p>
+              <button onClick={handleClose} className="btn btn-primary">
+                Close
+              </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -94,22 +101,74 @@ export default function ContactDrawer({ open, onClose }: ContactDrawerProps) {
                 </div>
               )}
               <div>
-                <label htmlFor="contact-name" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">Name</label>
-                <input id="contact-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className="input-luxury" required />
+                <label
+                  htmlFor="contact-name"
+                  className="block text-sm mb-1.5 text-luxury-gray-2 font-medium"
+                >
+                  Name
+                </label>
+                <input
+                  id="contact-name"
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="input-luxury"
+                  required
+                />
               </div>
               <div>
-                <label htmlFor="contact-email" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">Email</label>
-                <input id="contact-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input-luxury" required />
+                <label
+                  htmlFor="contact-email"
+                  className="block text-sm mb-1.5 text-luxury-gray-2 font-medium"
+                >
+                  Email
+                </label>
+                <input
+                  id="contact-email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="input-luxury"
+                  required
+                />
               </div>
               <div>
-                <label htmlFor="contact-subject" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">Subject</label>
-                <input id="contact-subject" type="text" value={subject} onChange={(e) => setSubject(e.target.value)} className="input-luxury" required />
+                <label
+                  htmlFor="contact-subject"
+                  className="block text-sm mb-1.5 text-luxury-gray-2 font-medium"
+                >
+                  Subject
+                </label>
+                <input
+                  id="contact-subject"
+                  type="text"
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  className="input-luxury"
+                  required
+                />
               </div>
               <div>
-                <label htmlFor="contact-message" className="block text-sm mb-1.5 text-luxury-gray-2 font-medium">Message</label>
-                <textarea id="contact-message" value={message} onChange={(e) => setMessage(e.target.value)} className="textarea-luxury" rows={4} required />
+                <label
+                  htmlFor="contact-message"
+                  className="block text-sm mb-1.5 text-luxury-gray-2 font-medium"
+                >
+                  Message
+                </label>
+                <textarea
+                  id="contact-message"
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  className="textarea-luxury"
+                  rows={4}
+                  required
+                />
               </div>
-              <button type="submit" disabled={sending} className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed">
+              <button
+                type="submit"
+                disabled={sending}
+                className="btn btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 {sending ? 'Sending...' : 'Send Message'}
               </button>
             </form>

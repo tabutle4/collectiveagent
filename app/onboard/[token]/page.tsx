@@ -8,7 +8,9 @@ import AuthFooter from '@/components/shared/AuthFooter'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 declare global {
-  interface Window { Payload: any }
+  interface Window {
+    Payload: any
+  }
 }
 
 const STEPS = [
@@ -82,7 +84,11 @@ export default function OnboardingPage() {
   const verifyToken = async () => {
     try {
       const res = await fetch(`/api/onboarding/verify?token=${token}`)
-      if (!res.ok) { setInvalid(true); setLoading(false); return }
+      if (!res.ok) {
+        setInvalid(true)
+        setLoading(false)
+        return
+      }
       const data = await res.json()
       const p = data.prospect
       setProspect(p)
@@ -110,7 +116,9 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target
     if (['personal_phone', 'business_phone'].includes(name)) {
       setJoinForm(prev => ({ ...prev, [name]: value.replace(/\D/g, '').slice(0, 10) }))
@@ -169,7 +177,8 @@ export default function OnboardingPage() {
         }),
       })
       const tokenData = await tokenRes.json()
-      if (!tokenData.client_token) throw new Error(tokenData.error || 'Failed to create checkout session')
+      if (!tokenData.client_token)
+        throw new Error(tokenData.error || 'Failed to create checkout session')
 
       // Open embedded checkout
       window.Payload(tokenData.client_token)
@@ -213,7 +222,10 @@ export default function OnboardingPage() {
   // Loading
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F9F9F9' }}>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: '#F9F9F9' }}
+      >
         <p className="text-sm text-luxury-gray-3">Loading your onboarding...</p>
       </div>
     )
@@ -225,10 +237,22 @@ export default function OnboardingPage() {
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
         <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
         <LuxuryHeader showTrainingCenter={false} />
-        <div className="flex-1 flex items-center justify-center px-6" style={{ paddingTop: '140px' }}>
+        <div
+          className="flex-1 flex items-center justify-center px-6"
+          style={{ paddingTop: '140px' }}
+        >
           <div className="container-card max-w-md text-center p-10">
             <h1 className="text-xl font-semibold text-luxury-gray-1 mb-3">Link Not Found</h1>
-            <p className="text-sm text-luxury-gray-3">This onboarding link is invalid or has expired. Please contact the office at <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a>.</p>
+            <p className="text-sm text-luxury-gray-3">
+              This onboarding link is invalid or has expired. Please contact the office at{' '}
+              <a
+                href="mailto:office@collectiverealtyco.com"
+                className="text-luxury-accent hover:underline"
+              >
+                office@collectiverealtyco.com
+              </a>
+              .
+            </p>
           </div>
         </div>
         <AuthFooter />
@@ -244,29 +268,42 @@ export default function OnboardingPage() {
       <LuxuryHeader showTrainingCenter={false} />
 
       {/* Progress bar */}
-      <div className="fixed left-0 right-0 z-40 bg-white border-b border-luxury-gray-5 shadow-sm" style={{ top: '83px' }}>
+      <div
+        className="fixed left-0 right-0 z-40 bg-white border-b border-luxury-gray-5 shadow-sm"
+        style={{ top: '83px' }}
+      >
         <div className="max-w-2xl mx-auto px-6 py-4">
           <div className="flex items-center gap-1">
             {STEPS.map((step, i) => (
               <div key={step.id} className="flex items-center flex-1">
                 <div className="flex flex-col items-center flex-shrink-0">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-300 ${
-                    currentStep > step.id
-                      ? 'bg-green-600 text-white'
-                      : currentStep === step.id
-                      ? 'bg-luxury-black text-white'
-                      : 'bg-luxury-gray-5 text-luxury-gray-3'
-                  }`}>
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-300 ${
+                      currentStep > step.id
+                        ? 'bg-green-600 text-white'
+                        : currentStep === step.id
+                          ? 'bg-luxury-black text-white'
+                          : 'bg-luxury-gray-5 text-luxury-gray-3'
+                    }`}
+                  >
                     {currentStep > step.id ? <CheckCircle2 size={14} /> : step.id}
                   </div>
-                  <span className={`text-xs mt-1 whitespace-nowrap hidden md:block ${
-                    currentStep === step.id ? 'text-luxury-gray-1 font-semibold' : 'text-luxury-gray-3'
-                  }`}>{step.label}</span>
+                  <span
+                    className={`text-xs mt-1 whitespace-nowrap hidden md:block ${
+                      currentStep === step.id
+                        ? 'text-luxury-gray-1 font-semibold'
+                        : 'text-luxury-gray-3'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
                 </div>
                 {i < STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-1 transition-all duration-300 ${
-                    currentStep > step.id ? 'bg-green-600' : 'bg-luxury-gray-5'
-                  }`} />
+                  <div
+                    className={`flex-1 h-0.5 mx-1 transition-all duration-300 ${
+                      currentStep > step.id ? 'bg-green-600' : 'bg-luxury-gray-5'
+                    }`}
+                  />
                 )}
               </div>
             ))}
@@ -278,8 +315,10 @@ export default function OnboardingPage() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 max-w-2xl mx-auto w-full px-6" style={{ paddingTop: '180px', paddingBottom: '60px' }}>
-
+      <div
+        className="flex-1 max-w-2xl mx-auto w-full px-6"
+        style={{ paddingTop: '180px', paddingBottom: '60px' }}
+      >
         {/* ── STEP 1: Join Form ── */}
         {currentStep === 1 && (
           <form onSubmit={handleSubmitJoinForm} className="space-y-5">
@@ -300,67 +339,168 @@ export default function OnboardingPage() {
 
             {/* Personal */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">Personal Information</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                Personal Information
+              </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Legal First Name *</label>
-                  <input name="first_name" value={joinForm.first_name} onChange={handleChange} onBlur={handleNameBlur} required className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Legal First Name *
+                  </label>
+                  <input
+                    name="first_name"
+                    value={joinForm.first_name}
+                    onChange={handleChange}
+                    onBlur={handleNameBlur}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Legal Last Name *</label>
-                  <input name="last_name" value={joinForm.last_name} onChange={handleChange} onBlur={handleNameBlur} required className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Legal Last Name *
+                  </label>
+                  <input
+                    name="last_name"
+                    value={joinForm.last_name}
+                    onChange={handleChange}
+                    onBlur={handleNameBlur}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Preferred First Name *</label>
-                  <input name="preferred_first_name" value={joinForm.preferred_first_name} onChange={handleChange} onBlur={handleNameBlur} required className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Preferred First Name *
+                  </label>
+                  <input
+                    name="preferred_first_name"
+                    value={joinForm.preferred_first_name}
+                    onChange={handleChange}
+                    onBlur={handleNameBlur}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Preferred Last Name *</label>
-                  <input name="preferred_last_name" value={joinForm.preferred_last_name} onChange={handleChange} onBlur={handleNameBlur} required className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Preferred Last Name *
+                  </label>
+                  <input
+                    name="preferred_last_name"
+                    value={joinForm.preferred_last_name}
+                    onChange={handleChange}
+                    onBlur={handleNameBlur}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Personal Phone *</label>
-                  <input name="personal_phone" value={joinForm.personal_phone} onChange={handleChange} required maxLength={10} placeholder="10 digits" className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Personal Phone *
+                  </label>
+                  <input
+                    name="personal_phone"
+                    value={joinForm.personal_phone}
+                    onChange={handleChange}
+                    required
+                    maxLength={10}
+                    placeholder="10 digits"
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Business Phone</label>
-                  <input name="business_phone" value={joinForm.business_phone} onChange={handleChange} maxLength={10} placeholder="10 digits" className="input-luxury" />
+                  <input
+                    name="business_phone"
+                    value={joinForm.business_phone}
+                    onChange={handleChange}
+                    maxLength={10}
+                    placeholder="10 digits"
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Date of Birth *</label>
-                  <input name="date_of_birth" type="date" value={joinForm.date_of_birth} onChange={handleChange} required className="input-luxury" />
+                  <input
+                    name="date_of_birth"
+                    type="date"
+                    value={joinForm.date_of_birth}
+                    onChange={handleChange}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Email</label>
-                  <input value={joinForm.email} readOnly className="input-luxury bg-luxury-gray-5/30 text-luxury-gray-3 cursor-not-allowed" />
+                  <input
+                    value={joinForm.email}
+                    readOnly
+                    className="input-luxury bg-luxury-gray-5/30 text-luxury-gray-3 cursor-not-allowed"
+                  />
                 </div>
               </div>
             </div>
 
             {/* Shipping Address */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">Shipping Address</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                Shipping Address
+              </h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Address Line 1 *</label>
-                  <input name="shipping_address_line1" value={joinForm.shipping_address_line1} onChange={handleChange} required className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Address Line 1 *
+                  </label>
+                  <input
+                    name="shipping_address_line1"
+                    value={joinForm.shipping_address_line1}
+                    onChange={handleChange}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Address Line 2</label>
-                  <input name="shipping_address_line2" value={joinForm.shipping_address_line2} onChange={handleChange} placeholder="Apt, Suite, Unit" className="input-luxury" />
+                  <input
+                    name="shipping_address_line2"
+                    value={joinForm.shipping_address_line2}
+                    onChange={handleChange}
+                    placeholder="Apt, Suite, Unit"
+                    className="input-luxury"
+                  />
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-1">
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">City *</label>
-                    <input name="shipping_city" value={joinForm.shipping_city} onChange={handleChange} required className="input-luxury" />
+                    <input
+                      name="shipping_city"
+                      value={joinForm.shipping_city}
+                      onChange={handleChange}
+                      required
+                      className="input-luxury"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">State *</label>
-                    <input name="shipping_state" value={joinForm.shipping_state} onChange={handleChange} required className="input-luxury" />
+                    <input
+                      name="shipping_state"
+                      value={joinForm.shipping_state}
+                      onChange={handleChange}
+                      required
+                      className="input-luxury"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">ZIP *</label>
-                    <input name="shipping_zip" value={joinForm.shipping_zip} onChange={handleChange} required maxLength={5} className="input-luxury" />
+                    <input
+                      name="shipping_zip"
+                      value={joinForm.shipping_zip}
+                      onChange={handleChange}
+                      required
+                      maxLength={5}
+                      className="input-luxury"
+                    />
                   </div>
                 </div>
               </div>
@@ -368,23 +508,51 @@ export default function OnboardingPage() {
 
             {/* License & MLS */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">License & MLS</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                License & MLS
+              </h2>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Texas Real Estate License Number *</label>
-                  <input name="license_number" value={joinForm.license_number} onChange={handleChange} required className="input-luxury" placeholder="e.g. 0123456" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Texas Real Estate License Number *
+                  </label>
+                  <input
+                    name="license_number"
+                    value={joinForm.license_number}
+                    onChange={handleChange}
+                    required
+                    className="input-luxury"
+                    placeholder="e.g. 0123456"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS ID *</label>
-                  <input name="mls_id" value={joinForm.mls_id} onChange={handleChange} required className="input-luxury" />
+                  <input
+                    name="mls_id"
+                    value={joinForm.mls_id}
+                    onChange={handleChange}
+                    required
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">NRDS ID</label>
-                  <input name="nrds_id" value={joinForm.nrds_id} onChange={handleChange} className="input-luxury" />
+                  <input
+                    name="nrds_id"
+                    value={joinForm.nrds_id}
+                    onChange={handleChange}
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Association *</label>
-                  <select name="association" value={joinForm.association} onChange={handleChange} required className="select-luxury">
+                  <select
+                    name="association"
+                    value={joinForm.association}
+                    onChange={handleChange}
+                    required
+                    className="select-luxury"
+                  >
                     <option value="">Select</option>
                     <option value="HAR">HAR</option>
                     <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
@@ -392,14 +560,27 @@ export default function OnboardingPage() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-luxury-gray-3 mb-2">Association Status *</label>
+                  <label className="block text-xs text-luxury-gray-3 mb-2">
+                    Association Status *
+                  </label>
                   <div className="space-y-2">
                     {[
                       { value: 'new_agent', label: 'I am a brand new licensed agent' },
-                      { value: 'previous_member', label: 'I was previously a member with another brokerage' },
+                      {
+                        value: 'previous_member',
+                        label: 'I was previously a member with another brokerage',
+                      },
                     ].map(opt => (
                       <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer">
-                        <input type="radio" name="association_status_on_join" value={opt.value} checked={joinForm.association_status_on_join === opt.value} onChange={handleChange} required className="mt-0.5" />
+                        <input
+                          type="radio"
+                          name="association_status_on_join"
+                          value={opt.value}
+                          checked={joinForm.association_status_on_join === opt.value}
+                          onChange={handleChange}
+                          required
+                          className="mt-0.5"
+                        />
                         <span className="text-sm text-luxury-gray-1">{opt.label}</span>
                       </label>
                     ))}
@@ -410,21 +591,44 @@ export default function OnboardingPage() {
 
             {/* Commission Plan */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">Commission Plan *</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                Commission Plan *
+              </h2>
               <div className="space-y-2.5">
                 {['New Agent Plan', 'No Cap Plan', 'Cap Plan'].map(plan => (
-                  <label key={plan} className="flex items-center gap-2.5 cursor-pointer inner-card hover:border-luxury-black transition-colors">
-                    <input type="radio" name="commission_plan" value={plan} checked={joinForm.commission_plan === plan} onChange={handleChange} required />
+                  <label
+                    key={plan}
+                    className="flex items-center gap-2.5 cursor-pointer inner-card hover:border-luxury-black transition-colors"
+                  >
+                    <input
+                      type="radio"
+                      name="commission_plan"
+                      value={plan}
+                      checked={joinForm.commission_plan === plan}
+                      onChange={handleChange}
+                      required
+                    />
                     <span className="text-sm text-luxury-gray-1 font-medium">{plan}</span>
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-luxury-gray-3 mt-3">Select the plan offered to you. Questions? Contact <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a>.</p>
+              <p className="text-xs text-luxury-gray-3 mt-3">
+                Select the plan offered to you. Questions? Contact{' '}
+                <a
+                  href="mailto:office@collectiverealtyco.com"
+                  className="text-luxury-accent hover:underline"
+                >
+                  office@collectiverealtyco.com
+                </a>
+                .
+              </p>
             </div>
 
             {/* Social Media */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">Social Media</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                Social Media
+              </h2>
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { name: 'instagram_handle', label: 'Instagram', placeholder: '@handle' },
@@ -436,7 +640,13 @@ export default function OnboardingPage() {
                 ].map(field => (
                   <div key={field.name}>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">{field.label}</label>
-                    <input name={field.name} value={(joinForm as any)[field.name]} onChange={handleChange} placeholder={field.placeholder} className="input-luxury" />
+                    <input
+                      name={field.name}
+                      value={(joinForm as any)[field.name]}
+                      onChange={handleChange}
+                      placeholder={field.placeholder}
+                      className="input-luxury"
+                    />
                   </div>
                 ))}
               </div>
@@ -444,20 +654,38 @@ export default function OnboardingPage() {
 
             {/* Referral */}
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">Referral & Team</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                Referral & Team
+              </h2>
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Referring Agent</label>
-                  <input name="referring_agent" value={joinForm.referring_agent} onChange={handleChange} className="input-luxury" />
+                  <input
+                    name="referring_agent"
+                    value={joinForm.referring_agent}
+                    onChange={handleChange}
+                    className="input-luxury"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Joining Team (name or team lead)</label>
-                  <input name="joining_team" value={joinForm.joining_team} onChange={handleChange} className="input-luxury" />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    Joining Team (name or team lead)
+                  </label>
+                  <input
+                    name="joining_team"
+                    value={joinForm.joining_team}
+                    onChange={handleChange}
+                    className="input-luxury"
+                  />
                 </div>
               </div>
             </div>
 
-            <button type="submit" disabled={submitting} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase disabled:opacity-50"
+            >
               {submitting ? 'Saving...' : 'Continue to Payment →'}
             </button>
           </form>
@@ -468,7 +696,9 @@ export default function OnboardingPage() {
           <div className="space-y-5">
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Onboarding Payment</h1>
-              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">Complete your onboarding fee to unlock your agreements and TREC sponsorship.</p>
+              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                Complete your onboarding fee to unlock your agreements and TREC sponsorship.
+              </p>
             </div>
 
             {error && (
@@ -478,31 +708,44 @@ export default function OnboardingPage() {
             )}
 
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">What's Included</h2>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                What's Included
+              </h2>
               <div className="space-y-3">
                 <div className="inner-card flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-luxury-gray-1">Onboarding Fee</p>
-                    <p className="text-xs text-luxury-gray-3">One-time fee to join Collective Realty Co.</p>
+                    <p className="text-xs text-luxury-gray-3">
+                      One-time fee to join Collective Realty Co.
+                    </p>
                   </div>
                   <p className="text-sm font-semibold text-luxury-gray-1">$399.00</p>
                 </div>
                 <div className="inner-card flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-luxury-gray-1">Prorated Monthly Fee</p>
-                    <p className="text-xs text-luxury-gray-3">Remaining days in the current month at $50/month.</p>
+                    <p className="text-xs text-luxury-gray-3">
+                      Remaining days in the current month at $50/month.
+                    </p>
                   </div>
                   <p className="text-sm font-semibold text-luxury-gray-1">Calculated at checkout</p>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-luxury-gray-5/50">
-                <p className="text-xs text-luxury-gray-3">Processing fees are passed to the payer. Monthly fees of $50 are due by the 5th of each month thereafter.</p>
+                <p className="text-xs text-luxury-gray-3">
+                  Processing fees are passed to the payer. Monthly fees of $50 are due by the 5th of
+                  each month thereafter.
+                </p>
               </div>
             </div>
 
             <div className="card-section">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Payment Methods</h2>
-              <p className="text-sm text-luxury-gray-2">Credit/debit card or bank account (ACH). You can also set up autopay at checkout.</p>
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                Payment Methods
+              </h2>
+              <p className="text-sm text-luxury-gray-2">
+                Credit/debit card or bank account (ACH). You can also set up autopay at checkout.
+              </p>
             </div>
 
             <button
@@ -514,7 +757,18 @@ export default function OnboardingPage() {
             </button>
 
             <div className="inner-card text-center">
-              <p className="text-xs text-luxury-gray-3">Prefer Zelle? Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> and include your name. Then contact <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a> to confirm.</p>
+              <p className="text-xs text-luxury-gray-3">
+                Prefer Zelle? Send to{' '}
+                <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span>{' '}
+                and include your name. Then contact{' '}
+                <a
+                  href="mailto:office@collectiverealtyco.com"
+                  className="text-luxury-accent hover:underline"
+                >
+                  office@collectiverealtyco.com
+                </a>{' '}
+                to confirm.
+              </p>
             </div>
           </div>
         )}
@@ -524,8 +778,19 @@ export default function OnboardingPage() {
           <div className="text-center py-16">
             <div className="container-card inline-block p-10">
               <CheckCircle2 size={40} className="text-luxury-accent mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-luxury-gray-1 mb-2">Step {currentStep}: {STEPS[currentStep - 1]?.label}</h2>
-              <p className="text-sm text-luxury-gray-3">This step is being prepared. Check back soon or contact <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">office@collectiverealtyco.com</a>.</p>
+              <h2 className="text-xl font-semibold text-luxury-gray-1 mb-2">
+                Step {currentStep}: {STEPS[currentStep - 1]?.label}
+              </h2>
+              <p className="text-sm text-luxury-gray-3">
+                This step is being prepared. Check back soon or contact{' '}
+                <a
+                  href="mailto:office@collectiverealtyco.com"
+                  className="text-luxury-accent hover:underline"
+                >
+                  office@collectiverealtyco.com
+                </a>
+                .
+              </p>
             </div>
           </div>
         )}

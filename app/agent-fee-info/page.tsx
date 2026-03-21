@@ -175,158 +175,176 @@ export default function AgentFeeInfoPage() {
       <div className="card-section mb-6">
         {/* One-Time Onboarding Fee */}
         <div className="flex-between-border">
-            <div className="flex items-center gap-2">
-              <label className="text-base font-medium text-luxury-gray-1">One-Time Onboarding Fee</label>
-              <button
-                onClick={() => setEditingOnboardingFee(!editingOnboardingFee)}
-                className="text-luxury-gray-3 hover:text-luxury-black"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-            </div>
-            {editingOnboardingFee ? (
-              <div className="flex items-center gap-2">
-                <span className="text-luxury-gray-2">$</span>
-                <input
-                  type="number"
-                  value={onboardingFee}
-                  onChange={(e) => setOnboardingFee(parseFloat(e.target.value) || 0)}
-                  className="w-24 px-2 py-1 text-sm border border-luxury-gray-5 rounded focus:outline-none focus:ring-1 focus:ring-luxury-black"
-                  autoFocus
-                />
-                <button
-                  onClick={() => setEditingOnboardingFee(false)}
-                  className="text-sm text-luxury-gold hover:underline"
-                >
-                  Save
-                </button>
-              </div>
-            ) : (
-              <span className="text-lg font-medium text-luxury-gray-1">{formatCurrency(onboardingFee)}</span>
-            )}
-          </div>
-
-          {/* Monthly Fee */}
-          <div className="flex-between-border">
-            <div className="flex items-center gap-2">
-              <label className="text-base font-medium text-luxury-gray-1">Monthly Fee</label>
-              <button
-                onClick={() => setShowWhatIncluded(!showWhatIncluded)}
-                className="text-sm text-luxury-gold hover:underline"
-              >
-                What's Included?
-              </button>
-              <button
-                onClick={() => setEditingMonthlyFee(!editingMonthlyFee)}
-                className="text-luxury-gray-3 hover:text-luxury-black"
-              >
-                <Edit className="w-4 h-4" />
-              </button>
-            </div>
-            {editingMonthlyFee ? (
-              <div className="flex items-center gap-2">
-                <span className="text-luxury-gray-2">$</span>
-                <input
-                  type="number"
-                  value={monthlyFee}
-                  onChange={(e) => setMonthlyFee(parseFloat(e.target.value) || 0)}
-                  className="w-24 px-2 py-1 text-sm border border-luxury-gray-5 rounded focus:outline-none focus:ring-1 focus:ring-luxury-black"
-                  autoFocus
-                />
-                <span className="text-luxury-gray-2">/mo</span>
-                <button
-                  onClick={() => setEditingMonthlyFee(false)}
-                  className="text-sm text-luxury-gold hover:underline"
-                >
-                  Save
-                </button>
-              </div>
-            ) : (
-              <span className="text-lg font-medium text-luxury-gray-1">${monthlyFee}/mo</span>
-            )}
-          </div>
-
-          {/* What's Included Modal/Expansion */}
-          {showWhatIncluded && (
-            <div className="py-4 border-b border-luxury-gray-5">
-              <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Monthly Plan Includes:</h3>
-              <ul className="space-y-2 text-sm text-luxury-gray-2">
-                <li>• E&O Insurance</li>
-                <li>• Microsoft 365</li>
-                <li>• Training Center</li>
-                <li>• Group Coaching</li>
-                <li>• Broker Support</li>
-                <li>• Office Access</li>
-                <li>• Agent Menu</li>
-              </ul>
-            </div>
-          )}
-
-          {/* Select Your Join Date */}
-          <div className="py-4 border-b border-luxury-gray-5">
-            <label className="block text-base font-medium text-luxury-gray-1 mb-2">Select Your Join Date</label>
-            <input
-              type="date"
-              value={joinDate}
-              onChange={(e) => setJoinDate(e.target.value)}
-              className="input-luxury max-w-xs"
-            />
-          </div>
-
-          {/* Calculated Total */}
-          <div className="mt-6 p-6 bg-luxury-light rounded-lg border-2 border-luxury-black">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-sm text-luxury-gray-2 mb-1">
-                  Onboarding Fee + {hasProrated ? `Prorated Monthly (${formatCurrency(breakdown.prorated)})` : 'Monthly Fee'}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-3xl font-light text-luxury-black">{formatCurrency(total)}</span>
-                  <button
-                    onClick={handleCopyTotal}
-                    className="text-luxury-gray-3 hover:text-luxury-black transition-colors"
-                    title="Copy amount"
-                  >
-                    {copied ? <CheckCircle2 className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p className="text-xs text-luxury-gray-2 mt-2">
-              This covers your onboarding and {hasProrated ? 'prorated monthly fee through the end of this month' : 'first month'}. Next payment due on the 1st.
-            </p>
-          </div>
-
-          {/* Pay Button */}
-          <div className="mt-6 text-center">
+          <div className="flex items-center gap-2">
+            <label className="text-base font-medium text-luxury-gray-1">
+              One-Time Onboarding Fee
+            </label>
             <button
-              onClick={handlePay}
-              disabled={processing || !joinDate}
-              className="w-full px-6 py-4 text-base rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              onClick={() => setEditingOnboardingFee(!editingOnboardingFee)}
+              className="text-luxury-gray-3 hover:text-luxury-black"
             >
-              {processing ? (
-                <>
-                  <span className="animate-spin">⏳</span>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <span>💳</span>
-                  Pay {formatCurrency(total)}
-                </>
-              )}
+              <Edit className="w-4 h-4" />
             </button>
           </div>
+          {editingOnboardingFee ? (
+            <div className="flex items-center gap-2">
+              <span className="text-luxury-gray-2">$</span>
+              <input
+                type="number"
+                value={onboardingFee}
+                onChange={e => setOnboardingFee(parseFloat(e.target.value) || 0)}
+                className="w-24 px-2 py-1 text-sm border border-luxury-gray-5 rounded focus:outline-none focus:ring-1 focus:ring-luxury-black"
+                autoFocus
+              />
+              <button
+                onClick={() => setEditingOnboardingFee(false)}
+                className="text-sm text-luxury-gold hover:underline"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <span className="text-lg font-medium text-luxury-gray-1">
+              {formatCurrency(onboardingFee)}
+            </span>
+          )}
         </div>
 
-        {/* How It Works */}
-        <div className="card-section bg-yellow-50 border-yellow-200 border-2">
-          <h3 className="text-base font-semibold text-luxury-gray-1 mb-3">How It Works</h3>
-          <p className="text-sm text-luxury-gray-2 leading-relaxed">
-            Click "Pay" above to process your payment of {formatCurrency(total)}. Your payment will be processed securely and you'll receive a confirmation email. Once payment is confirmed, you can continue with your onboarding checklist.
+        {/* Monthly Fee */}
+        <div className="flex-between-border">
+          <div className="flex items-center gap-2">
+            <label className="text-base font-medium text-luxury-gray-1">Monthly Fee</label>
+            <button
+              onClick={() => setShowWhatIncluded(!showWhatIncluded)}
+              className="text-sm text-luxury-gold hover:underline"
+            >
+              What's Included?
+            </button>
+            <button
+              onClick={() => setEditingMonthlyFee(!editingMonthlyFee)}
+              className="text-luxury-gray-3 hover:text-luxury-black"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+          </div>
+          {editingMonthlyFee ? (
+            <div className="flex items-center gap-2">
+              <span className="text-luxury-gray-2">$</span>
+              <input
+                type="number"
+                value={monthlyFee}
+                onChange={e => setMonthlyFee(parseFloat(e.target.value) || 0)}
+                className="w-24 px-2 py-1 text-sm border border-luxury-gray-5 rounded focus:outline-none focus:ring-1 focus:ring-luxury-black"
+                autoFocus
+              />
+              <span className="text-luxury-gray-2">/mo</span>
+              <button
+                onClick={() => setEditingMonthlyFee(false)}
+                className="text-sm text-luxury-gold hover:underline"
+              >
+                Save
+              </button>
+            </div>
+          ) : (
+            <span className="text-lg font-medium text-luxury-gray-1">${monthlyFee}/mo</span>
+          )}
+        </div>
+
+        {/* What's Included Modal/Expansion */}
+        {showWhatIncluded && (
+          <div className="py-4 border-b border-luxury-gray-5">
+            <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Monthly Plan Includes:</h3>
+            <ul className="space-y-2 text-sm text-luxury-gray-2">
+              <li>• E&O Insurance</li>
+              <li>• Microsoft 365</li>
+              <li>• Training Center</li>
+              <li>• Group Coaching</li>
+              <li>• Broker Support</li>
+              <li>• Office Access</li>
+              <li>• Agent Menu</li>
+            </ul>
+          </div>
+        )}
+
+        {/* Select Your Join Date */}
+        <div className="py-4 border-b border-luxury-gray-5">
+          <label className="block text-base font-medium text-luxury-gray-1 mb-2">
+            Select Your Join Date
+          </label>
+          <input
+            type="date"
+            value={joinDate}
+            onChange={e => setJoinDate(e.target.value)}
+            className="input-luxury max-w-xs"
+          />
+        </div>
+
+        {/* Calculated Total */}
+        <div className="mt-6 p-6 bg-luxury-light rounded-lg border-2 border-luxury-black">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm text-luxury-gray-2 mb-1">
+                Onboarding Fee +{' '}
+                {hasProrated
+                  ? `Prorated Monthly (${formatCurrency(breakdown.prorated)})`
+                  : 'Monthly Fee'}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-light text-luxury-black">
+                  {formatCurrency(total)}
+                </span>
+                <button
+                  onClick={handleCopyTotal}
+                  className="text-luxury-gray-3 hover:text-luxury-black transition-colors"
+                  title="Copy amount"
+                >
+                  {copied ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  ) : (
+                    <Copy className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-luxury-gray-2 mt-2">
+            This covers your onboarding and{' '}
+            {hasProrated ? 'prorated monthly fee through the end of this month' : 'first month'}.
+            Next payment due on the 1st.
           </p>
         </div>
+
+        {/* Pay Button */}
+        <div className="mt-6 text-center">
+          <button
+            onClick={handlePay}
+            disabled={processing || !joinDate}
+            className="w-full px-6 py-4 text-base rounded transition-colors text-center bg-luxury-black text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {processing ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                Processing...
+              </>
+            ) : (
+              <>
+                <span>💳</span>
+                Pay {formatCurrency(total)}
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* How It Works */}
+      <div className="card-section bg-yellow-50 border-yellow-200 border-2">
+        <h3 className="text-base font-semibold text-luxury-gray-1 mb-3">How It Works</h3>
+        <p className="text-sm text-luxury-gray-2 leading-relaxed">
+          Click "Pay" above to process your payment of {formatCurrency(total)}. Your payment will be
+          processed securely and you'll receive a confirmation email. Once payment is confirmed, you
+          can continue with your onboarding checklist.
+        </p>
+      </div>
     </PageContainer>
   )
 }
-

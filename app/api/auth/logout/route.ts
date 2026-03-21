@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     if (sessionToken) {
       const session = await verifySessionToken(sessionToken)
-      
+
       if (session?.sessionId) {
         // Invalidate session in database
         await supabaseAdmin
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({ message: 'Logged out successfully' })
     response.cookies.delete('ca_session')
     return response
-
   } catch (error) {
     console.error('Logout error:', error)
     const response = NextResponse.json({ message: 'Logged out' })

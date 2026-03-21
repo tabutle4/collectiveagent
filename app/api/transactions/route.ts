@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     // Build transactions query
     let txnQuery = supabase
       .from('transactions')
-      .select(`
+      .select(
+        `
         id,
         created_at,
         updated_at,
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
         transaction_type,
         submitted_by,
         office_location
-      `)
+      `
+      )
       .order('updated_at', { ascending: false })
 
     // Filter by user if they don't have can_view_all_transactions

@@ -23,7 +23,14 @@ const normalizeUuidInput = (value: string | null | undefined) => {
 
 export async function POST(request: NextRequest) {
   try {
-    const { campaign_id, recipient_filter, template_id, custom_html, custom_subject, individual_agent_id } = await request.json()
+    const {
+      campaign_id,
+      recipient_filter,
+      template_id,
+      custom_html,
+      custom_subject,
+      individual_agent_id,
+    } = await request.json()
 
     // Normalize UUID inputs - convert undefined/null/empty strings to null
     const normalizedCampaignId = normalizeUuidInput(campaign_id)
@@ -34,10 +41,7 @@ export async function POST(request: NextRequest) {
     let campaign = null
     if (recipient_filter !== 'prospect') {
       if (!normalizedCampaignId) {
-        return NextResponse.json(
-          { error: 'campaign_id is required' },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: 'campaign_id is required' }, { status: 400 })
       }
 
       const { data: campaignData, error: campaignError } = await supabase
@@ -74,7 +78,8 @@ export async function POST(request: NextRequest) {
       // Handle agent filters - filter by is_licensed_agent instead of roles array
       let query = supabase
         .from('users')
-        .select(`
+        .select(
+          `
           id,
           first_name,
           last_name,
@@ -84,7 +89,8 @@ export async function POST(request: NextRequest) {
           campaign_token,
           is_active,
           campaign_recipients!left(fully_completed_at, campaign_id)
-        `)
+        `
+        )
         .eq('is_licensed_agent', true)
 
       // Apply filter-specific conditions
@@ -114,9 +120,7 @@ export async function POST(request: NextRequest) {
           )
         }
         // Get all active agents with tokens first
-        query = query
-          .eq('is_active', true)
-          .not('campaign_token', 'is', null)
+        query = query.eq('is_active', true).not('campaign_token', 'is', null)
       } else if (recipient_filter === 'all') {
         // All agents with tokens (if campaign exists)
         if (normalizedCampaignId) {
@@ -130,9 +134,9 @@ export async function POST(request: NextRequest) {
         console.error('Error fetching agents:', agentsError)
         throw agentsError
       }
-      
+
       agents = agentsData || []
-      
+
       // For campaign_incomplete, filter results to only include those without completed status for this campaign
       if (recipient_filter === 'campaign_incomplete' && normalizedCampaignId) {
         // Fetch campaign_recipients for this campaign to check completion status
@@ -140,29 +144,27 @@ export async function POST(request: NextRequest) {
           .from('campaign_recipients')
           .select('user_id, fully_completed_at')
           .eq('campaign_id', normalizedCampaignId)
-        
+
         if (recipientsError) {
           console.error('Error fetching campaign recipients:', recipientsError)
           throw recipientsError
         }
-        
+
         // Create a set of user IDs who have completed this campaign
         const completedUserIds = new Set(
-          (recipientsData || [])
-            .filter((r: any) => r.fully_completed_at)
-            .map((r: any) => r.user_id)
+          (recipientsData || []).filter((r: any) => r.fully_completed_at).map((r: any) => r.user_id)
         )
-        
+
         // Filter agents to only those who haven't completed
         agents = agents.filter((agent: any) => !completedUserIds.has(agent.id))
       }
     }
 
     if (!agents || agents.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         sent: 0,
-        message: 'No recipients to send to'
+        message: 'No recipients to send to',
       })
     }
 
@@ -175,7 +177,7 @@ export async function POST(request: NextRequest) {
         .select('*')
         .eq('id', normalizedTemplateId)
         .eq('is_active', true)
-         
+
         .single()
       if (templateError) {
         console.error('Error fetching template by ID:', templateError)
@@ -190,7 +192,7 @@ export async function POST(request: NextRequest) {
         .select('*')
         .eq('id', campaign.email_template_id)
         .eq('is_active', true)
-         
+
         .single()
       if (templateError) {
         console.error('Error fetching template from campaign:', templateError)
@@ -200,7 +202,7 @@ export async function POST(request: NextRequest) {
         console.log('Using template from campaign:', template.name)
       }
     }
-    
+
     // If no template assigned, try to get default campaign template
     if (!emailTemplate) {
       const { data: defaultTemplate, error: defaultError } = await supabase
@@ -209,7 +211,7 @@ export async function POST(request: NextRequest) {
         .eq('category', 'campaign')
         .eq('is_default', true)
         .eq('is_active', true)
-         
+
         .single()
       if (defaultError) {
         console.error('Error fetching default template:', defaultError)
@@ -233,31 +235,35 @@ export async function POST(request: NextRequest) {
 
     // Send emails to each agent with rate limiting (2 per second to avoid Resend limits)
     const results: Array<{ success: boolean; email: string; error?: any }> = []
-    
+
     console.log(`📧 Starting to send ${agents.length} emails (rate limited to ~1.67/sec)...`)
-    
+
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i]
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        'http://localhost:3000'
       // Prospects don't have campaign tokens, so only create link if token exists
-      const campaignLink = agent.campaign_token && campaign 
-        ? `${baseUrl}/campaign/${campaign.slug}?token=${agent.campaign_token}`
-        : campaign 
-          ? `${baseUrl}/campaign/${campaign.slug}`
-          : ''
+      const campaignLink =
+        agent.campaign_token && campaign
+          ? `${baseUrl}/campaign/${campaign.slug}?token=${agent.campaign_token}`
+          : campaign
+            ? `${baseUrl}/campaign/${campaign.slug}`
+            : ''
       const logoUrl = `${baseUrl}${emailTemplate?.logo_url || '/logo-white.png'}`
-      
+
       // Prepare variable replacement data
       const variables: Record<string, string> = {
         first_name: agent.preferred_first_name || agent.first_name,
         last_name: agent.preferred_last_name || agent.last_name,
         campaign_name: campaign?.name || 'Campaign',
         campaign_link: campaignLink,
-        deadline: campaign?.deadline 
-          ? new Date(campaign.deadline).toLocaleDateString('en-US', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+        deadline: campaign?.deadline
+          ? new Date(campaign.deadline).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
             })
           : '',
         logo_url: logoUrl,
@@ -270,21 +276,23 @@ export async function POST(request: NextRequest) {
       if (emailTemplate) {
         emailHtml = emailTemplate.html_content
         emailSubject = emailTemplate.subject_line
-        
+
         // Ensure logo_url is always included in variables for replacement
         if (!variables.logo_url) {
           variables.logo_url = logoUrl
         }
-        
+
         // Replace all variables in template
-        Object.keys(variables).forEach((key) => {
+        Object.keys(variables).forEach(key => {
           const placeholder = `{{${key}}}`
           emailHtml = emailHtml.split(placeholder).join(variables[key])
           emailSubject = emailSubject.split(placeholder).join(variables[key])
         })
       } else {
         // Fallback to old system
-        let emailBody = campaign?.email_body || `
+        let emailBody =
+          campaign?.email_body ||
+          `
 Hi ${agent.preferred_first_name},
 
 ${campaign ? `Please complete the ${campaign.name} by clicking the link below:` : 'Thank you for your interest in Collective Realty Co.'}
@@ -301,7 +309,9 @@ Collective Realty Co.
           .replace(/{campaign_link}/g, campaignLink)
           .replace(/{deadline}/g, variables.deadline)
 
-        emailSubject = campaign?.email_subject || (campaign ? `Action Required: ${campaign.name}` : 'Welcome to Collective Realty Co.')
+        emailSubject =
+          campaign?.email_subject ||
+          (campaign ? `Action Required: ${campaign.name}` : 'Welcome to Collective Realty Co.')
 
         emailHtml = `
 <!DOCTYPE html>
@@ -393,13 +403,10 @@ Collective Realty Co.
       success: true,
       sent: successCount,
       total: agents.length,
-      message: `Sent ${successCount} of ${agents.length} emails successfully`
+      message: `Sent ${successCount} of ${agents.length} emails successfully`,
     })
   } catch (error) {
     console.error('Send campaign emails error:', error)
-    return NextResponse.json(
-      { error: 'Failed to send campaign emails' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to send campaign emails' }, { status: 500 })
   }
 }

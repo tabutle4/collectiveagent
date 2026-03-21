@@ -10,22 +10,22 @@
  */
 export function formatNameToTitleCase(name: string): string {
   if (!name || !name.trim()) return name
-  
+
   // Handle special cases and common prefixes
   const specialCases: Record<string, string> = {
-    'mc': 'Mc',
-    'mac': 'Mac',
+    mc: 'Mc',
+    mac: 'Mac',
     "o'": "O'",
     "d'": "D'",
-    'van': 'Van',
-    'von': 'Von',
-    'de': 'De',
-    'del': 'Del',
-    'la': 'La',
-    'le': 'Le',
-    'el': 'El',
+    van: 'Van',
+    von: 'Von',
+    de: 'De',
+    del: 'Del',
+    la: 'La',
+    le: 'Le',
+    el: 'El',
   }
-  
+
   // Split by spaces, hyphens, and apostrophes (but keep them)
   return name
     .trim()
@@ -33,9 +33,9 @@ export function formatNameToTitleCase(name: string): string {
     .map((part, index, array) => {
       // Skip separators (spaces, hyphens, apostrophes)
       if (/^[\s\-']$/.test(part)) return part
-      
+
       const lowerPart = part.toLowerCase()
-      
+
       // Check for special cases
       // Only match if prefix is the entire word OR followed by a space, hyphen, or apostrophe
       for (const [key, replacement] of Object.entries(specialCases)) {
@@ -48,10 +48,14 @@ export function formatNameToTitleCase(name: string): string {
           lowerPart.startsWith(key + "'")
         ) {
           // Prefix followed by space, hyphen, or apostrophe (e.g., "La Fontaine", "De-La-Cruz", "O'Brien")
-          return replacement + lowerPart.slice(key.length).charAt(0).toUpperCase() + lowerPart.slice(key.length + 1)
+          return (
+            replacement +
+            lowerPart.slice(key.length).charAt(0).toUpperCase() +
+            lowerPart.slice(key.length + 1)
+          )
         }
       }
-      
+
       // Default: capitalize first letter, lowercase the rest
       return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
     })
@@ -68,33 +72,33 @@ export function formatNameToTitleCase(name: string): string {
  */
 export function formatRole(role: string): string {
   if (!role || !role.trim()) return role
-  
+
   // First, replace underscores with spaces and normalize
   const normalized = role.replace(/_/g, ' ').trim()
-  
+
   // Special handling for multi-word roles
   const roleMap: Record<string, string> = {
-    'agent': 'Agent',
-    'broker': 'Broker',
-    'admin': 'Admin',
+    agent: 'Agent',
+    broker: 'Broker',
+    admin: 'Admin',
     'team lead': 'Team Lead',
-    'teamlead': 'Team Lead',
-    'team_lead': 'Team Lead',
+    teamlead: 'Team Lead',
+    team_lead: 'Team Lead',
     'operations officer': 'Operations Officer',
-    'operationsofficer': 'Operations Officer',
-    'operations_officer': 'Operations Officer',
-    'coach': 'Coach',
-    'ceo': 'CEO',
-    'owner': 'Owner',
+    operationsofficer: 'Operations Officer',
+    operations_officer: 'Operations Officer',
+    coach: 'Coach',
+    ceo: 'CEO',
+    owner: 'Owner',
   }
-  
+
   const lowerRole = normalized.toLowerCase()
-  
+
   // Check if it's a known role
   if (roleMap[lowerRole]) {
     return roleMap[lowerRole]
   }
-  
+
   // Default: capitalize each word (split by spaces)
   return normalized
     .split(/\s+/)
@@ -108,9 +112,8 @@ export function formatRole(role: string): string {
  */
 export function normalizeRoles(roles: string[]): string[] {
   if (!roles || !Array.isArray(roles)) return []
-  
+
   return roles
     .map(role => role.replace(/_/g, ' ').trim().toLowerCase())
     .filter(role => role && role.trim().length > 0)
 }
-

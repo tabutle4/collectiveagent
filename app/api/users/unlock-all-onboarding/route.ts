@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify admin access (check for admin role in request headers or body)
     // For now, we'll allow this endpoint to be called - you may want to add auth checks
-    
+
     // Update all users with 'agent' role to unlock onboarding
     const { data: users, error: fetchError } = await supabase
       .from('users')
@@ -26,15 +26,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Filter for agents (simple string, not array)
-    const agents = (users || []).filter((user: any) => 
-      user.role === 'Agent'
-    )
+    const agents = (users || []).filter((user: any) => user.role === 'Agent')
 
     if (agents.length === 0) {
-      return NextResponse.json(
-        { message: 'No agents found', unlocked: 0 },
-        { status: 200 }
-      )
+      return NextResponse.json({ message: 'No agents found', unlocked: 0 }, { status: 200 })
     }
 
     // Update all agents
@@ -64,4 +59,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

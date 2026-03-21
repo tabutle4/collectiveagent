@@ -49,13 +49,15 @@ export default function CampaignDetailPage() {
       // Initialize deadline for editing (format: YYYY-MM-DDTHH:MM)
       if (campaignData.deadline) {
         const deadlineDate = new Date(campaignData.deadline)
-        const localDateTime = new Date(deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000)
+        const localDateTime = new Date(
+          deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000
+        )
         setNewDeadline(localDateTime.toISOString().slice(0, 16))
       }
 
       // Fetch stats
       const { data: statsData } = await supabase.rpc('get_campaign_completion_stats', {
-        campaign_uuid: params.id
+        campaign_uuid: params.id,
       })
 
       if (statsData && statsData.length > 0) {
@@ -65,7 +67,8 @@ export default function CampaignDetailPage() {
       // Fetch all active agents (including those who haven't started the campaign)
       const { data: agentsData, error: agentsError } = await supabase
         .from('users')
-        .select(`
+        .select(
+          `
           id,
           first_name,
           last_name,
@@ -95,15 +98,18 @@ export default function CampaignDetailPage() {
             profile_updates,
             campaign_id
           )
-        `)
+        `
+        )
         .eq('is_active', true)
         .eq('is_licensed_agent', true)
 
       // Filter campaign_recipients and campaign_responses to only this campaign
       const agentsWithProgress = (agentsData || []).map(agent => ({
         ...agent,
-        campaign_recipients: agent.campaign_recipients?.filter((cr: any) => cr.campaign_id === params.id) || [],
-        campaign_responses: agent.campaign_responses?.filter((cr: any) => cr.campaign_id === params.id) || [],
+        campaign_recipients:
+          agent.campaign_recipients?.filter((cr: any) => cr.campaign_id === params.id) || [],
+        campaign_responses:
+          agent.campaign_responses?.filter((cr: any) => cr.campaign_id === params.id) || [],
       }))
 
       setAgents(agentsWithProgress)
@@ -111,7 +117,8 @@ export default function CampaignDetailPage() {
       // Fetch RSVPs (agents who responded to luncheon question)
       const { data: rsvpData } = await supabase
         .from('campaign_responses')
-        .select(`
+        .select(
+          `
           *,
           users!inner(
             first_name,
@@ -120,7 +127,8 @@ export default function CampaignDetailPage() {
             preferred_last_name,
             email
           )
-        `)
+        `
+        )
         .eq('campaign_id', params.id)
         .not('attending_luncheon', 'is', null)
 
@@ -129,7 +137,8 @@ export default function CampaignDetailPage() {
       // Fetch Survey responses (agents who completed feedback survey)
       const { data: surveyData } = await supabase
         .from('campaign_responses')
-        .select(`
+        .select(
+          `
           *,
           users!inner(
             first_name,
@@ -138,7 +147,8 @@ export default function CampaignDetailPage() {
             preferred_last_name,
             email
           )
-        `)
+        `
+        )
         .eq('campaign_id', params.id)
         .not('support_rating', 'is', null)
 
@@ -218,7 +228,10 @@ export default function CampaignDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Campaign not found</p>
-        <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
+        <Link
+          href="/admin/campaigns"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block"
+        >
           Back to Campaigns
         </Link>
       </div>
@@ -237,11 +250,9 @@ export default function CampaignDetailPage() {
         >
           ← Back to Campaigns
         </Link>
-        
+
         <div className="flex items-center justify-between mb-4 md:mb-6">
-          <h2 className="text-xl md:text-2xl font-semibold tracking-wide" >
-            {campaign.name}
-          </h2>
+          <h2 className="text-xl md:text-2xl font-semibold tracking-wide">{campaign.name}</h2>
           <Link
             href={`/admin/campaigns/builder/${params.id}`}
             className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
@@ -249,19 +260,20 @@ export default function CampaignDetailPage() {
             Edit Campaign Design
           </Link>
         </div>
-        
+
         {/* Deadline Editor */}
         <div className="mb-4">
           {!editingDeadline ? (
             <div className="flex items-center gap-3">
               <p className="text-luxury-gray-2">
-                Deadline: {new Date(campaign.deadline).toLocaleString('en-US', { 
-                  month: 'long', 
-                  day: 'numeric', 
+                Deadline:{' '}
+                {new Date(campaign.deadline).toLocaleString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
                   year: 'numeric',
                   hour: 'numeric',
                   minute: '2-digit',
-                  hour12: true
+                  hour12: true,
                 })}
               </p>
               <button
@@ -276,7 +288,7 @@ export default function CampaignDetailPage() {
               <input
                 type="datetime-local"
                 value={newDeadline}
-                onChange={(e) => setNewDeadline(e.target.value)}
+                onChange={e => setNewDeadline(e.target.value)}
                 className="input-luxury"
               />
               <button
@@ -285,28 +297,29 @@ export default function CampaignDetailPage() {
                     alert('Please enter a deadline')
                     return
                   }
-                  
+
                   setSavingDeadline(true)
                   try {
                     // Convert datetime-local format (YYYY-MM-DDTHH:MM) to ISO format for database
                     // Add seconds if not present, ensure proper format
-                    const deadlineValue = newDeadline.includes(':') && newDeadline.split(':').length === 2
-                      ? `${newDeadline}:00` // Add seconds
-                      : newDeadline
-                    
+                    const deadlineValue =
+                      newDeadline.includes(':') && newDeadline.split(':').length === 2
+                        ? `${newDeadline}:00` // Add seconds
+                        : newDeadline
+
                     // Validate the date
                     const testDate = new Date(deadlineValue)
                     if (isNaN(testDate.getTime())) {
                       throw new Error('Invalid date format')
                     }
-                    
+
                     const { error } = await supabase
                       .from('campaigns')
                       .update({ deadline: deadlineValue })
                       .eq('id', params.id)
-                    
+
                     if (error) throw error
-                    
+
                     setCampaign({ ...campaign, deadline: deadlineValue })
                     setEditingDeadline(false)
                     alert('Deadline updated successfully!')
@@ -328,7 +341,9 @@ export default function CampaignDetailPage() {
                   // Reset to original deadline
                   if (campaign.deadline) {
                     const deadlineDate = new Date(campaign.deadline)
-                    const localDateTime = new Date(deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000)
+                    const localDateTime = new Date(
+                      deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000
+                    )
                     setNewDeadline(localDateTime.toISOString().slice(0, 16))
                   }
                 }}
@@ -349,21 +364,21 @@ export default function CampaignDetailPage() {
           >
             📄 Export PDF Report
           </button>
-          
+
           <button
             onClick={async () => {
               if (!confirm('Duplicate this campaign for next year?')) return
-              
+
               try {
                 const response = await fetch('/api/campaign/duplicate', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ campaign_id: params.id }),
                 })
-                
+
                 const data = await response.json()
                 if (!response.ok) throw new Error(data.error)
-                
+
                 alert(data.message)
                 window.location.href = `/admin/campaigns/${data.campaign.id}`
               } catch (error: any) {
@@ -374,20 +389,25 @@ export default function CampaignDetailPage() {
           >
             📋 Duplicate for Next Year
           </button>
-          
+
           <button
             onClick={async () => {
-              if (!confirm('Are you sure you want to delete this campaign? This action cannot be undone.')) return
-              
+              if (
+                !confirm(
+                  'Are you sure you want to delete this campaign? This action cannot be undone.'
+                )
+              )
+                return
+
               setDeleting(true)
               try {
                 const response = await fetch(`/api/campaigns/${params.id}`, {
                   method: 'DELETE',
                 })
-                
+
                 const data = await response.json()
                 if (!response.ok) throw new Error(data.error || 'Failed to delete campaign')
-                
+
                 alert('Campaign deleted successfully')
                 router.push('/admin/campaigns')
               } catch (error: any) {
@@ -409,15 +429,11 @@ export default function CampaignDetailPage() {
         <div className="grid md:grid-cols-5 gap-4 mb-8">
           <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Total Recipients</p>
-            <p className="text-3xl font-light text-luxury-accent">
-              {stats.total_recipients || 0}
-            </p>
+            <p className="text-3xl font-light text-luxury-accent">{stats.total_recipients || 0}</p>
           </div>
           <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Fully Completed</p>
-            <p className="text-3xl font-light text-luxury-accent">
-              {stats.fully_complete || 0}
-            </p>
+            <p className="text-3xl font-light text-luxury-accent">{stats.fully_complete || 0}</p>
           </div>
           <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">In Progress</p>
@@ -427,15 +443,11 @@ export default function CampaignDetailPage() {
           </div>
           <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Attending Luncheon</p>
-            <p className="text-3xl font-light text-luxury-accent">
-              {attending.length}
-            </p>
+            <p className="text-3xl font-light text-luxury-accent">{attending.length}</p>
           </div>
           <div className="container-card text-center">
             <p className="text-xs text-luxury-gray-2 mb-1">Not Attending</p>
-            <p className="text-3xl font-light text-luxury-accent">
-              {notAttending.length}
-            </p>
+            <p className="text-3xl font-light text-luxury-accent">{notAttending.length}</p>
           </div>
         </div>
       )}
@@ -447,11 +459,14 @@ export default function CampaignDetailPage() {
           <input
             type="email"
             value={eventStaffEmail}
-            onChange={(e) => setEventStaffEmail(e.target.value)}
+            onChange={e => setEventStaffEmail(e.target.value)}
             placeholder="event@venue.com"
             className="input-luxury flex-1"
           />
-          <button onClick={saveEventStaffEmail} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary">
+          <button
+            onClick={saveEventStaffEmail}
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
+          >
             Save Email
           </button>
           <button
@@ -469,19 +484,19 @@ export default function CampaignDetailPage() {
       {/* Send Campaign Emails */}
       <div className="container-card mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-wide">Send Campaign Emails</h3>
-        
+
         <div className="space-y-4">
           <p className="text-sm text-luxury-gray-2">
             Preview, edit, and send personalized campaign emails to agents
           </p>
-          
+
           <button
             onClick={() => setEmailModalOpen(true)}
             className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Preview & Send Emails
           </button>
-          
+
           {campaign.sent_at && (
             <p className="text-xs text-luxury-gray-2">
               Last sent: {new Date(campaign.sent_at).toLocaleString()}
@@ -495,7 +510,13 @@ export default function CampaignDetailPage() {
         <CampaignEmailModal
           campaign={campaign}
           onClose={() => setEmailModalOpen(false)}
-          onSend={async (templateId, recipientFilter, customHtml, customSubject, individualAgentId) => {
+          onSend={async (
+            templateId,
+            recipientFilter,
+            customHtml,
+            customSubject,
+            individualAgentId
+          ) => {
             try {
               const response = await fetch('/api/campaign/send-emails', {
                 method: 'POST',
@@ -509,10 +530,10 @@ export default function CampaignDetailPage() {
                   individual_agent_id: individualAgentId || null,
                 }),
               })
-              
+
               const data = await response.json()
               if (!response.ok) throw new Error(data.error || 'Failed to send emails')
-              
+
               alert(data.message)
               fetchCampaignData()
             } catch (error: any) {
@@ -525,7 +546,10 @@ export default function CampaignDetailPage() {
       {/* Token Generator */}
       <div className="container-card mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-wide">Campaign Tokens</h3>
-        <button onClick={generateTokens} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary">
+        <button
+          onClick={generateTokens}
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
+        >
           Generate Tokens for All Active Agents
         </button>
         <p className="text-xs text-luxury-gray-2 mt-2">
@@ -537,11 +561,16 @@ export default function CampaignDetailPage() {
       <div className="container-card mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-wide">Migrate Profile Updates</h3>
         <p className="text-sm text-luxury-gray-2 mb-4">
-          If profile updates from this campaign failed to sync to user profiles, use this to push them from campaign_responses to the users table.
+          If profile updates from this campaign failed to sync to user profiles, use this to push
+          them from campaign_responses to the users table.
         </p>
         <button
           onClick={async () => {
-            if (!confirm(`This will migrate all profile updates from this campaign's responses to the users table. Continue?`)) {
+            if (
+              !confirm(
+                `This will migrate all profile updates from this campaign's responses to the users table. Continue?`
+              )
+            ) {
               return
             }
 
@@ -562,7 +591,9 @@ export default function CampaignDetailPage() {
               }
 
               setMigrationResult(data)
-              alert(`Migration complete!\n\nUpdated: ${data.results.updated}\nSkipped: ${data.results.skipped}\nErrors: ${data.results.errors.length}`)
+              alert(
+                `Migration complete!\n\nUpdated: ${data.results.updated}\nSkipped: ${data.results.skipped}\nErrors: ${data.results.errors.length}`
+              )
               fetchCampaignData() // Refresh data
             } catch (error: any) {
               console.error('Migration error:', error)
@@ -579,7 +610,9 @@ export default function CampaignDetailPage() {
         </button>
 
         {migrationResult && (
-          <div className={`mt-4 p-4 rounded ${migrationResult.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+          <div
+            className={`mt-4 p-4 rounded ${migrationResult.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}
+          >
             <h4 className="text-sm font-medium mb-2">
               {migrationResult.error ? 'Migration Error' : 'Migration Results'}
             </h4>
@@ -587,15 +620,25 @@ export default function CampaignDetailPage() {
               <p className="text-sm text-red-600">{migrationResult.error}</p>
             ) : (
               <div className="text-sm text-luxury-gray-2">
-                <p><strong>Total:</strong> {migrationResult.results.total}</p>
-                <p><strong>Updated:</strong> {migrationResult.results.updated}</p>
-                <p><strong>Skipped:</strong> {migrationResult.results.skipped}</p>
+                <p>
+                  <strong>Total:</strong> {migrationResult.results.total}
+                </p>
+                <p>
+                  <strong>Updated:</strong> {migrationResult.results.updated}
+                </p>
+                <p>
+                  <strong>Skipped:</strong> {migrationResult.results.skipped}
+                </p>
                 {migrationResult.results.errors.length > 0 && (
                   <div className="mt-2">
-                    <p><strong>Errors:</strong></p>
+                    <p>
+                      <strong>Errors:</strong>
+                    </p>
                     <ul className="list-disc list-inside text-xs">
                       {migrationResult.results.errors.map((err: any, idx: number) => (
-                        <li key={idx}>{err.user_id}: {err.error}</li>
+                        <li key={idx}>
+                          {err.user_id}: {err.error}
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -608,36 +651,55 @@ export default function CampaignDetailPage() {
 
       {/* Agent Progress List */}
       <div className="container-card mb-8">
-        <h3 className="text-lg font-medium mb-4 tracking-wide">Agent Progress ({agents.length} agents)</h3>
-        
+        <h3 className="text-lg font-medium mb-4 tracking-wide">
+          Agent Progress ({agents.length} agents)
+        </h3>
+
         {agents.length === 0 ? (
-          <p className="text-luxury-gray-2 text-center py-8">
-            No active agents found
-          </p>
+          <p className="text-luxury-gray-2 text-center py-8">No active agents found</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Agent</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Progress</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Commission Plan</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Luncheon RSVP</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Actions</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
+                    Agent
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
+                    Progress
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
+                    Commission Plan
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
+                    Luncheon RSVP
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {agents.map((agent) => {
-                  const recipient = agent.campaign_recipients?.find((cr: any) => cr.campaign_id === params.id) || agent.campaign_recipients?.[0]
-                  const response = agent.campaign_responses?.find((cr: any) => cr.campaign_id === params.id) || agent.campaign_responses?.[0]
+                {agents.map(agent => {
+                  const recipient =
+                    agent.campaign_recipients?.find((cr: any) => cr.campaign_id === params.id) ||
+                    agent.campaign_recipients?.[0]
+                  const response =
+                    agent.campaign_responses?.find((cr: any) => cr.campaign_id === params.id) ||
+                    agent.campaign_responses?.[0]
                   const progress = recipient?.current_step || 0
                   const isComplete = recipient?.fully_completed_at
                   const hasStarted = !!recipient
 
                   return (
-                    <tr key={agent.id} className="border-b border-luxury-gray-5 hover:bg-luxury-light">
+                    <tr
+                      key={agent.id}
+                      className="border-b border-luxury-gray-5 hover:bg-luxury-light"
+                    >
                       <td className="py-4 px-4">
-                        <p className="font-medium">{agent.preferred_first_name} {agent.preferred_last_name}</p>
+                        <p className="font-medium">
+                          {agent.preferred_first_name} {agent.preferred_last_name}
+                        </p>
                         <p className="text-sm text-luxury-gray-2">{agent.email}</p>
                       </td>
                       <td className="py-4 px-4">
@@ -646,7 +708,9 @@ export default function CampaignDetailPage() {
                             <div className="w-24 h-2 bg-luxury-gray-5 rounded">
                               <div
                                 className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-accent'}`}
-                                style={{ width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}` }}
+                                style={{
+                                  width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}`,
+                                }}
                               />
                             </div>
                             <span className="text-sm">
@@ -663,16 +727,17 @@ export default function CampaignDetailPage() {
                           if (response?.commission_plan_2026) {
                             return response.commission_plan_2026
                           }
-                          
+
                           // Get current commission plan from user record
                           if (agent.commission_plan) {
                             // Format: "new_agent" -> "New Agent", "no_cap" -> "No Cap", etc.
                             const plan = agent.commission_plan
-                            return plan.split('_').map((word: string) => 
-                              word.charAt(0).toUpperCase() + word.slice(1)
-                            ).join(' ')
+                            return plan
+                              .split('_')
+                              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ')
                           }
-                          
+
                           return '-'
                         })()}
                       </td>
@@ -728,20 +793,18 @@ export default function CampaignDetailPage() {
         <h3 className="text-lg font-medium mb-4 tracking-wide">
           Luncheon RSVPs ({attending.length} attending)
         </h3>
-        
+
         {attending.length === 0 ? (
           <p className="text-luxury-gray-2 text-center py-8">No RSVPs yet</p>
         ) : (
           <div className="space-y-4">
-            {attending.map((rsvp) => (
+            {attending.map(rsvp => (
               <div key={rsvp.id} className="border-l-4 border-luxury-gold pl-4 py-2">
                 <p className="font-medium">
                   {rsvp.users.preferred_first_name} {rsvp.users.preferred_last_name}
                 </p>
                 {rsvp.luncheon_comments && (
-                  <p className="text-sm text-luxury-gray-2 mt-1">
-                    "{rsvp.luncheon_comments}"
-                  </p>
+                  <p className="text-sm text-luxury-gray-2 mt-1">"{rsvp.luncheon_comments}"</p>
                 )}
               </div>
             ))}
@@ -754,7 +817,7 @@ export default function CampaignDetailPage() {
         <h3 className="text-lg font-medium mb-4 tracking-wide">
           Feedback Survey Summary ({surveys.length} responses)
         </h3>
-        
+
         {surveys.length === 0 ? (
           <p className="text-luxury-gray-2 text-center py-8">No survey responses yet</p>
         ) : (
@@ -762,18 +825,23 @@ export default function CampaignDetailPage() {
             {/* Average Support Rating */}
             {surveys.some(s => s.support_rating) && (
               <div>
-                <h4 className="text-sm font-medium mb-2 text-luxury-gray-2">Average Support Rating</h4>
+                <h4 className="text-sm font-medium mb-2 text-luxury-gray-2">
+                  Average Support Rating
+                </h4>
                 <div className="flex items-center gap-3">
                   <div className="w-48 h-3 bg-luxury-gray-5 rounded">
                     <div
                       className="h-full bg-luxury-accent rounded"
-                      style={{ 
-                        width: `${(surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length / 10) * 100}%` 
+                      style={{
+                        width: `${(surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length / 10) * 100}%`,
                       }}
                     />
                   </div>
                   <span className="text-lg font-medium">
-                    {(surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length).toFixed(1)}/10
+                    {(
+                      surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length
+                    ).toFixed(1)}
+                    /10
                   </span>
                 </div>
               </div>
@@ -809,11 +877,13 @@ export default function CampaignDetailPage() {
             {/* Support Improvements */}
             {surveys.some(s => s.support_improvements) && (
               <div>
-                <h4 className="text-sm font-medium mb-3 text-luxury-gray-2">Support Improvement Suggestions</h4>
+                <h4 className="text-sm font-medium mb-3 text-luxury-gray-2">
+                  Support Improvement Suggestions
+                </h4>
                 <div className="space-y-3">
                   {surveys
                     .filter(s => s.support_improvements)
-                    .map((survey) => (
+                    .map(survey => (
                       <div key={survey.id} className="border-l-4 border-luxury-gold pl-4 py-2">
                         <p className="font-medium text-sm">
                           {survey.users.preferred_first_name} {survey.users.preferred_last_name}

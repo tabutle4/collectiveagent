@@ -47,13 +47,15 @@ export default function HeadshotUpload({
     offsetY: number
     scale: number
   }>(() => {
-  if (initialCrop && typeof initialCrop.offsetX === 'number') {
-    return initialCrop
-  }
-  return { offsetX: 0, offsetY: 0, scale: 1 }
-})
+    if (initialCrop && typeof initialCrop.offsetX === 'number') {
+      return initialCrop
+    }
+    return { offsetX: 0, offsetY: 0, scale: 1 }
+  })
   const [dragging, setDragging] = useState(false)
-  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null)
+  const dragStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(
+    null
+  )
 
   const circleSizePx = size === 'small' ? 64 : size === 'medium' ? 96 : 128
 
@@ -210,20 +212,20 @@ export default function HeadshotUpload({
         onWheel={handleWheel}
       >
         <div
-  className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 flex items-center justify-center ${
-    sizeClasses[size]
-  }`}
-  onMouseDown={handleMouseDown}
-  style={{ 
-    cursor: editingCrop ? (dragging ? 'grabbing' : 'grab') : 'default',
-    width: `${circleSizePx}px`,
-    height: `${circleSizePx}px`,
-    minWidth: `${circleSizePx}px`,
-    minHeight: `${circleSizePx}px`,
-    maxWidth: `${circleSizePx}px`,
-    maxHeight: `${circleSizePx}px`,
-  }}
->
+          className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 flex items-center justify-center ${
+            sizeClasses[size]
+          }`}
+          onMouseDown={handleMouseDown}
+          style={{
+            cursor: editingCrop ? (dragging ? 'grabbing' : 'grab') : 'default',
+            width: `${circleSizePx}px`,
+            height: `${circleSizePx}px`,
+            minWidth: `${circleSizePx}px`,
+            minHeight: `${circleSizePx}px`,
+            maxWidth: `${circleSizePx}px`,
+            maxHeight: `${circleSizePx}px`,
+          }}
+        >
           {displayUrl ? (
             <img
               src={displayUrl}
@@ -276,7 +278,7 @@ export default function HeadshotUpload({
           <>
             <button
               type="button"
-              onClick={() => setEditingCrop((prev) => !prev)}
+              onClick={() => setEditingCrop(prev => !prev)}
               disabled={disabled || uploading}
               className="px-2 py-1 text-xs rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
@@ -301,9 +303,7 @@ export default function HeadshotUpload({
           <div className="flex items-center gap-2 bg-white border border-luxury-gray-5 rounded px-2 py-1">
             <button
               type="button"
-              onClick={() =>
-                setCrop((prev) => ({ ...prev, scale: Math.max(0.7, prev.scale - 0.1) }))
-              }
+              onClick={() => setCrop(prev => ({ ...prev, scale: Math.max(0.7, prev.scale - 0.1) }))}
               className="p-1 hover:bg-gray-100 rounded"
             >
               <ZoomOut className="w-3 h-3 text-gray-600" />
@@ -313,9 +313,7 @@ export default function HeadshotUpload({
             </span>
             <button
               type="button"
-              onClick={() =>
-                setCrop((prev) => ({ ...prev, scale: Math.min(3, prev.scale + 0.1) }))
-              }
+              onClick={() => setCrop(prev => ({ ...prev, scale: Math.min(3, prev.scale + 0.1) }))}
               className="p-1 hover:bg-gray-100 rounded"
             >
               <ZoomIn className="w-3 h-3 text-gray-600" />
@@ -347,4 +345,3 @@ export default function HeadshotUpload({
     </div>
   )
 }
-

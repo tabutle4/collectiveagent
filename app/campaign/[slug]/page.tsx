@@ -11,7 +11,7 @@ function CampaignContent() {
   const searchParams = useSearchParams()
   const slug = params.slug as string
   const token = searchParams.get('token')
-  
+
   const [campaign, setCampaign] = useState<any>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -89,13 +89,14 @@ function CampaignContent() {
         <LuxuryHeader />
         <div className="max-w-2xl mx-auto px-6 py-12 text-center">
           <div className="card-section">
-            <h2 className="text-2xl font-light mb-4 tracking-luxury text-red-600">
-              Access Denied
-            </h2>
+            <h2 className="text-2xl font-light mb-4 tracking-luxury text-red-600">Access Denied</h2>
             <p className="text-luxury-gray-1 mb-6">{error}</p>
             <p className="text-sm text-luxury-gray-2">
               Please contact the office at{' '}
-              <a href="mailto:office@collectiverealtyco.com" className="text-luxury-black hover:underline">
+              <a
+                href="mailto:office@collectiverealtyco.com"
+                className="text-luxury-black hover:underline"
+              >
                 office@collectiverealtyco.com
               </a>
             </p>
@@ -108,9 +109,12 @@ function CampaignContent() {
   return (
     <div className="min-h-screen bg-white">
       <LuxuryHeader />
-      
-      <div className="max-w-6xl mx-auto px-6" style={{ paddingTop: '104px', paddingBottom: '3rem' }}>
-        <CampaignForm 
+
+      <div
+        className="max-w-6xl mx-auto px-6"
+        style={{ paddingTop: '104px', paddingBottom: '3rem' }}
+      >
+        <CampaignForm
           campaignId={campaign.id}
           userId={user.id}
           userData={user}

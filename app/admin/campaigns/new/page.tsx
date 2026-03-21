@@ -29,7 +29,7 @@ export default function NewCampaignPage() {
       slug: name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
+        .replace(/^-+|-+$/g, ''),
     }))
   }
 
@@ -49,7 +49,7 @@ export default function NewCampaignPage() {
       // Check if slug already exists and find a unique one
       let uniqueSlug = formData.slug.trim()
       let attempt = 1
-      
+
       while (attempt <= 10) {
         const { data: existing, error: checkError } = await supabase
           .from('campaigns')
@@ -74,7 +74,9 @@ export default function NewCampaignPage() {
       }
 
       if (attempt > 10) {
-        throw new Error('Unable to generate a unique slug after 10 attempts. Please modify the slug manually.')
+        throw new Error(
+          'Unable to generate a unique slug after 10 attempts. Please modify the slug manually.'
+        )
       }
 
       // Update slug if it was changed
@@ -123,41 +125,43 @@ export default function NewCampaignPage() {
           if ('statusText' in insertError) {
             errorInfo.statusText = (insertError as any).statusText
           }
-          
+
           // Try to stringify the whole object
-          const errorStr = JSON.stringify(insertError, (key, value) => {
-            // Include all properties including non-enumerable ones
-            if (typeof value === 'object' && value !== null) {
-              const props: any = {}
-              for (const prop in value) {
-                props[prop] = value[prop]
+          const errorStr = JSON.stringify(
+            insertError,
+            (key, value) => {
+              // Include all properties including non-enumerable ones
+              if (typeof value === 'object' && value !== null) {
+                const props: any = {}
+                for (const prop in value) {
+                  props[prop] = value[prop]
+                }
+                // Also try to get non-enumerable properties
+                try {
+                  Object.getOwnPropertyNames(value).forEach(name => {
+                    if (!(name in props)) {
+                      try {
+                        props[name] = (value as any)[name]
+                      } catch {}
+                    }
+                  })
+                } catch {}
+                return props
               }
-              // Also try to get non-enumerable properties
-              try {
-                Object.getOwnPropertyNames(value).forEach(name => {
-                  if (!(name in props)) {
-                    try {
-                      props[name] = (value as any)[name]
-                    } catch {}
-                  }
-                })
-              } catch {}
-              return props
-            }
-            return value
-          }, 2)
+              return value
+            },
+            2
+          )
           console.error('Insert error full details:', errorStr)
         } catch (logErr) {
           console.error('Could not log error details:', logErr)
         }
-        
+
         console.error('Insert error info:', errorInfo)
-        
+
         // Create a more informative error
-        const errorMessage = insertError.message || 
-                            insertError.details || 
-                            insertError.hint || 
-                            'Unknown error occurred'
+        const errorMessage =
+          insertError.message || insertError.details || insertError.hint || 'Unknown error occurred'
         const enhancedError = new Error(errorMessage)
         ;(enhancedError as any).code = insertError.code
         ;(enhancedError as any).details = insertError.details
@@ -183,46 +187,56 @@ export default function NewCampaignPage() {
         statusText: err?.statusText,
         type: typeof err,
         constructor: err?.constructor?.name,
-        keys: Object.keys(err || {})
+        keys: Object.keys(err || {}),
       }
-      
+
       // Try to access originalError if it exists
       if (err?.originalError) {
         errorDetails.originalError = {
           message: err.originalError.message,
           code: err.originalError.code,
           details: err.originalError.details,
-          hint: err.originalError.hint
+          hint: err.originalError.hint,
         }
       }
-      
+
       console.error('Error creating campaign - Full details:', errorDetails)
-      
+
       // Try to stringify the error
       try {
-        const errorStr = JSON.stringify(err, (key, value) => {
-          if (typeof value === 'object' && value !== null && !(value instanceof Error)) {
-            const props: any = {}
-            try {
-              Object.getOwnPropertyNames(value).forEach(name => {
-                try {
-                  props[name] = (value as any)[name]
-                } catch {}
-              })
-            } catch {}
-            return props
-          }
-          return value
-        }, 2)
+        const errorStr = JSON.stringify(
+          err,
+          (key, value) => {
+            if (typeof value === 'object' && value !== null && !(value instanceof Error)) {
+              const props: any = {}
+              try {
+                Object.getOwnPropertyNames(value).forEach(name => {
+                  try {
+                    props[name] = (value as any)[name]
+                  } catch {}
+                })
+              } catch {}
+              return props
+            }
+            return value
+          },
+          2
+        )
         console.error('Error JSON:', errorStr)
       } catch (stringifyErr) {
         console.error('Could not stringify error:', stringifyErr)
       }
 
       // Handle Supabase unique constraint violation
-      const errorCode = err?.code || err?.error_code || (err?.details?.includes('unique') ? '23505' : null)
-      
-      if (errorCode === '23505' || errorCode === 'PGRST116' || err?.message?.toLowerCase().includes('unique') || err?.message?.toLowerCase().includes('duplicate')) {
+      const errorCode =
+        err?.code || err?.error_code || (err?.details?.includes('unique') ? '23505' : null)
+
+      if (
+        errorCode === '23505' ||
+        errorCode === 'PGRST116' ||
+        err?.message?.toLowerCase().includes('unique') ||
+        err?.message?.toLowerCase().includes('duplicate')
+      ) {
         setError('A campaign with this slug already exists. Please try a different slug.')
       } else if (err?.message) {
         setError(err.message)
@@ -244,8 +258,8 @@ export default function NewCampaignPage() {
         >
           ← Back to Campaigns
         </Link>
-        
-        <h2 className="text-xl md:text-2xl font-semibold tracking-wide mb-5 md:mb-8" >
+
+        <h2 className="text-xl md:text-2xl font-semibold tracking-wide mb-5 md:mb-8">
           Create New Campaign
         </h2>
       </div>
@@ -266,7 +280,7 @@ export default function NewCampaignPage() {
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={e => handleNameChange(e.target.value)}
               className="input-luxury"
               placeholder="2027 Plan Selection"
               required
@@ -284,7 +298,7 @@ export default function NewCampaignPage() {
             <input
               type="text"
               value={formData.slug}
-              onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+              onChange={e => setFormData({ ...formData, slug: e.target.value })}
               className="input-luxury"
               placeholder="2027-plan-selection"
               required
@@ -296,13 +310,11 @@ export default function NewCampaignPage() {
 
           {/* Year (Optional) */}
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Year (Optional)
-            </label>
+            <label className="block text-sm font-medium mb-2">Year (Optional)</label>
             <input
               type="number"
               value={formData.year}
-              onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || 0 })}
+              onChange={e => setFormData({ ...formData, year: parseInt(e.target.value) || 0 })}
               className="input-luxury"
               placeholder="2027"
             />
@@ -319,30 +331,24 @@ export default function NewCampaignPage() {
             <input
               type="date"
               value={formData.deadline}
-              onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+              onChange={e => setFormData({ ...formData, deadline: e.target.value })}
               className="input-luxury"
               required
             />
-            <p className="text-xs text-luxury-gray-2 mt-1">
-              Last day agents can submit responses
-            </p>
+            <p className="text-xs text-luxury-gray-2 mt-1">Last day agents can submit responses</p>
           </div>
 
           {/* Event Staff Email */}
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Event Staff Email (Optional)
-            </label>
+            <label className="block text-sm font-medium mb-2">Event Staff Email (Optional)</label>
             <input
               type="email"
               value={formData.event_staff_email}
-              onChange={(e) => setFormData({ ...formData, event_staff_email: e.target.value })}
+              onChange={e => setFormData({ ...formData, event_staff_email: e.target.value })}
               className="input-luxury"
               placeholder="event@venue.com"
             />
-            <p className="text-xs text-luxury-gray-2 mt-1">
-              RSVP lists will be sent to this email
-            </p>
+            <p className="text-xs text-luxury-gray-2 mt-1">RSVP lists will be sent to this email</p>
           </div>
 
           {/* Is Active */}
@@ -351,7 +357,7 @@ export default function NewCampaignPage() {
               <input
                 type="checkbox"
                 checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
                 className="w-4 h-4"
               />
               <span className="text-sm font-medium">Campaign is Active</span>
@@ -363,13 +369,11 @@ export default function NewCampaignPage() {
 
           {/* Email Subject */}
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Email Subject (Optional)
-            </label>
+            <label className="block text-sm font-medium mb-2">Email Subject (Optional)</label>
             <input
               type="text"
               value={formData.email_subject}
-              onChange={(e) => setFormData({ ...formData, email_subject: e.target.value })}
+              onChange={e => setFormData({ ...formData, email_subject: e.target.value })}
               className="input-luxury"
               placeholder="Action Required: Complete Your 2027 Plan Selection"
             />
@@ -380,12 +384,10 @@ export default function NewCampaignPage() {
 
           {/* Email Body */}
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Email Body Template (Optional)
-            </label>
+            <label className="block text-sm font-medium mb-2">Email Body Template (Optional)</label>
             <textarea
               value={formData.email_body}
-              onChange={(e) => setFormData({ ...formData, email_body: e.target.value })}
+              onChange={e => setFormData({ ...formData, email_body: e.target.value })}
               className="textarea-luxury"
               rows={8}
               placeholder="Hi {first_name},
@@ -400,7 +402,8 @@ Thanks!
 Collective Realty Co."
             />
             <p className="text-xs text-luxury-gray-2 mt-1">
-              Available variables: {'{first_name}'}, {'{last_name}'}, {'{campaign_link}'}, {'{deadline}'}
+              Available variables: {'{first_name}'}, {'{last_name}'}, {'{campaign_link}'},{' '}
+              {'{deadline}'}
             </p>
           </div>
         </div>
@@ -413,7 +416,10 @@ Collective Realty Co."
           >
             {loading ? 'Creating...' : 'Create Campaign'}
           </button>
-          <Link href="/admin/campaigns" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
+          <Link
+            href="/admin/campaigns"
+            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block"
+          >
             Cancel
           </Link>
         </div>

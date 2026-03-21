@@ -7,7 +7,7 @@ async function cropHeadshots() {
 
   const headshotsDir = join(process.cwd(), 'public', 'headshots')
   const outputDir = join(process.cwd(), 'public', 'headshots', 'cropped')
-  
+
   // Create output directory if it doesn't exist
   try {
     await require('fs').promises.mkdir(outputDir, { recursive: true })
@@ -16,15 +16,17 @@ async function cropHeadshots() {
   }
 
   let files: string[]
-  
+
   try {
     files = await readdir(headshotsDir)
     // Filter image files
     files = files.filter(file => {
       const lower = file.toLowerCase()
-      return lower.startsWith('headshot-') && 
-             (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) &&
-             !file.includes('cropped') // Skip already cropped files
+      return (
+        lower.startsWith('headshot-') &&
+        (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) &&
+        !file.includes('cropped')
+      ) // Skip already cropped files
     })
     console.log(`📁 Found ${files.length} headshot files to crop\n`)
   } catch (error) {
@@ -39,12 +41,12 @@ async function cropHeadshots() {
     try {
       const inputPath = join(headshotsDir, filename)
       const outputPath = join(outputDir, filename)
-      
+
       console.log(`🔄 Cropping: ${filename}...`)
 
       // Read image
       const imageBuffer = await readFile(inputPath)
-      
+
       // Get image metadata
       const metadata = await sharp(imageBuffer).metadata()
       const width = metadata.width || 0
@@ -57,15 +59,15 @@ async function cropHeadshots() {
       // Crop strategy: Focus on upper portion (where faces usually are)
       // Crop to square from top-center, focusing on upper portion of image
       const cropSize = Math.min(width, height)
-      
+
       // Ensure crop size is valid
       if (cropSize < 100) {
         throw new Error('Image too small to crop')
       }
-      
+
       const cropX = Math.max(0, Math.floor((width - cropSize) / 2)) // Center horizontally
       const cropY = Math.max(0, Math.floor(height * 0.1)) // Start from 10% down (focus on upper portion)
-      
+
       // Ensure crop area is within image bounds
       if (cropX + cropSize > width || cropY + cropSize > height) {
         // Fallback: use smaller crop size that fits
@@ -136,8 +138,7 @@ cropHeadshots()
     console.log('✅ Script completed successfully')
     process.exit(0)
   })
-  .catch((error) => {
+  .catch(error => {
     console.error('❌ Script failed:', error)
     process.exit(1)
   })
-

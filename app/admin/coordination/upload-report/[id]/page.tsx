@@ -8,7 +8,7 @@ export default function UploadWeeklyReportPage() {
   const router = useRouter()
   const params = useParams()
   const coordinationId = params.id as string
-  
+
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -31,21 +31,21 @@ export default function UploadWeeklyReportPage() {
     }
     if (!user) fetchUser()
   }, [router, user])
-  
+
   const [reportDate, setReportDate] = useState('')
-  
+
   const [file1, setFile1] = useState<File | null>(null)
   const [file2, setFile2] = useState<File | null>(null)
   const [isDragging1, setIsDragging1] = useState(false)
   const [isDragging2, setIsDragging2] = useState(false)
-  
+
   useEffect(() => {
     // Get user from localStorage
-    
+
     loadCoordination()
     setDefaultReportDate()
   }, [coordinationId])
-  
+
   // Helper to format a Date as YYYY-MM-DD for date inputs
   const formatDateForInput = (date: Date): string => {
     const year = date.getFullYear()
@@ -53,12 +53,12 @@ export default function UploadWeeklyReportPage() {
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
   }
-  
+
   const setDefaultReportDate = () => {
     const today = new Date()
     setReportDate(formatDateForInput(today))
   }
-  
+
   const handleDragOver = (e: React.DragEvent, fileNumber: 1 | 2) => {
     e.preventDefault()
     e.stopPropagation()
@@ -68,7 +68,7 @@ export default function UploadWeeklyReportPage() {
       setIsDragging2(true)
     }
   }
-  
+
   const handleDragLeave = (e: React.DragEvent, fileNumber: 1 | 2) => {
     e.preventDefault()
     e.stopPropagation()
@@ -78,17 +78,17 @@ export default function UploadWeeklyReportPage() {
       setIsDragging2(false)
     }
   }
-  
+
   const handleDrop = (e: React.DragEvent, fileNumber: 1 | 2) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     if (fileNumber === 1) {
       setIsDragging1(false)
     } else {
       setIsDragging2(false)
     }
-    
+
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
       const file = files[0]
@@ -103,7 +103,7 @@ export default function UploadWeeklyReportPage() {
       }
     }
   }
-  
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, fileNumber: 1 | 2) => {
     const files = e.target.files
     if (files && files.length > 0) {
@@ -114,13 +114,13 @@ export default function UploadWeeklyReportPage() {
       }
     }
   }
-  
+
   const loadCoordination = async () => {
     setLoading(true)
     try {
       const response = await fetch(`/api/coordination/get?id=${coordinationId}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setCoordination(data.coordination)
         setListing(data.listing)
@@ -131,34 +131,34 @@ export default function UploadWeeklyReportPage() {
       setLoading(false)
     }
   }
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!file1) {
       alert('Please select the showing report file')
       return
     }
-    
+
     if (listing && listing.mls_type !== 'NTREIS' && !file2) {
       alert('Please select the traffic report file')
       return
     }
-    
+
     if (!user) {
       alert('Please log in to upload reports')
       router.push('/auth/login')
       return
     }
-    
+
     // Use startTransition to make the heavy work non-blocking
     startTransition(async () => {
       setUploading(true)
-      
+
       try {
         // Defer FormData creation to avoid blocking the UI
         await new Promise(resolve => setTimeout(resolve, 0))
-        
+
         const data = new FormData()
         data.append('coordination_id', coordinationId)
         data.append('listing_id', listing!.id)
@@ -168,14 +168,14 @@ export default function UploadWeeklyReportPage() {
         if (file2) {
           data.append('report_file_2', file2)
         }
-        
+
         const response = await fetch('/api/coordination/upload-report', {
           method: 'POST',
           body: data,
         })
-        
+
         const result = await response.json()
-        
+
         if (result.success) {
           alert('Weekly reports uploaded successfully!')
           router.push(`/admin/coordination/${coordinationId}`)
@@ -190,7 +190,7 @@ export default function UploadWeeklyReportPage() {
       }
     })
   }
-  
+
   if (loading) {
     return (
       <div className="">
@@ -202,7 +202,7 @@ export default function UploadWeeklyReportPage() {
       </div>
     )
   }
-  
+
   if (!coordination || !listing) {
     return (
       <div className="">
@@ -220,7 +220,7 @@ export default function UploadWeeklyReportPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="">
       <div className="">
@@ -232,14 +232,10 @@ export default function UploadWeeklyReportPage() {
             >
               ← Back to Coordination
             </button>
-            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
-              Upload Weekly Reports
-            </h1>
-            <p className="text-sm text-luxury-gray-2">
-              {listing.property_address}
-            </p>
+            <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Upload Weekly Reports</h1>
+            <p className="text-sm text-luxury-gray-2">{listing.property_address}</p>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
@@ -248,23 +244,21 @@ export default function UploadWeeklyReportPage() {
               <input
                 type="date"
                 value={reportDate}
-                onChange={(e) => setReportDate(e.target.value)}
+                onChange={e => setReportDate(e.target.value)}
                 className="input-luxury"
                 required
               />
-              <p className="text-xs text-luxury-gray-2 mt-1">
-                Date the report was uploaded
-              </p>
+              <p className="text-xs text-luxury-gray-2 mt-1">Date the report was uploaded</p>
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Showing Report (PDF) <span className="text-red-500">*</span>
               </label>
               <div
-                onDragOver={(e) => handleDragOver(e, 1)}
-                onDragLeave={(e) => handleDragLeave(e, 1)}
-                onDrop={(e) => handleDrop(e, 1)}
+                onDragOver={e => handleDragOver(e, 1)}
+                onDragLeave={e => handleDragLeave(e, 1)}
+                onDrop={e => handleDrop(e, 1)}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
                   isDragging1
                     ? 'border-luxury-black bg-luxury-light'
@@ -273,9 +267,7 @@ export default function UploadWeeklyReportPage() {
               >
                 {file1 ? (
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {file1.name}
-                    </p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{file1.name}</p>
                     <button
                       type="button"
                       onClick={() => setFile1(null)}
@@ -292,7 +284,7 @@ export default function UploadWeeklyReportPage() {
                     <input
                       type="file"
                       accept=".pdf"
-                      onChange={(e) => handleFileChange(e, 1)}
+                      onChange={e => handleFileChange(e, 1)}
                       className="hidden"
                       id="file1-input"
                       required
@@ -307,61 +299,58 @@ export default function UploadWeeklyReportPage() {
                 )}
               </div>
             </div>
-            
+
             {listing && listing.mls_type !== 'NTREIS' && (
               <div>
                 <label className="block text-sm mb-2 text-luxury-gray-1">
                   Traffic Report (PDF) <span className="text-red-500">*</span>
                 </label>
-              <div
-                onDragOver={(e) => handleDragOver(e, 2)}
-                onDragLeave={(e) => handleDragLeave(e, 2)}
-                onDrop={(e) => handleDrop(e, 2)}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  isDragging2
-                    ? 'border-luxury-black bg-luxury-light'
-                    : 'border-luxury-gray-5 hover:border-luxury-gray-3'
-                }`}
-              >
-                {file2 ? (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {file2.name}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setFile2(null)}
-                      className="text-xs text-luxury-gray-2 hover:text-luxury-black underline"
-                    >
-                      Remove file
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-sm text-luxury-gray-2">
-                      Drag and drop a PDF file here, or click to browse
-                    </p>
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={(e) => handleFileChange(e, 2)}
-                      className="hidden"
-                      id="file2-input"
-                      required
-                    />
-                    <label
-                      htmlFor="file2-input"
-                      className="inline-block px-4 py-2 text-sm rounded transition-colors btn-primary cursor-pointer"
-                    >
-                      Choose File
-                    </label>
-                  </div>
-                )}
+                <div
+                  onDragOver={e => handleDragOver(e, 2)}
+                  onDragLeave={e => handleDragLeave(e, 2)}
+                  onDrop={e => handleDrop(e, 2)}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                    isDragging2
+                      ? 'border-luxury-black bg-luxury-light'
+                      : 'border-luxury-gray-5 hover:border-luxury-gray-3'
+                  }`}
+                >
+                  {file2 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-luxury-gray-1">{file2.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => setFile2(null)}
+                        className="text-xs text-luxury-gray-2 hover:text-luxury-black underline"
+                      >
+                        Remove file
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-luxury-gray-2">
+                        Drag and drop a PDF file here, or click to browse
+                      </p>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={e => handleFileChange(e, 2)}
+                        className="hidden"
+                        id="file2-input"
+                        required
+                      />
+                      <label
+                        htmlFor="file2-input"
+                        className="inline-block px-4 py-2 text-sm rounded transition-colors btn-primary cursor-pointer"
+                      >
+                        Choose File
+                      </label>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
-            
-            
+
             <div className="bg-luxury-light p-4 rounded">
               <h3 className="text-sm font-medium mb-2">What happens next:</h3>
               <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1">
@@ -371,7 +360,7 @@ export default function UploadWeeklyReportPage() {
                 <li>On Monday at 6:00 PM, sellers will receive email with links to both reports</li>
               </ul>
             </div>
-            
+
             <div className="flex justify-center gap-4 pt-6">
               <button
                 type="button"
@@ -382,7 +371,9 @@ export default function UploadWeeklyReportPage() {
               </button>
               <button
                 type="submit"
-                disabled={uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)}
+                disabled={
+                  uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)
+                }
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
                   uploading || !file1 || (listing && listing.mls_type !== 'NTREIS' && !file2)
                     ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed'
@@ -391,9 +382,25 @@ export default function UploadWeeklyReportPage() {
               >
                 {uploading ? (
                   <span className="flex items-center space-x-2">
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                     <span>Uploading...</span>
                   </span>
@@ -408,5 +415,3 @@ export default function UploadWeeklyReportPage() {
     </div>
   )
 }
-
-

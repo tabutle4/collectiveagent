@@ -24,9 +24,8 @@ export default function ProspectsPage() {
     }
   }
 
-  const filteredProspects = filter === 'all'
-    ? prospects
-    : prospects.filter(p => p.prospect_status === filter)
+  const filteredProspects =
+    filter === 'all' ? prospects : prospects.filter(p => p.prospect_status === filter)
 
   const statusCounts = {
     all: prospects.length,
@@ -39,12 +38,18 @@ export default function ProspectsPage() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'new': return 'bg-luxury-accent/10 text-luxury-accent'
-      case 'contacted': return 'bg-luxury-gray-5/40 text-luxury-gray-2'
-      case 'scheduled': return 'bg-luxury-accent/20 text-luxury-accent'
-      case 'joined': return 'bg-green-50 text-green-700'
-      case 'not_interested': return 'bg-red-50 text-red-600'
-      default: return 'bg-luxury-gray-5/40 text-luxury-gray-3'
+      case 'new':
+        return 'bg-luxury-accent/10 text-luxury-accent'
+      case 'contacted':
+        return 'bg-luxury-gray-5/40 text-luxury-gray-2'
+      case 'scheduled':
+        return 'bg-luxury-accent/20 text-luxury-accent'
+      case 'joined':
+        return 'bg-green-50 text-green-700'
+      case 'not_interested':
+        return 'bg-red-50 text-red-600'
+      default:
+        return 'bg-luxury-gray-5/40 text-luxury-gray-3'
     }
   }
 
@@ -87,14 +92,20 @@ export default function ProspectsPage() {
           <>
             {/* Mobile Card View */}
             <div className="md:hidden space-y-3">
-              {filteredProspects.map((prospect) => (
+              {filteredProspects.map(prospect => (
                 <div key={prospect.id} className="inner-card">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-luxury-gray-1">{prospect.preferred_first_name} {prospect.preferred_last_name}</p>
-                      <p className="text-xs text-luxury-gray-3">{prospect.first_name} {prospect.last_name}</p>
+                      <p className="text-sm font-semibold text-luxury-gray-1">
+                        {prospect.preferred_first_name} {prospect.preferred_last_name}
+                      </p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {prospect.first_name} {prospect.last_name}
+                      </p>
                     </div>
-                    <span className={`text-xs px-2.5 py-1 rounded flex-shrink-0 ml-2 font-medium ${getStatusStyle(prospect.prospect_status)}`}>
+                    <span
+                      className={`text-xs px-2.5 py-1 rounded flex-shrink-0 ml-2 font-medium ${getStatusStyle(prospect.prospect_status)}`}
+                    >
                       {prospect.prospect_status.replace('_', ' ')}
                     </span>
                   </div>
@@ -111,7 +122,9 @@ export default function ProspectsPage() {
                     )}
                     <div>
                       <span className="text-luxury-gray-3">Submitted: </span>
-                      <span className="text-luxury-gray-1">{new Date(prospect.created_at).toLocaleDateString()}</span>
+                      <span className="text-luxury-gray-1">
+                        {new Date(prospect.created_at).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                   <div className="mt-3 pt-3 border-t border-luxury-gray-5/30">
@@ -131,25 +144,44 @@ export default function ProspectsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-luxury-gray-5/50">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Name</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Email</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Location</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Status</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Submitted</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                      Location
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
+                      Submitted
+                    </th>
                     <th className="py-3 px-4"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProspects.map((prospect) => (
-                    <tr key={prospect.id} className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors">
+                  {filteredProspects.map(prospect => (
+                    <tr
+                      key={prospect.id}
+                      className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors"
+                    >
                       <td className="py-3 px-4">
-                        <p className="text-sm font-semibold text-luxury-gray-1">{prospect.preferred_first_name} {prospect.preferred_last_name}</p>
-                        <p className="text-xs text-luxury-gray-3">{prospect.first_name} {prospect.last_name}</p>
+                        <p className="text-sm font-semibold text-luxury-gray-1">
+                          {prospect.preferred_first_name} {prospect.preferred_last_name}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3">
+                          {prospect.first_name} {prospect.last_name}
+                        </p>
                       </td>
                       <td className="py-3 px-4 text-sm text-luxury-gray-2">{prospect.email}</td>
                       <td className="py-3 px-4 text-sm text-luxury-gray-2">{prospect.location}</td>
                       <td className="py-3 px-4">
-                        <span className={`text-xs px-2.5 py-1 rounded font-medium ${getStatusStyle(prospect.prospect_status)}`}>
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded font-medium ${getStatusStyle(prospect.prospect_status)}`}
+                        >
                           {prospect.prospect_status.replace('_', ' ')}
                         </span>
                       </td>

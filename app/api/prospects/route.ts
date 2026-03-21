@@ -26,19 +26,13 @@ export async function POST(request: NextRequest) {
 
     for (const field of requiredFields) {
       if (!formData[field]) {
-        return NextResponse.json(
-          { error: `${field} is required` },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: `${field} is required` }, { status: 400 })
       }
     }
 
     const phoneDigits = formData.phone.replace(/\D/g, '')
     if (phoneDigits.length !== 10) {
-      return NextResponse.json(
-        { error: 'Phone number must be exactly 10 digits' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Phone number must be exactly 10 digits' }, { status: 400 })
     }
 
     const { data: existingUser } = await supabase

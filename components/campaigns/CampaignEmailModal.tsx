@@ -6,7 +6,13 @@ import { supabase } from '@/lib/supabase'
 interface CampaignEmailModalProps {
   campaign: any
   onClose: () => void
-  onSend: (templateId: string | null, recipientFilter: string, customHtml?: string, customSubject?: string, individualAgentId?: string) => Promise<void>
+  onSend: (
+    templateId: string | null,
+    recipientFilter: string,
+    customHtml?: string,
+    customSubject?: string,
+    individualAgentId?: string
+  ) => Promise<void>
 }
 
 export default function CampaignEmailModal({ campaign, onClose, onSend }: CampaignEmailModalProps) {
@@ -18,7 +24,9 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
   const [loading, setLoading] = useState(true)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [sending, setSending] = useState(false)
-  const [recipientFilter, setRecipientFilter] = useState<'all' | 'active' | 'inactive' | 'prospect' | 'campaign_incomplete' | 'individual'>('all')
+  const [recipientFilter, setRecipientFilter] = useState<
+    'all' | 'active' | 'inactive' | 'prospect' | 'campaign_incomplete' | 'individual'
+  >('all')
   const [individualAgentId, setIndividualAgentId] = useState<string>('')
   const [agents, setAgents] = useState<any[]>([])
   const [loadingAgents, setLoadingAgents] = useState(false)
@@ -40,13 +48,15 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
 
   useEffect(() => {
     if (templates.length === 0) return
-    
+
     if (selectedTemplateId) {
       const template = templates.find(t => t.id === selectedTemplateId)
       setSelectedTemplate(template || null)
     } else {
       // Load default template (or first template if no default)
-      const defaultTemplate = templates.find(t => t.category === 'campaign' && t.is_default && t.is_active) || templates[0]
+      const defaultTemplate =
+        templates.find(t => t.category === 'campaign' && t.is_default && t.is_active) ||
+        templates[0]
       if (defaultTemplate) {
         setSelectedTemplateId(defaultTemplate.id)
         setSelectedTemplate(defaultTemplate)
@@ -74,18 +84,15 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
     // Wait for iframe to load
     const timeoutId = setTimeout(() => {
       try {
-        const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document
+        const iframeDoc =
+          iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document
         if (!iframeDoc || !iframeDoc.body) return
 
         // Make all text elements contentEditable (but not variable placeholders)
-        const walker = iframeDoc.createTreeWalker(
-          iframeDoc.body,
-          NodeFilter.SHOW_TEXT,
-          null
-        )
+        const walker = iframeDoc.createTreeWalker(iframeDoc.body, NodeFilter.SHOW_TEXT, null)
         const textNodes: Node[] = []
         let node
-        while (node = walker.nextNode()) {
+        while ((node = walker.nextNode())) {
           const text = node.textContent || ''
           // Skip if text contains variable placeholders
           if (!/\{\{(\w+)\}\}/.test(text) && text.trim()) {
@@ -95,7 +102,12 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
 
         textNodes.forEach(textNode => {
           const parent = textNode.parentNode
-          if (parent && parent instanceof Element && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
+          if (
+            parent &&
+            parent instanceof Element &&
+            parent.tagName !== 'SCRIPT' &&
+            parent.tagName !== 'STYLE'
+          ) {
             const span = iframeDoc.createElement('span')
             span.contentEditable = 'true'
             span.style.outline = '1px dashed #C5A278'
@@ -186,7 +198,10 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       const htmlToPreview = selectedTemplate?.html_content || ''
       const subjectToPreview = selectedTemplate?.subject_line || ''
 
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        'http://localhost:3000'
       const sampleLink = `${baseUrl}/campaign/${campaign.slug}?token=sample-token-12345`
 
       const variables: Record<string, string> = {
@@ -197,7 +212,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
         deadline: new Date(campaign.deadline).toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
-          day: 'numeric'
+          day: 'numeric',
         }),
         logo_url: `${baseUrl}/logo.png`,
       }
@@ -205,7 +220,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       let preview = htmlToPreview
       let subject = subjectToPreview
 
-      Object.keys(variables).forEach((key) => {
+      Object.keys(variables).forEach(key => {
         const placeholder = `{{${key}}}`
         preview = preview.split(placeholder).join(variables[key])
         subject = subject.split(placeholder).join(variables[key])
@@ -231,10 +246,12 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       case 'prospect':
         return 'prospects'
       case 'campaign_incomplete':
-        return 'agents who haven\'t completed the campaign'
+        return "agents who haven't completed the campaign"
       case 'individual':
         const selectedAgent = agents.find(a => a.id === individualAgentId)
-        return selectedAgent ? `individual agent: ${selectedAgent.preferred_first_name} ${selectedAgent.preferred_last_name}` : 'individual agent'
+        return selectedAgent
+          ? `individual agent: ${selectedAgent.preferred_first_name} ${selectedAgent.preferred_last_name}`
+          : 'individual agent'
       default:
         return 'recipients'
     }
@@ -245,7 +262,8 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
     if (!iframeRef.current) return
 
     try {
-      const iframeDoc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+      const iframeDoc =
+        iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
       if (!iframeDoc || !iframeDoc.body) return
 
       let editedHtml = iframeDoc.body.innerHTML
@@ -259,13 +277,13 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
         deadline: new Date(campaign.deadline).toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
-          day: 'numeric'
+          day: 'numeric',
         }),
         logo_url: `${process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logo.png`,
       }
 
       // Replace sample values back with placeholders (optional - may not be needed for custom edits)
-      Object.keys(variables).forEach((key) => {
+      Object.keys(variables).forEach(key => {
         const sampleValue = variables[key]
         const placeholder = `{{${key}}}`
         // Only replace if it's an exact match to avoid false positives
@@ -298,12 +316,13 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
     try {
       // Use edited preview if in edit mode, otherwise use original template
       const customHtml = previewEditMode && editedPreviewHtml ? editedPreviewHtml : undefined
-      const customSubject = previewEditMode && editedPreviewSubject ? editedPreviewSubject : undefined
-      
+      const customSubject =
+        previewEditMode && editedPreviewSubject ? editedPreviewSubject : undefined
+
       await onSend(
-        selectedTemplateId, 
-        recipientFilter, 
-        customHtml, 
+        selectedTemplateId,
+        recipientFilter,
+        customHtml,
         customSubject,
         recipientFilter === 'individual' ? individualAgentId : undefined
       )
@@ -345,18 +364,16 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
             {/* Left: Template Selector & Settings */}
             <div className="md:col-span-1 space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Email Template
-                </label>
+                <label className="block text-sm font-medium mb-2">Email Template</label>
                 <select
                   value={selectedTemplateId || ''}
-                  onChange={(e) => {
+                  onChange={e => {
                     setSelectedTemplateId(e.target.value || null)
                   }}
                   className="select-luxury"
                 >
                   <option value="">Default Template</option>
-                  {templates.map((template) => (
+                  {templates.map(template => (
                     <option key={template.id} value={template.id}>
                       {template.name} {template.is_default && '(Default)'}
                     </option>
@@ -378,7 +395,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="all"
                       checked={recipientFilter === 'all'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">All agents</span>
@@ -389,7 +406,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="active"
                       checked={recipientFilter === 'active'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Active agents</span>
@@ -400,7 +417,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="inactive"
                       checked={recipientFilter === 'inactive'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Inactive agents</span>
@@ -411,7 +428,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="prospect"
                       checked={recipientFilter === 'prospect'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Prospects</span>
@@ -422,7 +439,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="campaign_incomplete"
                       checked={recipientFilter === 'campaign_incomplete'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Campaign incomplete</span>
@@ -433,7 +450,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       name="recipientFilter"
                       value="individual"
                       checked={recipientFilter === 'individual'}
-                      onChange={(e) => setRecipientFilter(e.target.value as any)}
+                      onChange={e => setRecipientFilter(e.target.value as any)}
                       className="w-4 h-4"
                     />
                     <span className="text-sm">Individual</span>
@@ -445,13 +462,14 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       ) : (
                         <select
                           value={individualAgentId}
-                          onChange={(e) => setIndividualAgentId(e.target.value)}
+                          onChange={e => setIndividualAgentId(e.target.value)}
                           className="select-luxury text-sm w-full"
                         >
                           <option value="">Select an agent...</option>
-                          {agents.map((agent) => (
+                          {agents.map(agent => (
                             <option key={agent.id} value={agent.id}>
-                              {agent.preferred_first_name} {agent.preferred_last_name} ({agent.email}) {agent.is_active ? '' : '(Inactive)'}
+                              {agent.preferred_first_name} {agent.preferred_last_name} (
+                              {agent.email}) {agent.is_active ? '' : '(Inactive)'}
                             </option>
                           ))}
                         </select>
@@ -472,7 +490,7 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
                       <input
                         type="text"
                         value={editedPreviewSubject}
-                        onChange={(e) => setEditedPreviewSubject(e.target.value)}
+                        onChange={e => setEditedPreviewSubject(e.target.value)}
                         className="input-luxury text-sm w-full"
                         placeholder="Email subject"
                       />
@@ -535,4 +553,3 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
     </div>
   )
 }
-

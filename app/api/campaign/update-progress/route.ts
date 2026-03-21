@@ -34,19 +34,14 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       // Update existing
-      await supabase
-        .from('campaign_recipients')
-        .update(updateData)
-        .eq('id', existing.id)
+      await supabase.from('campaign_recipients').update(updateData).eq('id', existing.id)
     } else {
       // Create new
-      await supabase
-        .from('campaign_recipients')
-        .insert({
-          campaign_id,
-          user_id,
-          ...updateData,
-        })
+      await supabase.from('campaign_recipients').insert({
+        campaign_id,
+        user_id,
+        ...updateData,
+      })
     }
 
     return NextResponse.json({ success: true })

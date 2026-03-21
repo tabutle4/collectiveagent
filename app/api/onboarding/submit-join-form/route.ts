@@ -61,13 +61,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Advance onboarding session to step 2
-    await supabase
-      .from('onboarding_sessions')
-      .upsert({
+    await supabase.from('onboarding_sessions').upsert(
+      {
         user_id: prospect.id,
         current_step: 2,
         step_1_completed_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' })
+      },
+      { onConflict: 'user_id' }
+    )
 
     return NextResponse.json({ success: true, next_step: 2 })
   } catch (error: any) {

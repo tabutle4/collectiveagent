@@ -3,22 +3,25 @@
 // When company_settings is wired up, these will pull from the database
 
 export const EMAIL_COLORS = {
-  accent: '#C5A278',        // luxury-accent (tan/gold)
-  headerBg: '#1A1A1A',      // luxury-black
-  bodyText: '#555555',       // luxury-gray-2
-  headingText: '#1A1A1A',   // luxury-gray-1
-  lightText: '#888888',      // luxury-gray-3
-  lightBg: '#F9F9F9',       // luxury-light
-  border: '#E5E5E5',        // luxury-gray-5
+  accent: '#C5A278', // luxury-accent (tan/gold)
+  headerBg: '#1A1A1A', // luxury-black
+  bodyText: '#555555', // luxury-gray-2
+  headingText: '#1A1A1A', // luxury-gray-1
+  lightText: '#888888', // luxury-gray-3
+  lightBg: '#F9F9F9', // luxury-light
+  border: '#E5E5E5', // luxury-gray-5
   white: '#FFFFFF',
   buttonText: '#FFFFFF',
 }
 
-export function getEmailLayout(content: string, options?: {
-  title?: string
-  subtitle?: string
-  preheader?: string
-}): string {
+export function getEmailLayout(
+  content: string,
+  options?: {
+    title?: string
+    subtitle?: string
+    preheader?: string
+  }
+): string {
   const { title, subtitle, preheader } = options || {}
 
   return `<!DOCTYPE html>
@@ -162,10 +165,14 @@ export function getEmailLayout(content: string, options?: {
 </head>
 <body>
   <div class="email-wrapper">
-    ${title ? `<div class="email-header">
+    ${
+      title
+        ? `<div class="email-header">
       <h1>${title}</h1>
       ${subtitle ? `<p>${subtitle}</p>` : ''}
-    </div>` : ''}
+    </div>`
+        : ''
+    }
     
     <div class="email-content">
       ${content}
@@ -192,7 +199,12 @@ export function emailButton(text: string, url: string, dark?: boolean): string {
 }
 
 // Helper for a signature block
-export function emailSignature(name: string, title: string, email?: string, phone?: string): string {
+export function emailSignature(
+  name: string,
+  title: string,
+  email?: string,
+  phone?: string
+): string {
   let sig = `<div class="email-signature">Best regards,<br><strong>${name}</strong><br>${title}<br>Collective Realty Co.`
   if (email) sig += `<br>${email}`
   if (phone) sig += `<br>${phone}`

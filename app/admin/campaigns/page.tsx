@@ -22,7 +22,7 @@ export default function AdminCampaignsPage() {
       if (error) throw error
 
       const campaignsWithCounts = await Promise.all(
-        campaigns.map(async (campaign) => {
+        campaigns.map(async campaign => {
           try {
             const { count, error: countError } = await supabase
               .from('campaign_recipients')
@@ -30,7 +30,8 @@ export default function AdminCampaignsPage() {
               .eq('campaign_id', campaign.id)
               .not('fully_completed_at', 'is', null)
 
-            if (countError) console.error(`Error counting recipients for campaign ${campaign.id}:`, countError)
+            if (countError)
+              console.error(`Error counting recipients for campaign ${campaign.id}:`, countError)
             return { ...campaign, completed_count: count || 0 }
           } catch (countErr) {
             console.error(`Error counting recipients for campaign ${campaign.id}:`, countErr)
@@ -43,7 +44,9 @@ export default function AdminCampaignsPage() {
       setLoading(false)
     } catch (error: any) {
       console.error('Error fetching campaigns:', error)
-      alert(`Error loading campaigns: ${error?.message || 'Unknown error'}. Check console for details.`)
+      alert(
+        `Error loading campaigns: ${error?.message || 'Unknown error'}. Check console for details.`
+      )
       setLoading(false)
     }
   }
@@ -71,7 +74,7 @@ export default function AdminCampaignsPage() {
       ) : (
         <div className="container-card">
           <div className="space-y-3">
-            {campaigns.map((campaign) => (
+            {campaigns.map(campaign => (
               <Link
                 key={campaign.id}
                 href={`/admin/campaigns/${campaign.id}`}
@@ -81,19 +84,25 @@ export default function AdminCampaignsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1.5">
                       <h3 className="text-sm font-semibold text-luxury-gray-1">{campaign.name}</h3>
-                      <span className={`text-xs px-2.5 py-1 rounded font-medium ${campaign.is_active ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/40 text-luxury-gray-3'}`}>
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded font-medium ${campaign.is_active ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/40 text-luxury-gray-3'}`}
+                      >
                         {campaign.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-4 text-xs text-luxury-gray-3">
                       {campaign.year && <span>Year: {campaign.year}</span>}
                       <span>Deadline: {new Date(campaign.deadline).toLocaleDateString()}</span>
-                      {campaign.sent_at && <span>Sent: {new Date(campaign.sent_at).toLocaleDateString()}</span>}
+                      {campaign.sent_at && (
+                        <span>Sent: {new Date(campaign.sent_at).toLocaleDateString()}</span>
+                      )}
                     </div>
                   </div>
                   <div className="text-left md:text-right flex-shrink-0">
                     <p className="text-xs text-luxury-gray-3">Completed</p>
-                    <p className="text-2xl font-semibold text-luxury-accent">{campaign.completed_count || 0}</p>
+                    <p className="text-2xl font-semibold text-luxury-accent">
+                      {campaign.completed_count || 0}
+                    </p>
                   </div>
                 </div>
               </Link>

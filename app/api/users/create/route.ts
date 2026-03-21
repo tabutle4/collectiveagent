@@ -17,7 +17,14 @@ export async function POST(request: NextRequest) {
       is_active,
     } = await request.json()
 
-    if (!email || !password || !first_name || !last_name || !preferred_first_name || !preferred_last_name) {
+    if (
+      !email ||
+      !password ||
+      !first_name ||
+      !last_name ||
+      !preferred_first_name ||
+      !preferred_last_name
+    ) {
       return NextResponse.json(
         { error: 'Email, password, and all name fields are required' },
         { status: 400 }
@@ -25,10 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (password.length < 8) {
-      return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
     const { data: existingUser } = await supabase
@@ -38,10 +42,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
     }
 
     const password_hash = await hashPassword(password)
@@ -56,7 +57,9 @@ export async function POST(request: NextRequest) {
         preferred_first_name,
         preferred_last_name,
         roles: (roles || ['agent']).map((r: string) => r.toLowerCase()),
-        role: (roles || ['agent']).some((r: string) => r.toLowerCase() === 'admin') ? 'Admin' : 'Agent',
+        role: (roles || ['agent']).some((r: string) => r.toLowerCase() === 'admin')
+          ? 'Admin'
+          : 'Agent',
         is_active: is_active !== undefined ? is_active : true,
       })
       .select()

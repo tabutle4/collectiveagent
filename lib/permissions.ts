@@ -1,12 +1,12 @@
 /**
  * Database-driven permissions system for Collective Agent app
- * 
+ *
  * Permissions are stored in the database:
  * - roles: defines role names (agent, tc, operations, broker)
  * - permissions: defines permission codes (can_create_transactions, etc.)
  * - role_permissions: maps roles to permissions (defaults per role)
  * - user_permission_overrides: per-user grants/revokes
- * 
+ *
  * Usage:
  *   const permissions = await getUserPermissions(userId)
  *   if (permissions.has('can_create_transactions')) { ... }
@@ -101,10 +101,12 @@ export async function getUserPermissions(userId: string): Promise<Set<Permission
     // 3. Get all permissions for this role
     const { data: rolePerms, error: rolePermsError } = await supabase
       .from('role_permissions')
-      .select(`
+      .select(
+        `
         permission_id,
         permissions!inner(code)
-      `)
+      `
+      )
       .eq('role_id', role.id)
 
     if (rolePermsError) {
@@ -121,10 +123,12 @@ export async function getUserPermissions(userId: string): Promise<Set<Permission
     // 4. Apply user-specific overrides
     const { data: overrides, error: overridesError } = await supabase
       .from('user_permission_overrides')
-      .select(`
+      .select(
+        `
         granted,
         permissions!inner(code)
-      `)
+      `
+      )
       .eq('user_id', userId)
 
     if (overridesError) {
@@ -161,7 +165,10 @@ export async function hasPermission(userId: string, permission: PermissionCode):
 /**
  * Check if a user has ALL of the specified permissions
  */
-export async function hasAllPermissions(userId: string, requiredPermissions: PermissionCode[]): Promise<boolean> {
+export async function hasAllPermissions(
+  userId: string,
+  requiredPermissions: PermissionCode[]
+): Promise<boolean> {
   const permissions = await getUserPermissions(userId)
   return requiredPermissions.every(p => permissions.has(p))
 }
@@ -169,7 +176,10 @@ export async function hasAllPermissions(userId: string, requiredPermissions: Per
 /**
  * Check if a user has ANY of the specified permissions
  */
-export async function hasAnyPermission(userId: string, requiredPermissions: PermissionCode[]): Promise<boolean> {
+export async function hasAnyPermission(
+  userId: string,
+  requiredPermissions: PermissionCode[]
+): Promise<boolean> {
   const permissions = await getUserPermissions(userId)
   return requiredPermissions.some(p => permissions.has(p))
 }
@@ -177,32 +187,61 @@ export async function hasAnyPermission(userId: string, requiredPermissions: Perm
 /**
  * Get permissions as an object for JSON responses
  */
-export async function getPermissionsObject(userId: string): Promise<Record<PermissionCode, boolean>> {
+export async function getPermissionsObject(
+  userId: string
+): Promise<Record<PermissionCode, boolean>> {
   const permissions = await getUserPermissions(userId)
   const result: Partial<Record<PermissionCode, boolean>> = {}
-  
+
   // All possible permissions
   const allPermissions: PermissionCode[] = [
-    'can_create_transactions', 'can_edit_transactions', 'can_delete_transactions',
-    'can_cancel_transactions', 'can_view_all_transactions', 'can_close_transactions',
-    'can_reopen_transactions', 'can_submit_for_compliance', 'can_review_compliance',
-    'can_approve_compliance', 'can_complete_checklist_items', 'can_edit_commission_details',
-    'can_generate_cda', 'can_finalize_commissions', 'can_approve_cda',
-    'can_view_checks', 'can_manage_checks', 'can_process_payouts',
-    'can_view_1099_data', 'can_generate_1099_reports', 'can_view_all_agents',
-    'can_manage_agents', 'can_reset_passwords', 'can_manage_agent_billing',
-    'can_view_agent_debts', 'can_manage_agent_debts', 'can_manage_company_settings',
-    'can_manage_transaction_types', 'can_manage_commission_plans', 'can_manage_checklists',
-    'can_manage_required_documents', 'can_manage_field_definitions', 'can_manage_workflow_steps',
-    'can_manage_payee_types', 'can_manage_roles', 'can_view_activity_log',
-    'can_view_own_reports', 'can_view_all_reports', 'can_manage_contact_submissions',
-    'can_manage_email_templates', 'can_view_all_contacts'
+    'can_create_transactions',
+    'can_edit_transactions',
+    'can_delete_transactions',
+    'can_cancel_transactions',
+    'can_view_all_transactions',
+    'can_close_transactions',
+    'can_reopen_transactions',
+    'can_submit_for_compliance',
+    'can_review_compliance',
+    'can_approve_compliance',
+    'can_complete_checklist_items',
+    'can_edit_commission_details',
+    'can_generate_cda',
+    'can_finalize_commissions',
+    'can_approve_cda',
+    'can_view_checks',
+    'can_manage_checks',
+    'can_process_payouts',
+    'can_view_1099_data',
+    'can_generate_1099_reports',
+    'can_view_all_agents',
+    'can_manage_agents',
+    'can_reset_passwords',
+    'can_manage_agent_billing',
+    'can_view_agent_debts',
+    'can_manage_agent_debts',
+    'can_manage_company_settings',
+    'can_manage_transaction_types',
+    'can_manage_commission_plans',
+    'can_manage_checklists',
+    'can_manage_required_documents',
+    'can_manage_field_definitions',
+    'can_manage_workflow_steps',
+    'can_manage_payee_types',
+    'can_manage_roles',
+    'can_view_activity_log',
+    'can_view_own_reports',
+    'can_view_all_reports',
+    'can_manage_contact_submissions',
+    'can_manage_email_templates',
+    'can_view_all_contacts',
   ]
-  
+
   for (const perm of allPermissions) {
     result[perm] = permissions.has(perm)
   }
-  
+
   return result as Record<PermissionCode, boolean>
 }
 
@@ -211,7 +250,7 @@ export async function getPermissionsObject(userId: string): Promise<Record<Permi
  */
 export async function getUserRole(userId: string): Promise<RoleName> {
   const supabase = createClient()
-  
+
   const { data: user, error } = await supabase
     .from('users')
     .select('role')
@@ -223,12 +262,12 @@ export async function getUserRole(userId: string): Promise<RoleName> {
   }
 
   const role = (user.role || 'agent').toLowerCase()
-  
+
   // Validate it's a known role
   if (['agent', 'tc', 'operations', 'broker'].includes(role)) {
     return role as RoleName
   }
-  
+
   return 'agent'
 }
 

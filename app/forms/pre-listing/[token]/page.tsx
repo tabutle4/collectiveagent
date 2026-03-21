@@ -8,18 +8,18 @@ export default function PublicPreListingForm() {
   const params = useParams()
   const router = useRouter()
   const token = params.token as string
-  
+
   const [loading, setLoading] = useState(false)
   const [validating, setValidating] = useState(true)
   const [valid, setValid] = useState(false)
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
-  const [agents, setAgents] = useState<Array<{id: string, name: string}>>([])
+  const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
   const [submissionType, setSubmissionType] = useState<'new' | 'update'>('new')
   const [agentSearch, setAgentSearch] = useState('')
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
-  const [selectedAgent, setSelectedAgent] = useState<{id: string, name: string} | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<{ id: string; name: string } | null>(null)
   const agentDropdownRef = useRef<HTMLDivElement>(null)
-  
+
   const [formData, setFormData] = useState({
     agent_id: '',
     agent_name: '',
@@ -40,7 +40,7 @@ export default function PublicPreListingForm() {
     photography_requested: false,
     is_broker_listing: false,
   })
-  
+
   useEffect(() => {
     // Validate token (just checks if token format is valid)
     fetch(`/api/forms/validate-token?token=${token}`)
@@ -59,7 +59,7 @@ export default function PublicPreListingForm() {
       .finally(() => {
         setValidating(false)
       })
-    
+
     // Load coordination config
     fetch('/api/service-config/get?type=listing_coordination')
       .then(res => res.json())
@@ -69,7 +69,7 @@ export default function PublicPreListingForm() {
         }
       })
       .catch(err => console.error('Error fetching service config:', err))
-    
+
     // Load agents for dropdown
     fetch('/api/agents/list')
       .then(res => res.json())
@@ -80,7 +80,7 @@ export default function PublicPreListingForm() {
       })
       .catch(err => console.error('Error fetching agents:', err))
   }, [token])
-  
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -88,12 +88,12 @@ export default function PublicPreListingForm() {
         setAgentDropdownOpen(false)
       }
     }
-    
+
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-  
-  const handleAgentSelect = (agent: {id: string, name: string}) => {
+
+  const handleAgentSelect = (agent: { id: string; name: string }) => {
     setSelectedAgent(agent)
     setAgentSearch(agent.name)
     setAgentDropdownOpen(false)
@@ -103,25 +103,27 @@ export default function PublicPreListingForm() {
       agent_name: agent.name,
     })
   }
-  
+
   const filteredAgents = agents.filter(agent =>
     agent.name.toLowerCase().includes(agentSearch.toLowerCase())
   )
-  
+
   // Check if selected agent is Courtney Okanlomo (case-insensitive)
-  const isCourtneyOkanlomo = selectedAgent?.name?.toLowerCase().includes('courtney okanlomo') || 
-                             selectedAgent?.name?.toLowerCase().includes('okanlomo') || false
-  
+  const isCourtneyOkanlomo =
+    selectedAgent?.name?.toLowerCase().includes('courtney okanlomo') ||
+    selectedAgent?.name?.toLowerCase().includes('okanlomo') ||
+    false
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!selectedAgent) {
       alert('Please select an agent from the dropdown')
       return
     }
-    
+
     setLoading(true)
-    
+
     try {
       const response = await fetch('/api/listings/create', {
         method: 'POST',
@@ -132,9 +134,9 @@ export default function PublicPreListingForm() {
           form_token: token, // Include token to identify this is a token-based submission
         }),
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         alert('Pre-listing form submitted successfully!')
         router.push('/forms/success')
@@ -148,7 +150,7 @@ export default function PublicPreListingForm() {
       setLoading(false)
     }
   }
-  
+
   if (validating) {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
@@ -160,16 +162,14 @@ export default function PublicPreListingForm() {
       </div>
     )
   }
-  
+
   if (!valid) {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="card-section text-center py-12">
             <h2 className="text-xl font-medium mb-4 text-luxury-gray-1">Access Denied</h2>
-            <p className="text-luxury-gray-2 mb-6">
-              This form link is invalid or has expired.
-            </p>
+            <p className="text-luxury-gray-2 mb-6">This form link is invalid or has expired.</p>
             <p className="text-sm text-luxury-gray-2">
               Please contact the office for a new form link.
             </p>
@@ -178,7 +178,7 @@ export default function PublicPreListingForm() {
       </div>
     )
   }
-  
+
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-3xl mx-auto">
@@ -187,11 +187,12 @@ export default function PublicPreListingForm() {
           <p className="text-sm text-luxury-gray-2 mb-6">
             Submit this form when you have executed a new listing agreement
           </p>
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
-                Is this a new submission or an update to an existing transaction? <span className="text-red-500">*</span>
+                Is this a new submission or an update to an existing transaction?{' '}
+                <span className="text-red-500">*</span>
               </label>
               <div className="space-y-2">
                 <label className="flex items-center space-x-3 cursor-pointer">
@@ -200,7 +201,7 @@ export default function PublicPreListingForm() {
                     name="submission_type"
                     value="new"
                     checked={submissionType === 'new'}
-                    onChange={(e) => setSubmissionType('new')}
+                    onChange={e => setSubmissionType('new')}
                     className="mt-0.5"
                     required
                   />
@@ -212,7 +213,7 @@ export default function PublicPreListingForm() {
                     name="submission_type"
                     value="update"
                     checked={submissionType === 'update'}
-                    onChange={(e) => setSubmissionType('update')}
+                    onChange={e => setSubmissionType('update')}
                     className="mt-0.5"
                     required
                   />
@@ -221,11 +222,12 @@ export default function PublicPreListingForm() {
               </div>
               {submissionType === 'update' && (
                 <p className="text-xs text-luxury-gray-2 mt-2">
-                  The system will find the existing transaction by matching the property address and agent you select below.
+                  The system will find the existing transaction by matching the property address and
+                  agent you select below.
                 </p>
               )}
             </div>
-            
+
             <div className="relative" ref={agentDropdownRef}>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Agent <span className="text-red-500">*</span>
@@ -233,12 +235,12 @@ export default function PublicPreListingForm() {
               <input
                 type="text"
                 value={agentSearch}
-                onChange={(e) => {
+                onChange={e => {
                   setAgentSearch(e.target.value)
                   setAgentDropdownOpen(true)
                   if (!e.target.value) {
                     setSelectedAgent(null)
-                    setFormData({...formData, agent_id: '', agent_name: ''})
+                    setFormData({ ...formData, agent_id: '', agent_name: '' })
                   }
                 }}
                 onFocus={() => {
@@ -253,7 +255,7 @@ export default function PublicPreListingForm() {
               />
               {agentDropdownOpen && agentSearch && filteredAgents.length > 0 && (
                 <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-60 overflow-auto">
-                  {filteredAgents.map((agent) => (
+                  {filteredAgents.map(agent => (
                     <button
                       key={agent.id}
                       type="button"
@@ -270,11 +272,9 @@ export default function PublicPreListingForm() {
                   No agents found
                 </div>
               )}
-              {selectedAgent && (
-                <input type="hidden" name="agent_id" value={selectedAgent.id} />
-              )}
+              {selectedAgent && <input type="hidden" name="agent_id" value={selectedAgent.id} />}
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Property Address <span className="text-red-500">*</span>
@@ -282,20 +282,22 @@ export default function PublicPreListingForm() {
               <input
                 type="text"
                 value={formData.property_address}
-                onChange={(e) => setFormData({...formData, property_address: e.target.value})}
+                onChange={e => setFormData({ ...formData, property_address: e.target.value })}
                 className="input-luxury"
                 placeholder="123 Main St, Houston, TX 77001"
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Transaction Type <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.transaction_type}
-                onChange={(e) => setFormData({...formData, transaction_type: e.target.value as 'sale' | 'lease'})}
+                onChange={e =>
+                  setFormData({ ...formData, transaction_type: e.target.value as 'sale' | 'lease' })
+                }
                 className="select-luxury"
                 required
               >
@@ -303,14 +305,16 @@ export default function PublicPreListingForm() {
                 <option value="lease">Lease</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 MLS <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.mls_type}
-                onChange={(e) => setFormData({...formData, mls_type: e.target.value as 'HAR' | 'NTREIS'})}
+                onChange={e =>
+                  setFormData({ ...formData, mls_type: e.target.value as 'HAR' | 'NTREIS' })
+                }
                 className="select-luxury"
                 required
               >
@@ -318,7 +322,7 @@ export default function PublicPreListingForm() {
                 <option value="NTREIS">NTREIS</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Client Name or LLC <span className="text-red-500">*</span>
@@ -326,13 +330,13 @@ export default function PublicPreListingForm() {
               <input
                 type="text"
                 value={formData.client_names}
-                onChange={(e) => setFormData({...formData, client_names: e.target.value})}
+                onChange={e => setFormData({ ...formData, client_names: e.target.value })}
                 className="input-luxury"
                 placeholder="John and Jane Doe or ABC LLC"
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Client Phone Number(s) <span className="text-red-500">*</span>
@@ -340,13 +344,13 @@ export default function PublicPreListingForm() {
               <input
                 type="tel"
                 value={formData.client_phone}
-                onChange={(e) => setFormData({...formData, client_phone: e.target.value})}
+                onChange={e => setFormData({ ...formData, client_phone: e.target.value })}
                 className="input-luxury"
                 placeholder="(555) 123-4567"
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Client Email Address(es) <span className="text-red-500">*</span>
@@ -354,20 +358,20 @@ export default function PublicPreListingForm() {
               <input
                 type="email"
                 value={formData.client_email}
-                onChange={(e) => setFormData({...formData, client_email: e.target.value})}
+                onChange={e => setFormData({ ...formData, client_email: e.target.value })}
                 className="input-luxury"
                 placeholder="client@example.com"
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 What is the source of this lead? <span className="text-red-500">*</span>
               </label>
               <select
                 value={formData.lead_source}
-                onChange={(e) => setFormData({...formData, lead_source: e.target.value})}
+                onChange={e => setFormData({ ...formData, lead_source: e.target.value })}
                 className="select-luxury"
                 required
               >
@@ -382,7 +386,7 @@ export default function PublicPreListingForm() {
                 <option value="print_advertising">Print Advertising</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 Estimated Listing Launch Date <span className="text-red-500">*</span>
@@ -390,36 +394,48 @@ export default function PublicPreListingForm() {
               <input
                 type="date"
                 value={formData.estimated_launch_date}
-                onChange={(e) => setFormData({...formData, estimated_launch_date: e.target.value})}
+                onChange={e => setFormData({ ...formData, estimated_launch_date: e.target.value })}
                 className="input-luxury"
                 required
               />
             </div>
-            
+
             <div className="border-t border-luxury-gray-5 pt-6 mt-8">
               <h3 className="text-lg font-medium mb-4">Optional Services</h3>
-              
+
               <div className="bg-luxury-light p-4 rounded mb-4">
                 <label className="flex items-start space-x-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.listing_input_requested}
-                    onChange={(e) => setFormData({...formData, listing_input_requested: e.target.checked})}
+                    onChange={e =>
+                      setFormData({ ...formData, listing_input_requested: e.target.checked })
+                    }
                     className="mt-1"
                   />
                   <div className="flex-1">
                     <p className="font-medium text-base mb-1">
                       Request Initial Listing Input
-                      {!isCourtneyOkanlomo && <span> - $50 <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></span>}
+                      {!isCourtneyOkanlomo && (
+                        <span>
+                          {' '}
+                          - $50{' '}
+                          <span className="text-xs font-normal text-luxury-gray-2">(one time)</span>
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-luxury-gray-2 mb-2">
                       Includes listing the property in the MLS, as well as up to 2 additional edits.
                     </p>
                     {!isCourtneyOkanlomo && (
                       <div className="bg-white p-3 rounded border border-luxury-gray-5 mb-2">
-                        <p className="text-sm font-medium mb-1">Agent Pays (Due in 60 Days or at Closing)</p>
+                        <p className="text-sm font-medium mb-1">
+                          Agent Pays (Due in 60 Days or at Closing)
+                        </p>
                         <p className="text-xs text-luxury-gray-2">
-                          You pay $50 to brokerage within 60 days or at closing, whichever happens first. If not paid within 60 days, fee will be deducted from any commission.
+                          You pay $50 to brokerage within 60 days or at closing, whichever happens
+                          first. If not paid within 60 days, fee will be deducted from any
+                          commission.
                         </p>
                       </div>
                     )}
@@ -435,7 +451,12 @@ export default function PublicPreListingForm() {
                               name="listing_input_payment_method"
                               value="zelle"
                               checked={formData.listing_input_payment_method === 'zelle'}
-                              onChange={(e) => setFormData({...formData, listing_input_payment_method: e.target.value as 'zelle'})}
+                              onChange={e =>
+                                setFormData({
+                                  ...formData,
+                                  listing_input_payment_method: e.target.value as 'zelle',
+                                })
+                              }
                               className="mt-0.5"
                               required={formData.listing_input_requested}
                             />
@@ -452,7 +473,12 @@ export default function PublicPreListingForm() {
                               name="listing_input_payment_method"
                               value="invoice"
                               checked={formData.listing_input_payment_method === 'invoice'}
-                              onChange={(e) => setFormData({...formData, listing_input_payment_method: e.target.value as 'invoice'})}
+                              onChange={e =>
+                                setFormData({
+                                  ...formData,
+                                  listing_input_payment_method: e.target.value as 'invoice',
+                                })
+                              }
                               className="mt-0.5"
                               required={formData.listing_input_requested}
                             />
@@ -469,31 +495,42 @@ export default function PublicPreListingForm() {
                   </div>
                 </label>
               </div>
-              
+
               {coordinationConfig && (
                 <div className="bg-luxury-light p-4 rounded mb-4">
                   <label className="flex items-start space-x-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.coordination_requested}
-                      onChange={(e) => setFormData({...formData, coordination_requested: e.target.checked})}
+                      onChange={e =>
+                        setFormData({ ...formData, coordination_requested: e.target.checked })
+                      }
                       className="mt-1"
                     />
                     <div className="flex-1">
                       <p className="font-medium text-base mb-1">
                         {coordinationConfig.service_name}
-                        {!isCourtneyOkanlomo && <span> - ${coordinationConfig.price} <span className="text-xs font-normal text-luxury-gray-2">(one time)</span></span>}
+                        {!isCourtneyOkanlomo && (
+                          <span>
+                            {' '}
+                            - ${coordinationConfig.price}{' '}
+                            <span className="text-xs font-normal text-luxury-gray-2">
+                              (one time)
+                            </span>
+                          </span>
+                        )}
                       </p>
-                      {coordinationConfig.inclusions && coordinationConfig.inclusions.length > 0 && (
-                        <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1 ml-4 mb-3">
-                          {coordinationConfig.inclusions.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      )}
+                      {coordinationConfig.inclusions &&
+                        coordinationConfig.inclusions.length > 0 && (
+                          <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1 ml-4 mb-3">
+                            {coordinationConfig.inclusions.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
+                        )}
                     </div>
                   </label>
-                  
+
                   {formData.coordination_requested && (
                     <div className="mt-4 ml-7 pl-4 border-l-2 border-luxury-gray-5">
                       <p className="text-xs font-medium text-luxury-gray-1 mb-2">
@@ -506,39 +543,56 @@ export default function PublicPreListingForm() {
                             name="coordination_payment_method"
                             value="client_direct"
                             checked={formData.coordination_payment_method === 'client_direct'}
-                            onChange={(e) => setFormData({...formData, coordination_payment_method: e.target.value as 'client_direct', coordination_payment_type: ''})}
+                            onChange={e =>
+                              setFormData({
+                                ...formData,
+                                coordination_payment_method: e.target.value as 'client_direct',
+                                coordination_payment_type: '',
+                              })
+                            }
                             className="mt-0.5"
                             required={formData.coordination_requested}
                           />
                           <div className="flex-1">
-                            <p className="text-sm font-medium">Client Pays Directly (Before Service Starts)</p>
+                            <p className="text-sm font-medium">
+                              Client Pays Directly (Before Service Starts)
+                            </p>
                             {!isCourtneyOkanlomo && (
                               <p className="text-xs text-luxury-gray-2">
-                                $250 fee included in listing agreement. Client pays brokerage before coordination begins.
+                                $250 fee included in listing agreement. Client pays brokerage before
+                                coordination begins.
                               </p>
                             )}
                           </div>
                         </label>
-                        
+
                         <label className="flex items-start space-x-3 cursor-pointer">
                           <input
                             type="radio"
                             name="coordination_payment_method"
                             value="agent_pays"
                             checked={formData.coordination_payment_method === 'agent_pays'}
-                            onChange={(e) => setFormData({...formData, coordination_payment_method: e.target.value as 'agent_pays', coordination_payment_type: ''})}
+                            onChange={e =>
+                              setFormData({
+                                ...formData,
+                                coordination_payment_method: e.target.value as 'agent_pays',
+                                coordination_payment_type: '',
+                              })
+                            }
                             className="mt-0.5"
                             required={formData.coordination_requested}
                           />
                           <div className="flex-1">
-                            <p className="text-sm font-medium">Agent Pays (Before Service Starts)</p>
+                            <p className="text-sm font-medium">
+                              Agent Pays (Before Service Starts)
+                            </p>
                             <p className="text-xs text-luxury-gray-2">
                               You pay brokerage before coordination begins.
                             </p>
                           </div>
                         </label>
                       </div>
-                      
+
                       {formData.coordination_payment_method && (
                         <div className="mt-3">
                           <p className="text-xs font-medium text-luxury-gray-1 mb-2">
@@ -551,7 +605,12 @@ export default function PublicPreListingForm() {
                                 name="coordination_payment_type"
                                 value="zelle"
                                 checked={formData.coordination_payment_type === 'zelle'}
-                                onChange={(e) => setFormData({...formData, coordination_payment_type: e.target.value as 'zelle'})}
+                                onChange={e =>
+                                  setFormData({
+                                    ...formData,
+                                    coordination_payment_type: e.target.value as 'zelle',
+                                  })
+                                }
                                 className="mt-0.5"
                                 required={formData.coordination_requested}
                               />
@@ -568,7 +627,12 @@ export default function PublicPreListingForm() {
                                 name="coordination_payment_type"
                                 value="invoice"
                                 checked={formData.coordination_payment_type === 'invoice'}
-                                onChange={(e) => setFormData({...formData, coordination_payment_type: e.target.value as 'invoice'})}
+                                onChange={e =>
+                                  setFormData({
+                                    ...formData,
+                                    coordination_payment_type: e.target.value as 'invoice',
+                                  })
+                                }
                                 className="mt-0.5"
                                 required={formData.coordination_requested}
                               />
@@ -589,7 +653,7 @@ export default function PublicPreListingForm() {
                 </div>
               )}
             </div>
-            
+
             <div className="border-t border-luxury-gray-5 pt-6 mt-8">
               <h3 className="text-lg font-medium mb-4">Before Submitting</h3>
               <div className="bg-luxury-light p-4 rounded">
@@ -603,31 +667,48 @@ export default function PublicPreListingForm() {
                   <input
                     type="checkbox"
                     checked={formData.dotloop_file_created}
-                    onChange={(e) => setFormData({...formData, dotloop_file_created: e.target.checked})}
+                    onChange={e =>
+                      setFormData({ ...formData, dotloop_file_created: e.target.checked })
+                    }
                     required
                   />
                   <span className="text-sm">
-                    I confirm the above steps have been completed <span className="text-red-500">*</span>
+                    I confirm the above steps have been completed{' '}
+                    <span className="text-red-500">*</span>
                   </span>
                 </label>
               </div>
             </div>
-            
+
             <div className="flex justify-center gap-4 pt-6">
               <button
                 type="submit"
                 disabled={loading}
                 className={`px-6 py-2.5 text-sm rounded transition-colors ${
-                  loading 
-                    ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed' 
-                    : 'btn-primary'
+                  loading ? 'bg-luxury-gray-3 text-luxury-gray-2 cursor-not-allowed' : 'btn-primary'
                 }`}
               >
                 {loading ? (
                   <span className="flex items-center space-x-2">
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                     <span>Submitting...</span>
                   </span>
@@ -642,4 +723,3 @@ export default function PublicPreListingForm() {
     </div>
   )
 }
-

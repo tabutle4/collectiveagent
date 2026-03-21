@@ -5,46 +5,38 @@ import { createClient } from '@/lib/supabase/server'
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
-    
-    const { data: { user } } = await supabase.auth.getUser()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
+
     const { data: userData } = await supabase
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single()
-    
+
     // Check role (simple string, not array)
     if (userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
-    
+
     const body = await request.json()
     const { service_type, updates } = body
-    
+
     const success = await updateServiceConfig(service_type, updates)
-    
+
     if (!success) {
-      return NextResponse.json(
-        { error: 'Failed to update service configuration' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to update service configuration' }, { status: 500 })
     }
-    
+
     return NextResponse.json({
       success: true,
-      message: 'Service configuration updated successfully'
+      message: 'Service configuration updated successfully',
     })
-    
   } catch (error: any) {
     console.error('Error updating service config:', error)
     return NextResponse.json(
@@ -53,4 +45,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

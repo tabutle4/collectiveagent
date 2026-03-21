@@ -7,10 +7,7 @@ export async function GET(request: NextRequest) {
     const token = searchParams.get('token')
 
     if (!token) {
-      return NextResponse.json(
-        { error: 'Token is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Token is required' }, { status: 400 })
     }
 
     // Find user by campaign_token
@@ -23,18 +20,12 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (error || !user) {
-      return NextResponse.json(
-        { error: 'Invalid or expired campaign link' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Invalid or expired campaign link' }, { status: 404 })
     }
 
     return NextResponse.json({ user })
   } catch (error) {
     console.error('Token verification error:', error)
-    return NextResponse.json(
-      { error: 'An error occurred' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }

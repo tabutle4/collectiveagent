@@ -4,7 +4,22 @@
 export function toTitleCase(str: string): string {
   if (!str) return ''
   // Words that stay lowercase unless first word
-  const minor = new Set(['a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 'to', 'by', 'of', 'in'])
+  const minor = new Set([
+    'a',
+    'an',
+    'the',
+    'and',
+    'but',
+    'or',
+    'for',
+    'nor',
+    'on',
+    'at',
+    'to',
+    'by',
+    'of',
+    'in',
+  ])
   return str
     .toLowerCase()
     .split(' ')
@@ -23,12 +38,30 @@ export function formatAddress(str: string): string {
   let formatted = toTitleCase(str)
   // Fix common street abbreviations
   const abbrevs: Record<string, string> = {
-    'St': 'St', 'Dr': 'Dr', 'Ave': 'Ave', 'Blvd': 'Blvd', 'Ln': 'Ln',
-    'Ct': 'Ct', 'Rd': 'Rd', 'Pl': 'Pl', 'Cir': 'Cir', 'Pkwy': 'Pkwy',
-    'Hwy': 'Hwy', 'Fwy': 'Fwy', 'Apt': 'Apt', 'Ste': 'Ste', 'Unit': 'Unit',
-    'Ne': 'NE', 'Nw': 'NW', 'Se': 'SE', 'Sw': 'SW',
-    'N': 'N', 'S': 'S', 'E': 'E', 'W': 'W',
-    'Po': 'PO',
+    St: 'St',
+    Dr: 'Dr',
+    Ave: 'Ave',
+    Blvd: 'Blvd',
+    Ln: 'Ln',
+    Ct: 'Ct',
+    Rd: 'Rd',
+    Pl: 'Pl',
+    Cir: 'Cir',
+    Pkwy: 'Pkwy',
+    Hwy: 'Hwy',
+    Fwy: 'Fwy',
+    Apt: 'Apt',
+    Ste: 'Ste',
+    Unit: 'Unit',
+    Ne: 'NE',
+    Nw: 'NW',
+    Se: 'SE',
+    Sw: 'SW',
+    N: 'N',
+    S: 'S',
+    E: 'E',
+    W: 'W',
+    Po: 'PO',
   }
   // Replace directional and abbreviation fixes
   Object.entries(abbrevs).forEach(([lower, upper]) => {
@@ -89,7 +122,11 @@ export function parseMoney(value: string): string {
 // ===== Address Builder =====
 
 export function buildPropertyAddress(
-  street: string, unit: string, city: string, state: string, zip: string
+  street: string,
+  unit: string,
+  city: string,
+  state: string,
+  zip: string
 ): string {
   if (!street) return ''
   const parts = [street]

@@ -29,7 +29,7 @@ export default function ProspectDetailPage() {
         .single()
 
       if (error) throw error
-      
+
       setProspect(data)
       setNewStatus(data.prospect_status || 'new')
       setLoading(false)
@@ -68,7 +68,10 @@ export default function ProspectDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-luxury-gray-2 mb-6">Prospect not found</p>
-        <Link href="/admin/prospects" className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block">
+        <Link
+          href="/admin/prospects"
+          className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary inline-block"
+        >
           Back to Prospects
         </Link>
       </div>
@@ -84,21 +87,21 @@ export default function ProspectDetailPage() {
         >
           ← Back to Prospects
         </Link>
-        
+
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6" >
+            <h2 className="text-xl md:text-2xl font-semibold tracking-luxury mb-4 md:mb-6">
               {prospect.preferred_first_name} {prospect.preferred_last_name}
             </h2>
             <p className="text-luxury-gray-2">
               {prospect.email} • {prospect.phone}
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <select
               value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value)}
+              onChange={e => setNewStatus(e.target.value)}
               className="select-luxury"
             >
               <option value="new">New</option>
@@ -107,7 +110,7 @@ export default function ProspectDetailPage() {
               <option value="joined">Joined</option>
               <option value="not_interested">Not Interested</option>
             </select>
-            
+
             {newStatus !== prospect.prospect_status && (
               <button
                 onClick={updateStatus}
@@ -127,7 +130,9 @@ export default function ProspectDetailPage() {
           <div className="grid md:grid-cols-2 gap-4 text-base">
             <div>
               <p className="text-luxury-gray-2">Legal Name</p>
-              <p className="font-medium">{prospect.first_name} {prospect.last_name}</p>
+              <p className="font-medium">
+                {prospect.first_name} {prospect.last_name}
+              </p>
             </div>
             <div>
               <p className="text-luxury-gray-2">Location</p>
@@ -156,10 +161,9 @@ export default function ProspectDetailPage() {
             <div>
               <p className="text-luxury-gray-2">Association Status</p>
               <p className="font-medium">
-                {prospect.association_status_on_join === 'new_agent' 
+                {prospect.association_status_on_join === 'new_agent'
                   ? 'Brand new licensed agent'
-                  : 'Previously a member with another brokerage'
-                }
+                  : 'Previously a member with another brokerage'}
               </p>
             </div>
             {prospect.previous_brokerage && (
@@ -175,19 +179,27 @@ export default function ProspectDetailPage() {
           <h3 className="text-lg font-medium mb-4 tracking-luxury">Expectations</h3>
           <div className="space-y-4 text-base">
             <div>
-              <p className="text-luxury-gray-2 font-medium mb-1">What expectations do you have for Collective Realty Co.?</p>
+              <p className="text-luxury-gray-2 font-medium mb-1">
+                What expectations do you have for Collective Realty Co.?
+              </p>
               <p className="text-luxury-gray-1 italic">"{prospect.expectations}"</p>
             </div>
             <div>
-              <p className="text-luxury-gray-2 font-medium mb-1">Do you want to be held accountable?</p>
+              <p className="text-luxury-gray-2 font-medium mb-1">
+                Do you want to be held accountable?
+              </p>
               <p className="text-luxury-gray-1 italic">"{prospect.accountability}"</p>
             </div>
             <div>
-              <p className="text-luxury-gray-2 font-medium mb-1">How do you plan to produce business leads?</p>
+              <p className="text-luxury-gray-2 font-medium mb-1">
+                How do you plan to produce business leads?
+              </p>
               <p className="text-luxury-gray-1 italic">"{prospect.lead_generation}"</p>
             </div>
             <div>
-              <p className="text-luxury-gray-2 font-medium mb-1">Is there anything you would like to add?</p>
+              <p className="text-luxury-gray-2 font-medium mb-1">
+                Is there anything you would like to add?
+              </p>
               <p className="text-luxury-gray-1 italic">"{prospect.additional_info}"</p>
             </div>
           </div>

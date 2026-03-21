@@ -11,8 +11,8 @@ export default function PublicRosterPage() {
 
   useEffect(() => {
     fetch('/agent-roster.html')
-      .then((res) => res.text())
-      .then((html) => {
+      .then(res => res.text())
+      .then(html => {
         const parser = new DOMParser()
         const doc = parser.parseFromString(html, 'text/html')
 
@@ -29,7 +29,7 @@ export default function PublicRosterPage() {
 
         const scripts = doc.querySelectorAll('script')
         let scriptContent = ''
-        scripts.forEach((script) => {
+        scripts.forEach(script => {
           scriptContent += script.innerHTML + '\n'
         })
 
@@ -58,7 +58,7 @@ export default function PublicRosterPage() {
         ;(window as any).__rosterScripts = scriptContent
         setLoading(false)
       })
-      .catch((error) => {
+      .catch(error => {
         console.error('Error loading agent roster:', error)
         setLoading(false)
       })
@@ -86,13 +86,21 @@ export default function PublicRosterPage() {
     if (!htmlContent) return
     ;(window as any).filterTable = function () {
       if (!document.getElementById('agentTable')) return
-      const searchInput = (document.getElementById('searchInput') as HTMLInputElement)?.value.toLowerCase() || ''
-      const officeFilterValue = ((document.getElementById('officeFilter') as HTMLSelectElement)?.value || 'all').trim()
-      const teamFilterValue = ((document.getElementById('teamFilter') as HTMLSelectElement)?.value || 'all').trim()
-      const divisionFilterValue = ((document.getElementById('divisionFilter') as HTMLSelectElement)?.value || 'all').trim()
+      const searchInput =
+        (document.getElementById('searchInput') as HTMLInputElement)?.value.toLowerCase() || ''
+      const officeFilterValue = (
+        (document.getElementById('officeFilter') as HTMLSelectElement)?.value || 'all'
+      ).trim()
+      const teamFilterValue = (
+        (document.getElementById('teamFilter') as HTMLSelectElement)?.value || 'all'
+      ).trim()
+      const divisionFilterValue = (
+        (document.getElementById('divisionFilter') as HTMLSelectElement)?.value || 'all'
+      ).trim()
       const officeFilter = officeFilterValue === 'all' ? 'all' : officeFilterValue.toLowerCase()
       const teamFilter = teamFilterValue === 'all' ? 'all' : teamFilterValue.toLowerCase()
-      const divisionFilter = divisionFilterValue === 'all' ? 'all' : divisionFilterValue.toLowerCase()
+      const divisionFilter =
+        divisionFilterValue === 'all' ? 'all' : divisionFilterValue.toLowerCase()
 
       const table = document.getElementById('agentTable')
       if (!table) return
@@ -135,7 +143,10 @@ export default function PublicRosterPage() {
         if (divisionFilter === 'all') {
           matchesDivision = true
         } else if (division && division !== '-' && division.trim().length > 0) {
-          const agentDivisions = division.split('|').map((d: string) => d.trim().toLowerCase()).filter((d: string) => d.length > 0 && d !== '-')
+          const agentDivisions = division
+            .split('|')
+            .map((d: string) => d.trim().toLowerCase())
+            .filter((d: string) => d.length > 0 && d !== '-')
           matchesDivision = agentDivisions.includes(divisionFilter)
         }
 
@@ -150,36 +161,121 @@ export default function PublicRosterPage() {
       }
 
       const agentCount = document.getElementById('agent-count')
-      if (agentCount) agentCount.textContent = visibleCount + ' agent' + (visibleCount !== 1 ? 's' : '')
+      if (agentCount)
+        agentCount.textContent = visibleCount + ' agent' + (visibleCount !== 1 ? 's' : '')
 
       const noResults = document.getElementById('noResults')
       if (noResults) noResults.style.display = visibleCount === 0 ? 'block' : 'none'
     }
 
-    return () => { delete (window as any).filterTable }
+    return () => {
+      delete (window as any).filterTable
+    }
   }, [htmlContent])
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9', position: 'relative', overflow: 'hidden' }}>
-
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ backgroundColor: '#F9F9F9', position: 'relative', overflow: 'hidden' }}
+    >
       {/* Corner lines SVG background */}
       <svg
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
         xmlns="http://www.w3.org/2000/svg"
         preserveAspectRatio="none"
       >
-        <line x1="0" y1="0" x2="500" y2="500" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.18"/>
-        <line x1="0" y1="60" x2="500" y2="560" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
-        <line x1="0" y1="120" x2="400" y2="520" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.09"/>
-        <line x1="60" y1="0" x2="560" y2="500" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
-        <line x1="120" y1="0" x2="520" y2="400" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.09"/>
-        <line x1="100%" y1="100%" x2="calc(100% - 500px)" y2="calc(100% - 500px)" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.15"/>
-        <line x1="100%" y1="calc(100% - 60px)" x2="calc(100% - 500px)" y2="calc(100% - 560px)" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.1"/>
-        <line x1="calc(100% - 60px)" y1="100%" x2="calc(100% - 560px)" y2="calc(100% - 500px)" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.1"/>
+        <line
+          x1="0"
+          y1="0"
+          x2="500"
+          y2="500"
+          stroke="#C5A278"
+          strokeWidth="0.8"
+          strokeOpacity="0.18"
+        />
+        <line
+          x1="0"
+          y1="60"
+          x2="500"
+          y2="560"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.13"
+        />
+        <line
+          x1="0"
+          y1="120"
+          x2="400"
+          y2="520"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.09"
+        />
+        <line
+          x1="60"
+          y1="0"
+          x2="560"
+          y2="500"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.13"
+        />
+        <line
+          x1="120"
+          y1="0"
+          x2="520"
+          y2="400"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.09"
+        />
+        <line
+          x1="100%"
+          y1="100%"
+          x2="calc(100% - 500px)"
+          y2="calc(100% - 500px)"
+          stroke="#C5A278"
+          strokeWidth="0.8"
+          strokeOpacity="0.15"
+        />
+        <line
+          x1="100%"
+          y1="calc(100% - 60px)"
+          x2="calc(100% - 500px)"
+          y2="calc(100% - 560px)"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.1"
+        />
+        <line
+          x1="calc(100% - 60px)"
+          y1="100%"
+          x2="calc(100% - 560px)"
+          y2="calc(100% - 500px)"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.1"
+        />
       </svg>
 
       {/* Top accent bar */}
-      <div style={{ height: '3px', backgroundColor: '#C5A278', width: '100%', position: 'relative', zIndex: 10 }} />
+      <div
+        style={{
+          height: '3px',
+          backgroundColor: '#C5A278',
+          width: '100%',
+          position: 'relative',
+          zIndex: 10,
+        }}
+      />
 
       {/* Header - sticky so it stays on top while scrolling */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F9F9F9' }}>

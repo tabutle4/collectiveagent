@@ -34,14 +34,12 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', existingResponse.id)
     } else {
-      await supabase
-        .from('campaign_responses')
-        .insert({
-          campaign_id,
-          user_id,
-          attending_luncheon: rsvp_data.attending_luncheon,
-          luncheon_comments: rsvp_data.luncheon_comments,
-        })
+      await supabase.from('campaign_responses').insert({
+        campaign_id,
+        user_id,
+        attending_luncheon: rsvp_data.attending_luncheon,
+        luncheon_comments: rsvp_data.luncheon_comments,
+      })
     }
 
     return NextResponse.json({ success: true })

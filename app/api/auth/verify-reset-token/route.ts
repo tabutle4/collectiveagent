@@ -6,10 +6,7 @@ export async function POST(request: NextRequest) {
     const { token } = await request.json()
 
     if (!token) {
-      return NextResponse.json(
-        { error: 'Token is required', valid: false },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Token is required', valid: false }, { status: 400 })
     }
 
     // Find user by reset token
@@ -29,10 +26,7 @@ export async function POST(request: NextRequest) {
     // Check if token is expired
     const expiryDate = new Date(user.reset_token_expires)
     if (expiryDate < new Date()) {
-      return NextResponse.json(
-        { error: 'Reset token has expired', valid: false },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Reset token has expired', valid: false }, { status: 400 })
     }
 
     return NextResponse.json({ valid: true })

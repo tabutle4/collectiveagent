@@ -19,14 +19,17 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!user?.payload_payee_id) {
-      return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Agent does not have a Payload customer ID.' },
+        { status: 400 }
+      )
     }
 
     // Void the invoice in Payload by updating status to voided
     const res = await fetch(`https://api.payload.com/invoices/${invoice_id}`, {
       method: 'PUT',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({ status: 'voided' }),

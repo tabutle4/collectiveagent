@@ -19,13 +19,13 @@ async function findExistingTransaction(
     .from('transaction_internal_agents')
     .select('transaction_id')
     .eq('agent_id', agentId)
-  
+
   if (agentError || !agentTransactions?.length) {
     return null
   }
-  
+
   const transactionIds = agentTransactions.map((t: any) => t.transaction_id)
-  
+
   const { data: existingTransaction, error } = await supabase
     .from('transactions')
     .select('*')
@@ -34,11 +34,11 @@ async function findExistingTransaction(
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
-  
+
   if (error || !existingTransaction) {
     return null
   }
-  
+
   return existingTransaction
 }
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
     const body = await request.json()
-    
+
     // Get agent_id (either from body.agent_id or look up by agent_name)
     let agentIdForListing: string | null = null
     if (body.agent_id) {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
         const lastName = agentNameParts.slice(1).join(' ').trim()
-        
+
         const { data: agentsByPreferred } = await supabase
           .from('users')
           .select('id, preferred_first_name, preferred_last_name')
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
           .ilike('preferred_last_name', lastName)
           .eq('is_licensed_agent', true)
           .limit(1)
-        
+
         if (agentsByPreferred && agentsByPreferred.length > 0) {
           agentIdForListing = agentsByPreferred[0].id
         } else {
@@ -76,51 +76,51 @@ export async function POST(request: NextRequest) {
             .ilike('last_name', lastName)
             .eq('is_licensed_agent', true)
             .limit(1)
-          
+
           if (agentsByLegal && agentsByLegal.length > 0) {
             agentIdForListing = agentsByLegal[0].id
           }
         }
       }
     }
-    
+
     if (!agentIdForListing) {
       return NextResponse.json(
         { error: 'Agent ID is required. Please select an agent from the dropdown.' },
         { status: 400 }
       )
     }
-    
+
     // Check if this is an update to an existing transaction
     const isUpdate = body.submission_type === 'update'
     let existingListing = null
-    
+
     if (isUpdate && body.property_address) {
       existingListing = await findExistingTransaction(
         supabase,
         body.property_address,
         agentIdForListing
       )
-      
+
       if (!existingListing) {
         return NextResponse.json(
-          { error: 'No existing transaction found for this property address and agent. Please select "New Submission" instead.' },
+          {
+            error:
+              'No existing transaction found for this property address and agent. Please select "New Submission" instead.',
+          },
           { status: 404 }
         )
       }
     }
-    
+
     // Check if this is a token-based submission (public form, no login required)
     if (body.form_token) {
       // Validate token format
       const validation = validateFormToken(body.form_token)
       if (!validation) {
-        return NextResponse.json(
-          { error: 'Invalid form token' },
-          { status: 401 }
-        )
+        return NextResponse.json({ error: 'Invalid form token' }, { status: 401 })
       }
-      
+
       // Fetch form record to get notification_email
       let formRecord = null
       try {
@@ -129,13 +129,13 @@ export async function POST(request: NextRequest) {
           .select('id, name, form_type, notification_email')
           .eq('shareable_token', body.form_token)
           .single()
-        
+
         formRecord = form
       } catch (error) {
         console.error('Error fetching form record:', error)
         // Continue even if form record not found (for legacy tokens)
       }
-      
+
       // If updating, update existing listing
       if (isUpdate && existingListing) {
         const updateData: any = {
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
           listing_input_requested: body.listing_input_requested,
           photography_requested: body.photography_requested,
         }
-        
+
         if (validation.formType === 'pre-listing') {
           updateData.listing_date = body.estimated_launch_date
           updateData.pre_listing_form_completed = true
@@ -155,13 +155,13 @@ export async function POST(request: NextRequest) {
           updateData.status = body.status || 'active'
           updateData.just_listed_form_completed = true
         }
-        
+
         await updateListing(existingListing.id, updateData)
-        
+
         // Update contact info in transaction_contacts
         if (body.client_names || body.client_phone || body.client_email) {
           const contactType = body.transaction_type === 'lease' ? 'landlord' : 'seller'
-          
+
           // Check if contact exists
           const { data: existingContact } = await supabase
             .from('transaction_contacts')
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
             .eq('transaction_id', existingListing.id)
             .eq('contact_type', contactType)
             .single()
-          
+
           if (existingContact) {
             await supabase
               .from('transaction_contacts')
@@ -180,18 +180,16 @@ export async function POST(request: NextRequest) {
               })
               .eq('id', existingContact.id)
           } else {
-            await supabase
-              .from('transaction_contacts')
-              .insert({
-                transaction_id: existingListing.id,
-                contact_type: contactType,
-                name: body.client_names || null,
-                phone: body.client_phone || null,
-                email: body.client_email || null,
-              })
+            await supabase.from('transaction_contacts').insert({
+              transaction_id: existingListing.id,
+              contact_type: contactType,
+              name: body.client_names || null,
+              phone: body.client_phone || null,
+              email: body.client_email || null,
+            })
           }
         }
-        
+
         // Send notification email if form has notification_email set
         if (formRecord?.notification_email) {
           try {
@@ -212,24 +210,21 @@ export async function POST(request: NextRequest) {
             // Don't fail the submission if email fails
           }
         }
-        
+
         return NextResponse.json({
           success: true,
           listing: { ...existingListing, ...updateData },
-          message: 'Transaction updated successfully'
+          message: 'Transaction updated successfully',
         })
       }
-      
+
       // Create new listing (don't generate tokens since this is already token-based)
       const listing = await createListing(body, agentIdForListing, true)
-      
+
       if (!listing) {
-        return NextResponse.json(
-          { error: 'Failed to create listing' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
       }
-      
+
       // Send notification email if form has notification_email set
       if (formRecord?.notification_email) {
         try {
@@ -249,7 +244,7 @@ export async function POST(request: NextRequest) {
           // Don't fail the submission if email fails
         }
       }
-      
+
       // Handle coordination if requested (same logic as authenticated flow)
       if (body.coordination_requested) {
         if (!body.is_broker_listing && !body.coordination_payment_method) {
@@ -258,26 +253,33 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        
+
         const serviceConfig = await getServiceConfig('listing_coordination')
-        const serviceFee = body.is_broker_listing ? 0.00 : (serviceConfig?.price || 250.00)
-        
+        const serviceFee = body.is_broker_listing ? 0.0 : serviceConfig?.price || 250.0
+
         let paymentDueDate = null
         if (!body.is_broker_listing && body.coordination_payment_method === 'agent_pays') {
           const dueDate = new Date()
           dueDate.setDate(dueDate.getDate() + 60)
           paymentDueDate = dueDate.toISOString().split('T')[0]
         }
-        
-        const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
-        
+
+        const { folderPath, sharingUrl } = await createListingFolder(
+          listing.property_address,
+          listing.id,
+          listing.transaction_type || 'sale'
+        )
+
         if (!agentIdForListing) {
           return NextResponse.json(
-            { error: 'Agent ID is required for coordination service. Please ensure the agent name matches an agent in the system.' },
+            {
+              error:
+                'Agent ID is required for coordination service. Please ensure the agent name matches an agent in the system.',
+            },
             { status: 400 }
           )
         }
-        
+
         const coordination = await createCoordination({
           listing_id: listing.id,
           agent_id: agentIdForListing,
@@ -285,10 +287,12 @@ export async function POST(request: NextRequest) {
           seller_email: body.client_email,
           service_fee: serviceFee,
           start_date: new Date().toISOString().split('T')[0],
-          payment_method: body.is_broker_listing ? 'broker_listing' : body.coordination_payment_method,
+          payment_method: body.is_broker_listing
+            ? 'broker_listing'
+            : body.coordination_payment_method,
           payment_due_date: paymentDueDate,
         })
-        
+
         if (coordination) {
           await supabase
             .from('listing_coordination')
@@ -296,28 +300,27 @@ export async function POST(request: NextRequest) {
               onedrive_folder_url: sharingUrl,
             })
             .eq('id', coordination.id)
-          
+
           const { data: agentData } = await supabase
             .from('users')
-            .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+            .select(
+              'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+            )
             .eq('id', agentIdForListing)
             .single()
-          
+
           if (agentData) {
             const agentInfo = {
-              name: agentData.preferred_first_name && agentData.preferred_last_name 
-                ? `${agentData.preferred_first_name} ${agentData.preferred_last_name}`
-                : `${agentData.first_name} ${agentData.last_name}`,
+              name:
+                agentData.preferred_first_name && agentData.preferred_last_name
+                  ? `${agentData.preferred_first_name} ${agentData.preferred_last_name}`
+                  : `${agentData.first_name} ${agentData.last_name}`,
               email: agentData.email,
               phone: agentData.business_phone || agentData.personal_phone || '',
             }
-            
-            await sendWelcomeEmail(
-              coordination,
-              listing,
-              agentInfo
-            )
-            
+
+            await sendWelcomeEmail(coordination, listing, agentInfo)
+
             await supabase
               .from('listing_coordination')
               .update({
@@ -328,36 +331,26 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-      
+
       return NextResponse.json({
         success: true,
         listing,
-        message: 'Form submitted successfully'
+        message: 'Form submitted successfully',
       })
     }
-    
+
     // Original authenticated flow
     // Get user_id from request body (sent from client)
     const userId = body.user_id
-    
+
     if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
     }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const { data: userData } = await supabase.from('users').select('*').eq('id', userId).single()
 
     if (!userData) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Allow both agents and admins to create listings
@@ -367,12 +360,9 @@ export async function POST(request: NextRequest) {
     const isAgent = userData.is_licensed_agent === true
 
     if (!isAdmin && !isAgent) {
-      return NextResponse.json(
-        { error: 'Forbidden - Must be an agent or admin' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Must be an agent or admin' }, { status: 403 })
     }
-    
+
     // Get agent_id from body (if using selector) or look up by name
     let agentIdForListingAuth: string | null = null
     if (body.agent_id) {
@@ -383,7 +373,7 @@ export async function POST(request: NextRequest) {
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
         const lastName = agentNameParts.slice(1).join(' ').trim()
-        
+
         const { data: agentsByPreferred, error: preferredError } = await supabase
           .from('users')
           .select('id, preferred_first_name, preferred_last_name')
@@ -391,7 +381,7 @@ export async function POST(request: NextRequest) {
           .ilike('preferred_last_name', lastName)
           .eq('is_licensed_agent', true)
           .limit(1)
-        
+
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
           agentIdForListingAuth = agentsByPreferred[0].id
         } else {
@@ -402,14 +392,14 @@ export async function POST(request: NextRequest) {
             .ilike('last_name', lastName)
             .eq('is_licensed_agent', true)
             .limit(1)
-          
+
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {
             agentIdForListingAuth = agentsByLegal[0].id
           }
         }
       }
     }
-    
+
     // Use the found agent ID, or fallback to submitting user only if they're an agent
     let finalAgentId: string | null = null
     if (agentIdForListingAuth) {
@@ -418,25 +408,28 @@ export async function POST(request: NextRequest) {
       // Only use submitting user's ID if they're an agent (not an admin)
       finalAgentId = userId
     }
-    
+
     // Check if this is an update to an existing transaction (authenticated flow)
     const isUpdateAuth = body.submission_type === 'update'
     let existingListingAuth = null
-    
+
     if (isUpdateAuth && body.property_address && finalAgentId) {
       existingListingAuth = await findExistingTransaction(
         supabase,
         body.property_address,
         finalAgentId
       )
-      
+
       if (!existingListingAuth) {
         return NextResponse.json(
-          { error: 'No existing transaction found for this property address and agent. Please select "New Submission" instead.' },
+          {
+            error:
+              'No existing transaction found for this property address and agent. Please select "New Submission" instead.',
+          },
           { status: 404 }
         )
       }
-      
+
       // Update existing listing
       const updateData: any = {
         transaction_type: body.transaction_type,
@@ -446,7 +439,7 @@ export async function POST(request: NextRequest) {
         listing_input_requested: body.listing_input_requested,
         photography_requested: body.photography_requested,
       }
-      
+
       if (body.mls_link) {
         // Just Listed form
         updateData.mls_link = body.mls_link
@@ -457,13 +450,13 @@ export async function POST(request: NextRequest) {
         updateData.listing_date = body.estimated_launch_date
         updateData.pre_listing_form_completed = true
       }
-      
+
       await updateListing(existingListingAuth.id, updateData)
-      
+
       // Update contact info in transaction_contacts
       if (body.client_names || body.client_phone || body.client_email) {
         const contactType = body.transaction_type === 'lease' ? 'landlord' : 'seller'
-        
+
         // Check if contact exists
         const { data: existingContact } = await supabase
           .from('transaction_contacts')
@@ -471,7 +464,7 @@ export async function POST(request: NextRequest) {
           .eq('transaction_id', existingListingAuth.id)
           .eq('contact_type', contactType)
           .single()
-        
+
         if (existingContact) {
           await supabase
             .from('transaction_contacts')
@@ -482,34 +475,29 @@ export async function POST(request: NextRequest) {
             })
             .eq('id', existingContact.id)
         } else {
-          await supabase
-            .from('transaction_contacts')
-            .insert({
-              transaction_id: existingListingAuth.id,
-              contact_type: contactType,
-              name: body.client_names || null,
-              phone: body.client_phone || null,
-              email: body.client_email || null,
-            })
+          await supabase.from('transaction_contacts').insert({
+            transaction_id: existingListingAuth.id,
+            contact_type: contactType,
+            name: body.client_names || null,
+            phone: body.client_phone || null,
+            email: body.client_email || null,
+          })
         }
       }
-      
+
       return NextResponse.json({
         success: true,
         listing: { ...existingListingAuth, ...updateData },
-        message: 'Transaction updated successfully'
+        message: 'Transaction updated successfully',
       })
     }
-    
+
     const listing = await createListing(body, finalAgentId || '')
-    
+
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Failed to create listing' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
     }
-    
+
     if (body.coordination_requested) {
       // If broker listing, fee is $0 and payment method is not required
       if (!body.is_broker_listing && !body.coordination_payment_method) {
@@ -518,11 +506,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      
+
       const serviceConfig = await getServiceConfig('listing_coordination')
       // Set fee to $0 for broker listings, otherwise use default
-      const serviceFee = body.is_broker_listing ? 0.00 : (serviceConfig?.price || 250.00)
-      
+      const serviceFee = body.is_broker_listing ? 0.0 : serviceConfig?.price || 250.0
+
       let paymentDueDate = null
       // Only set payment due date if not a broker listing and agent is paying
       if (!body.is_broker_listing && body.coordination_payment_method === 'agent_pays') {
@@ -530,20 +518,27 @@ export async function POST(request: NextRequest) {
         dueDate.setDate(dueDate.getDate() + 60)
         paymentDueDate = dueDate.toISOString().split('T')[0]
       }
-      
-      const { folderPath, sharingUrl } = await createListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
-      
+
+      const { folderPath, sharingUrl } = await createListingFolder(
+        listing.property_address,
+        listing.id,
+        listing.transaction_type || 'sale'
+      )
+
       // Use the listing's agent_id (from the selected agent in the form)
       // Only fallback to submitting user if they're an agent and no agent was found
       const coordinationAgentId = finalAgentId || (isAgent ? userId : null)
-      
+
       if (!coordinationAgentId) {
         return NextResponse.json(
-          { error: 'Agent ID is required for coordination service. Please ensure the agent name matches an agent in the system.' },
+          {
+            error:
+              'Agent ID is required for coordination service. Please ensure the agent name matches an agent in the system.',
+          },
           { status: 400 }
         )
       }
-      
+
       const coordination = await createCoordination({
         listing_id: listing.id,
         agent_id: coordinationAgentId,
@@ -551,10 +546,12 @@ export async function POST(request: NextRequest) {
         seller_email: body.client_email,
         service_fee: serviceFee,
         start_date: new Date().toISOString().split('T')[0],
-        payment_method: body.is_broker_listing ? 'broker_listing' : body.coordination_payment_method,
+        payment_method: body.is_broker_listing
+          ? 'broker_listing'
+          : body.coordination_payment_method,
         payment_due_date: paymentDueDate,
       })
-      
+
       if (coordination) {
         await supabase
           .from('listing_coordination')
@@ -562,41 +559,41 @@ export async function POST(request: NextRequest) {
             onedrive_folder_url: sharingUrl,
           })
           .eq('id', coordination.id)
-        
+
         // Get the actual agent's info for the welcome email (not the submitting user)
         let agentInfo = {
-          name: userData.preferred_first_name && userData.preferred_last_name 
-            ? `${userData.preferred_first_name} ${userData.preferred_last_name}`
-            : `${userData.first_name} ${userData.last_name}`,
+          name:
+            userData.preferred_first_name && userData.preferred_last_name
+              ? `${userData.preferred_first_name} ${userData.preferred_last_name}`
+              : `${userData.first_name} ${userData.last_name}`,
           email: userData.email,
           phone: userData.business_phone || userData.personal_phone || '',
         }
-        
+
         // If we found an agent, use their info instead
         if (finalAgentId) {
           const { data: actualAgent } = await supabase
             .from('users')
-            .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+            .select(
+              'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+            )
             .eq('id', finalAgentId)
             .single()
-          
+
           if (actualAgent) {
             agentInfo = {
-              name: actualAgent.preferred_first_name && actualAgent.preferred_last_name 
-                ? `${actualAgent.preferred_first_name} ${actualAgent.preferred_last_name}`
-                : `${actualAgent.first_name} ${actualAgent.last_name}`,
+              name:
+                actualAgent.preferred_first_name && actualAgent.preferred_last_name
+                  ? `${actualAgent.preferred_first_name} ${actualAgent.preferred_last_name}`
+                  : `${actualAgent.first_name} ${actualAgent.last_name}`,
               email: actualAgent.email,
               phone: actualAgent.business_phone || actualAgent.personal_phone || '',
             }
           }
         }
-        
-        await sendWelcomeEmail(
-          coordination,
-          listing,
-          agentInfo
-        )
-        
+
+        await sendWelcomeEmail(coordination, listing, agentInfo)
+
         await supabase
           .from('listing_coordination')
           .update({
@@ -606,13 +603,12 @@ export async function POST(request: NextRequest) {
           .eq('id', coordination.id)
       }
     }
-    
+
     return NextResponse.json({
       success: true,
       listing,
-      message: 'Listing created successfully'
+      message: 'Listing created successfully',
     })
-    
   } catch (error: any) {
     console.error('Error creating listing:', error)
     return NextResponse.json(

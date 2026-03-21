@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation'
 
 export default function AgentTransactionsRedirect() {
   const router = useRouter()
-  useEffect(() => { router.replace('/transactions') }, [router])
+  useEffect(() => {
+    router.replace('/transactions')
+  }, [router])
   return null
 }

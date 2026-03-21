@@ -52,12 +52,13 @@ export default function AgentFormResponsesPage() {
   const [loading, setLoading] = useState(true)
   const [selectedResponse, setSelectedResponse] = useState<any>(null)
   const [modalOpen, setModalOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'closed' | 'cancelled'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'closed' | 'cancelled'>(
+    'active'
+  )
   const [requestingUpdate, setRequestingUpdate] = useState(false)
   const [updateMessage, setUpdateMessage] = useState('')
 
   useEffect(() => {
-
     try {
       setUser(user)
       loadData(user?.id)
@@ -106,9 +107,10 @@ export default function AgentFormResponsesPage() {
         body: JSON.stringify({
           listing_id: selectedResponse.id,
           agent_id: user?.id,
-          agent_name: user.preferred_first_name && user.preferred_last_name
-            ? `${user.preferred_first_name} ${user.preferred_last_name}`
-            : `${user.first_name} ${user.last_name}`,
+          agent_name:
+            user.preferred_first_name && user.preferred_last_name
+              ? `${user.preferred_first_name} ${user.preferred_last_name}`
+              : `${user.first_name} ${user.last_name}`,
           agent_email: user.email,
           message: updateMessage,
           property_address: selectedResponse.property_address,
@@ -154,15 +156,14 @@ export default function AgentFormResponsesPage() {
 
   return (
     <>
-    <div className="max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">
-          My Transactions
-        </h1>
-        <p className="text-sm text-luxury-gray-2">
-          View your active listings and transactions. Use the update request section if something needs to be changed.
-        </p>
-      </div>
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl md:text-3xl font-light tracking-luxury mb-2">My Transactions</h1>
+          <p className="text-sm text-luxury-gray-2">
+            View your active listings and transactions. Use the update request section if something
+            needs to be changed.
+          </p>
+        </div>
 
         <div className="card-section mb-6">
           {/* Tabs */}
@@ -222,15 +223,25 @@ export default function AgentFormResponsesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Date
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Property Address
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Client Name
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Type
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {activeListings.map((listing) => (
+                    {activeListings.map(listing => (
                       <tr
                         key={listing.id}
                         onClick={() => handleRowClick(listing)}
@@ -241,13 +252,19 @@ export default function AgentFormResponsesPage() {
                         <td className="py-3 px-4 text-sm">{listing.client_names}</td>
                         <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
                         <td className="py-3 px-4 text-sm">
-                          <span className={`px-2 py-1 text-xs rounded capitalize ${
-                            listing.status === 'active' ? 'bg-green-100 text-green-800' :
-                            listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            listing.status === 'sold' ? 'bg-blue-100 text-blue-800' :
-                            listing.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span
+                            className={`px-2 py-1 text-xs rounded capitalize ${
+                              listing.status === 'active'
+                                ? 'bg-green-100 text-green-800'
+                                : listing.status === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : listing.status === 'sold'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : listing.status === 'cancelled'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
                             {listing.status}
                           </span>
                         </td>
@@ -269,15 +286,25 @@ export default function AgentFormResponsesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Date
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Property Address
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Client Name
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Type
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingTransactions.map((listing) => (
+                    {pendingTransactions.map(listing => (
                       <tr
                         key={listing.id}
                         onClick={() => handleRowClick(listing)}
@@ -288,13 +315,19 @@ export default function AgentFormResponsesPage() {
                         <td className="py-3 px-4 text-sm">{listing.client_names}</td>
                         <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
                         <td className="py-3 px-4 text-sm">
-                          <span className={`px-2 py-1 text-xs rounded capitalize ${
-                            listing.status === 'active' ? 'bg-green-100 text-green-800' :
-                            listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            listing.status === 'sold' ? 'bg-blue-100 text-blue-800' :
-                            listing.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span
+                            className={`px-2 py-1 text-xs rounded capitalize ${
+                              listing.status === 'active'
+                                ? 'bg-green-100 text-green-800'
+                                : listing.status === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : listing.status === 'sold'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : listing.status === 'cancelled'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
                             {listing.status}
                           </span>
                         </td>
@@ -316,20 +349,32 @@ export default function AgentFormResponsesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Closed Date</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Closed Date
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Property Address
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Client Name
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Type
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {closedTransactions.map((listing) => (
+                    {closedTransactions.map(listing => (
                       <tr
                         key={listing.id}
                         onClick={() => handleRowClick(listing)}
                         className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
                       >
-                        <td className="py-3 px-4 text-sm">{formatDate(listing.closed_date || listing.updated_at || listing.created_at)}</td>
+                        <td className="py-3 px-4 text-sm">
+                          {formatDate(
+                            listing.closed_date || listing.updated_at || listing.created_at
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-sm">{listing.property_address}</td>
                         <td className="py-3 px-4 text-sm">{listing.client_names}</td>
                         <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
@@ -351,20 +396,30 @@ export default function AgentFormResponsesPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Date
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Property Address
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Client Name
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
+                        Type
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cancelledTransactions.map((listing) => (
+                    {cancelledTransactions.map(listing => (
                       <tr
                         key={listing.id}
                         onClick={() => handleRowClick(listing)}
                         className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
                       >
-                        <td className="py-3 px-4 text-sm">{formatDate(listing.updated_at || listing.created_at)}</td>
+                        <td className="py-3 px-4 text-sm">
+                          {formatDate(listing.updated_at || listing.created_at)}
+                        </td>
                         <td className="py-3 px-4 text-sm">{listing.property_address}</td>
                         <td className="py-3 px-4 text-sm">{listing.client_names}</td>
                         <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
@@ -381,26 +436,24 @@ export default function AgentFormResponsesPage() {
             )}
           </div>
         )}
-    </div>
+      </div>
 
-    {/* Side Modal - Read Only View */}
-    {modalOpen && selectedResponse && (
-      <div className="fixed inset-0 z-50 flex">
-        {/* Backdrop */}
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50"
-          onClick={() => {
-            setModalOpen(false)
-            setUpdateMessage('')
-          }}
-        />
-        
-        {/* Modal */}
-        <div className="fixed right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl overflow-y-auto z-50">
+      {/* Side Modal - Read Only View */}
+      {modalOpen && selectedResponse && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50"
+            onClick={() => {
+              setModalOpen(false)
+              setUpdateMessage('')
+            }}
+          />
+
+          {/* Modal */}
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-2xl bg-white shadow-2xl overflow-y-auto z-50">
             <div className="sticky top-0 bg-white border-b border-luxury-gray-5 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-medium">
-                Transaction Details
-              </h2>
+              <h2 className="text-xl font-medium">Transaction Details</h2>
               <button
                 onClick={() => {
                   setModalOpen(false)
@@ -421,7 +474,9 @@ export default function AgentFormResponsesPage() {
               {/* Listing Details - same layout for all statuses */}
               <div className="space-y-4">
                 <div className="border-t border-luxury-gray-5 pt-4">
-                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Listing Information</h3>
+                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">
+                    Listing Information
+                  </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-luxury-gray-2 mb-1">Agent Name</p>
@@ -442,7 +497,9 @@ export default function AgentFormResponsesPage() {
                     {selectedResponse.estimated_launch_date && (
                       <div>
                         <p className="text-xs text-luxury-gray-2 mb-1">Estimated Launch Date</p>
-                        <p className="text-sm">{formatDate(selectedResponse.estimated_launch_date)}</p>
+                        <p className="text-sm">
+                          {formatDate(selectedResponse.estimated_launch_date)}
+                        </p>
                       </div>
                     )}
                     {selectedResponse.actual_launch_date && (
@@ -480,7 +537,9 @@ export default function AgentFormResponsesPage() {
                 </div>
 
                 <div className="border-t border-luxury-gray-5 pt-4">
-                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Client Information</h3>
+                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">
+                    Client Information
+                  </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-luxury-gray-2 mb-1">Client Name or LLC</p>
@@ -502,18 +561,35 @@ export default function AgentFormResponsesPage() {
                 </div>
 
                 <div className="border-t border-luxury-gray-5 pt-4">
-                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Additional Details</h3>
+                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">
+                    Additional Details
+                  </h3>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" checked={selectedResponse.dotloop_file_created} readOnly className="w-4 h-4" />
+                      <input
+                        type="checkbox"
+                        checked={selectedResponse.dotloop_file_created}
+                        readOnly
+                        className="w-4 h-4"
+                      />
                       <span className="text-sm">Dotloop file created</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" checked={selectedResponse.listing_input_requested} readOnly className="w-4 h-4" />
+                      <input
+                        type="checkbox"
+                        checked={selectedResponse.listing_input_requested}
+                        readOnly
+                        className="w-4 h-4"
+                      />
                       <span className="text-sm">Listing input requested</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" checked={selectedResponse.photography_requested || false} readOnly className="w-4 h-4" />
+                      <input
+                        type="checkbox"
+                        checked={selectedResponse.photography_requested || false}
+                        readOnly
+                        className="w-4 h-4"
+                      />
                       <span className="text-sm">Photography requested</span>
                     </div>
                   </div>
@@ -527,11 +603,12 @@ export default function AgentFormResponsesPage() {
                   Request Update
                 </h3>
                 <p className="text-xs text-luxury-gray-2 mb-3">
-                  Need to update information on this form? Send a request to admin with details about what needs to be changed.
+                  Need to update information on this form? Send a request to admin with details
+                  about what needs to be changed.
                 </p>
                 <textarea
                   value={updateMessage}
-                  onChange={(e) => setUpdateMessage(e.target.value)}
+                  onChange={e => setUpdateMessage(e.target.value)}
                   placeholder="Describe what information needs to be updated..."
                   className="textarea-luxury w-full mb-3"
                   rows={4}
@@ -551,4 +628,3 @@ export default function AgentFormResponsesPage() {
     </>
   )
 }
-

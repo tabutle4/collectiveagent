@@ -27,13 +27,13 @@ export default function CoordinationDetailPage() {
   }, [router, user])
   const params = useParams()
   const coordinationId = params.id as string
-  
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sendingEmail, setSendingEmail] = useState<'welcome' | 'weekly' | null>(null)
   const [coordination, setCoordination] = useState<ListingCoordination | null>(null)
   const [listing, setListing] = useState<Listing | null>(null)
-  const [agents, setAgents] = useState<Array<{id: string, name: string}>>([])
+  const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
   const [agentSearch, setAgentSearch] = useState<string>('')
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false)
   const [emailHistory, setEmailHistory] = useState<any[]>([])
@@ -42,7 +42,7 @@ export default function CoordinationDetailPage() {
   const [weeklyReports, setWeeklyReports] = useState<any[]>([])
   const [loadingReports, setLoadingReports] = useState(false)
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
-  
+
   const [editData, setEditData] = useState({
     // Coordination fields
     seller_name: '',
@@ -61,15 +61,21 @@ export default function CoordinationDetailPage() {
     estimated_launch_date: '',
     actual_launch_date: '',
     lead_source: '',
-    status: 'pre-listing' as 'pre-listing' | 'active' | 'pending' | 'sold' | 'expired' | 'cancelled',
+    status: 'pre-listing' as
+      | 'pre-listing'
+      | 'active'
+      | 'pending'
+      | 'sold'
+      | 'expired'
+      | 'cancelled',
   })
-  
+
   useEffect(() => {
     loadCoordination()
     loadAgents()
     loadEmailHistory()
     loadWeeklyReports()
-    
+
     // Close dropdown when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest('.agent-selector')) {
@@ -79,29 +85,31 @@ export default function CoordinationDetailPage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [coordinationId])
-  
+
   const loadAgents = async () => {
     const { data, error } = await supabase
       .from('users')
       .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
       .eq('is_licensed_agent', true)
-    
+
     if (!error && data) {
-      const agentsList = data.map(user => ({
-        id: user?.id,
-        name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim()
-      })).sort((a, b) => a.name.localeCompare(b.name))
+      const agentsList = data
+        .map(user => ({
+          id: user?.id,
+          name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim(),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
       setAgents(agentsList)
     }
   }
-  
+
   const filteredAgents = () => {
     const search = agentSearch.toLowerCase()
     return agents.filter(agent => agent.name.toLowerCase().includes(search))
   }
-  
+
   const selectAgent = (agentName: string, agentId: string) => {
-    setEditData({...editData, agent_name: agentName})
+    setEditData({ ...editData, agent_name: agentName })
     setAgentSearch('')
     setAgentDropdownOpen(false)
     // Also update agent_id in the listing if we have it
@@ -109,7 +117,7 @@ export default function CoordinationDetailPage() {
       // The agent_id will be updated when we save via the API
     }
   }
-  
+
   const loadEmailHistory = async () => {
     setLoadingHistory(true)
     try {
@@ -152,13 +160,14 @@ export default function CoordinationDetailPage() {
   }
 
   const handleDeleteReport = async (reportId: string) => {
-    if (!confirm('Are you sure you want to delete this weekly report? This action cannot be undone.')) {
+    if (
+      !confirm('Are you sure you want to delete this weekly report? This action cannot be undone.')
+    ) {
       return
     }
 
     setDeletingReportId(reportId)
     try {
-
       const response = await fetch('/api/coordination/delete-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,11 +195,11 @@ export default function CoordinationDetailPage() {
     try {
       const response = await fetch(`/api/coordination/get?id=${coordinationId}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setCoordination(data.coordination)
         setListing(data.listing)
-        
+
         setEditData({
           seller_name: data.coordination.seller_name,
           seller_email: data.coordination.seller_email,
@@ -218,7 +227,7 @@ export default function CoordinationDetailPage() {
       setLoading(false)
     }
   }
-  
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -233,9 +242,10 @@ export default function CoordinationDetailPage() {
             seller_email: editData.seller_email,
             service_paid: editData.service_paid,
             onedrive_folder_url: editData.onedrive_folder_url,
-            payment_date: editData.service_paid && !coordination?.service_paid 
-              ? new Date().toISOString() 
-              : coordination?.payment_date,
+            payment_date:
+              editData.service_paid && !coordination?.service_paid
+                ? new Date().toISOString()
+                : coordination?.payment_date,
           },
           listing_updates: {
             listing_website_url: editData.listing_website_url,
@@ -253,9 +263,9 @@ export default function CoordinationDetailPage() {
           },
         }),
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         alert('Updated successfully!')
         // Reload coordination to get fresh data (this ensures sync with form responses)
@@ -272,15 +282,18 @@ export default function CoordinationDetailPage() {
       setSaving(false)
     }
   }
-  
+
   const handleRegenerateFolderLink = async () => {
-    if (!confirm('Regenerate the OneDrive folder sharing link? This will create a new anonymous link that doesn\'t require Microsoft login.')) {
+    if (
+      !confirm(
+        "Regenerate the OneDrive folder sharing link? This will create a new anonymous link that doesn't require Microsoft login."
+      )
+    ) {
       return
     }
 
     setSaving(true)
     try {
-
       const response = await fetch('/api/coordination/regenerate-folder-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -294,7 +307,7 @@ export default function CoordinationDetailPage() {
 
       if (response.ok && data.success) {
         alert('Folder sharing link regenerated successfully!')
-        setEditData({...editData, onedrive_folder_url: data.sharingUrl})
+        setEditData({ ...editData, onedrive_folder_url: data.sharingUrl })
         loadCoordination() // Reload to get updated link
       } else {
         alert(`Error: ${data.error || 'Unknown error'}`)
@@ -307,15 +320,16 @@ export default function CoordinationDetailPage() {
     }
   }
 
-
   const handleDeleteCoordination = async () => {
-    if (!confirm('Are you sure you want to delete this coordination? This will permanently delete:\n\n- The coordination record\n- All email history\n- All weekly reports\n\nThis action cannot be undone.')) {
+    if (
+      !confirm(
+        'Are you sure you want to delete this coordination? This will permanently delete:\n\n- The coordination record\n- All email history\n- All weekly reports\n\nThis action cannot be undone.'
+      )
+    ) {
       return
     }
 
     try {
-
-      
       const response = await fetch('/api/coordination/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,10 +354,12 @@ export default function CoordinationDetailPage() {
   }
 
   const handleDeactivate = async () => {
-    if (!confirm('Are you sure you want to deactivate this coordination? Weekly emails will stop.')) {
+    if (
+      !confirm('Are you sure you want to deactivate this coordination? Weekly emails will stop.')
+    ) {
       return
     }
-    
+
     try {
       const response = await fetch('/api/coordination/deactivate', {
         method: 'POST',
@@ -353,9 +369,9 @@ export default function CoordinationDetailPage() {
           listing_id: listing?.id,
         }),
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         alert('Coordination deactivated successfully')
         loadCoordination()
@@ -367,12 +383,12 @@ export default function CoordinationDetailPage() {
       alert('Failed to deactivate coordination')
     }
   }
-  
+
   const handleReactivate = async () => {
     if (!confirm('Are you sure you want to reactivate this coordination?')) {
       return
     }
-    
+
     try {
       const response = await fetch('/api/coordination/reactivate', {
         method: 'POST',
@@ -381,9 +397,9 @@ export default function CoordinationDetailPage() {
           coordination_id: coordinationId,
         }),
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         alert('Coordination reactivated successfully')
         loadCoordination()
@@ -459,7 +475,7 @@ export default function CoordinationDetailPage() {
       setSendingEmail(null)
     }
   }
-  
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -470,7 +486,7 @@ export default function CoordinationDetailPage() {
       minute: '2-digit',
     })
   }
-  
+
   if (loading) {
     return (
       <div className="">
@@ -482,7 +498,7 @@ export default function CoordinationDetailPage() {
       </div>
     )
   }
-  
+
   if (!coordination || !listing) {
     return (
       <div className="">
@@ -500,7 +516,7 @@ export default function CoordinationDetailPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="">
       <div className="">
@@ -513,39 +529,46 @@ export default function CoordinationDetailPage() {
               ← Back to Dashboard
             </button>
             <div className="flex items-center space-x-2">
-              <span className={`px-3 py-1 text-xs rounded ${
-                coordination.is_active 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-luxury-gray-5 text-luxury-gray-2'
-              }`}>
+              <span
+                className={`px-3 py-1 text-xs rounded ${
+                  coordination.is_active
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-luxury-gray-5 text-luxury-gray-2'
+                }`}
+              >
                 {coordination.is_active ? 'Active' : 'Inactive'}
               </span>
-              <span className={`px-3 py-1 text-xs rounded ${
-                coordination.service_paid 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
+              <span
+                className={`px-3 py-1 text-xs rounded ${
+                  coordination.service_paid
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-800'
+                }`}
+              >
                 {coordination.service_paid ? 'Paid' : 'Unpaid'}
               </span>
             </div>
           </div>
-          
+
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">
             {editData.property_address || listing.property_address}
           </h1>
-          <p className="text-sm text-luxury-gray-2">
-            Coordination ID: {coordination.id}
-          </p>
+          <p className="text-sm text-luxury-gray-2">Coordination ID: {coordination.id}</p>
         </div>
-        
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Service Fee</p>
-            <p className="text-xl font-medium">${coordination.service_fee} <span className="text-sm font-normal text-luxury-gray-2">(one time)</span></p>
+            <p className="text-xl font-medium">
+              ${coordination.service_fee}{' '}
+              <span className="text-sm font-normal text-luxury-gray-2">(one time)</span>
+            </p>
           </div>
           <div className="container-card">
             <p className="text-xs text-luxury-gray-2 mb-1">Emails Sent</p>
-            <p className="text-xl font-medium">{Math.max(coordination.total_emails_sent || 0, emailHistory.length)}</p>
+            <p className="text-xl font-medium">
+              {Math.max(coordination.total_emails_sent || 0, emailHistory.length)}
+            </p>
             {coordination.total_emails_sent === 0 && emailHistory.length > 0 && (
               <p className="text-xs text-yellow-600 mt-1">Count updated from email history</p>
             )}
@@ -574,16 +597,20 @@ export default function CoordinationDetailPage() {
             </p>
           </div>
         </div>
-        
+
         {coordination.payment_method === 'agent_pays' && (
           <div className="container-card mb-6">
-            <h3 className="text-sm font-medium text-luxury-gold mb-3">Payment Status - Agent Pays</h3>
+            <h3 className="text-sm font-medium text-luxury-gold mb-3">
+              Payment Status - Agent Pays
+            </h3>
             <div className="bg-luxury-light p-4 rounded">
               <div className="grid grid-cols-2 gap-4 mb-3">
                 <div>
                   <p className="text-xs text-luxury-gray-2 mb-1">Payment Due Date (60 days)</p>
                   <p className="text-sm font-medium">
-                    {coordination.payment_due_date ? formatDate(coordination.payment_due_date) : 'Not set'}
+                    {coordination.payment_due_date
+                      ? formatDate(coordination.payment_due_date)
+                      : 'Not set'}
                   </p>
                 </div>
                 <div>
@@ -595,7 +622,7 @@ export default function CoordinationDetailPage() {
                   </p>
                 </div>
               </div>
-              
+
               {!coordination.service_paid && coordination.payment_due_date && (
                 <>
                   {new Date(coordination.payment_due_date) < new Date() ? (
@@ -615,7 +642,7 @@ export default function CoordinationDetailPage() {
                   )}
                 </>
               )}
-              
+
               {coordination.service_paid && (
                 <div className="bg-green-50 border border-green-200 p-3 rounded">
                   <p className="text-sm text-green-800 font-medium">✓ Paid</p>
@@ -629,47 +656,43 @@ export default function CoordinationDetailPage() {
             </div>
           </div>
         )}
-        
-        {coordination.payment_method === 'agent_pays' && 
-         !coordination.service_paid && 
-         (listing?.status === 'pending' || listing?.status === 'sold') && (
-          <div className="container-card mb-6 bg-red-50 border-red-200">
-            <h3 className="text-sm font-medium text-red-800 mb-2">⚠️ Action Required</h3>
-            <p className="text-sm text-red-700">
-              This listing is {listing.status} but the $250 coordination fee has not been marked as paid. 
-              Payment should be collected at closing or deducted from agent commission.
-            </p>
-          </div>
-        )}
-        
+
+        {coordination.payment_method === 'agent_pays' &&
+          !coordination.service_paid &&
+          (listing?.status === 'pending' || listing?.status === 'sold') && (
+            <div className="container-card mb-6 bg-red-50 border-red-200">
+              <h3 className="text-sm font-medium text-red-800 mb-2">⚠️ Action Required</h3>
+              <p className="text-sm text-red-700">
+                This listing is {listing.status} but the $250 coordination fee has not been marked
+                as paid. Payment should be collected at closing or deducted from agent commission.
+              </p>
+            </div>
+          )}
+
         <div className="container-card mb-6">
           <h2 className="text-lg font-medium mb-4">Listing Information</h2>
-          
+
           <div className="space-y-4">
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Property Address
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Property Address</label>
               <input
                 type="text"
                 value={editData.property_address}
-                onChange={(e) => setEditData({...editData, property_address: e.target.value})}
+                onChange={e => setEditData({ ...editData, property_address: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Agent Name
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Agent Name</label>
               <div className="relative agent-selector">
                 <input
                   type="text"
                   value={agentSearch || editData.agent_name}
-                  onChange={(e) => {
+                  onChange={e => {
                     const value = e.target.value
                     setAgentSearch(value)
-                    setEditData({...editData, agent_name: value})
+                    setEditData({ ...editData, agent_name: value })
                     setAgentDropdownOpen(true)
                   }}
                   onFocus={() => setAgentDropdownOpen(true)}
@@ -691,114 +714,99 @@ export default function CoordinationDetailPage() {
                 )}
               </div>
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Transaction Type
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Transaction Type</label>
               <select
                 value={editData.transaction_type}
-                onChange={(e) => setEditData({...editData, transaction_type: e.target.value as 'sale' | 'lease'})}
+                onChange={e =>
+                  setEditData({ ...editData, transaction_type: e.target.value as 'sale' | 'lease' })
+                }
                 className="select-luxury"
               >
                 <option value="sale">Sale</option>
                 <option value="lease">Lease</option>
               </select>
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Client Name or LLC
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Client Name or LLC</label>
               <input
                 type="text"
                 value={editData.client_names}
-                onChange={(e) => setEditData({...editData, client_names: e.target.value})}
+                onChange={e => setEditData({ ...editData, client_names: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Client Phone
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Client Phone</label>
               <input
                 type="tel"
                 value={editData.client_phone || ''}
-                onChange={(e) => setEditData({...editData, client_phone: e.target.value})}
+                onChange={e => setEditData({ ...editData, client_phone: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Client Email
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Client Email</label>
               <input
                 type="email"
                 value={editData.client_email || ''}
-                onChange={(e) => setEditData({...editData, client_email: e.target.value})}
+                onChange={e => setEditData({ ...editData, client_email: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                MLS Link
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">MLS Link</label>
               <input
                 type="url"
                 value={editData.mls_link || ''}
-                onChange={(e) => setEditData({...editData, mls_link: e.target.value})}
+                onChange={e => setEditData({ ...editData, mls_link: e.target.value })}
                 className="input-luxury"
                 placeholder="https://..."
               />
             </div>
-            
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Estimated Launch Date
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Estimated Launch Date</label>
               <input
                 type="date"
                 value={editData.estimated_launch_date || ''}
-                onChange={(e) => setEditData({...editData, estimated_launch_date: e.target.value})}
+                onChange={e => setEditData({ ...editData, estimated_launch_date: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Actual Launch Date
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Actual Launch Date</label>
               <input
                 type="date"
                 value={editData.actual_launch_date || ''}
-                onChange={(e) => setEditData({...editData, actual_launch_date: e.target.value})}
+                onChange={e => setEditData({ ...editData, actual_launch_date: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Lead Source
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Lead Source</label>
               <input
                 type="text"
                 value={editData.lead_source || ''}
-                onChange={(e) => setEditData({...editData, lead_source: e.target.value})}
+                onChange={e => setEditData({ ...editData, lead_source: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Status
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Status</label>
               <select
                 value={editData.status}
-                onChange={(e) => setEditData({...editData, status: e.target.value as Listing['status']})}
+                onChange={e =>
+                  setEditData({ ...editData, status: e.target.value as Listing['status'] })
+                }
                 className="select-luxury"
               >
                 <option value="pre-listing">Pre-Listing</option>
@@ -821,43 +829,37 @@ export default function CoordinationDetailPage() {
             </button>
           </div>
         </div>
-        
+
         <div className="container-card mb-6">
           <h2 className="text-lg font-medium mb-4">Coordination Details</h2>
-          
+
           <div className="space-y-4">
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Seller Name
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Seller Name</label>
               <input
                 type="text"
                 value={editData.seller_name}
-                onChange={(e) => setEditData({...editData, seller_name: e.target.value})}
+                onChange={e => setEditData({ ...editData, seller_name: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Seller Email
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Seller Email</label>
               <input
                 type="email"
                 value={editData.seller_email}
-                onChange={(e) => setEditData({...editData, seller_email: e.target.value})}
+                onChange={e => setEditData({ ...editData, seller_email: e.target.value })}
                 className="input-luxury"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Listing Website URL
-              </label>
+              <label className="block text-sm mb-2 text-luxury-gray-1">Listing Website URL</label>
               <input
                 type="url"
                 value={editData.listing_website_url}
-                onChange={(e) => setEditData({...editData, listing_website_url: e.target.value})}
+                onChange={e => setEditData({ ...editData, listing_website_url: e.target.value })}
                 className="input-luxury"
                 placeholder="https://..."
               />
@@ -865,7 +867,7 @@ export default function CoordinationDetailPage() {
                 This will be shown in the seller's dashboard
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
                 OneDrive Folder URL (Sharing Link)
@@ -874,7 +876,7 @@ export default function CoordinationDetailPage() {
                 <input
                   type="url"
                   value={editData.onedrive_folder_url}
-                  onChange={(e) => setEditData({...editData, onedrive_folder_url: e.target.value})}
+                  onChange={e => setEditData({ ...editData, onedrive_folder_url: e.target.value })}
                   className="input-luxury flex-1"
                   placeholder="https://..."
                 />
@@ -889,16 +891,17 @@ export default function CoordinationDetailPage() {
                 </button>
               </div>
               <p className="text-xs text-luxury-gray-2 mt-1">
-                VA updates reports in this OneDrive folder. Click "Regenerate Link" to create an anonymous link that doesn't require Microsoft login.
+                VA updates reports in this OneDrive folder. Click "Regenerate Link" to create an
+                anonymous link that doesn't require Microsoft login.
               </p>
             </div>
-            
+
             <div>
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={editData.service_paid}
-                  onChange={(e) => setEditData({...editData, service_paid: e.target.checked})}
+                  onChange={e => setEditData({ ...editData, service_paid: e.target.checked })}
                   className="w-4 h-4"
                 />
                 <span className="text-sm">Service fee has been paid</span>
@@ -910,7 +913,7 @@ export default function CoordinationDetailPage() {
               )}
             </div>
           </div>
-          
+
           <div className="flex justify-end gap-4 mt-6 pt-6 border-t border-luxury-gray-5">
             <button
               onClick={handleSave}
@@ -921,7 +924,7 @@ export default function CoordinationDetailPage() {
             </button>
           </div>
         </div>
-        
+
         {coordination.seller_magic_link && (
           <div className="container-card mb-6">
             <h2 className="text-lg font-medium mb-4">Seller Dashboard Access</h2>
@@ -936,7 +939,9 @@ export default function CoordinationDetailPage() {
                 />
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_BASE_URL || 'https://agent.collectiverealtyco.com'}/seller/${coordination.seller_magic_link}`)
+                    navigator.clipboard.writeText(
+                      `${process.env.NEXT_PUBLIC_BASE_URL || 'https://agent.collectiverealtyco.com'}/seller/${coordination.seller_magic_link}`
+                    )
                     alert('Link copied to clipboard!')
                   }}
                   className="px-4 py-2 text-sm rounded transition-colors btn-primary"
@@ -947,7 +952,7 @@ export default function CoordinationDetailPage() {
             </div>
           </div>
         )}
-        
+
         <div className="container-card">
           <h2 className="text-lg font-medium mb-4">Email Actions</h2>
           <div className="flex flex-col space-y-3 mb-6">
@@ -955,12 +960,16 @@ export default function CoordinationDetailPage() {
               onClick={handleSendWelcomeEmail}
               disabled={sendingEmail !== null}
               className={`px-6 py-2.5 text-sm rounded transition-colors ${
-                (coordination.welcome_email_sent || hasWelcomeEmailInHistory) 
-                  ? 'bg-green-600 text-white hover:bg-green-700' 
+                coordination.welcome_email_sent || hasWelcomeEmailInHistory
+                  ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'btn-primary'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {sendingEmail === 'welcome' ? 'Sending...' : (coordination.welcome_email_sent || hasWelcomeEmailInHistory) ? '✓ Resend Welcome Email' : 'Send Welcome Email'}
+              {sendingEmail === 'welcome'
+                ? 'Sending...'
+                : coordination.welcome_email_sent || hasWelcomeEmailInHistory
+                  ? '✓ Resend Welcome Email'
+                  : 'Send Welcome Email'}
             </button>
             <button
               onClick={handleSendWeeklyEmail}
@@ -980,7 +989,7 @@ export default function CoordinationDetailPage() {
               <p className="text-sm text-luxury-gray-2">No emails sent yet</p>
             ) : (
               <div className="space-y-3">
-                {emailHistory.map((email) => (
+                {emailHistory.map(email => (
                   <div key={email.id} className="bg-luxury-light p-4 rounded">
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -990,15 +999,17 @@ export default function CoordinationDetailPage() {
                         <p className="text-xs text-luxury-gray-2 mt-1">
                           To: {email.recipient_email}
                         </p>
-                        <p className="text-xs text-luxury-gray-2">
-                          Subject: {email.subject}
-                        </p>
+                        <p className="text-xs text-luxury-gray-2">Subject: {email.subject}</p>
                       </div>
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        email.status === 'sent' ? 'bg-green-100 text-green-800' :
-                        email.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 text-xs rounded ${
+                          email.status === 'sent'
+                            ? 'bg-green-100 text-green-800'
+                            : email.status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                      >
                         {email.status}
                       </span>
                     </div>
@@ -1008,13 +1019,12 @@ export default function CoordinationDetailPage() {
                       </p>
                       {email.resend_email_id && (
                         <p className="text-xs text-luxury-gray-2 mt-1">
-                          Resend ID: <span className="font-mono text-xs">{email.resend_email_id}</span>
+                          Resend ID:{' '}
+                          <span className="font-mono text-xs">{email.resend_email_id}</span>
                         </p>
                       )}
                       {email.error_message && (
-                        <p className="text-xs text-red-600 mt-1">
-                          Error: {email.error_message}
-                        </p>
+                        <p className="text-xs text-red-600 mt-1">Error: {email.error_message}</p>
                       )}
                     </div>
                   </div>
@@ -1036,19 +1046,25 @@ export default function CoordinationDetailPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {weeklyReports.map((report) => (
-                  <div key={report.id} className="bg-luxury-light p-4 rounded border border-luxury-gray-5">
+                {weeklyReports.map(report => (
+                  <div
+                    key={report.id}
+                    className="bg-luxury-light p-4 rounded border border-luxury-gray-5"
+                  >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <p className="text-sm font-medium mb-1">
-                          Week of {new Date(report.week_start_date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric' 
-                          })} - {new Date(report.week_end_date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric' 
+                          Week of{' '}
+                          {new Date(report.week_start_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}{' '}
+                          -{' '}
+                          {new Date(report.week_end_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
                           })}
                         </p>
                         <div className="flex flex-wrap gap-4 mt-2">
@@ -1075,12 +1091,16 @@ export default function CoordinationDetailPage() {
                         </div>
                         {report.email_sent && (
                           <p className="text-xs text-green-600 mt-2">
-                            ✓ Email sent on {report.email_sent_at ? new Date(report.email_sent_at).toLocaleDateString('en-US') : 'N/A'}
+                            ✓ Email sent on{' '}
+                            {report.email_sent_at
+                              ? new Date(report.email_sent_at).toLocaleDateString('en-US')
+                              : 'N/A'}
                           </p>
                         )}
                         {!report.email_sent && report.email_scheduled_for && (
                           <p className="text-xs text-blue-600 mt-2">
-                            📅 Scheduled for {new Date(report.email_scheduled_for).toLocaleString('en-US', {
+                            📅 Scheduled for{' '}
+                            {new Date(report.email_scheduled_for).toLocaleString('en-US', {
                               month: 'short',
                               day: 'numeric',
                               hour: 'numeric',
@@ -1089,9 +1109,7 @@ export default function CoordinationDetailPage() {
                           </p>
                         )}
                         {!report.email_sent && !report.email_scheduled_for && (
-                          <p className="text-xs text-luxury-gray-2 mt-2">
-                            ⏳ Not scheduled
-                          </p>
+                          <p className="text-xs text-luxury-gray-2 mt-2">⏳ Not scheduled</p>
                         )}
                       </div>
                       <button
@@ -1154,4 +1172,3 @@ export default function CoordinationDetailPage() {
     </div>
   )
 }
-

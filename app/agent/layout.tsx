@@ -5,11 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import AppSidebar from '@/components/shared/AppSidebar'
 import { useAuth } from '@/lib/context/AuthContext'
 
-export default function AgentLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, loading } = useAuth()

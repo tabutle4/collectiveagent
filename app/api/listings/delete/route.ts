@@ -8,17 +8,11 @@ export async function POST(request: NextRequest) {
     const { listingId, userId } = body
 
     if (!listingId || !userId) {
-      return NextResponse.json(
-        { error: 'Listing ID and User ID are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Listing ID and User ID are required' }, { status: 400 })
     }
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Verify user is admin
@@ -30,10 +24,7 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Check if listing has an active coordination
@@ -45,34 +36,27 @@ export async function POST(request: NextRequest) {
 
     if (coordination) {
       return NextResponse.json(
-        { 
+        {
           error: 'Cannot delete listing with active coordination. Delete the coordination first.',
           hasCoordination: true,
-          coordinationId: coordination.id
+          coordinationId: coordination.id,
         },
         { status: 400 }
       )
     }
 
     // Delete the transaction (cascade will delete related records)
-    const { error: deleteError } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', listingId)
+    const { error: deleteError } = await supabase.from('transactions').delete().eq('id', listingId)
 
     if (deleteError) {
       console.error('Error deleting transaction:', deleteError)
-      return NextResponse.json(
-        { error: 'Failed to delete listing' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to delete listing' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Listing deleted successfully'
+      message: 'Listing deleted successfully',
     })
-
   } catch (error: any) {
     console.error('Error in delete listing API:', error)
     return NextResponse.json(

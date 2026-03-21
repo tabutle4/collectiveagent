@@ -8,16 +8,20 @@ const authHeader = () =>
 // Call this after creating an invoice, pass the invoice_id.
 export async function POST(request: NextRequest) {
   try {
-    const { invoice_id, description }: { invoice_id: string; description: string } = await request.json()
+    const { invoice_id, description }: { invoice_id: string; description: string } =
+      await request.json()
 
     if (!invoice_id || !description) {
-      return NextResponse.json({ error: 'invoice_id and description are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'invoice_id and description are required' },
+        { status: 400 }
+      )
     }
 
     const res = await fetch('https://api.payload.com/access_tokens', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -42,12 +46,18 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     if (!res.ok) {
       console.error('Payload client token creation failed:', data)
-      return NextResponse.json({ error: data.message || 'Failed to create checkout token' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.message || 'Failed to create checkout token' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true, client_token: data.id })
   } catch (error: any) {
     console.error('Error creating checkout token:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create checkout token' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to create checkout token' },
+      { status: 500 }
+    )
   }
 }

@@ -25,10 +25,7 @@ export async function POST(
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Template ID is required' }, { status: 400 })
     }
 
     // Fetch the original template
@@ -36,22 +33,20 @@ export async function POST(
       .from('email_templates')
       .select('*')
       .eq('id', normalizedId)
-       
+
       .single()
 
     if (fetchError) throw fetchError
 
     if (!originalTemplate) {
-      return NextResponse.json(
-        { error: 'Template not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
 
     // Create duplicate with modified name and without default status
     // Handle both subject and subject_line fields (database may have been updated)
-    const subjectValue = originalTemplate.subject || originalTemplate.subject_line || 'Campaign Email'
-    
+    const subjectValue =
+      originalTemplate.subject || originalTemplate.subject_line || 'Campaign Email'
+
     const duplicateData: any = {
       name: `${originalTemplate.name} (Copy)`,
       description: originalTemplate.description,
@@ -65,7 +60,7 @@ export async function POST(
       is_default: false, // Don't duplicate default status
       is_active: originalTemplate.is_active !== undefined ? originalTemplate.is_active : true,
     }
-    
+
     // Also set subject_line if the column exists (for backward compatibility)
     if (originalTemplate.subject_line !== undefined) {
       duplicateData.subject_line = subjectValue
@@ -88,4 +83,3 @@ export async function POST(
     )
   }
 }
-

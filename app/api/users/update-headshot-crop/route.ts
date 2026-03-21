@@ -6,10 +6,7 @@ export async function POST(request: NextRequest) {
     const { userId, crop } = await request.json()
 
     if (!userId || !crop || typeof crop !== 'object') {
-      return NextResponse.json(
-        { error: 'User ID and crop settings are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'User ID and crop settings are required' }, { status: 400 })
     }
 
     const { offsetX, offsetY, scale } = crop as {
@@ -18,15 +15,8 @@ export async function POST(request: NextRequest) {
       scale: number
     }
 
-    if (
-      typeof offsetX !== 'number' ||
-      typeof offsetY !== 'number' ||
-      typeof scale !== 'number'
-    ) {
-      return NextResponse.json(
-        { error: 'Invalid crop settings' },
-        { status: 400 }
-      )
+    if (typeof offsetX !== 'number' || typeof offsetY !== 'number' || typeof scale !== 'number') {
+      return NextResponse.json({ error: 'Invalid crop settings' }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin
@@ -59,5 +49,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
-

@@ -6,37 +6,23 @@ export async function DELETE(request: NextRequest) {
     const supabase = createClient()
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
-    
+
     if (!id) {
-      return NextResponse.json(
-        { error: 'Form ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Form ID is required' }, { status: 400 })
     }
-    
-    const { error } = await supabase
-      .from('forms')
-      .delete()
-      .eq('id', id)
-    
+
+    const { error } = await supabase.from('forms').delete().eq('id', id)
+
     if (error) {
       console.error('Error deleting form:', error)
-      return NextResponse.json(
-        { error: 'Failed to delete form' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to delete form' }, { status: 500 })
     }
-    
+
     return NextResponse.json({
       success: true,
     })
-    
   } catch (error: any) {
     console.error('Error deleting form:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to delete form' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || 'Failed to delete form' }, { status: 500 })
   }
 }
-

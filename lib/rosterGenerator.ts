@@ -35,13 +35,14 @@ type AgentRecord = {
 }
 
 const escapeHtml = (str: string | null | undefined) =>
-  (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-
-const escapeAttr = (str: string | null | undefined) =>
   (str || '')
     .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+
+const escapeAttr = (str: string | null | undefined) =>
+  (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
 const formatName = (agent: AgentRecord) => {
   const preferredFirst = agent.preferred_first_name || agent.first_name || ''
@@ -73,7 +74,9 @@ const getBirthdayLabel = (agent: AgentRecord) => {
 }
 
 const getUniqueSorted = (values: (string | null)[]) => {
-  const unique = Array.from(new Set(values.filter((val): val is string => !!val?.trim()).map((val) => val!.trim())))
+  const unique = Array.from(
+    new Set(values.filter((val): val is string => !!val?.trim()).map(val => val!.trim()))
+  )
   return unique.sort((a, b) => a.localeCompare(b))
 }
 
@@ -133,7 +136,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const roleLabel = formatRole(role)
       // No additional roles with simple role string
       const filteredAdditionalRoles: string[] = []
-      
+
       // Combine additional roles with job title
       const roleParts: string[] = []
       if (filteredAdditionalRoles.length > 0) {
@@ -157,7 +160,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const firstInitial = firstName.charAt(0)?.toUpperCase() || ''
       const lastInitial = lastName.charAt(0)?.toUpperCase() || ''
       const initials = `${firstInitial}${lastInitial}` || '?'
-      
+
       // Build CSS transform for crop if available
       let cropStyle = ''
       if (headshotCrop && headshotUrl) {
@@ -166,8 +169,8 @@ export const buildTableRows = (agents: AgentRecord[]) =>
         const scale = headshotCrop.scale || 1
         cropStyle = ` style="transform: translate(${offsetX}px, ${offsetY}px) scale(${scale}); transform-origin: center center;"`
       }
-      
-      const headshotImg = headshotUrl 
+
+      const headshotImg = headshotUrl
         ? `<img src="${escapeAttr(headshotUrl)}" alt="${escapeAttr(fullName)}" class="agent-headshot"${cropStyle} onerror="this.onerror=null; this.style.display='none'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display='flex';">`
         : ''
       const placeholderDiv = `<div class="agent-headshot-placeholder" style="background-color: #FFFFFF; color: #000000; display: ${headshotUrl ? 'none' : 'flex'}; align-items: center; justify-content: center; font-weight: 600; font-size: 18px;">${escapeHtml(initials)}</div>`
@@ -214,7 +217,12 @@ export const buildTableRows = (agents: AgentRecord[]) =>
     .join('\n')
 
 const buildOptions = (values: string[]) =>
-  values.map((value) => `                        <option value="${escapeAttr(value.toLowerCase())}">${escapeHtml(value)}</option>`).join('\n')
+  values
+    .map(
+      value =>
+        `                        <option value="${escapeAttr(value.toLowerCase())}">${escapeHtml(value)}</option>`
+    )
+    .join('\n')
 
 export const buildRosterHtml = ({
   agentCount,
@@ -230,143 +238,667 @@ export const buildRosterHtml = ({
   tableRows: string
 }) => {
   const parts: string[] = []
-  parts.push('<!DOCTYPE html>', '<html lang="en">', '<head>', '    <meta charset="UTF-8">', '    <meta name="viewport" content="width=device-width, initial-scale=1.0">', '    <title>CRC Agent Roster</title>', '    <link rel="preconnect" href="https://fonts.googleapis.com">', '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>', "    <link href=\"https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600&family=Montserrat:wght@300;400;500;600&display=swap\" rel=\"stylesheet\">", '    <style>')
-  parts.push('        * {', '            margin: 0;', '            padding: 0;', '            box-sizing: border-box;', '        }')
-  parts.push("        body {", "            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;", '            background: #f9f9f9;', '            min-height: 100vh;', '            padding: 24px;', '        }')
-  parts.push('        .container {', '            max-width: 1400px;', '            margin: 0 auto;', '        }')
+  parts.push(
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head>',
+    '    <meta charset="UTF-8">',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
+    '    <title>CRC Agent Roster</title>',
+    '    <link rel="preconnect" href="https://fonts.googleapis.com">',
+    '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    '    <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">',
+    '    <style>'
+  )
+  parts.push(
+    '        * {',
+    '            margin: 0;',
+    '            padding: 0;',
+    '            box-sizing: border-box;',
+    '        }'
+  )
+  parts.push(
+    '        body {',
+    "            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;",
+    '            background: #f9f9f9;',
+    '            min-height: 100vh;',
+    '            padding: 24px;',
+    '        }'
+  )
+  parts.push(
+    '        .container {',
+    '            max-width: 1400px;',
+    '            margin: 0 auto;',
+    '        }'
+  )
   // .header CSS removed
   // .logo CSS removed
-  parts.push('        .page-title {', '            text-align: center;', '            margin-bottom: 24px;', '        }')
-  parts.push('        .page-title h1 {', '            font-size: 18px;', '            font-weight: 600;', '            color: #1a1a1a;', '            letter-spacing: 0.1em;', '            text-transform: uppercase;', '            margin-bottom: 4px;', '        }')
-  parts.push('        .page-title p {', '            font-size: 13px;', '            color: #888888;', '        }')
-  parts.push('        .card {', '            background-color: white;', '            border-radius: 8px;', '            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);', '            border: 1px solid #e5e7eb;', '            overflow: hidden;', '            margin-bottom: 20px;', '            padding: 20px;', '        }')
+  parts.push(
+    '        .page-title {',
+    '            text-align: center;',
+    '            margin-bottom: 24px;',
+    '        }'
+  )
+  parts.push(
+    '        .page-title h1 {',
+    '            font-size: 18px;',
+    '            font-weight: 600;',
+    '            color: #1a1a1a;',
+    '            letter-spacing: 0.1em;',
+    '            text-transform: uppercase;',
+    '            margin-bottom: 4px;',
+    '        }'
+  )
+  parts.push(
+    '        .page-title p {',
+    '            font-size: 13px;',
+    '            color: #888888;',
+    '        }'
+  )
+  parts.push(
+    '        .card {',
+    '            background-color: white;',
+    '            border-radius: 8px;',
+    '            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);',
+    '            border: 1px solid #e5e7eb;',
+    '            overflow: hidden;',
+    '            margin-bottom: 20px;',
+    '            padding: 20px;',
+    '        }'
+  )
   parts.push('        .filter-card {', '            padding: 20px;', '        }')
-  parts.push('        .filter-title {', '            font-size: 18px;', '            font-weight: 600;', '            color: #111827;', '            margin-bottom: 16px;', '            display: flex;', '            align-items: center;', '            gap: 8px;', '        }')
-  parts.push('        .search-container {', '            margin-bottom: 16px;', '            position: relative;', '        }')
-  parts.push('        .search-icon {', '            position: absolute;', '            left: 12px;', '            top: 50%;', '            transform: translateY(-50%);', '            color: #9ca3af;', '        }')
-  parts.push('        .search-input {', '            width: 100%;', '            padding: 10px 10px 10px 40px;', '            border: 1px solid #d1d5db;', '            border-radius: 8px;', '            font-size: 14px;', '            outline: none;', '            transition: border-color 0.2s;', '        }')
+  parts.push(
+    '        .filter-title {',
+    '            font-size: 18px;',
+    '            font-weight: 600;',
+    '            color: #111827;',
+    '            margin-bottom: 16px;',
+    '            display: flex;',
+    '            align-items: center;',
+    '            gap: 8px;',
+    '        }'
+  )
+  parts.push(
+    '        .search-container {',
+    '            margin-bottom: 16px;',
+    '            position: relative;',
+    '        }'
+  )
+  parts.push(
+    '        .search-icon {',
+    '            position: absolute;',
+    '            left: 12px;',
+    '            top: 50%;',
+    '            transform: translateY(-50%);',
+    '            color: #9ca3af;',
+    '        }'
+  )
+  parts.push(
+    '        .search-input {',
+    '            width: 100%;',
+    '            padding: 10px 10px 10px 40px;',
+    '            border: 1px solid #d1d5db;',
+    '            border-radius: 8px;',
+    '            font-size: 14px;',
+    '            outline: none;',
+    '            transition: border-color 0.2s;',
+    '        }'
+  )
   parts.push('        .search-input:focus {', '            border-color: #3b82f6;', '        }')
-  parts.push('        .filters-grid {', '            display: grid;', '            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));', '            gap: 16px;', '        }')
-  parts.push('        .filter-group {', '            display: flex;', '            flex-direction: column;', '            gap: 8px;', '        }')
-  parts.push('        .filter-label {', '            font-size: 12px;', '            font-weight: 600;', '            color: #374151;', '            text-transform: uppercase;', '            letter-spacing: 0.05em;', '        }')
-  parts.push('        .filter-select {', '            padding: 8px 12px;', '            border: 1px solid #d1d5db;', '            border-radius: 8px;', '            font-size: 14px;', '            background-color: white;', '            cursor: pointer;', '            outline: none;', '            transition: border-color 0.2s;', '        }')
+  parts.push(
+    '        .filters-grid {',
+    '            display: grid;',
+    '            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));',
+    '            gap: 16px;',
+    '        }'
+  )
+  parts.push(
+    '        .filter-group {',
+    '            display: flex;',
+    '            flex-direction: column;',
+    '            gap: 8px;',
+    '        }'
+  )
+  parts.push(
+    '        .filter-label {',
+    '            font-size: 12px;',
+    '            font-weight: 600;',
+    '            color: #374151;',
+    '            text-transform: uppercase;',
+    '            letter-spacing: 0.05em;',
+    '        }'
+  )
+  parts.push(
+    '        .filter-select {',
+    '            padding: 8px 12px;',
+    '            border: 1px solid #d1d5db;',
+    '            border-radius: 8px;',
+    '            font-size: 14px;',
+    '            background-color: white;',
+    '            cursor: pointer;',
+    '            outline: none;',
+    '            transition: border-color 0.2s;',
+    '        }'
+  )
   parts.push('        .filter-select:focus {', '            border-color: #3b82f6;', '        }')
   parts.push('        .table-container {', '            overflow-x: auto;', '        }')
-  parts.push('        table {', '            width: 100%;', '            border-collapse: collapse;', '        }')
-  parts.push('        th {', '            background-color: #f9fafb;', '            padding: 12px 8px;', '            text-align: left;', '            font-weight: 600;', '            font-size: 12px;', '            color: #374151;', '            border-bottom: 1px solid #e5e7eb;', '            text-transform: uppercase;', '            letter-spacing: 0.05em;', '        }')
-  parts.push('        td {', '            padding: 16px 8px;', '            font-size: 14px;', '            color: #111827;', '            border-bottom: 1px solid #e5e7eb;', '        }')
+  parts.push(
+    '        table {',
+    '            width: 100%;',
+    '            border-collapse: collapse;',
+    '        }'
+  )
+  parts.push(
+    '        th {',
+    '            background-color: #f9fafb;',
+    '            padding: 12px 8px;',
+    '            text-align: left;',
+    '            font-weight: 600;',
+    '            font-size: 12px;',
+    '            color: #374151;',
+    '            border-bottom: 1px solid #e5e7eb;',
+    '            text-transform: uppercase;',
+    '            letter-spacing: 0.05em;',
+    '        }'
+  )
+  parts.push(
+    '        td {',
+    '            padding: 16px 8px;',
+    '            font-size: 14px;',
+    '            color: #111827;',
+    '            border-bottom: 1px solid #e5e7eb;',
+    '        }'
+  )
   parts.push('        tr:last-child td {', '            border-bottom: none;', '        }')
   parts.push('        tr:hover {', '            background-color: #f9fafb;', '        }')
-  parts.push('        .index-col {', '            text-align: center;', '            font-weight: 600;', '            color: #6b7280;', '            width: 60px;', '        }')
-  parts.push('        .headshot-col {', '            width: 60px;', '            padding: 8px;', '            text-align: center;', '        }')
-  parts.push('        .agent-headshot {', '            width: 48px;', '            height: 48px;', '            border-radius: 50%;', '            object-fit: cover;', '            border: 2px solid #e5e7eb;', '            display: inline-block;', '        }')
-  parts.push('        .agent-headshot-placeholder {', '            width: 48px;', '            height: 48px;', '            border-radius: 50%;', '            background-color: #f3f4f6;', '            border: 2px solid #e5e7eb;', '            display: inline-block;', '        }')
+  parts.push(
+    '        .index-col {',
+    '            text-align: center;',
+    '            font-weight: 600;',
+    '            color: #6b7280;',
+    '            width: 60px;',
+    '        }'
+  )
+  parts.push(
+    '        .headshot-col {',
+    '            width: 60px;',
+    '            padding: 8px;',
+    '            text-align: center;',
+    '        }'
+  )
+  parts.push(
+    '        .agent-headshot {',
+    '            width: 48px;',
+    '            height: 48px;',
+    '            border-radius: 50%;',
+    '            object-fit: cover;',
+    '            border: 2px solid #e5e7eb;',
+    '            display: inline-block;',
+    '        }'
+  )
+  parts.push(
+    '        .agent-headshot-placeholder {',
+    '            width: 48px;',
+    '            height: 48px;',
+    '            border-radius: 50%;',
+    '            background-color: #f3f4f6;',
+    '            border: 2px solid #e5e7eb;',
+    '            display: inline-block;',
+    '        }'
+  )
   parts.push('        .font-medium {', '            font-weight: 500;', '        }')
   parts.push('        .text-sm {', '            font-size: 13px;', '        }')
-  parts.push('        .social-icons {', '            display: flex;', '            gap: 8px;', '            align-items: center;', '        }')
-  parts.push('        .social-icon {', '            color: #000;', '            transition: opacity 0.2s;', '        }')
+  parts.push(
+    '        .social-icons {',
+    '            display: flex;',
+    '            gap: 8px;',
+    '            align-items: center;',
+    '        }'
+  )
+  parts.push(
+    '        .social-icon {',
+    '            color: #000;',
+    '            transition: opacity 0.2s;',
+    '        }'
+  )
   parts.push('        .social-icon:hover {', '            opacity: 0.7;', '        }')
-  parts.push('        .social-icon svg {', '            width: 16px;', '            height: 16px;', '        }')
-  parts.push('        a {', '            color: inherit;', '            text-decoration: none;', '        }')
-  parts.push('        .footer {', '            background-color: #000;', '            border-top: 1px solid #1f2937;', '            padding: 16px;', '            margin-top: 24px;', '            text-align: center;', '        }')
-  parts.push('        .footer p {', '            color: white;', '            font-size: 14px;', '        }')
-  parts.push('        .no-results {', '            text-align: center;', '            padding: 40px;', '            color: #6b7280;', '            font-size: 14px;', '        }')
-  parts.push('        .active-filters {', '            display: flex;', '            flex-wrap: wrap;', '            gap: 8px;', '            margin-top: 12px;', '            align-items: center;', '        }')
-  parts.push('        .active-filters-label {', '            font-size: 12px;', '            font-weight: 600;', '            color: #6b7280;', '            margin-right: 4px;', '        }')
-  parts.push('        .filter-chip {', '            display: inline-flex;', '            align-items: center;', '            gap: 6px;', '            padding: 6px 12px;', '            background-color: #eff6ff;', '            border: 1px solid #3b82f6;', '            border-radius: 16px;', '            font-size: 13px;', '            color: #1e40af;', '        }')
+  parts.push(
+    '        .social-icon svg {',
+    '            width: 16px;',
+    '            height: 16px;',
+    '        }'
+  )
+  parts.push(
+    '        a {',
+    '            color: inherit;',
+    '            text-decoration: none;',
+    '        }'
+  )
+  parts.push(
+    '        .footer {',
+    '            background-color: #000;',
+    '            border-top: 1px solid #1f2937;',
+    '            padding: 16px;',
+    '            margin-top: 24px;',
+    '            text-align: center;',
+    '        }'
+  )
+  parts.push(
+    '        .footer p {',
+    '            color: white;',
+    '            font-size: 14px;',
+    '        }'
+  )
+  parts.push(
+    '        .no-results {',
+    '            text-align: center;',
+    '            padding: 40px;',
+    '            color: #6b7280;',
+    '            font-size: 14px;',
+    '        }'
+  )
+  parts.push(
+    '        .active-filters {',
+    '            display: flex;',
+    '            flex-wrap: wrap;',
+    '            gap: 8px;',
+    '            margin-top: 12px;',
+    '            align-items: center;',
+    '        }'
+  )
+  parts.push(
+    '        .active-filters-label {',
+    '            font-size: 12px;',
+    '            font-weight: 600;',
+    '            color: #6b7280;',
+    '            margin-right: 4px;',
+    '        }'
+  )
+  parts.push(
+    '        .filter-chip {',
+    '            display: inline-flex;',
+    '            align-items: center;',
+    '            gap: 6px;',
+    '            padding: 6px 12px;',
+    '            background-color: #eff6ff;',
+    '            border: 1px solid #3b82f6;',
+    '            border-radius: 16px;',
+    '            font-size: 13px;',
+    '            color: #1e40af;',
+    '        }'
+  )
   parts.push('        .filter-chip-label {', '            font-weight: 500;', '        }')
   parts.push('        .filter-chip-value {', '            font-weight: 600;', '        }')
-  parts.push('        .filter-chip-remove {', '            cursor: pointer;', '            color: #3b82f6;', '            font-weight: bold;', '            font-size: 16px;', '            line-height: 1;', '            padding: 0 2px;', '            transition: color 0.2s;', '        }')
+  parts.push(
+    '        .filter-chip-remove {',
+    '            cursor: pointer;',
+    '            color: #3b82f6;',
+    '            font-weight: bold;',
+    '            font-size: 16px;',
+    '            line-height: 1;',
+    '            padding: 0 2px;',
+    '            transition: color 0.2s;',
+    '        }'
+  )
   parts.push('        .filter-chip-remove:hover {', '            color: #1e40af;', '        }')
-  parts.push('        .clear-all-filters {', '            padding: 6px 12px;', '            background-color: #f3f4f6;', '            border: 1px solid #d1d5db;', '            border-radius: 6px;', '            font-size: 12px;', '            color: #374151;', '            cursor: pointer;', '            transition: all 0.2s;', '            font-weight: 500;', '        }')
-  parts.push('        .clear-all-filters:hover {', '            background-color: #e5e7eb;', '            border-color: #9ca3af;', '        }')
-  parts.push('        .filters-info {', '            font-size: 12px;', '            color: #6b7280;', '            margin-top: 8px;', '            font-style: italic;', '        }')
-  parts.push('        .mobile-cards {', '            display: none;', '            background: transparent;', '        }')
-  parts.push('        .mobile-card {', '            background: white;', '            border-radius: 12px;', '            padding: 12px 16px;', '            margin-bottom: 16px;', '            box-shadow: 0 1px 3px rgba(0,0,0,0.1);', '        }')
-  parts.push('        .mobile-card-header {', '            display: flex;', '            justify-content: space-between;', '            align-items: flex-start;', '            cursor: pointer;', '            width: 100%;', '        }')
-  parts.push('        .mobile-card-header-left {', '            flex: 1;', '            min-width: 0;', '        }')
-  parts.push('        .mobile-card-name {', '            font-size: 16px;', '            font-weight: 600;', '            color: #111827;', '            margin-bottom: 4px;', '            line-height: 1.3;', '        }')
-  parts.push('        .mobile-card-title {', '            font-size: 14px;', '            color: #6b7280;', '            line-height: 1.3;', '            min-height: 18px;', '        }')
-  parts.push('        .mobile-card-chevron {', '            width: 8px;', '            height: 8px;', '            border-right: 1.5px solid #9ca3af;', '            border-bottom: 1.5px solid #9ca3af;', '            transform: rotate(45deg);', '            transition: transform 0.2s;', '            flex-shrink: 0;', '            margin-top: 4px;', '        }')
-  parts.push('        .mobile-card-chevron.expanded {', '            transform: rotate(225deg);', '        }')
-  parts.push('        .mobile-card-details {', '            display: none;', '            margin-top: 16px;', '            padding-top: 16px;', '            border-top: 1px solid #e5e7eb;', '        }')
+  parts.push(
+    '        .clear-all-filters {',
+    '            padding: 6px 12px;',
+    '            background-color: #f3f4f6;',
+    '            border: 1px solid #d1d5db;',
+    '            border-radius: 6px;',
+    '            font-size: 12px;',
+    '            color: #374151;',
+    '            cursor: pointer;',
+    '            transition: all 0.2s;',
+    '            font-weight: 500;',
+    '        }'
+  )
+  parts.push(
+    '        .clear-all-filters:hover {',
+    '            background-color: #e5e7eb;',
+    '            border-color: #9ca3af;',
+    '        }'
+  )
+  parts.push(
+    '        .filters-info {',
+    '            font-size: 12px;',
+    '            color: #6b7280;',
+    '            margin-top: 8px;',
+    '            font-style: italic;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-cards {',
+    '            display: none;',
+    '            background: transparent;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card {',
+    '            background: white;',
+    '            border-radius: 12px;',
+    '            padding: 12px 16px;',
+    '            margin-bottom: 16px;',
+    '            box-shadow: 0 1px 3px rgba(0,0,0,0.1);',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-header {',
+    '            display: flex;',
+    '            justify-content: space-between;',
+    '            align-items: flex-start;',
+    '            cursor: pointer;',
+    '            width: 100%;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-header-left {',
+    '            flex: 1;',
+    '            min-width: 0;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-name {',
+    '            font-size: 16px;',
+    '            font-weight: 600;',
+    '            color: #111827;',
+    '            margin-bottom: 4px;',
+    '            line-height: 1.3;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-title {',
+    '            font-size: 14px;',
+    '            color: #6b7280;',
+    '            line-height: 1.3;',
+    '            min-height: 18px;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-chevron {',
+    '            width: 8px;',
+    '            height: 8px;',
+    '            border-right: 1.5px solid #9ca3af;',
+    '            border-bottom: 1.5px solid #9ca3af;',
+    '            transform: rotate(45deg);',
+    '            transition: transform 0.2s;',
+    '            flex-shrink: 0;',
+    '            margin-top: 4px;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-chevron.expanded {',
+    '            transform: rotate(225deg);',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-details {',
+    '            display: none;',
+    '            margin-top: 16px;',
+    '            padding-top: 16px;',
+    '            border-top: 1px solid #e5e7eb;',
+    '        }'
+  )
   parts.push('        .mobile-card-details.expanded {', '            display: block;', '        }')
-  parts.push('        .mobile-card-detail-row {', '            display: flex;', '            margin-bottom: 12px;', '            font-size: 14px;', '        }')
-  parts.push('        .mobile-card-detail-label {', '            font-weight: 600;', '            color: #374151;', '            min-width: 80px;', '            margin-right: 8px;', '        }')
-  parts.push('        .mobile-card-detail-value {', '            color: #111827;', '            flex: 1;', '        }')
-  parts.push('        .mobile-card-detail-value a {', '            color: #111827;', '            text-decoration: none;', '        }')
-  parts.push('        .mobile-card-headshot-container {', '            text-align: center;', '            margin-bottom: 16px;', '            padding-bottom: 16px;', '            border-bottom: 1px solid #e5e7eb;', '        }')
-  parts.push('        .mobile-card-headshot {', '            width: 80px;', '            height: 80px;', '            border-radius: 50%;', '            object-fit: cover;', '            border: 2px solid #e5e7eb;', '            display: inline-block;', '        }')
-  parts.push('        .mobile-card-headshot-placeholder {', '            width: 80px;', '            height: 80px;', '            border-radius: 50%;', '            background-color: #f3f4f6;', '            border: 2px solid #e5e7eb;', '            display: inline-block;', '            margin: 0 auto;', '        }')
-  parts.push('        @media (max-width: 768px) {', '            body {', '                padding: 16px;', '            }', '            .header {', '                padding: 12px 16px;', '                margin-bottom: 16px;', '            }', '            .logo {', '                height: 48px;', '            }', '            .page-title h1 {', '                font-size: 18px;', '            }', '            .filter-card {', '                padding: 16px;', '            }', '            .table-container {', '                display: none;', '            }', '            .mobile-cards {', '                display: block;', '                background: transparent;', '            }', '            .card:has(.mobile-cards) {', '                background-color: transparent !important;', '                box-shadow: none !important;', '            }', '            @supports not selector(:has(*)) {', '                .card:not(.filter-card) {', '                    background-color: transparent !important;', '                    box-shadow: none !important;', '                }', '            }', '        }')
-  parts.push('        @media print {', '            body {', '                background: white;', '                padding: 0;', '            }', '            .header, .footer, .filter-card {', '                background-color: #000 !important;', '                -webkit-print-color-adjust: exact;', '                print-color-adjust: exact;', '            }', '            .filter-card {', '                display: none;', '            }', '        }')
+  parts.push(
+    '        .mobile-card-detail-row {',
+    '            display: flex;',
+    '            margin-bottom: 12px;',
+    '            font-size: 14px;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-detail-label {',
+    '            font-weight: 600;',
+    '            color: #374151;',
+    '            min-width: 80px;',
+    '            margin-right: 8px;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-detail-value {',
+    '            color: #111827;',
+    '            flex: 1;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-detail-value a {',
+    '            color: #111827;',
+    '            text-decoration: none;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-headshot-container {',
+    '            text-align: center;',
+    '            margin-bottom: 16px;',
+    '            padding-bottom: 16px;',
+    '            border-bottom: 1px solid #e5e7eb;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-headshot {',
+    '            width: 80px;',
+    '            height: 80px;',
+    '            border-radius: 50%;',
+    '            object-fit: cover;',
+    '            border: 2px solid #e5e7eb;',
+    '            display: inline-block;',
+    '        }'
+  )
+  parts.push(
+    '        .mobile-card-headshot-placeholder {',
+    '            width: 80px;',
+    '            height: 80px;',
+    '            border-radius: 50%;',
+    '            background-color: #f3f4f6;',
+    '            border: 2px solid #e5e7eb;',
+    '            display: inline-block;',
+    '            margin: 0 auto;',
+    '        }'
+  )
+  parts.push(
+    '        @media (max-width: 768px) {',
+    '            body {',
+    '                padding: 16px;',
+    '            }',
+    '            .header {',
+    '                padding: 12px 16px;',
+    '                margin-bottom: 16px;',
+    '            }',
+    '            .logo {',
+    '                height: 48px;',
+    '            }',
+    '            .page-title h1 {',
+    '                font-size: 18px;',
+    '            }',
+    '            .filter-card {',
+    '                padding: 16px;',
+    '            }',
+    '            .table-container {',
+    '                display: none;',
+    '            }',
+    '            .mobile-cards {',
+    '                display: block;',
+    '                background: transparent;',
+    '            }',
+    '            .card:has(.mobile-cards) {',
+    '                background-color: transparent !important;',
+    '                box-shadow: none !important;',
+    '            }',
+    '            @supports not selector(:has(*)) {',
+    '                .card:not(.filter-card) {',
+    '                    background-color: transparent !important;',
+    '                    box-shadow: none !important;',
+    '                }',
+    '            }',
+    '        }'
+  )
+  parts.push(
+    '        @media print {',
+    '            body {',
+    '                background: white;',
+    '                padding: 0;',
+    '            }',
+    '            .header, .footer, .filter-card {',
+    '                background-color: #000 !important;',
+    '                -webkit-print-color-adjust: exact;',
+    '                print-color-adjust: exact;',
+    '            }',
+    '            .filter-card {',
+    '                display: none;',
+    '            }',
+    '        }'
+  )
   parts.push('    </style>', '</head>', '<body>')
   // Header removed - handled by LuxuryHeader component
   parts.push('    <div class="container">')
-  parts.push('        <div class="page-title">', '            <h1>Agent Roster</h1>', `            <p id="agent-count">${agentCount} active agents</p>`, '        </div>')
-  parts.push('        <div class="card filter-card">', '            <div class="filter-title">', '                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">', '                    <circle cx="11" cy="11" r="8"></circle>', '                    <path d="m21 21-4.35-4.35"></path>', '                </svg>', '                Search & Filter', '            </div>')
-  parts.push('            <div class="search-container">', '                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">', '                    <circle cx="11" cy="11" r="8"></circle>', '                    <path d="m21 21-4.35-4.35"></path>', '                </svg>', '                <input', '                    type="text"', '                    id="searchInput"', '                    class="search-input"', '                    placeholder="Search by name, email, phone, social media, or birthday month..."', '                    onkeyup="filterTable()"', '                >', '            </div>')
+  parts.push(
+    '        <div class="page-title">',
+    '            <h1>Agent Roster</h1>',
+    `            <p id="agent-count">${agentCount} active agents</p>`,
+    '        </div>'
+  )
+  parts.push(
+    '        <div class="card filter-card">',
+    '            <div class="filter-title">',
+    '                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">',
+    '                    <circle cx="11" cy="11" r="8"></circle>',
+    '                    <path d="m21 21-4.35-4.35"></path>',
+    '                </svg>',
+    '                Search & Filter',
+    '            </div>'
+  )
+  parts.push(
+    '            <div class="search-container">',
+    '                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">',
+    '                    <circle cx="11" cy="11" r="8"></circle>',
+    '                    <path d="m21 21-4.35-4.35"></path>',
+    '                </svg>',
+    '                <input',
+    '                    type="text"',
+    '                    id="searchInput"',
+    '                    class="search-input"',
+    '                    placeholder="Search by name, email, phone, social media, or birthday month..."',
+    '                    onkeyup="filterTable()"',
+    '                >',
+    '            </div>'
+  )
   parts.push('            <div class="filters-grid">')
-  parts.push('                <div class="filter-group">', '                    <label class="filter-label" for="officeFilter">Office</label>', '                    <select id="officeFilter" class="filter-select" onchange="filterTable()">', '                        <option value="all">All Offices</option>')
+  parts.push(
+    '                <div class="filter-group">',
+    '                    <label class="filter-label" for="officeFilter">Office</label>',
+    '                    <select id="officeFilter" class="filter-select" onchange="filterTable()">',
+    '                        <option value="all">All Offices</option>'
+  )
   parts.push(officeOptions || '')
   parts.push('                    </select>', '                </div>')
-  parts.push('                <div class="filter-group">', '                    <label class="filter-label" for="teamFilter">Team</label>', '                    <select id="teamFilter" class="filter-select" onchange="filterTable()">', '                        <option value="all">All Teams</option>')
+  parts.push(
+    '                <div class="filter-group">',
+    '                    <label class="filter-label" for="teamFilter">Team</label>',
+    '                    <select id="teamFilter" class="filter-select" onchange="filterTable()">',
+    '                        <option value="all">All Teams</option>'
+  )
   parts.push(teamOptions || '')
   parts.push('                    </select>', '                </div>')
-  parts.push('                <div class="filter-group">', '                    <label class="filter-label" for="divisionFilter">Division</label>', '                    <select id="divisionFilter" class="filter-select" onchange="filterTable()">', '                        <option value="all">All Divisions</option>')
+  parts.push(
+    '                <div class="filter-group">',
+    '                    <label class="filter-label" for="divisionFilter">Division</label>',
+    '                    <select id="divisionFilter" class="filter-select" onchange="filterTable()">',
+    '                        <option value="all">All Divisions</option>'
+  )
   parts.push(divisionOptions || '')
   parts.push('                    </select>', '                </div>')
   parts.push('            </div>')
-  parts.push('            <div id="activeFilters" class="active-filters" style="display: none;"></div>')
-  parts.push('            <div id="filtersInfo" class="filters-info" style="display: none;">Filters are combined (AND logic) - showing agents that match all selected filters</div>')
+  parts.push(
+    '            <div id="activeFilters" class="active-filters" style="display: none;"></div>'
+  )
+  parts.push(
+    '            <div id="filtersInfo" class="filters-info" style="display: none;">Filters are combined (AND logic) - showing agents that match all selected filters</div>'
+  )
   parts.push('        </div>')
-  parts.push('        <div class="card">', '            <div class="table-container">', '                <table id="agentTable">', '                    <thead>', '                        <tr>', '                            <th class="index-col">#</th>', '                            <th class="headshot-col">Photo</th>', '                            <th>Agent Name</th>', '                            <th>Email</th>', '                            <th>Office</th>', '                            <th>Role</th>', '                            <th>Additional Roles</th>', '                            <th>Team</th>', '                            <th>Phone</th>', '                            <th>Birthday</th>', '                            <th>Social Media</th>', '                            <th>Division</th>', '                        </tr>', '                    </thead>', '                    <tbody>')
+  parts.push(
+    '        <div class="card">',
+    '            <div class="table-container">',
+    '                <table id="agentTable">',
+    '                    <thead>',
+    '                        <tr>',
+    '                            <th class="index-col">#</th>',
+    '                            <th class="headshot-col">Photo</th>',
+    '                            <th>Agent Name</th>',
+    '                            <th>Email</th>',
+    '                            <th>Office</th>',
+    '                            <th>Role</th>',
+    '                            <th>Additional Roles</th>',
+    '                            <th>Team</th>',
+    '                            <th>Phone</th>',
+    '                            <th>Birthday</th>',
+    '                            <th>Social Media</th>',
+    '                            <th>Division</th>',
+    '                        </tr>',
+    '                    </thead>',
+    '                    <tbody>'
+  )
   parts.push(tableRows || '')
-  parts.push('                    </tbody>', '                </table>', '                <div id="noResults" class="no-results" style="display: none;">', '                    <p>No agents match your search criteria</p>', '                </div>', '            </div>', '            <div id="mobileCards" class="mobile-cards"></div>', '        </div>', '    </div>')
-  parts.push('    <div class="footer">', `        <p>© ${new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>`, '    </div>')
+  parts.push(
+    '                    </tbody>',
+    '                </table>',
+    '                <div id="noResults" class="no-results" style="display: none;">',
+    '                    <p>No agents match your search criteria</p>',
+    '                </div>',
+    '            </div>',
+    '            <div id="mobileCards" class="mobile-cards"></div>',
+    '        </div>',
+    '    </div>'
+  )
+  parts.push(
+    '    <div class="footer">',
+    `        <p>© ${new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>`,
+    '    </div>'
+  )
   // Build script content with escaped backticks to avoid parsing issues
   const scriptContent = [
     '    <script>',
     '        function formatPhone(phone) {',
     '            if (!phone || phone.length !== 10) return phone;',
-    '            return \'(\' + phone.slice(0, 3) + \') \' + phone.slice(3, 6) + \'-\' + phone.slice(6);',
+    "            return '(' + phone.slice(0, 3) + ') ' + phone.slice(3, 6) + '-' + phone.slice(6);",
     '        }',
     '',
     '        function capitalizeFirst(str) {',
-    '            if (!str) return \'\';',
+    "            if (!str) return '';",
     '            return str.charAt(0).toUpperCase() + str.slice(1);',
     '        }',
     '',
     '        function createMobileCards() {',
     '            try {',
-    '                const table = document.getElementById(\'agentTable\');',
+    "                const table = document.getElementById('agentTable');",
     '                if (!table) {',
     "                    console.error('agentTable not found');",
     '                    return;',
     '                }',
-    '                const tbody = table.getElementsByTagName(\'tbody\')[0];',
+    "                const tbody = table.getElementsByTagName('tbody')[0];",
     '                if (!tbody) {',
     "                    console.error('tbody not found');",
     '                    return;',
     '                }',
-    '                const rows = tbody.getElementsByTagName(\'tr\');',
-    '                const mobileCardsContainer = document.getElementById(\'mobileCards\');',
+    "                const rows = tbody.getElementsByTagName('tr');",
+    "                const mobileCardsContainer = document.getElementById('mobileCards');",
     '                if (!mobileCardsContainer) {',
     "                    console.error('mobileCards container not found');",
     '                    return;',
     '                }',
-    '                mobileCardsContainer.innerHTML = \'\';',
+    "                mobileCardsContainer.innerHTML = '';",
     '                for (let i = 0; i < rows.length; i++) {',
     '                    const row = rows[i];',
-    '                    const name = row.getAttribute(\'data-name\') || \'\';',
-    '                    const email = row.getAttribute(\'data-email\') || \'\';',
-    '                    const office = (row.getAttribute(\'data-office\') || \'\').trim().toLowerCase();',
-    '                    const team = (row.getAttribute(\'data-team\') || \'\').trim().toLowerCase();',
-    '                    const division = (row.getAttribute(\'data-division\') || \'\').trim().toLowerCase();',
-    '                    const phone = row.getAttribute(\'data-phone\') || \'\';',
-    '                    const birthday = row.getAttribute(\'data-birthday\') || \'\';',
-    '                    const headshot = row.getAttribute(\'data-headshot\') || \'\';',
-    '                    const headshotCropStr = row.getAttribute(\'data-headshot-crop\') || \'\';',
+    "                    const name = row.getAttribute('data-name') || '';",
+    "                    const email = row.getAttribute('data-email') || '';",
+    "                    const office = (row.getAttribute('data-office') || '').trim().toLowerCase();",
+    "                    const team = (row.getAttribute('data-team') || '').trim().toLowerCase();",
+    "                    const division = (row.getAttribute('data-division') || '').trim().toLowerCase();",
+    "                    const phone = row.getAttribute('data-phone') || '';",
+    "                    const birthday = row.getAttribute('data-birthday') || '';",
+    "                    const headshot = row.getAttribute('data-headshot') || '';",
+    "                    const headshotCropStr = row.getAttribute('data-headshot-crop') || '';",
     '                    let headshotCrop = null;',
     '                    if (headshotCropStr) {',
     '                        try {',
@@ -375,43 +907,43 @@ export const buildRosterHtml = ({
     '                            headshotCrop = null;',
     '                        }',
     '                    }',
-    '                    const role = row.cells[5]?.textContent?.trim() || \'\';',
-    '                    const additionalRoles = row.cells[6]?.textContent?.trim() || \'-\';',
+    "                    const role = row.cells[5]?.textContent?.trim() || '';",
+    "                    const additionalRoles = row.cells[6]?.textContent?.trim() || '-';",
     '                    const socialMediaCell = row.cells[10];',
-    '                    const socialMediaHTML = socialMediaCell ? socialMediaCell.innerHTML : \'\';',
-    '                    const card = document.createElement(\'div\');',
+    "                    const socialMediaHTML = socialMediaCell ? socialMediaCell.innerHTML : '';",
+    "                    const card = document.createElement('div');",
     "                    card.className = 'mobile-card';",
-    '                    const isRowHidden = row.style.display === \'none\';',
-    '                    card.style.display = isRowHidden ? \'none\' : \'block\';',
-    '                    card.setAttribute(\'data-row-index\', i.toString());',
-    '                    const displayName = capitalizeFirst(name.split(\' \').map(word => capitalizeFirst(word)).join(\' \'));',
-    '                    const jobTitle = row.getAttribute(\'data-job-title\') || \'\';',
-    '                    let displayTitle = \'\';',
+    "                    const isRowHidden = row.style.display === 'none';",
+    "                    card.style.display = isRowHidden ? 'none' : 'block';",
+    "                    card.setAttribute('data-row-index', i.toString());",
+    "                    const displayName = capitalizeFirst(name.split(' ').map(word => capitalizeFirst(word)).join(' '));",
+    "                    const jobTitle = row.getAttribute('data-job-title') || '';",
+    "                    let displayTitle = '';",
     '                    if (jobTitle) {',
     '                        displayTitle = jobTitle;',
     '                    } else if (office && role) {',
-    '                        displayTitle = office + \' • \' + role;',
+    "                        displayTitle = office + ' • ' + role;",
     '                    } else if (office) {',
     '                        displayTitle = office;',
     '                    } else if (role) {',
     '                        displayTitle = role;',
     '                    }',
-    '                    const firstName = row.cells[2]?.textContent?.trim().split(\' \')[0] || \'\';',
-    '                    const lastName = row.cells[2]?.textContent?.trim().split(\' \').slice(1).join(\' \') || \'\';',
-    '                    const firstInitial = firstName.charAt(0)?.toUpperCase() || \'\';',
-    '                    const lastInitial = lastName.charAt(0)?.toUpperCase() || \'\';',
-    '                    const initials = (firstInitial + lastInitial) || \'?\';',
-    '                    let cropStyle = \'\';',
+    "                    const firstName = row.cells[2]?.textContent?.trim().split(' ')[0] || '';",
+    "                    const lastName = row.cells[2]?.textContent?.trim().split(' ').slice(1).join(' ') || '';",
+    "                    const firstInitial = firstName.charAt(0)?.toUpperCase() || '';",
+    "                    const lastInitial = lastName.charAt(0)?.toUpperCase() || '';",
+    "                    const initials = (firstInitial + lastInitial) || '?';",
+    "                    let cropStyle = '';",
     '                    if (headshotCrop && headshot) {',
     '                        const offsetX = headshotCrop.offsetX || 0;',
     '                        const offsetY = headshotCrop.offsetY || 0;',
     '                        const scale = headshotCrop.scale || 1;',
-    '                        cropStyle = \' style="transform: translate(\' + offsetX + \'px, \' + offsetY + \'px) scale(\' + scale + \'); transform-origin: center center;"\';',
+    "                        cropStyle = ' style=\"transform: translate(' + offsetX + 'px, ' + offsetY + 'px) scale(' + scale + '); transform-origin: center center;\"';",
     '                    }',
-    '                    const headshotHTML = headshot ? \'<img src="\' + headshot + \'" alt="\' + displayName + \'" class="mobile-card-headshot"\' + cropStyle + \' onerror="this.onerror=null; this.style.display=\\\'none\\\'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display=\\\'flex\\\';">\' : \'\';',
-    '                    const placeholderHTML = \'<div class="mobile-card-headshot-placeholder" style="background-color: #FFFFFF; color: #000000; display: \' + (headshot ? \'none\' : \'flex\') + \'; align-items: center; justify-content: center; font-weight: 600; font-size: 32px;">\' + initials + \'</div>\';',
+    "                    const headshotHTML = headshot ? '<img src=\"' + headshot + '\" alt=\"' + displayName + '\" class=\"mobile-card-headshot\"' + cropStyle + ' onerror=\"this.onerror=null; this.style.display=\\'none\\'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display=\\'flex\\';\">' : '';",
+    "                    const placeholderHTML = '<div class=\"mobile-card-headshot-placeholder\" style=\"background-color: #FFFFFF; color: #000000; display: ' + (headshot ? 'none' : 'flex') + '; align-items: center; justify-content: center; font-weight: 600; font-size: 32px;\">' + initials + '</div>';",
     '                    const headshotDisplay = headshotHTML + placeholderHTML;',
-    '                    const cardHTML = \'<div class="mobile-card-header" onclick="toggleCard(\' + i + \')"><div class="mobile-card-header-left"><div class="mobile-card-name">\' + (displayName || \'Unknown Agent\') + \'</div><div class="mobile-card-title">\' + (displayTitle || \'\') + \'</div></div><div class="mobile-card-chevron" id="chevron-\' + i + \'"></div></div><div class="mobile-card-details" id="details-\' + i + \'"><div class="mobile-card-headshot-container">\' + headshotDisplay + \'</div>\' + (email ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">EMAIL:</div><div class="mobile-card-detail-value"><a href="mailto:\' + email + \'">\' + email + \'</a></div></div>\' : \'\') + (phone ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">PHONE:</div><div class="mobile-card-detail-value"><a href="tel:\' + phone + \'">\' + formatPhone(phone) + \'</a></div></div>\' : \'\') + (team ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">TEAM:</div><div class="mobile-card-detail-value">\' + team + \'</div></div>\' : \'\') + (birthday ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">BIRTHDAY:</div><div class="mobile-card-detail-value">\' + capitalizeFirst(birthday) + \'</div></div>\' : \'\') + (socialMediaHTML ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">SOCIAL MEDIA:</div><div class="mobile-card-detail-value">\' + socialMediaHTML + \'</div></div>\' : \'\') + (division && division !== \'-\' ? \'<div class="mobile-card-detail-row"><div class="mobile-card-detail-label">DIVISION:</div><div class="mobile-card-detail-value">\' + division + \'</div></div>\' : \'\') + \'</div>\';',
+    "                    const cardHTML = '<div class=\"mobile-card-header\" onclick=\"toggleCard(' + i + ')\"><div class=\"mobile-card-header-left\"><div class=\"mobile-card-name\">' + (displayName || 'Unknown Agent') + '</div><div class=\"mobile-card-title\">' + (displayTitle || '') + '</div></div><div class=\"mobile-card-chevron\" id=\"chevron-' + i + '\"></div></div><div class=\"mobile-card-details\" id=\"details-' + i + '\"><div class=\"mobile-card-headshot-container\">' + headshotDisplay + '</div>' + (email ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">EMAIL:</div><div class=\"mobile-card-detail-value\"><a href=\"mailto:' + email + '\">' + email + '</a></div></div>' : '') + (phone ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">PHONE:</div><div class=\"mobile-card-detail-value\"><a href=\"tel:' + phone + '\">' + formatPhone(phone) + '</a></div></div>' : '') + (team ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">TEAM:</div><div class=\"mobile-card-detail-value\">' + team + '</div></div>' : '') + (birthday ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">BIRTHDAY:</div><div class=\"mobile-card-detail-value\">' + capitalizeFirst(birthday) + '</div></div>' : '') + (socialMediaHTML ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">SOCIAL MEDIA:</div><div class=\"mobile-card-detail-value\">' + socialMediaHTML + '</div></div>' : '') + (division && division !== '-' ? '<div class=\"mobile-card-detail-row\"><div class=\"mobile-card-detail-label\">DIVISION:</div><div class=\"mobile-card-detail-value\">' + division + '</div></div>' : '') + '</div>';",
     '                    card.innerHTML = cardHTML;',
     '                    mobileCardsContainer.appendChild(card);',
     '                }',
@@ -421,43 +953,43 @@ export const buildRosterHtml = ({
     '        }',
     '',
     '        function toggleCard(index) {',
-    '            const details = document.getElementById(\'details-\' + index);',
-    '            const chevron = document.getElementById(\'chevron-\' + index);',
-    '            if (details.classList.contains(\'expanded\')) {',
-    '                details.classList.remove(\'expanded\');',
-    '                chevron.classList.remove(\'expanded\');',
+    "            const details = document.getElementById('details-' + index);",
+    "            const chevron = document.getElementById('chevron-' + index);",
+    "            if (details.classList.contains('expanded')) {",
+    "                details.classList.remove('expanded');",
+    "                chevron.classList.remove('expanded');",
     '            } else {',
-    '                details.classList.add(\'expanded\');',
-    '                chevron.classList.add(\'expanded\');',
+    "                details.classList.add('expanded');",
+    "                chevron.classList.add('expanded');",
     '            }',
     '        }',
     '',
     '        function filterTable() {',
-    '            const searchInput = document.getElementById(\'searchInput\').value.toLowerCase();',
-    '            const officeFilterValue = document.getElementById(\'officeFilter\').value.trim();',
-    '            const teamFilterValue = document.getElementById(\'teamFilter\').value.trim();',
-    '            const divisionFilterValue = document.getElementById(\'divisionFilter\').value.trim();',
-    '            const officeFilter = officeFilterValue === \'all\' ? \'all\' : officeFilterValue.toLowerCase();',
-    '            const teamFilter = teamFilterValue === \'all\' ? \'all\' : teamFilterValue.toLowerCase();',
-    '            const divisionFilter = divisionFilterValue === \'all\' ? \'all\' : divisionFilterValue.toLowerCase();',
-    '            const table = document.getElementById(\'agentTable\');',
-    '            const rows = table.getElementsByTagName(\'tbody\')[0].getElementsByTagName(\'tr\');',
+    "            const searchInput = document.getElementById('searchInput').value.toLowerCase();",
+    "            const officeFilterValue = document.getElementById('officeFilter').value.trim();",
+    "            const teamFilterValue = document.getElementById('teamFilter').value.trim();",
+    "            const divisionFilterValue = document.getElementById('divisionFilter').value.trim();",
+    "            const officeFilter = officeFilterValue === 'all' ? 'all' : officeFilterValue.toLowerCase();",
+    "            const teamFilter = teamFilterValue === 'all' ? 'all' : teamFilterValue.toLowerCase();",
+    "            const divisionFilter = divisionFilterValue === 'all' ? 'all' : divisionFilterValue.toLowerCase();",
+    "            const table = document.getElementById('agentTable');",
+    "            const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');",
     '            let visibleCount = 0;',
     '            for (let i = 0; i < rows.length; i++) {',
     '                const row = rows[i];',
-    '                const name = row.getAttribute(\'data-name\');',
-    '                const email = row.getAttribute(\'data-email\');',
-    '                const office = (row.getAttribute(\'data-office\') || \'\').trim().toLowerCase();',
-    '                const team = (row.getAttribute(\'data-team\') || \'\').trim().toLowerCase();',
-    '                const division = (row.getAttribute(\'data-division\') || \'\').trim().toLowerCase();',
-    '                const phone = row.getAttribute(\'data-phone\');',
-    '                const birthday = row.getAttribute(\'data-birthday\');',
-    '                const ig = row.getAttribute(\'data-ig\');',
-    '                const tiktok = row.getAttribute(\'data-tiktok\');',
-    '                const threads = row.getAttribute(\'data-threads\');',
-    '                const youtube = row.getAttribute(\'data-youtube\');',
-    '                const linkedin = row.getAttribute(\'data-linkedin\');',
-    '                const facebook = row.getAttribute(\'data-facebook\');',
+    "                const name = row.getAttribute('data-name');",
+    "                const email = row.getAttribute('data-email');",
+    "                const office = (row.getAttribute('data-office') || '').trim().toLowerCase();",
+    "                const team = (row.getAttribute('data-team') || '').trim().toLowerCase();",
+    "                const division = (row.getAttribute('data-division') || '').trim().toLowerCase();",
+    "                const phone = row.getAttribute('data-phone');",
+    "                const birthday = row.getAttribute('data-birthday');",
+    "                const ig = row.getAttribute('data-ig');",
+    "                const tiktok = row.getAttribute('data-tiktok');",
+    "                const threads = row.getAttribute('data-threads');",
+    "                const youtube = row.getAttribute('data-youtube');",
+    "                const linkedin = row.getAttribute('data-linkedin');",
+    "                const facebook = row.getAttribute('data-facebook');",
     '                const matchesSearch = !searchInput ||',
     '                    name.includes(searchInput) ||',
     '                    email.includes(searchInput) ||',
@@ -469,33 +1001,33 @@ export const buildRosterHtml = ({
     '                    youtube.includes(searchInput) ||',
     '                    linkedin.includes(searchInput) ||',
     '                    facebook.includes(searchInput);',
-    '                const matchesOffice = officeFilter === \'all\' || office === officeFilter;',
-    '                const matchesTeam = teamFilter === \'all\' || team === teamFilter;',
+    "                const matchesOffice = officeFilter === 'all' || office === officeFilter;",
+    "                const matchesTeam = teamFilter === 'all' || team === teamFilter;",
     '                // Handle multiple divisions (split by |)',
     '                let matchesDivision = false;',
-    '                if (divisionFilter === \'all\') {',
+    "                if (divisionFilter === 'all') {",
     '                    matchesDivision = true;',
-    '                } else if (division && division !== \'-\' && division.trim().length > 0) {',
+    "                } else if (division && division !== '-' && division.trim().length > 0) {",
     '                    // Split by |, trim each part, lowercase, and filter out empty strings and dashes',
-    '                    const agentDivisions = division.split(\'|\').map(d => d.trim().toLowerCase()).filter(d => d.length > 0 && d !== \'-\');',
+    "                    const agentDivisions = division.split('|').map(d => d.trim().toLowerCase()).filter(d => d.length > 0 && d !== '-');",
     '                    matchesDivision = agentDivisions.includes(divisionFilter);',
     '                }',
     '                if (matchesSearch && matchesOffice && matchesTeam && matchesDivision) {',
-    '                    row.style.display = \'\';',
+    "                    row.style.display = '';",
     '                    visibleCount++;',
-    '                    const rowNumber = row.querySelector(\'.row-number\');',
+    "                    const rowNumber = row.querySelector('.row-number');",
     '                    if (rowNumber) {',
     '                        rowNumber.textContent = visibleCount;',
     '                    }',
-    '                    const mobileCard = document.querySelector(\'.mobile-card[data-row-index="\' + i + \'"]\');',
+    "                    const mobileCard = document.querySelector('.mobile-card[data-row-index=\"' + i + '\"]');",
     '                    if (mobileCard) {',
-    '                        mobileCard.style.display = \'block\';',
+    "                        mobileCard.style.display = 'block';",
     '                    }',
     '                } else {',
-    '                    row.style.display = \'none\';',
-    '                    const mobileCard = document.querySelector(\'.mobile-card[data-row-index="\' + i + \'"]\');',
+    "                    row.style.display = 'none';",
+    "                    const mobileCard = document.querySelector('.mobile-card[data-row-index=\"' + i + '\"]');",
     '                    if (mobileCard) {',
-    '                        mobileCard.style.display = \'none\';',
+    "                        mobileCard.style.display = 'none';",
     '                    }',
     '                }',
     '            }',
@@ -508,75 +1040,75 @@ export const buildRosterHtml = ({
     '        }',
     '',
     '        function updateActiveFilters() {',
-    '            const activeFiltersContainer = document.getElementById(\'activeFilters\');',
-    '            const filtersInfo = document.getElementById(\'filtersInfo\');',
+    "            const activeFiltersContainer = document.getElementById('activeFilters');",
+    "            const filtersInfo = document.getElementById('filtersInfo');",
     '            if (!activeFiltersContainer) return;',
     '',
-    '            const searchInput = document.getElementById(\'searchInput\').value.trim();',
-    '            const officeFilter = document.getElementById(\'officeFilter\');',
-    '            const teamFilter = document.getElementById(\'teamFilter\');',
-    '            const divisionFilter = document.getElementById(\'divisionFilter\');',
+    "            const searchInput = document.getElementById('searchInput').value.trim();",
+    "            const officeFilter = document.getElementById('officeFilter');",
+    "            const teamFilter = document.getElementById('teamFilter');",
+    "            const divisionFilter = document.getElementById('divisionFilter');",
     '',
     '            const activeFilters = [];',
     '',
     '            if (searchInput) {',
-    '                activeFilters.push({ type: \'search\', label: \'Search\', value: searchInput });',
+    "                activeFilters.push({ type: 'search', label: 'Search', value: searchInput });",
     '            }',
-    '            if (officeFilter && officeFilter.value !== \'all\') {',
+    "            if (officeFilter && officeFilter.value !== 'all') {",
     '                const selectedOption = officeFilter.options[officeFilter.selectedIndex];',
-    '                activeFilters.push({ type: \'office\', label: \'Office\', value: selectedOption.text });',
+    "                activeFilters.push({ type: 'office', label: 'Office', value: selectedOption.text });",
     '            }',
-    '            if (teamFilter && teamFilter.value !== \'all\') {',
+    "            if (teamFilter && teamFilter.value !== 'all') {",
     '                const selectedOption = teamFilter.options[teamFilter.selectedIndex];',
-    '                activeFilters.push({ type: \'team\', label: \'Team\', value: selectedOption.text });',
+    "                activeFilters.push({ type: 'team', label: 'Team', value: selectedOption.text });",
     '            }',
-    '            if (divisionFilter && divisionFilter.value !== \'all\') {',
+    "            if (divisionFilter && divisionFilter.value !== 'all') {",
     '                const selectedOption = divisionFilter.options[divisionFilter.selectedIndex];',
-    '                activeFilters.push({ type: \'division\', label: \'Division\', value: selectedOption.text });',
+    "                activeFilters.push({ type: 'division', label: 'Division', value: selectedOption.text });",
     '            }',
     '',
-    '            activeFiltersContainer.innerHTML = \'\';',
+    "            activeFiltersContainer.innerHTML = '';",
     '',
     '            if (activeFilters.length > 0) {',
-    '                activeFiltersContainer.style.display = \'flex\';',
-    '                if (filtersInfo) filtersInfo.style.display = \'block\';',
+    "                activeFiltersContainer.style.display = 'flex';",
+    "                if (filtersInfo) filtersInfo.style.display = 'block';",
     '',
     '                activeFilters.forEach(filter => {',
-    '                    const chip = document.createElement(\'div\');',
-    '                    chip.className = \'filter-chip\';',
+    "                    const chip = document.createElement('div');",
+    "                    chip.className = 'filter-chip';",
     '                    chip.innerHTML = \'<span class="filter-chip-label">\' + filter.label + \':</span><span class="filter-chip-value">\' + filter.value + \'</span><span class="filter-chip-remove" onclick="removeFilter(\\\'\' + filter.type + \'\\\')" title="Remove filter">×</span>\';',
     '                    activeFiltersContainer.appendChild(chip);',
     '                });',
     '',
-    '                const clearAllBtn = document.createElement(\'button\');',
-    '                clearAllBtn.className = \'clear-all-filters\';',
-    '                clearAllBtn.textContent = \'Clear All\';',
+    "                const clearAllBtn = document.createElement('button');",
+    "                clearAllBtn.className = 'clear-all-filters';",
+    "                clearAllBtn.textContent = 'Clear All';",
     '                clearAllBtn.onclick = clearAllFilters;',
     '                activeFiltersContainer.appendChild(clearAllBtn);',
     '            } else {',
-    '                activeFiltersContainer.style.display = \'none\';',
-    '                if (filtersInfo) filtersInfo.style.display = \'none\';',
+    "                activeFiltersContainer.style.display = 'none';",
+    "                if (filtersInfo) filtersInfo.style.display = 'none';",
     '            }',
     '        }',
     '',
     '        function removeFilter(filterType) {',
-    '            if (filterType === \'search\') {',
-    '                document.getElementById(\'searchInput\').value = \'\';',
-    '            } else if (filterType === \'office\') {',
-    '                document.getElementById(\'officeFilter\').value = \'all\';',
-    '            } else if (filterType === \'team\') {',
-    '                document.getElementById(\'teamFilter\').value = \'all\';',
-    '            } else if (filterType === \'division\') {',
-    '                document.getElementById(\'divisionFilter\').value = \'all\';',
+    "            if (filterType === 'search') {",
+    "                document.getElementById('searchInput').value = '';",
+    "            } else if (filterType === 'office') {",
+    "                document.getElementById('officeFilter').value = 'all';",
+    "            } else if (filterType === 'team') {",
+    "                document.getElementById('teamFilter').value = 'all';",
+    "            } else if (filterType === 'division') {",
+    "                document.getElementById('divisionFilter').value = 'all';",
     '            }',
     '            filterTable();',
     '        }',
     '',
     '        function clearAllFilters() {',
-    '            document.getElementById(\'searchInput\').value = \'\';',
-    '            document.getElementById(\'officeFilter\').value = \'all\';',
-    '            document.getElementById(\'teamFilter\').value = \'all\';',
-    '            document.getElementById(\'divisionFilter\').value = \'all\';',
+    "            document.getElementById('searchInput').value = '';",
+    "            document.getElementById('officeFilter').value = 'all';",
+    "            document.getElementById('teamFilter').value = 'all';",
+    "            document.getElementById('divisionFilter').value = 'all';",
     '            filterTable();',
     '        }',
     '',
@@ -592,42 +1124,42 @@ export const buildRosterHtml = ({
     '            }, 100);',
     '        }',
     '',
-    '        if (document.readyState === \'loading\') {',
-    '            document.addEventListener(\'DOMContentLoaded\', initMobileView);',
+    "        if (document.readyState === 'loading') {",
+    "            document.addEventListener('DOMContentLoaded', initMobileView);",
     '        } else {',
     '            initMobileView();',
     '        }',
     '',
-    '        window.addEventListener(\'load\', function() {',
+    "        window.addEventListener('load', function() {",
     '            if (window.innerWidth <= 768) {',
     '                createMobileCards();',
     '            }',
     '        });',
     '',
-    '        window.addEventListener(\'resize\', function() {',
+    "        window.addEventListener('resize', function() {",
     '            if (window.innerWidth <= 768) {',
     '                createMobileCards();',
     '            } else {',
-    '                const mobileCardsContainer = document.getElementById(\'mobileCards\');',
+    "                const mobileCardsContainer = document.getElementById('mobileCards');",
     '                if (mobileCardsContainer) {',
-    '                    mobileCardsContainer.innerHTML = \'\';',
+    "                    mobileCardsContainer.innerHTML = '';",
     '                }',
     '            }',
     '        });',
     '    </script>',
     '</body>',
-    '</html>'
+    '</html>',
   ].join('\n')
-  
+
   parts.push(scriptContent)
   return parts.join('\n')
 }
 
 export const regenerateRoster = async () => {
   const client = supabaseAdmin
-  
+
   console.log('🔄 Starting roster regeneration...')
-  
+
   // Query for active agents with 'agent' role
   const { data: allUsers, error } = await client
     .from('users')
@@ -654,19 +1186,20 @@ export const regenerateRoster = async () => {
     return aName.localeCompare(bName)
   })
 
-  
-
   console.log(`✅ Found ${agents?.length || 0} active agents with 'agent' role`)
-  
+
   // Log agent names for debugging
   if (agents && agents.length > 0) {
-    console.log('Agents included:', agents.map(a => `${a.preferred_first_name} ${a.preferred_last_name}`).join(', '))
+    console.log(
+      'Agents included:',
+      agents.map(a => `${a.preferred_first_name} ${a.preferred_last_name}`).join(', ')
+    )
   }
 
-  const offices = getUniqueSorted((agents || []).map((agent) => agent.office?.trim() || null))
-  const teams = getUniqueSorted((agents || []).map((agent) => agent.team_name?.trim() || null))
+  const offices = getUniqueSorted((agents || []).map(agent => agent.office?.trim() || null))
+  const teams = getUniqueSorted((agents || []).map(agent => agent.team_name?.trim() || null))
   // Extract individual divisions from combined divisions (split by |)
-  const allDivisions = (agents || []).flatMap((agent) => extractDivisions(agent.division))
+  const allDivisions = (agents || []).flatMap(agent => extractDivisions(agent.division))
   const divisions = getUniqueSorted(allDivisions)
 
   const html = buildRosterHtml({
@@ -678,7 +1211,7 @@ export const regenerateRoster = async () => {
   })
 
   const outputPath = path.join(process.cwd(), 'public', 'agent-roster.html')
-  
+
   try {
     await writeFile(outputPath, html, 'utf8')
     console.log(`✅ Roster HTML written to: ${outputPath}`)
@@ -690,4 +1223,3 @@ export const regenerateRoster = async () => {
   console.log('✅ Roster regeneration complete!')
   return { agentCount: agents?.length || 0 }
 }
-

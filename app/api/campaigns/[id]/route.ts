@@ -9,21 +9,14 @@ export async function DELETE(
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params
-    
-    const { error } = await supabase
-      .from('campaigns')
-      .delete()
-      .eq('id', resolvedParams.id)
+
+    const { error } = await supabase.from('campaigns').delete().eq('id', resolvedParams.id)
 
     if (error) throw error
 
     return NextResponse.json({ success: true, message: 'Campaign deleted successfully' })
   } catch (error) {
     console.error('Delete campaign error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete campaign' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 })
   }
 }
-

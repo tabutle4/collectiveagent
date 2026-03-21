@@ -10,7 +10,7 @@ export default function ActivateCoordinationPage() {
   const [loading, setLoading] = useState(false)
   const [listings, setListings] = useState<Listing[]>([])
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
-  
+
   const [formData, setFormData] = useState({
     listing_id: '',
     seller_name: '',
@@ -19,11 +19,11 @@ export default function ActivateCoordinationPage() {
     payment_method: '' as 'client_direct' | 'agent_pays' | 'broker_listing' | '',
     custom_fee: '',
   })
-  
+
   useEffect(() => {
     loadListings()
   }, [])
-  
+
   const loadListings = async () => {
     try {
       const response = await fetch('/api/listings/available-for-coordination')
@@ -35,17 +35,18 @@ export default function ActivateCoordinationPage() {
       console.error('Error loading listings:', error)
     }
   }
-  
+
   const handleListingSelect = async (listingId: string) => {
     const listing = listings.find(l => l.id === listingId)
     setSelectedListing(listing || null)
-    
+
     if (listing) {
       // Check if agent is Courtney Okanlomo
       let isCourtneyOkanlomo = false
       if (listing.agent_name) {
         const agentNameLower = listing.agent_name.toLowerCase()
-        isCourtneyOkanlomo = agentNameLower.includes('courtney okanlomo') || agentNameLower.includes('okanlomo')
+        isCourtneyOkanlomo =
+          agentNameLower.includes('courtney okanlomo') || agentNameLower.includes('okanlomo')
       } else if (listing.agent_id) {
         // Fetch agent data to check name
         try {
@@ -54,16 +55,18 @@ export default function ActivateCoordinationPage() {
             .select('preferred_first_name, preferred_last_name, first_name, last_name')
             .eq('id', listing.agent_id)
             .single()
-          
+
           if (agentData) {
-            const agentName = `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
-            isCourtneyOkanlomo = agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
+            const agentName =
+              `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
+            isCourtneyOkanlomo =
+              agentName.includes('courtney okanlomo') || agentName.includes('okanlomo')
           }
         } catch (error) {
           console.error('Error fetching agent data:', error)
         }
       }
-      
+
       setFormData({
         listing_id: listingId,
         seller_name: listing.client_names,
@@ -74,11 +77,11 @@ export default function ActivateCoordinationPage() {
       })
     }
   }
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const response = await fetch('/api/coordination/activate', {
         method: 'POST',
@@ -89,9 +92,9 @@ export default function ActivateCoordinationPage() {
           custom_service_fee: formData.custom_fee ? parseFloat(formData.custom_fee) : undefined,
         }),
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         alert('Coordination activated successfully! Welcome email has been sent.')
         router.push('/admin/coordination')
@@ -105,7 +108,7 @@ export default function ActivateCoordinationPage() {
       setLoading(false)
     }
   }
-  
+
   return (
     <div className="">
       <div className="">
@@ -121,7 +124,7 @@ export default function ActivateCoordinationPage() {
               Activate Listing Coordination
             </h1>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">
@@ -129,12 +132,12 @@ export default function ActivateCoordinationPage() {
               </label>
               <select
                 value={formData.listing_id}
-                onChange={(e) => handleListingSelect(e.target.value)}
+                onChange={e => handleListingSelect(e.target.value)}
                 className="select-luxury"
                 required
               >
                 <option value="">Choose a listing...</option>
-                {listings.map((listing) => (
+                {listings.map(listing => (
                   <option key={listing.id} value={listing.id}>
                     {listing.property_address} - {listing.client_names}
                   </option>
@@ -146,7 +149,7 @@ export default function ActivateCoordinationPage() {
                 </p>
               )}
             </div>
-            
+
             {selectedListing && (
               <>
                 <div>
@@ -156,12 +159,12 @@ export default function ActivateCoordinationPage() {
                   <input
                     type="text"
                     value={formData.seller_name}
-                    onChange={(e) => setFormData({...formData, seller_name: e.target.value})}
+                    onChange={e => setFormData({ ...formData, seller_name: e.target.value })}
                     className="input-luxury"
                     required
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm mb-2 text-luxury-gray-1">
                     Seller Email <span className="text-red-500">*</span>
@@ -169,7 +172,7 @@ export default function ActivateCoordinationPage() {
                   <input
                     type="email"
                     value={formData.seller_email}
-                    onChange={(e) => setFormData({...formData, seller_email: e.target.value})}
+                    onChange={e => setFormData({ ...formData, seller_email: e.target.value })}
                     className="input-luxury"
                     required
                   />
@@ -177,7 +180,7 @@ export default function ActivateCoordinationPage() {
                     Weekly reports will be sent to this email
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm mb-2 text-luxury-gray-1">
                     Listing Website URL
@@ -185,7 +188,9 @@ export default function ActivateCoordinationPage() {
                   <input
                     type="url"
                     value={formData.listing_website_url}
-                    onChange={(e) => setFormData({...formData, listing_website_url: e.target.value})}
+                    onChange={e =>
+                      setFormData({ ...formData, listing_website_url: e.target.value })
+                    }
                     className="input-luxury"
                     placeholder="https://..."
                   />
@@ -193,7 +198,7 @@ export default function ActivateCoordinationPage() {
                     Optional: Link to the listing on your website (will appear in seller dashboard)
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm mb-2 text-luxury-gray-1">
                     Payment Method <span className="text-red-500">*</span>
@@ -205,7 +210,12 @@ export default function ActivateCoordinationPage() {
                         name="payment_method"
                         value="client_direct"
                         checked={formData.payment_method === 'client_direct'}
-                        onChange={(e) => setFormData({...formData, payment_method: e.target.value as 'client_direct'})}
+                        onChange={e =>
+                          setFormData({
+                            ...formData,
+                            payment_method: e.target.value as 'client_direct',
+                          })
+                        }
                         className="mt-0.5"
                         required
                       />
@@ -216,27 +226,34 @@ export default function ActivateCoordinationPage() {
                         </p>
                       </div>
                     </label>
-                    
+
                     <label className="flex items-start space-x-3 cursor-pointer p-3 border border-luxury-gray-5 rounded hover:border-luxury-black transition-colors">
                       <input
                         type="radio"
                         name="payment_method"
                         value="agent_pays"
                         checked={formData.payment_method === 'agent_pays'}
-                        onChange={(e) => setFormData({...formData, payment_method: e.target.value as 'agent_pays'})}
+                        onChange={e =>
+                          setFormData({
+                            ...formData,
+                            payment_method: e.target.value as 'agent_pays',
+                          })
+                        }
                         className="mt-0.5"
                         required
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium">Agent Pays</p>
                         <p className="text-xs text-luxury-gray-2">
-                          You pay $250 to brokerage within 60 days or at closing, whichever happens first. If not paid within 60 days, fee will be deducted from any commission.
+                          You pay $250 to brokerage within 60 days or at closing, whichever happens
+                          first. If not paid within 60 days, fee will be deducted from any
+                          commission.
                         </p>
                       </div>
                     </label>
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm mb-2 text-luxury-gray-1">
                     Service Fee Override (Optional)
@@ -245,7 +262,7 @@ export default function ActivateCoordinationPage() {
                     type="number"
                     step="0.01"
                     value={formData.custom_fee}
-                    onChange={(e) => setFormData({...formData, custom_fee: e.target.value})}
+                    onChange={e => setFormData({ ...formData, custom_fee: e.target.value })}
                     className="input-luxury"
                     placeholder="Leave blank for default $250"
                   />
@@ -253,7 +270,7 @@ export default function ActivateCoordinationPage() {
                     Enter $0 for broker/owner listings. Leave blank to use default $250 fee.
                   </p>
                 </div>
-                
+
                 <div className="bg-luxury-light p-4 rounded">
                   <h3 className="text-sm font-medium mb-2">What happens next:</h3>
                   <ul className="list-disc list-inside space-y-1 text-xs text-luxury-gray-1">
@@ -265,7 +282,7 @@ export default function ActivateCoordinationPage() {
                 </div>
               </>
             )}
-            
+
             <div className="flex justify-center gap-4 pt-6">
               <button
                 type="button"
@@ -288,4 +305,3 @@ export default function ActivateCoordinationPage() {
     </div>
   )
 }
-

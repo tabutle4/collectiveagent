@@ -9,31 +9,32 @@ type Props = {
 export default function AgentCampaignResponseModal({ agent, campaignResponse, onClose }: Props) {
   const profileUpdates = campaignResponse?.profile_updates || {}
   const commissionPlanLabels: Record<string, string> = {
-    'no_cap_plan': 'No Cap Plan 85/15',
-    'cap_plan': 'Cap Plan 70/30 $18,000 Cap',
-    'no_change': 'No Change',
-    'new_agent_plan': 'New Agent Plan',
-    'other': 'Other',
+    no_cap_plan: 'No Cap Plan 85/15',
+    cap_plan: 'Cap Plan 70/30 $18,000 Cap',
+    no_change: 'No Change',
+    new_agent_plan: 'New Agent Plan',
+    other: 'Other',
   }
 
   const workPreferenceLabels: Record<string, string> = {
-    'team': 'Team',
-    'independent': 'Independent',
-    'not_sure': 'Not Sure',
+    team: 'Team',
+    independent: 'Independent',
+    not_sure: 'Not Sure',
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div 
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
         className="bg-white w-full max-w-4xl max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-luxury-gray-5">
           <div>
-            <h3 className="text-2xl font-light tracking-wide">
-              Campaign Responses
-            </h3>
+            <h3 className="text-2xl font-light tracking-wide">Campaign Responses</h3>
             <p className="text-sm text-luxury-gray-2 mt-1">
               {agent.preferred_first_name} {agent.preferred_last_name} ({agent.email})
             </p>
@@ -101,7 +102,9 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                   {profileUpdates.date_of_birth && (
                     <div>
                       <label className="text-xs text-luxury-gray-2">Date of Birth</label>
-                      <p className="text-sm">{new Date(profileUpdates.date_of_birth).toLocaleDateString()}</p>
+                      <p className="text-sm">
+                        {new Date(profileUpdates.date_of_birth).toLocaleDateString()}
+                      </p>
                     </div>
                   )}
                   {profileUpdates.birth_month && (
@@ -127,7 +130,8 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                       <label className="text-xs text-luxury-gray-2">Shipping Address</label>
                       <p className="text-sm">
                         {profileUpdates.shipping_address_line1}
-                        {profileUpdates.shipping_address_line2 && `, ${profileUpdates.shipping_address_line2}`}
+                        {profileUpdates.shipping_address_line2 &&
+                          `, ${profileUpdates.shipping_address_line2}`}
                         {profileUpdates.shipping_city && `, ${profileUpdates.shipping_city}`}
                         {profileUpdates.shipping_state && `, ${profileUpdates.shipping_state}`}
                         {profileUpdates.shipping_zip && ` ${profileUpdates.shipping_zip}`}
@@ -138,7 +142,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">Instagram</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.instagram_handle} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.instagram_handle}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.instagram_handle}
                         </a>
                       </p>
@@ -148,7 +157,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">TikTok</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.tiktok_handle} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.tiktok_handle}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.tiktok_handle}
                         </a>
                       </p>
@@ -158,7 +172,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">Threads</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.threads_handle} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.threads_handle}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.threads_handle}
                         </a>
                       </p>
@@ -168,7 +187,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">YouTube</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.youtube_url} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.youtube_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.youtube_url}
                         </a>
                       </p>
@@ -178,7 +202,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">LinkedIn</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.linkedin_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.linkedin_url}
                         </a>
                       </p>
@@ -188,7 +217,12 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                     <div>
                       <label className="text-xs text-luxury-gray-2">Facebook</label>
                       <p className="text-sm">
-                        <a href={profileUpdates.facebook_url} target="_blank" rel="noopener noreferrer" className="text-luxury-black hover:underline">
+                        <a
+                          href={profileUpdates.facebook_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-luxury-black hover:underline"
+                        >
                           {profileUpdates.facebook_url}
                         </a>
                       </p>
@@ -207,80 +241,93 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
                 <div>
                   <label className="text-xs text-luxury-gray-2">Selected Plan</label>
                   <p className="text-sm">
-                    {commissionPlanLabels[campaignResponse.commission_plan_2026] || campaignResponse.commission_plan_2026}
-                    {campaignResponse.commission_plan_2026 === 'other' && campaignResponse.commission_plan_2026_other && (
-                      <span className="text-luxury-gray-2"> - {campaignResponse.commission_plan_2026_other}</span>
-                    )}
+                    {commissionPlanLabels[campaignResponse.commission_plan_2026] ||
+                      campaignResponse.commission_plan_2026}
+                    {campaignResponse.commission_plan_2026 === 'other' &&
+                      campaignResponse.commission_plan_2026_other && (
+                        <span className="text-luxury-gray-2">
+                          {' '}
+                          - {campaignResponse.commission_plan_2026_other}
+                        </span>
+                      )}
                   </p>
                 </div>
               </div>
             )}
 
             {/* RSVP Section */}
-            {campaignResponse && campaignResponse.attending_luncheon !== null && campaignResponse.attending_luncheon !== undefined && (
-              <div>
-                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
-                  Luncheon RSVP (Step 3)
-                </h4>
+            {campaignResponse &&
+              campaignResponse.attending_luncheon !== null &&
+              campaignResponse.attending_luncheon !== undefined && (
                 <div>
-                  <label className="text-xs text-luxury-gray-2">Attending</label>
-                  <p className="text-sm">
-                    {campaignResponse.attending_luncheon ? '✓ Yes' : '✗ No'}
-                  </p>
-                </div>
-                {campaignResponse.luncheon_comments && (
-                  <div className="mt-3">
-                    <label className="text-xs text-luxury-gray-2">Comments</label>
-                    <p className="text-sm text-luxury-gray-1">{campaignResponse.luncheon_comments}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Survey Section */}
-            {campaignResponse && (campaignResponse.support_rating || campaignResponse.work_preference) && (
-              <div>
-                <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
-                  Feedback Survey (Step 4)
-                </h4>
-                {campaignResponse.support_rating && (
-                  <div className="mb-4">
-                    <label className="text-xs text-luxury-gray-2">Support Rating</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="w-48 h-2 bg-luxury-gray-5 rounded">
-                        <div
-                          className="h-full bg-luxury-accent rounded"
-                          style={{ width: `${(campaignResponse.support_rating / 10) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-sm">{campaignResponse.support_rating}/10</span>
-                    </div>
-                  </div>
-                )}
-                {campaignResponse.support_improvements && (
-                  <div className="mb-4">
-                    <label className="text-xs text-luxury-gray-2">Support Improvements</label>
-                    <p className="text-sm text-luxury-gray-1 mt-1">{campaignResponse.support_improvements}</p>
-                  </div>
-                )}
-                {campaignResponse.work_preference && (
+                  <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
+                    Luncheon RSVP (Step 3)
+                  </h4>
                   <div>
-                    <label className="text-xs text-luxury-gray-2">Work Preference</label>
+                    <label className="text-xs text-luxury-gray-2">Attending</label>
                     <p className="text-sm">
-                      {workPreferenceLabels[campaignResponse.work_preference] || campaignResponse.work_preference}
+                      {campaignResponse.attending_luncheon ? '✓ Yes' : '✗ No'}
                     </p>
                   </div>
-                )}
-              </div>
-            )}
+                  {campaignResponse.luncheon_comments && (
+                    <div className="mt-3">
+                      <label className="text-xs text-luxury-gray-2">Comments</label>
+                      <p className="text-sm text-luxury-gray-1">
+                        {campaignResponse.luncheon_comments}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {(!campaignResponse || (
-              Object.keys(profileUpdates).length === 0 && 
-              !campaignResponse.commission_plan_2026 && 
-              (campaignResponse.attending_luncheon === null || campaignResponse.attending_luncheon === undefined) && 
-              !campaignResponse.support_rating && 
-              !campaignResponse.work_preference
-            )) && (
+            {/* Survey Section */}
+            {campaignResponse &&
+              (campaignResponse.support_rating || campaignResponse.work_preference) && (
+                <div>
+                  <h4 className="text-lg font-medium mb-4 tracking-wide border-b border-luxury-gray-5 pb-2">
+                    Feedback Survey (Step 4)
+                  </h4>
+                  {campaignResponse.support_rating && (
+                    <div className="mb-4">
+                      <label className="text-xs text-luxury-gray-2">Support Rating</label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-48 h-2 bg-luxury-gray-5 rounded">
+                          <div
+                            className="h-full bg-luxury-accent rounded"
+                            style={{ width: `${(campaignResponse.support_rating / 10) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm">{campaignResponse.support_rating}/10</span>
+                      </div>
+                    </div>
+                  )}
+                  {campaignResponse.support_improvements && (
+                    <div className="mb-4">
+                      <label className="text-xs text-luxury-gray-2">Support Improvements</label>
+                      <p className="text-sm text-luxury-gray-1 mt-1">
+                        {campaignResponse.support_improvements}
+                      </p>
+                    </div>
+                  )}
+                  {campaignResponse.work_preference && (
+                    <div>
+                      <label className="text-xs text-luxury-gray-2">Work Preference</label>
+                      <p className="text-sm">
+                        {workPreferenceLabels[campaignResponse.work_preference] ||
+                          campaignResponse.work_preference}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            {(!campaignResponse ||
+              (Object.keys(profileUpdates).length === 0 &&
+                !campaignResponse.commission_plan_2026 &&
+                (campaignResponse.attending_luncheon === null ||
+                  campaignResponse.attending_luncheon === undefined) &&
+                !campaignResponse.support_rating &&
+                !campaignResponse.work_preference)) && (
               <p className="text-luxury-gray-2 text-center py-8">No responses submitted yet</p>
             )}
           </div>
@@ -299,4 +346,3 @@ export default function AgentCampaignResponseModal({ agent, campaignResponse, on
     </div>
   )
 }
-

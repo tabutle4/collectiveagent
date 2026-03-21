@@ -7,4 +7,3 @@ import TeamAgreementFormPage from '../[id]/page'
 export default function NewTeamAgreementPage() {
   return <TeamAgreementFormPage params={{ id: 'new' }} />
 }
-

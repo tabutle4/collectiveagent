@@ -5,11 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import AppSidebar from '@/components/shared/AppSidebar'
 import { getAppRole } from '@/lib/transactions/role'
 
-export default function TransactionsLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function TransactionsLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 

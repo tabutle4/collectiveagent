@@ -14,14 +14,11 @@ export async function GET(request: NextRequest) {
     const [txnRes, agentRes, typesRes] = await Promise.all([
       supabase
         .from('transactions')
-        .select('id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net'),
-      supabase
-        .from('transaction_internal_agents')
-        .select('transaction_id, agent_net'),
-      supabase
-        .from('processing_fee_types')
-        .select('name, is_lease')
-        .eq('is_active', true),
+        .select(
+          'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net'
+        ),
+      supabase.from('transaction_internal_agents').select('transaction_id, agent_net'),
+      supabase.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
     ])
 
     return NextResponse.json({

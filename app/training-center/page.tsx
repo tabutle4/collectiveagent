@@ -4,30 +4,60 @@ import { useEffect, useState } from 'react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import {
-  BookOpen, Video, FileText, ExternalLink, ChevronRight,
-  Folder, Clock, User, Play, AlertCircle, Search, Loader2, Menu, X,
+  BookOpen,
+  Video,
+  FileText,
+  ExternalLink,
+  ChevronRight,
+  Folder,
+  Clock,
+  User,
+  Play,
+  AlertCircle,
+  Search,
+  Loader2,
+  Menu,
+  X,
 } from 'lucide-react'
 
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 const NAV_SECTIONS = [
-  { label: 'About Training Center', href: `${SHAREPOINT_BASE}/SitePages/About%20the%20Training%20Center.aspx` },
+  {
+    label: 'About Training Center',
+    href: `${SHAREPOINT_BASE}/SitePages/About%20the%20Training%20Center.aspx`,
+  },
   {
     label: 'Compliance & Commission Overview',
     href: `${SHAREPOINT_BASE}/SitePages/Compliance-and-Commission-Disbursement-Guide.aspx`,
     children: [
-      { label: 'Commission Plans & Fees', href: `${SHAREPOINT_BASE}/SitePages/Commission-Plans.aspx` },
-      { label: 'Compliance Overview', href: `${SHAREPOINT_BASE}/SitePages/Compliance-and-Commission-Disbursement-Guide.aspx` },
+      {
+        label: 'Commission Plans & Fees',
+        href: `${SHAREPOINT_BASE}/SitePages/Commission-Plans.aspx`,
+      },
+      {
+        label: 'Compliance Overview',
+        href: `${SHAREPOINT_BASE}/SitePages/Compliance-and-Commission-Disbursement-Guide.aspx`,
+      },
     ],
   },
-  { label: 'Policies & Procedures', href: `${SHAREPOINT_BASE}/SitePages/Brokerage%20Policies%20and%20Procedures.aspx` },
-  { label: 'Agent Onboarding Jumpstart', href: `${SHAREPOINT_BASE}/SitePages/Agent%20Onboarding.aspx` },
+  {
+    label: 'Policies & Procedures',
+    href: `${SHAREPOINT_BASE}/SitePages/Brokerage%20Policies%20and%20Procedures.aspx`,
+  },
+  {
+    label: 'Agent Onboarding Jumpstart',
+    href: `${SHAREPOINT_BASE}/SitePages/Agent%20Onboarding.aspx`,
+  },
   { label: 'Quick Links', href: `${SHAREPOINT_BASE}/SitePages/Quick-Links.aspx` },
   { label: 'How-To Guides', href: `${SHAREPOINT_BASE}/SitePages/How-To-Guides(1).aspx` },
   { label: 'Forms', href: `${SHAREPOINT_BASE}/SitePages/Forms.aspx` },
   { label: 'Agent Resources', href: `${SHAREPOINT_BASE}/SitePages/Agent-Resources.aspx` },
   { label: 'Sample Documents', href: `${SHAREPOINT_BASE}/SitePages/Sample-Documents.aspx` },
-  { label: 'Agent Readiness Checklist', href: 'https://collectiverealtyco-my.sharepoint.com/:u:/p/tarab/IQBKkyjR2GzzSq6MhLk6-Fw_Afo2GvqYIK46kxAtfhN_mHQ?e=hNn8we' },
+  {
+    label: 'Agent Readiness Checklist',
+    href: 'https://collectiverealtyco-my.sharepoint.com/:u:/p/tarab/IQBKkyjR2GzzSq6MhLk6-Fw_Afo2GvqYIK46kxAtfhN_mHQ?e=hNn8we',
+  },
   { label: 'Help', href: `${SHAREPOINT_BASE}/SitePages/Help.aspx` },
 ]
 
@@ -70,7 +100,11 @@ interface SearchResult {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 function formatVideoName(name: string) {
@@ -120,15 +154,21 @@ export default function TrainingCenterPage() {
   }, [])
 
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults(null); return }
+    if (!searchQuery.trim()) {
+      setSearchResults(null)
+      return
+    }
     const timer = setTimeout(async () => {
       setSearching(true)
       try {
         const res = await fetch(`/api/training-center?q=${encodeURIComponent(searchQuery)}`)
         const data = await res.json()
         setSearchResults(data.searchResults || null)
-      } catch { setSearchResults(null) }
-      finally { setSearching(false) }
+      } catch {
+        setSearchResults(null)
+      } finally {
+        setSearching(false)
+      }
     }, 500)
     return () => clearTimeout(timer)
   }, [searchQuery])
@@ -139,12 +179,14 @@ export default function TrainingCenterPage() {
         <p className="section-title mb-0">Site Navigation</p>
       </div>
       <nav className="py-2">
-        {NAV_SECTIONS.map((section) => (
+        {NAV_SECTIONS.map(section => (
           <div key={section.label}>
             {section.children ? (
               <>
                 <button
-                  onClick={() => setExpandedNav(expandedNav === section.label ? null : section.label)}
+                  onClick={() =>
+                    setExpandedNav(expandedNav === section.label ? null : section.label)
+                  }
                   className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-left transition-colors hover:bg-luxury-light text-luxury-gray-2"
                 >
                   <span>{section.label}</span>
@@ -156,7 +198,7 @@ export default function TrainingCenterPage() {
                 </button>
                 {expandedNav === section.label && (
                   <div className="pl-3 pb-1">
-                    {section.children.map((child) => (
+                    {section.children.map(child => (
                       <a
                         key={child.label}
                         href={child.href}
@@ -181,7 +223,10 @@ export default function TrainingCenterPage() {
                 onClick={() => setMobileNavOpen(false)}
               >
                 <span>{section.label}</span>
-                <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity" />
+                <ExternalLink
+                  size={11}
+                  className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity"
+                />
               </a>
             )}
           </div>
@@ -207,10 +252,12 @@ export default function TrainingCenterPage() {
       <LuxuryHeader />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-6 pt-20 md:pt-24">
-
         {/* Back link */}
         <div className="mb-4">
-          <a href="/agent/dashboard" className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+          <a
+            href="/agent/dashboard"
+            className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+          >
             <ChevronRight size={12} className="rotate-180" />
             Back to Collective Agent
           </a>
@@ -225,7 +272,8 @@ export default function TrainingCenterPage() {
                 <h1 className="page-title text-white">Training Center</h1>
               </div>
               <p className="text-xs text-white/60">
-                Coaching recordings, resources, guides, and everything you need to grow your business.
+                Coaching recordings, resources, guides, and everything you need to grow your
+                business.
               </p>
             </div>
             <a
@@ -244,13 +292,18 @@ export default function TrainingCenterPage() {
           <div className="alert-warning flex items-center gap-2 mb-4">
             <AlertCircle size={14} />
             Could not load live data.{' '}
-            <a href={SHAREPOINT_BASE} target="_blank" className="underline">Open Training Center →</a>
+            <a href={SHAREPOINT_BASE} target="_blank" className="underline">
+              Open Training Center →
+            </a>
           </div>
         )}
 
         {/* Search */}
         <div className="relative mb-6">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3"
+          />
           <input
             type="text"
             placeholder="Search recordings, guides, forms, resources..."
@@ -259,7 +312,10 @@ export default function TrainingCenterPage() {
             className="input-luxury pl-8 w-full"
           />
           {searching && (
-            <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-luxury-gray-3 animate-spin" />
+            <Loader2
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-luxury-gray-3 animate-spin"
+            />
           )}
         </div>
 
@@ -283,13 +339,16 @@ export default function TrainingCenterPage() {
         {searchQuery.trim() ? (
           <div className="space-y-4">
             {searching ? (
-              <div className="container-card text-center py-12 text-xs text-luxury-gray-3">Searching...</div>
+              <div className="container-card text-center py-12 text-xs text-luxury-gray-3">
+                Searching...
+              </div>
             ) : searchResults ? (
               <>
                 {/* Result count + SharePoint search link */}
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-luxury-gray-3">
-                    {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+                    {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "
+                    {searchQuery}"
                   </p>
                   <a
                     href={`${SHAREPOINT_BASE}/_layouts/15/search.aspx/siteall?q=${encodeURIComponent(searchQuery)}`}
@@ -305,7 +364,7 @@ export default function TrainingCenterPage() {
                 {searchResults.length > 0 ? (
                   <div className="container-card">
                     <div className="divide-y divide-luxury-gray-5/30">
-                      {searchResults.map((result) => (
+                      {searchResults.map(result => (
                         <a
                           key={result.id}
                           href={result.webUrl}
@@ -316,11 +375,15 @@ export default function TrainingCenterPage() {
                           {result.type === 'video' ? (
                             <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
                           ) : (
-                            <span className="text-base flex-shrink-0 leading-none">{getFileIcon(result.name)}</span>
+                            <span className="text-base flex-shrink-0 leading-none">
+                              {getFileIcon(result.name)}
+                            </span>
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
-                              {result.type === 'video' ? formatVideoName(result.name) : formatFileName(result.name)}
+                              {result.type === 'video'
+                                ? formatVideoName(result.name)
+                                : formatFileName(result.name)}
                             </p>
                             <p className="text-xs text-luxury-gray-3">
                               {result.type === 'video' ? result.folder : result.category}
@@ -330,7 +393,10 @@ export default function TrainingCenterPage() {
                               {formatDate(result.lastModified)}
                             </p>
                           </div>
-                          <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity" />
+                          <ExternalLink
+                            size={11}
+                            className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity"
+                          />
                         </a>
                       ))}
                     </div>
@@ -344,10 +410,8 @@ export default function TrainingCenterPage() {
             ) : null}
           </div>
         ) : (
-
           /* DEFAULT VIEW */
           <div className="flex flex-col md:flex-row gap-6">
-
             {/* Left Nav - desktop only */}
             <div className="hidden md:block w-56 flex-shrink-0">
               <div className="container-card sticky top-6 p-0 overflow-hidden">
@@ -357,7 +421,6 @@ export default function TrainingCenterPage() {
 
             {/* Main Content */}
             <div className="flex-1 min-w-0 space-y-6">
-
               {/* Recent Recordings */}
               <div className="container-card">
                 <div className="flex items-center justify-between mb-4">
@@ -367,18 +430,25 @@ export default function TrainingCenterPage() {
                       Coaching & Training Recordings
                     </h2>
                   </div>
-                  <a href={SHAREPOINT_BASE} target="_blank" rel="noopener noreferrer" className="header-subtitle flex items-center gap-1">
+                  <a
+                    href={SHAREPOINT_BASE}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="header-subtitle flex items-center gap-1"
+                  >
                     See all <ExternalLink size={11} />
                   </a>
                 </div>
 
                 {loading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {[...Array(3)].map((_, i) => <div key={i} className="inner-card animate-pulse h-48" />)}
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="inner-card animate-pulse h-48" />
+                    ))}
                   </div>
                 ) : recordings.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {recordings.map((rec) => (
+                    {recordings.map(rec => (
                       <a
                         key={rec.id}
                         href={rec.webUrl}
@@ -388,7 +458,11 @@ export default function TrainingCenterPage() {
                       >
                         <div className="relative bg-luxury-dark-3" style={{ paddingTop: '56.25%' }}>
                           {rec.thumbnail ? (
-                            <img src={rec.thumbnail} alt={rec.name} className="absolute inset-0 w-full h-full object-cover" />
+                            <img
+                              src={rec.thumbnail}
+                              alt={rec.name}
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
                           ) : (
                             <div className="absolute inset-0 flex items-center justify-center">
                               <Play size={28} className="text-luxury-accent" />
@@ -417,14 +491,19 @@ export default function TrainingCenterPage() {
                 ) : (
                   <div className="inner-card text-center py-8 text-xs text-luxury-gray-3">
                     No recordings found.{' '}
-                    <a href={SHAREPOINT_BASE} target="_blank" className="text-luxury-accent hover:underline">Browse SharePoint →</a>
+                    <a
+                      href={SHAREPOINT_BASE}
+                      target="_blank"
+                      className="text-luxury-accent hover:underline"
+                    >
+                      Browse SharePoint →
+                    </a>
                   </div>
                 )}
               </div>
 
               {/* Resources + Video Library */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                 {/* Recently Uploaded Resources */}
                 <div className="container-card">
                   <div className="flex items-center justify-between mb-4">
@@ -434,31 +513,52 @@ export default function TrainingCenterPage() {
                         Recently Uploaded Resources
                       </h2>
                     </div>
-                    <a href={SHAREPOINT_BASE} target="_blank" rel="noopener noreferrer" className="header-subtitle flex items-center gap-1">
+                    <a
+                      href={SHAREPOINT_BASE}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="header-subtitle flex items-center gap-1"
+                    >
                       See all <ExternalLink size={11} />
                     </a>
                   </div>
 
                   {loading ? (
                     <div className="space-y-2">
-                      {[...Array(4)].map((_, i) => <div key={i} className="inner-card animate-pulse h-12" />)}
+                      {[...Array(4)].map((_, i) => (
+                        <div key={i} className="inner-card animate-pulse h-12" />
+                      ))}
                     </div>
                   ) : resources.length > 0 ? (
                     <div className="divide-y divide-luxury-gray-5/30">
-                      {resources.map((res) => (
-                        <a key={res.id} href={res.webUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
+                      {resources.map(res => (
+                        <a
+                          key={res.id}
+                          href={res.webUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                        >
                           <span className="text-base flex-shrink-0">{getFileIcon(res.name)}</span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">{formatFileName(res.name)}</p>
-                            <p className="text-xs text-luxury-gray-3">{res.category} · {formatDate(res.lastModified)}</p>
+                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
+                              {formatFileName(res.name)}
+                            </p>
+                            <p className="text-xs text-luxury-gray-3">
+                              {res.category} · {formatDate(res.lastModified)}
+                            </p>
                           </div>
-                          <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity" />
+                          <ExternalLink
+                            size={11}
+                            className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity"
+                          />
                         </a>
                       ))}
                     </div>
                   ) : (
-                    <div className="inner-card text-center py-6 text-xs text-luxury-gray-3">No resources found.</div>
+                    <div className="inner-card text-center py-6 text-xs text-luxury-gray-3">
+                      No resources found.
+                    </div>
                   )}
                 </div>
 
@@ -473,16 +573,25 @@ export default function TrainingCenterPage() {
 
                   {loading ? (
                     <div className="space-y-2">
-                      {[...Array(6)].map((_, i) => <div key={i} className="inner-card animate-pulse h-10" />)}
+                      {[...Array(6)].map((_, i) => (
+                        <div key={i} className="inner-card animate-pulse h-10" />
+                      ))}
                     </div>
                   ) : videoFolders.length > 0 ? (
                     <div className="divide-y divide-luxury-gray-5/30">
-                      {videoFolders.map((folder) => (
-                        <a key={folder.id} href={folder.webUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group">
+                      {videoFolders.map(folder => (
+                        <a
+                          key={folder.id}
+                          href={folder.webUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                        >
                           <div className="flex items-center gap-2">
                             <Folder size={14} className="text-luxury-accent" />
-                            <span className="text-xs font-medium text-luxury-gray-1">{folder.name}</span>
+                            <span className="text-xs font-medium text-luxury-gray-1">
+                              {folder.name}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             {folder.childCount > 0 && (
@@ -490,13 +599,18 @@ export default function TrainingCenterPage() {
                                 {folder.childCount}
                               </span>
                             )}
-                            <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity" />
+                            <ExternalLink
+                              size={11}
+                              className="opacity-0 group-hover:opacity-100 text-luxury-accent transition-opacity"
+                            />
                           </div>
                         </a>
                       ))}
                     </div>
                   ) : (
-                    <div className="inner-card text-center py-6 text-xs text-luxury-gray-3">No folders found.</div>
+                    <div className="inner-card text-center py-6 text-xs text-luxury-gray-3">
+                      No folders found.
+                    </div>
                   )}
                 </div>
               </div>

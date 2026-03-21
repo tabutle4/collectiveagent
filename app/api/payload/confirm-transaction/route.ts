@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const res = await fetch(`https://api.payload.com/transactions/${transaction_id}`, {
       method: 'PUT',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({ status: 'processed' }),
@@ -25,12 +25,18 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     if (!res.ok) {
       console.error('Payload transaction confirm failed:', data)
-      return NextResponse.json({ error: data.message || 'Failed to confirm transaction' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.message || 'Failed to confirm transaction' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error confirming transaction:', error)
-    return NextResponse.json({ error: error.message || 'Failed to confirm transaction' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to confirm transaction' },
+      { status: 500 }
+    )
   }
 }

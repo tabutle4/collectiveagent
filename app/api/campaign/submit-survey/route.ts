@@ -38,16 +38,14 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', existingResponse.id)
     } else {
-      await supabase
-        .from('campaign_responses')
-        .insert({
-          campaign_id,
-          user_id,
-          support_rating: survey_data.support_rating,
-          support_improvements: survey_data.support_improvements,
-          work_preference: survey_data.work_preference,
-          submitted_at: now,
-        })
+      await supabase.from('campaign_responses').insert({
+        campaign_id,
+        user_id,
+        support_rating: survey_data.support_rating,
+        support_improvements: survey_data.support_improvements,
+        work_preference: survey_data.work_preference,
+        submitted_at: now,
+      })
     }
 
     // Mark campaign as fully completed

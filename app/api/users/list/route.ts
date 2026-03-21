@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     // Strip sensitive fields
-    const users = (data || []).map(({ password_hash, reset_token, reset_token_expires, ...user }: any) => user)
+    const users = (data || []).map(
+      ({ password_hash, reset_token, reset_token_expires, ...user }: any) => user
+    )
 
     return NextResponse.json({ users })
   } catch (err: any) {

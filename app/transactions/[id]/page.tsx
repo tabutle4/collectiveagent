@@ -16,7 +16,10 @@ export default function TransactionDetailPage() {
     const init = async () => {
       try {
         const res = await fetch('/api/auth/me')
-        if (!res.ok) { router.push('/auth/login'); return }
+        if (!res.ok) {
+          router.push('/auth/login')
+          return
+        }
         const data = await res.json()
         setUser(data.user)
         setRole(getAppRole(data.user))
@@ -29,14 +32,14 @@ export default function TransactionDetailPage() {
     init()
   }, [router])
 
-  if (loading) return (
-    <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
-  )
+  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   // TODO: render TransactionDetail component with id, user, and role props
   return (
     <div>
-      <p className="text-sm text-luxury-gray-3">Transaction {id} — role: {role}</p>
+      <p className="text-sm text-luxury-gray-3">
+        Transaction {id} — role: {role}
+      </p>
     </div>
   )
 }

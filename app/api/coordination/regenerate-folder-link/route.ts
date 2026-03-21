@@ -26,33 +26,24 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get coordination and listing
     const coordination = await getCoordinationById(coordinationId)
     if (!coordination) {
-      return NextResponse.json(
-        { error: 'Coordination not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Coordination not found' }, { status: 404 })
     }
 
     const listing = await getListingById(coordination.listing_id)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
 
     // Regenerate the sharing link with anonymous scope (will find the correct folder format)
     const newSharingUrl = await regenerateFolderSharingLink(
-      listing.property_address, 
-      listing.id, 
+      listing.property_address,
+      listing.id,
       listing.transaction_type || 'sale'
     )
 
@@ -66,7 +57,6 @@ export async function POST(request: NextRequest) {
       message: 'Folder sharing link regenerated successfully',
       sharingUrl: newSharingUrl,
     })
-
   } catch (error: any) {
     console.error('Error regenerating folder link:', error)
     return NextResponse.json(
@@ -75,4 +65,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
     if (agentId) {
       let query = supabase
         .from('agent_debts')
-        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id')
+        .select(
+          'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id'
+        )
         .eq('agent_id', agentId)
         .order('date_incurred', { ascending: false })
 
@@ -33,7 +35,9 @@ export async function GET(request: NextRequest) {
     if (status || debtType) {
       let query = supabase
         .from('agent_debts')
-        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id')
+        .select(
+          'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id'
+        )
         .order('date_incurred', { ascending: false })
 
       if (status) query = query.eq('status', status)
@@ -47,7 +51,9 @@ export async function GET(request: NextRequest) {
     const [agentsRes, debtRes] = await Promise.all([
       supabase
         .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, monthly_fee_waived, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
+        .select(
+          'id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, monthly_fee_waived, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status'
+        )
         .eq('status', 'active')
         .order('first_name'),
       supabase

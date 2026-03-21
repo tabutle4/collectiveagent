@@ -10,26 +10,17 @@ export async function POST(request: NextRequest) {
     const { coordination_id } = await request.json()
 
     if (!coordination_id) {
-      return NextResponse.json(
-        { error: 'Coordination ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Coordination ID is required' }, { status: 400 })
     }
 
     const coordination = await getCoordinationById(coordination_id)
     if (!coordination) {
-      return NextResponse.json(
-        { error: 'Coordination not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Coordination not found' }, { status: 404 })
     }
 
     const listing = await getListingById(coordination.listing_id)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
 
     // Get agent email for CC
@@ -106,19 +97,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Log email to history
-    await supabase
-      .from('coordination_email_history')
-      .insert({
-        coordination_id,
-        email_type: 'weekly_report',
-        recipient_email: coordination.seller_email,
-        recipient_name: coordination.seller_name,
-        subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
-        resend_email_id: emailResult.emailId || null,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        weekly_report_id: latestReport?.id || null,
-      })
+    await supabase.from('coordination_email_history').insert({
+      coordination_id,
+      email_type: 'weekly_report',
+      recipient_email: coordination.seller_email,
+      recipient_name: coordination.seller_name,
+      subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
+      resend_email_id: emailResult.emailId || null,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      weekly_report_id: latestReport?.id || null,
+    })
 
     return NextResponse.json({
       success: true,
@@ -133,4 +122,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

@@ -4,11 +4,29 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
-  LayoutDashboard, UserCog, CalendarDays, Megaphone, Search, Wallet,
-  Briefcase, Receipt, UsersRound, DollarSign,
-  Settings, Menu, X, ChevronRight,
-  Users, UserPlus, FileText, FolderOpen, CircleDollarSign, BookUser, ClipboardList,
-  BarChart3, BookOpen
+  LayoutDashboard,
+  UserCog,
+  CalendarDays,
+  Megaphone,
+  Search,
+  Wallet,
+  Briefcase,
+  Receipt,
+  UsersRound,
+  DollarSign,
+  Settings,
+  Menu,
+  X,
+  ChevronRight,
+  Users,
+  UserPlus,
+  FileText,
+  FolderOpen,
+  CircleDollarSign,
+  BookUser,
+  ClipboardList,
+  BarChart3,
+  BookOpen,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import { useAuth } from '@/lib/context/AuthContext'
@@ -44,7 +62,12 @@ const adminNav: NavItem[] = [
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
-  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+  {
+    href: 'https://agent.collectiverealtyco.com/roster',
+    label: 'Roster',
+    icon: FileText,
+    external: true,
+  },
   { href: '/admin/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
@@ -63,7 +86,12 @@ const tcNav: NavItem[] = [
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
-  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+  {
+    href: 'https://agent.collectiverealtyco.com/roster',
+    label: 'Roster',
+    icon: FileText,
+    external: true,
+  },
 ]
 
 const supportNav: NavItem[] = [
@@ -77,7 +105,12 @@ const supportNav: NavItem[] = [
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
-  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+  {
+    href: 'https://agent.collectiverealtyco.com/roster',
+    label: 'Roster',
+    icon: FileText,
+    external: true,
+  },
 ]
 
 const agentNav: NavItem[] = [
@@ -89,7 +122,12 @@ const agentNav: NavItem[] = [
   { href: '/agent/forms', label: 'Forms', icon: FileText },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
-  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+  {
+    href: 'https://agent.collectiverealtyco.com/roster',
+    label: 'Roster',
+    icon: FileText,
+    external: true,
+  },
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
@@ -117,7 +155,12 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
     { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
-    { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+    {
+      href: 'https://agent.collectiverealtyco.com/roster',
+      label: 'Roster',
+      icon: FileText,
+      external: true,
+    },
   ]
 
   const getNavItems = () => {
@@ -177,11 +220,12 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
-        {navItems.map((item) => {
+        {navItems.map(item => {
           const Icon = item.icon
-          const isActive = !item.disabled && !item.external && (
-            pathname === item.href || pathname?.startsWith(item.href + '/')
-          )
+          const isActive =
+            !item.disabled &&
+            !item.external &&
+            (pathname === item.href || pathname?.startsWith(item.href + '/'))
 
           if (item.disabled) {
             return (
@@ -216,9 +260,10 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
               href={item.href}
               className={`
                 flex items-center gap-3 px-3 py-2 rounded-md transition-colors
-                ${isActive
-                  ? 'bg-luxury-gray-5/60 text-luxury-gray-1'
-                  : 'text-luxury-gray-2 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1'
+                ${
+                  isActive
+                    ? 'bg-luxury-gray-5/60 text-luxury-gray-1'
+                    : 'text-luxury-gray-2 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1'
                 }
               `}
             >
@@ -227,7 +272,9 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
                 className={`flex-shrink-0 ${isActive ? 'text-luxury-gray-1' : 'text-luxury-gray-3'}`}
                 strokeWidth={isActive ? 2 : 1.5}
               />
-              <span className={`text-[13px] ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+              <span className={`text-[13px] ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                {item.label}
+              </span>
             </Link>
           )
         })}
@@ -247,7 +294,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             className="flex items-center gap-2.5 w-full px-2 py-2 rounded-md hover:bg-luxury-gray-5/40 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-luxury-accent flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-              {user.preferred_first_name?.[0]}{user.preferred_last_name?.[0]}
+              {user.preferred_first_name?.[0]}
+              {user.preferred_last_name?.[0]}
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-[13px] font-semibold text-luxury-gray-1 truncate">
@@ -259,7 +307,9 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
         </div>
 
         <div className="px-5 pb-3 flex justify-end">
-          <span className="text-[9px] font-semibold text-luxury-gray-3 tracking-[0.2em] uppercase">Collective Agent</span>
+          <span className="text-[9px] font-semibold text-luxury-gray-3 tracking-[0.2em] uppercase">
+            Collective Agent
+          </span>
         </div>
 
         {userMenuOpen && (
@@ -292,7 +342,10 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
                 Tools Home
               </a>
               <button
-                onClick={() => { setUserMenuOpen(false); setContactOpen(true) }}
+                onClick={() => {
+                  setUserMenuOpen(false)
+                  setContactOpen(true)
+                }}
                 className="block w-full text-left px-4 py-2 text-[13px] text-luxury-gray-2 hover:bg-luxury-gray-5/30 transition-colors"
               >
                 Contact
@@ -313,15 +366,91 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
   return (
     <div className="min-h-screen bg-luxury-page-bg" style={{ position: 'relative' }}>
-      <svg style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0, opacity: 0.5 }} xmlns="http://www.w3.org/2000/svg">
-        <line x1="0" y1="0" x2="500" y2="500" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.18"/>
-        <line x1="0" y1="60" x2="500" y2="560" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
-        <line x1="0" y1="120" x2="400" y2="520" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.09"/>
-        <line x1="60" y1="0" x2="560" y2="500" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.13"/>
-        <line x1="120" y1="0" x2="520" y2="400" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.09"/>
-        <line x1="100%" y1="100%" x2="calc(100% - 500px)" y2="calc(100% - 500px)" stroke="#C5A278" strokeWidth="0.8" strokeOpacity="0.15"/>
-        <line x1="100%" y1="calc(100% - 60px)" x2="calc(100% - 500px)" y2="calc(100% - 560px)" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.1"/>
-        <line x1="calc(100% - 60px)" y1="100%" x2="calc(100% - 560px)" y2="calc(100% - 500px)" stroke="#C5A278" strokeWidth="0.6" strokeOpacity="0.1"/>
+      <svg
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 0,
+          opacity: 0.5,
+        }}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <line
+          x1="0"
+          y1="0"
+          x2="500"
+          y2="500"
+          stroke="#C5A278"
+          strokeWidth="0.8"
+          strokeOpacity="0.18"
+        />
+        <line
+          x1="0"
+          y1="60"
+          x2="500"
+          y2="560"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.13"
+        />
+        <line
+          x1="0"
+          y1="120"
+          x2="400"
+          y2="520"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.09"
+        />
+        <line
+          x1="60"
+          y1="0"
+          x2="560"
+          y2="500"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.13"
+        />
+        <line
+          x1="120"
+          y1="0"
+          x2="520"
+          y2="400"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.09"
+        />
+        <line
+          x1="100%"
+          y1="100%"
+          x2="calc(100% - 500px)"
+          y2="calc(100% - 500px)"
+          stroke="#C5A278"
+          strokeWidth="0.8"
+          strokeOpacity="0.15"
+        />
+        <line
+          x1="100%"
+          y1="calc(100% - 60px)"
+          x2="calc(100% - 500px)"
+          y2="calc(100% - 560px)"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.1"
+        />
+        <line
+          x1="calc(100% - 60px)"
+          y1="100%"
+          x2="calc(100% - 560px)"
+          y2="calc(100% - 500px)"
+          stroke="#C5A278"
+          strokeWidth="0.6"
+          strokeOpacity="0.1"
+        />
       </svg>
       {mobileMenuOpen && isMobile && (
         <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setMobileMenuOpen(false)} />
@@ -345,7 +474,10 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
         </aside>
       )}
 
-      <div className="min-h-screen" style={{ marginLeft: isMobile ? 0 : '220px', position: 'relative', zIndex: 1 }}>
+      <div
+        className="min-h-screen"
+        style={{ marginLeft: isMobile ? 0 : '220px', position: 'relative', zIndex: 1 }}
+      >
         <div className="sticky top-0 z-30 bg-luxury-page-bg/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
           <div>
             {isMobile && (
@@ -358,13 +490,12 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             )}
           </div>
           <p className="text-[13px] text-luxury-gray-2">
-            Welcome back, <span className="text-luxury-gray-1 font-semibold">{user.preferred_first_name}</span>
+            Welcome back,{' '}
+            <span className="text-luxury-gray-1 font-semibold">{user.preferred_first_name}</span>
           </p>
         </div>
 
-        <div className="px-4 md:px-6 pt-6 pb-6">
-          {children}
-        </div>
+        <div className="px-4 md:px-6 pt-6 pb-6">{children}</div>
       </div>
 
       <ContactDrawer open={contactOpen} onClose={() => setContactOpen(false)} />

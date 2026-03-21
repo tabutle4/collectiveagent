@@ -6,10 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const { searchParams } = new URL(request.url)
@@ -17,15 +14,15 @@ export async function GET(
 
     // ── Full transaction detail load ─────────────────────────────────────────
     if (!section || section === 'full') {
-      const [
-        { data: txn, error: txnError },
-        { data: agents },
-        { data: settings },
-      ] = await Promise.all([
-        supabase.from('transactions').select('*').eq('id', id).single(),
-        supabase.from('transaction_internal_agents').select('*').eq('transaction_id', id),
-        supabase.from('company_settings').select('referral_tracking_url, crm_url, crm_name').single(),
-      ])
+      const [{ data: txn, error: txnError }, { data: agents }, { data: settings }] =
+        await Promise.all([
+          supabase.from('transactions').select('*').eq('id', id).single(),
+          supabase.from('transaction_internal_agents').select('*').eq('transaction_id', id),
+          supabase
+            .from('company_settings')
+            .select('referral_tracking_url, crm_url, crm_name')
+            .single(),
+        ])
 
       if (txnError || !txn) {
         return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
@@ -33,10 +30,12 @@ export async function GET(
 
       // Get agent user records
       const agentIds = (agents || []).map((a: any) => a.agent_id).filter(Boolean)
-      const { data: agentUsers } = agentIds.length > 0
-        ? await supabase
-            .from('users')
-            .select(`
+      const { data: agentUsers } =
+        agentIds.length > 0
+          ? await supabase
+              .from('users')
+              .select(
+                `
               id, first_name, last_name, preferred_first_name, preferred_last_name,
               office_email, email, phone, office, commission_plan, license_number,
               license_expiration, nrds_id, mls_id, association, join_date,
@@ -44,21 +43,24 @@ export async function GET(
               referring_agent_id, is_on_team, team_name, team_lead,
               cap_progress, cap_year, qualifying_transaction_count,
               waive_processing_fees, special_commission_notes, headshot_url
-            `)
-            .in('id', agentIds)
-        : { data: [] }
+            `
+              )
+              .in('id', agentIds)
+          : { data: [] }
 
       // Primary agent (submitted_by)
       const primaryAgentId = txn.submitted_by
-      const primaryAgent = (agentUsers || []).find((u: any) => u.id === primaryAgentId)
-        || (agentUsers || [])[0]
+      const primaryAgent =
+        (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
       // Agent billing (debts + credits)
       let agentBilling = null
       if (primaryAgentId) {
         const { data: billingRecords } = await supabase
           .from('agent_debts')
-          .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status')
+          .select(
+            'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status'
+          )
           .eq('agent_id', primaryAgentId)
           .eq('status', 'outstanding')
           .order('date_incurred', { ascending: false })
@@ -66,8 +68,14 @@ export async function GET(
         const records = billingRecords || []
         const debts = records.filter((r: any) => r.record_type !== 'credit')
         const credits = records.filter((r: any) => r.record_type === 'credit')
-        const totalDebts = debts.reduce((s: number, d: any) => s + parseFloat(d.amount_remaining ?? d.amount_owed ?? 0), 0)
-        const totalCredits = credits.reduce((s: number, c: any) => s + parseFloat(c.amount_remaining ?? c.amount_owed ?? 0), 0)
+        const totalDebts = debts.reduce(
+          (s: number, d: any) => s + parseFloat(d.amount_remaining ?? d.amount_owed ?? 0),
+          0
+        )
+        const totalCredits = credits.reduce(
+          (s: number, c: any) => s + parseFloat(c.amount_remaining ?? c.amount_owed ?? 0),
+          0
+        )
 
         agentBilling = {
           debts,
@@ -197,10 +205,7 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const body = await request.json()
@@ -287,11 +292,7 @@ export async function POST(
     // ── Add payout ───────────────────────────────────────────────────────────
     if (action === 'add_payout') {
       const { payout } = body
-      const { data, error } = await supabase
-        .from('check_payouts')
-        .insert(payout)
-        .select()
-        .single()
+      const { data, error } = await supabase.from('check_payouts').insert(payout).select().single()
       if (error) throw error
       return NextResponse.json({ payout: data })
     }
@@ -299,10 +300,7 @@ export async function POST(
     // ── Update payout ────────────────────────────────────────────────────────
     if (action === 'update_payout') {
       const { payout_id, updates } = body
-      const { error } = await supabase
-        .from('check_payouts')
-        .update(updates)
-        .eq('id', payout_id)
+      const { error } = await supabase.from('check_payouts').update(updates).eq('id', payout_id)
       if (error) throw error
       return NextResponse.json({ success: true })
     }
@@ -310,10 +308,7 @@ export async function POST(
     // ── Delete payout ────────────────────────────────────────────────────────
     if (action === 'delete_payout') {
       const { payout_id } = body
-      const { error } = await supabase
-        .from('check_payouts')
-        .delete()
-        .eq('id', payout_id)
+      const { error } = await supabase.from('check_payouts').delete().eq('id', payout_id)
       if (error) throw error
       return NextResponse.json({ success: true })
     }

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient()
-    
+
     // Get all coordinations (active and inactive)
     const { data: allCoordinations, error } = await supabase
       .from('listing_coordination')
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch listings for each coordination
     const coordinationsWithListings = await Promise.all(
-      (allCoordinations || []).map(async (coordination) => {
+      (allCoordinations || []).map(async coordination => {
         const listing = await getListingById(coordination.listing_id)
         return {
           ...coordination,
@@ -41,4 +41,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

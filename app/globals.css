@@ -110,7 +110,7 @@
   }
 
   /* Range Slider */
-  input[type="range"] {
+  input[type='range'] {
     accent-color: #000000;
     -webkit-appearance: none;
     appearance: none;
@@ -120,7 +120,7 @@
     outline: none;
   }
 
-  input[type="range"]::-webkit-slider-thumb {
+  input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 18px;
@@ -130,7 +130,7 @@
     cursor: pointer;
   }
 
-  input[type="range"]::-moz-range-thumb {
+  input[type='range']::-moz-range-thumb {
     width: 18px;
     height: 18px;
     background: #000000;
@@ -139,7 +139,7 @@
     cursor: pointer;
   }
 
-  input[type="range"]::-ms-thumb {
+  input[type='range']::-ms-thumb {
     width: 18px;
     height: 18px;
     background: #000000;
@@ -148,19 +148,19 @@
     cursor: pointer;
   }
 
-  input[type="range"]::-webkit-slider-track {
+  input[type='range']::-webkit-slider-track {
     background: #e5e5e5;
     height: 6px;
     border-radius: 3px;
   }
 
-  input[type="range"]::-moz-range-track {
+  input[type='range']::-moz-range-track {
     background: #e5e5e5;
     height: 6px;
     border-radius: 3px;
   }
 
-  input[type="range"]::-ms-track {
+  input[type='range']::-ms-track {
     background: #e5e5e5;
     height: 6px;
     border-radius: 3px;

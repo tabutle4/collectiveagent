@@ -6,31 +6,24 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
-    
+
     if (!id) {
-      return NextResponse.json(
-        { error: 'Coordination ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Coordination ID is required' }, { status: 400 })
     }
-    
+
     const coordination = await getCoordinationById(id)
-    
+
     if (!coordination) {
-      return NextResponse.json(
-        { error: 'Coordination not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Coordination not found' }, { status: 404 })
     }
-    
+
     const listing = await getListingById(coordination.listing_id)
-    
+
     return NextResponse.json({
       success: true,
       coordination,
       listing,
     })
-    
   } catch (error: any) {
     console.error('Error fetching coordination:', error)
     return NextResponse.json(
@@ -39,4 +32,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

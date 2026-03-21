@@ -8,18 +8,16 @@ interface Split {
 }
 
 // GET - Get single team agreement
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const supabase = createClient()
     const { id } = await params
-    
+
     // Fetch team agreement with team lead
     const { data: agreement, error: agreementError } = await supabase
       .from('team_agreements')
-      .select(`
+      .select(
+        `
         *,
         team_lead:users!team_lead_id(
           id,
@@ -28,18 +26,20 @@ export async function GET(
           first_name,
           last_name
         )
-      `)
+      `
+      )
       .eq('id', id)
       .single()
-    
+
     if (agreementError) {
       throw agreementError
     }
-    
+
     // Fetch team members with agent names
     const { data: members, error: membersError } = await supabase
       .from('team_members')
-      .select(`
+      .select(
+        `
         *,
         agent:users!agent_id(
           id,
@@ -48,25 +48,26 @@ export async function GET(
           first_name,
           last_name
         )
-      `)
+      `
+      )
       .eq('team_agreement_id', id)
-    
+
     if (membersError) {
       throw membersError
     }
-    
+
     // Format team lead name
     const team_lead_name = agreement.team_lead
       ? `${agreement.team_lead.preferred_first_name || agreement.team_lead.first_name || ''} ${agreement.team_lead.preferred_last_name || agreement.team_lead.last_name || ''}`.trim()
       : null
-    
+
     // Return combined data
     return NextResponse.json({
       agreement: {
         ...agreement,
         team_lead_name,
-        team_members: members || []
-      }
+        team_members: members || [],
+      },
     })
   } catch (error: any) {
     console.error('Error fetching team agreement:', error)
@@ -78,15 +79,12 @@ export async function GET(
 }
 
 // PUT - Update team agreement
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const supabase = createClient()
     const { id } = await params
     const body = await request.json()
-    
+
     const {
       team_name,
       team_lead_id: raw_team_lead_id,
@@ -97,17 +95,22 @@ export async function PUT(
       notes,
       team_members,
     } = body
-    
+
     // Sanitize UUID values - convert "undefined" string to null
     const sanitizeUUID = (value: any): string | null => {
-      if (!value || value === 'undefined' || value === '' || (typeof value === 'string' && value.trim() === '')) {
+      if (
+        !value ||
+        value === 'undefined' ||
+        value === '' ||
+        (typeof value === 'string' && value.trim() === '')
+      ) {
         return null
       }
       return typeof value === 'string' ? value.trim() : value
     }
-    
+
     const team_lead_id = sanitizeUUID(raw_team_lead_id)
-    
+
     // Validation (same as POST)
     if (!team_name || !team_lead_id || !effective_date) {
       return NextResponse.json(
@@ -115,25 +118,23 @@ export async function PUT(
         { status: 400 }
       )
     }
-    
+
     if (!team_members || team_members.length === 0) {
-      return NextResponse.json(
-        { error: 'At least one team member is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'At least one team member is required' }, { status: 400 })
     }
-    
+
     // Check that team lead is NOT in members
-    const teamLeadInMembers = team_members.some(
-      (m: any) => m.agent_id === team_lead_id
-    )
+    const teamLeadInMembers = team_members.some((m: any) => m.agent_id === team_lead_id)
     if (teamLeadInMembers) {
       return NextResponse.json(
-        { error: 'Team lead cannot be added as a team member. The team lead is separate from team members.' },
+        {
+          error:
+            'Team lead cannot be added as a team member. The team lead is separate from team members.',
+        },
         { status: 400 }
       )
     }
-    
+
     // Validate splits
     for (const member of team_members) {
       if (!member.splits) {
@@ -142,7 +143,7 @@ export async function PUT(
           { status: 400 }
         )
       }
-      
+
       // Helper function to check if a plan has any data
       const planHasData = (planSplits: any): boolean => {
         if (!planSplits) return false
@@ -158,16 +159,17 @@ export async function PUT(
       for (const plan of salesPlans) {
         const planSplits = member.splits.sales?.[plan]
         if (!planSplits) continue
-        
+
         // Skip validation for custom plans if they have no data
         if (plan === 'custom' && !planHasData(planSplits)) {
           continue
         }
-        
+
         for (const [source, split] of Object.entries(planSplits)) {
           if (split && typeof split === 'object') {
             const typedSplit = split as Split
-            const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
+            const total =
+              (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
             if (Math.abs(total - 100) > 0.01) {
               return NextResponse.json(
                 {
@@ -179,22 +181,23 @@ export async function PUT(
           }
         }
       }
-      
+
       // Validate lease splits (only validate custom if it has data)
       const leasePlans = ['standard', 'custom'] as const
       for (const plan of leasePlans) {
         const planSplits = member.splits.lease?.[plan]
         if (!planSplits) continue
-        
+
         // Skip validation for custom plans if they have no data
         if (plan === 'custom' && !planHasData(planSplits)) {
           continue
         }
-        
+
         for (const [source, split] of Object.entries(planSplits)) {
           if (split && typeof split === 'object') {
             const typedSplit = split as Split
-            const total = (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
+            const total =
+              (typedSplit.agent || 0) + (typedSplit.team_lead || 0) + (typedSplit.firm || 0)
             if (Math.abs(total - 100) > 0.01) {
               return NextResponse.json(
                 {
@@ -207,7 +210,7 @@ export async function PUT(
         }
       }
     }
-    
+
     // Check for duplicate agents
     const agentIds = team_members.map((m: any) => m.agent_id)
     const uniqueIds = new Set(agentIds)
@@ -217,7 +220,7 @@ export async function PUT(
         { status: 400 }
       )
     }
-    
+
     // Update team agreement
     const { error: agreementError } = await supabase
       .from('team_agreements')
@@ -231,21 +234,21 @@ export async function PUT(
         notes: notes || null,
       })
       .eq('id', id)
-    
+
     if (agreementError) {
       throw agreementError
     }
-    
+
     // Delete existing members
     const { error: deleteError } = await supabase
       .from('team_members')
       .delete()
       .eq('team_agreement_id', id)
-    
+
     if (deleteError) {
       throw deleteError
     }
-    
+
     // Insert updated members
     const membersToInsert = team_members
       .map((member: any) => ({
@@ -262,7 +265,7 @@ export async function PUT(
         active_sales_plan: member.active_sales_plan || 'no_cap',
         active_lease_plan: member.active_lease_plan || 'standard',
       }))
-    
+
     // Validate that we have members to insert
     if (membersToInsert.length === 0) {
       return NextResponse.json(
@@ -270,19 +273,18 @@ export async function PUT(
         { status: 400 }
       )
     }
-    
-    const { error: membersError } = await supabase
-      .from('team_members')
-      .insert(membersToInsert)
-    
+
+    const { error: membersError } = await supabase.from('team_members').insert(membersToInsert)
+
     if (membersError) {
       throw membersError
     }
-    
+
     // Fetch complete agreement
     const { data: completeAgreement, error: fetchError } = await supabase
       .from('team_agreements')
-      .select(`
+      .select(
+        `
         *,
         team_lead:users!team_agreements_team_lead_id_fkey(
           id,
@@ -301,14 +303,15 @@ export async function PUT(
             last_name
           )
         )
-      `)
+      `
+      )
       .eq('id', id)
       .single()
-    
+
     if (fetchError) {
       throw fetchError
     }
-    
+
     return NextResponse.json({
       success: true,
       agreement: completeAgreement,
@@ -330,17 +333,14 @@ export async function DELETE(
   try {
     const supabase = createClient()
     const { id } = await params
-    
+
     // Delete will cascade to team_members
-    const { error } = await supabase
-      .from('team_agreements')
-      .delete()
-      .eq('id', id)
-    
+    const { error } = await supabase.from('team_agreements').delete().eq('id', id)
+
     if (error) {
       throw error
     }
-    
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error deleting team agreement:', error)
@@ -350,4 +350,3 @@ export async function DELETE(
     )
   }
 }
-

@@ -21,13 +21,16 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!user?.payload_payee_id) {
-      return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Agent does not have a Payload customer ID.' },
+        { status: 400 }
+      )
     }
 
     const res = await fetch('https://api.payload.com/payment_links/', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({

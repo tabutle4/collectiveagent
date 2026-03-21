@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 
 declare global {
-  interface Window { Payload: any }
+  interface Window {
+    Payload: any
+  }
 }
 
 export default function AgentFeesPage() {
@@ -32,10 +34,15 @@ export default function AgentFeesPage() {
     const fetchUser = async () => {
       try {
         const res = await fetch('/api/auth/me')
-        if (!res.ok) { router.push('/auth/login'); return }
+        if (!res.ok) {
+          router.push('/auth/login')
+          return
+        }
         const data = await res.json()
         setUser(data.user)
-      } catch { router.push('/auth/login') }
+      } catch {
+        router.push('/auth/login')
+      }
     }
     fetchUser()
   }, [router])
@@ -79,7 +86,7 @@ export default function AgentFeesPage() {
     if (user?.monthly_fee_waived) return 'waived'
     if (!user?.monthly_fee_paid_through) return 'unpaid'
     const [y, m, d] = user.monthly_fee_paid_through.split('-').map(Number)
-const paidThrough = new Date(y, m - 1, d)
+    const paidThrough = new Date(y, m - 1, d)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
     return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }
@@ -88,7 +95,11 @@ const paidThrough = new Date(y, m - 1, d)
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A'
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
   }
 
   const formatCurrency = (amount: any) => {
@@ -112,7 +123,8 @@ const paidThrough = new Date(y, m - 1, d)
         }),
       })
       const tokenData = await tokenRes.json()
-      if (!tokenData.client_token) throw new Error(tokenData.error || 'Failed to create checkout session')
+      if (!tokenData.client_token)
+        throw new Error(tokenData.error || 'Failed to create checkout session')
 
       window.Payload(tokenData.client_token)
       const checkout = new window.Payload.Checkout({
@@ -155,9 +167,13 @@ const paidThrough = new Date(y, m - 1, d)
       <div className="container-card mb-4">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Onboarding Fee</p>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">
+              Onboarding Fee
+            </p>
             {user?.onboarding_fee_paid_date && (
-              <p className="text-xs text-luxury-gray-3 mt-1">Paid {formatDate(user.onboarding_fee_paid_date)}</p>
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                Paid {formatDate(user.onboarding_fee_paid_date)}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -180,14 +196,18 @@ const paidThrough = new Date(y, m - 1, d)
       <div className="container-card mb-4">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Monthly Fee</p>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">
+              Monthly Fee
+            </p>
             {monthlyStatus === 'waived' ? (
               <p className="text-sm font-semibold text-luxury-gray-1">Waived</p>
             ) : (
               <p className="text-sm font-semibold text-luxury-gray-1">$50 / month</p>
             )}
             {user?.monthly_fee_paid_through && monthlyStatus !== 'waived' && (
-              <p className="text-xs text-luxury-gray-3 mt-1">Paid through {formatDate(user.monthly_fee_paid_through)}</p>
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                Paid through {formatDate(user.monthly_fee_paid_through)}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -221,7 +241,11 @@ const paidThrough = new Date(y, m - 1, d)
         {monthlyStatus !== 'waived' && (
           <div className="inner-card">
             <p className="text-xs font-medium text-luxury-gray-2 mb-1">Prefer Zelle?</p>
-            <p className="text-xs text-luxury-gray-3">Send to <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> — include your name in the memo.</p>
+            <p className="text-xs text-luxury-gray-3">
+              Send to{' '}
+              <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> —
+              include your name in the memo.
+            </p>
           </div>
         )}
       </div>
@@ -229,16 +253,22 @@ const paidThrough = new Date(y, m - 1, d)
       {/* Outstanding Balances */}
       {debts.length > 0 && (
         <div className="container-card mb-4">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Outstanding Balances</h2>
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+            Outstanding Balances
+          </h2>
           <div className="space-y-2">
-            {debts.map((debt) => (
+            {debts.map(debt => (
               <div key={debt.id} className="inner-card border border-orange-100 bg-orange-50/30">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-xs font-semibold text-luxury-gray-1">{debt.description}</p>
-                    <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(debt.date_incurred)}</p>
+                    <p className="text-xs text-luxury-gray-3 mt-0.5">
+                      {formatDate(debt.date_incurred)}
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-orange-600 ml-4">{formatCurrency(debt.amount_remaining ?? debt.amount_owed)}</p>
+                  <p className="text-sm font-semibold text-orange-600 ml-4">
+                    {formatCurrency(debt.amount_remaining ?? debt.amount_owed)}
+                  </p>
                 </div>
               </div>
             ))}
@@ -249,16 +279,22 @@ const paidThrough = new Date(y, m - 1, d)
       {/* Brokerage Credits */}
       {credits.length > 0 && (
         <div className="container-card mb-4">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Brokerage Credits</h2>
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+            Brokerage Credits
+          </h2>
           <div className="space-y-2">
-            {credits.map((credit) => (
+            {credits.map(credit => (
               <div key={credit.id} className="inner-card border border-green-100 bg-green-50/30">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-xs font-semibold text-luxury-gray-1">{credit.description}</p>
-                    <p className="text-xs text-luxury-gray-3 mt-0.5">{formatDate(credit.date_incurred)}</p>
+                    <p className="text-xs text-luxury-gray-3 mt-0.5">
+                      {formatDate(credit.date_incurred)}
+                    </p>
                   </div>
-                  <p className="text-sm font-semibold text-green-600 ml-4">-{formatCurrency(credit.amount_remaining ?? credit.amount_owed)}</p>
+                  <p className="text-sm font-semibold text-green-600 ml-4">
+                    -{formatCurrency(credit.amount_remaining ?? credit.amount_owed)}
+                  </p>
                 </div>
               </div>
             ))}
@@ -270,13 +306,21 @@ const paidThrough = new Date(y, m - 1, d)
       {(debts.length > 0 || credits.length > 0) && (
         <div className="container-card mb-4">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Net Balance</p>
-            <p className={`text-sm font-bold ${netBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-              {netBalance > 0 ? formatCurrency(netBalance) : `-${formatCurrency(Math.abs(netBalance))}`}
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+              Net Balance
+            </p>
+            <p
+              className={`text-sm font-bold ${netBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}
+            >
+              {netBalance > 0
+                ? formatCurrency(netBalance)
+                : `-${formatCurrency(Math.abs(netBalance))}`}
             </p>
           </div>
           {netBalance < 0 && (
-            <p className="text-xs text-luxury-gray-3 mt-1">You have a credit on file. It will be applied to your next invoice.</p>
+            <p className="text-xs text-luxury-gray-3 mt-1">
+              You have a credit on file. It will be applied to your next invoice.
+            </p>
           )}
         </div>
       )}
@@ -284,23 +328,29 @@ const paidThrough = new Date(y, m - 1, d)
       {/* Open Invoices */}
       {openInvoices.length > 0 && (
         <div className="container-card mb-4">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Outstanding Invoices</h2>
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+            Outstanding Invoices
+          </h2>
           <div className="space-y-3">
-            {openInvoices.map((inv) => (
+            {openInvoices.map(inv => (
               <div key={inv.id} className="inner-card">
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-xs font-semibold text-luxury-gray-1">{inv.description}</p>
                     {inv.due_date && (
-                      <p className="text-xs text-luxury-gray-3 mt-0.5">Due {formatDate(inv.due_date)}</p>
+                      <p className="text-xs text-luxury-gray-3 mt-0.5">
+                        Due {formatDate(inv.due_date)}
+                      </p>
                     )}
                     {inv.items?.length > 1 && (
                       <div className="mt-1.5 space-y-0.5">
-                        {inv.items.filter((item: any) => item.entry_type === 'charge').map((item: any, i: number) => (
-                          <p key={i} className="text-xs text-luxury-gray-3">
-                            {item.type}: {formatCurrency(item.amount)}
-                          </p>
-                        ))}
+                        {inv.items
+                          .filter((item: any) => item.entry_type === 'charge')
+                          .map((item: any, i: number) => (
+                            <p key={i} className="text-xs text-luxury-gray-3">
+                              {item.type}: {formatCurrency(item.amount)}
+                            </p>
+                          ))}
                       </div>
                     )}
                   </div>
@@ -313,7 +363,9 @@ const paidThrough = new Date(y, m - 1, d)
                   disabled={paying === inv.id}
                   className="btn btn-primary text-xs w-full disabled:opacity-50"
                 >
-                  {paying === inv.id ? 'Opening Checkout...' : `Pay ${formatCurrency(inv.amount_due ?? inv.amount)}`}
+                  {paying === inv.id
+                    ? 'Opening Checkout...'
+                    : `Pay ${formatCurrency(inv.amount_due ?? inv.amount)}`}
                 </button>
               </div>
             ))}
@@ -324,16 +376,20 @@ const paidThrough = new Date(y, m - 1, d)
       {/* Payment History */}
       {receipts.length > 0 && (
         <div className="container-card mb-4">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Payment History</h2>
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+            Payment History
+          </h2>
           <div className="space-y-2">
-            {receipts.map((r) => (
+            {receipts.map(r => (
               <div key={r.id} className="inner-card flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-luxury-gray-1">{r.description}</p>
                   <p className="text-xs text-luxury-gray-3">{formatDate(r.paid_at)}</p>
                 </div>
                 <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                  <p className="text-sm font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {formatCurrency(r.amount)}
+                  </p>
                   {r.url && (
                     <a
                       href={r.url}
@@ -355,7 +411,10 @@ const paidThrough = new Date(y, m - 1, d)
       <div className="inner-card">
         <p className="text-xs text-luxury-gray-3">
           Questions about your billing? Email{' '}
-          <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+          <a
+            href="mailto:office@collectiverealtyco.com"
+            className="text-luxury-accent hover:underline"
+          >
             office@collectiverealtyco.com
           </a>
         </p>

@@ -4,15 +4,24 @@ import { buildRosterHtml, buildTableRows } from '@/lib/rosterGenerator'
 
 // Helper functions (same as in rosterGenerator.ts)
 const getUniqueSorted = (values: (string | null)[]) => {
-  const unique = Array.from(new Set(values.filter((val): val is string => !!val?.trim()).map((val) => val!.trim())))
+  const unique = Array.from(
+    new Set(values.filter((val): val is string => !!val?.trim()).map(val => val!.trim()))
+  )
   return unique.sort((a, b) => a.localeCompare(b))
 }
 
 // buildOptions needs to return HTML option strings, not objects
 const buildOptions = (values: string[]) => {
-  const escapeAttr = (str: string) => str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-  const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-  return values.map((value) => `                        <option value="${escapeAttr(value.toLowerCase())}">${escapeHtml(value)}</option>`).join('\n')
+  const escapeAttr = (str: string) =>
+    str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  const escapeHtml = (str: string) =>
+    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return values
+    .map(
+      value =>
+        `                        <option value="${escapeAttr(value.toLowerCase())}">${escapeHtml(value)}</option>`
+    )
+    .join('\n')
 }
 
 // This route generates the roster HTML dynamically
@@ -20,7 +29,7 @@ const buildOptions = (values: string[]) => {
 export async function GET() {
   try {
     console.log('🔄 Generating roster HTML dynamically...')
-    
+
     // Fetch active licensed agents
     const { data: agents, error: fetchError } = await supabaseAdmin
       .from('users')
@@ -43,9 +52,9 @@ export async function GET() {
     })
 
     console.log(`✅ Found ${sortedAgents.length} active licensed agents`)
-    
-    const offices = getUniqueSorted(sortedAgents.map((agent) => agent.office?.trim() || null))
-    const teams = getUniqueSorted(sortedAgents.map((agent) => agent.team_name?.trim() || null))
+
+    const offices = getUniqueSorted(sortedAgents.map(agent => agent.office?.trim() || null))
+    const teams = getUniqueSorted(sortedAgents.map(agent => agent.team_name?.trim() || null))
     // Extract individual divisions from combined divisions (split by |)
     const extractDivisions = (division: string | null): string[] => {
       if (!division || !division.trim()) return []
@@ -54,7 +63,7 @@ export async function GET() {
         .map(d => d.trim())
         .filter(d => d.length > 0)
     }
-    const allDivisions = sortedAgents.flatMap((agent) => extractDivisions(agent.division))
+    const allDivisions = sortedAgents.flatMap(agent => extractDivisions(agent.division))
     const divisions = getUniqueSorted(allDivisions)
 
     // Generate HTML

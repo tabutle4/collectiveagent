@@ -100,7 +100,10 @@ const formatPhone = (value: string) => {
 const parseRevenueShare = (value: string | null | undefined): string[] => {
   if (!value) return []
   // Handle comma-separated values
-  return value.split(',').map(s => s.trim()).filter(s => s.length > 0)
+  return value
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
 }
 
 // Convert array of names to comma-separated string
@@ -109,13 +112,13 @@ const stringifyRevenueShare = (names: string[]): string => {
 }
 
 // Autocomplete Multi-Select Component
-function UserAutocomplete({ 
-  selectedUsers, 
-  onSelect, 
+function UserAutocomplete({
+  selectedUsers,
+  onSelect,
   onRemove,
   allUsers,
-  disabled 
-}: { 
+  disabled,
+}: {
   selectedUsers: string[]
   onSelect: (name: string) => void
   onRemove: (name: string) => void
@@ -137,9 +140,10 @@ function UserAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const filteredUsers = allUsers.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    !selectedUsers.includes(user.name)
+  const filteredUsers = allUsers.filter(
+    user =>
+      user.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      !selectedUsers.includes(user.name)
   )
 
   return (
@@ -147,8 +151,8 @@ function UserAutocomplete({
       {/* Selected users as tags */}
       <div className="flex flex-wrap gap-2 mb-2">
         {selectedUsers.map(name => (
-          <span 
-            key={name} 
+          <span
+            key={name}
             className="inline-flex items-center gap-1 px-2 py-1 bg-luxury-light rounded text-sm"
           >
             {name}
@@ -172,7 +176,7 @@ function UserAutocomplete({
           className="input-luxury"
           placeholder="Type to search users..."
           value={searchTerm}
-          onChange={(e) => {
+          onChange={e => {
             setSearchTerm(e.target.value)
             setIsOpen(true)
           }}
@@ -239,12 +243,14 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         .from('users')
         .select('id, preferred_first_name, preferred_last_name')
         .order('preferred_first_name')
-      
+
       if (data) {
-        setAllUsers(data.map(u => ({
-          id: u.id,
-          name: `${u.preferred_first_name} ${u.preferred_last_name}`
-        })))
+        setAllUsers(
+          data.map(u => ({
+            id: u.id,
+            name: `${u.preferred_first_name} ${u.preferred_last_name}`,
+          }))
+        )
       }
     }
     fetchUsers()
@@ -260,7 +266,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
             .select('*')
             .eq('id', user.id)
             .single()
-          
+
           if (error) {
             console.error('Error fetching fresh user data:', error)
             // Fallback to user prop if fetch fails
@@ -281,9 +287,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
   }, [user?.id])
 
   // Check if current user is admin (case-insensitive)
-  const isAdmin = currentUser?.roles?.some((r: string) => r.toLowerCase() === 'admin') || 
-                  currentUser?.role?.toLowerCase() === 'admin' || 
-                  false
+  const isAdmin =
+    currentUser?.roles?.some((r: string) => r.toLowerCase() === 'admin') ||
+    currentUser?.role?.toLowerCase() === 'admin' ||
+    false
 
   const isNewUser = !user
 
@@ -354,7 +361,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev: any) => {
       const updated = { ...prev, [field]: value }
-      
+
       // Sync status dropdown with is_active checkbox
       if (field === 'status') {
         if (value === 'active') {
@@ -364,7 +371,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         }
         // For 'onboarding' or empty, keep current is_active value
       }
-      
+
       // Sync is_active checkbox with status dropdown
       if (field === 'is_active') {
         if (value === true) {
@@ -373,7 +380,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           updated.status = 'inactive'
         }
       }
-      
+
       return updated
     })
   }
@@ -425,14 +432,14 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
   const handleRevenueShareSelect = (name: string) => {
     setFormData((prev: any) => ({
       ...prev,
-      revenue_share: [...prev.revenue_share, name]
+      revenue_share: [...prev.revenue_share, name],
     }))
   }
 
   const handleRevenueShareRemove = (name: string) => {
     setFormData((prev: any) => ({
       ...prev,
-      revenue_share: prev.revenue_share.filter((n: string) => n !== name)
+      revenue_share: prev.revenue_share.filter((n: string) => n !== name),
     }))
   }
 
@@ -444,9 +451,15 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       const formattedData = {
         ...formData,
       }
-      
+
       // Validation for required fields
-      if (!formattedData.email || !formattedData.first_name || !formattedData.last_name || !formattedData.preferred_first_name || !formattedData.preferred_last_name) {
+      if (
+        !formattedData.email ||
+        !formattedData.first_name ||
+        !formattedData.last_name ||
+        !formattedData.preferred_first_name ||
+        !formattedData.preferred_last_name
+      ) {
         setError('Email and all name fields are required')
         setSaving(false)
         return
@@ -533,7 +546,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
             .from('users')
             .update(updatePayload)
             .eq('id', data.user.id)
-          
+
           if (updateError) throw updateError
         }
 
@@ -599,11 +612,11 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           roles: normalizeRoles(formData.roles || []),
         }
 
-        console.log('Updating user with payload:', { 
-          id: freshUser?.id || user.id, 
+        console.log('Updating user with payload:', {
+          id: freshUser?.id || user.id,
           is_active: payload.is_active,
           formData_is_active: formData.is_active,
-          payload_keys: Object.keys(payload)
+          payload_keys: Object.keys(payload),
         })
 
         const { data: updateResult, error } = await supabase
@@ -618,7 +631,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           throw error
         }
 
-        console.log('User updated successfully. Database now has is_active:', updateResult?.is_active)
+        console.log(
+          'User updated successfully. Database now has is_active:',
+          updateResult?.is_active
+        )
 
         // Fetch the updated user from database to ensure we have the latest data
         const { data: updatedUser, error: fetchError } = await supabase
@@ -661,9 +677,19 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
   const roles = user?.roles || []
 
   // Check if there's any prospective agent form data
-  const hasProspectData = (freshUser || user)?.phone || (freshUser || user)?.location || (freshUser || user)?.mls_choice || (freshUser || user)?.association_status_on_join || 
-    (freshUser || user)?.previous_brokerage || (freshUser || user)?.expectations || (freshUser || user)?.accountability || (freshUser || user)?.lead_generation || 
-    (freshUser || user)?.additional_info || (freshUser || user)?.how_heard || (freshUser || user)?.how_heard_other || (freshUser || user)?.joining_team
+  const hasProspectData =
+    (freshUser || user)?.phone ||
+    (freshUser || user)?.location ||
+    (freshUser || user)?.mls_choice ||
+    (freshUser || user)?.association_status_on_join ||
+    (freshUser || user)?.previous_brokerage ||
+    (freshUser || user)?.expectations ||
+    (freshUser || user)?.accountability ||
+    (freshUser || user)?.lead_generation ||
+    (freshUser || user)?.additional_info ||
+    (freshUser || user)?.how_heard ||
+    (freshUser || user)?.how_heard_other ||
+    (freshUser || user)?.joining_team
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -671,10 +697,14 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         <div className="flex items-center justify-between px-6 py-4 border-b border-luxury-gray-5">
           <div>
             <h3 className="text-2xl font-light tracking-luxury">
-              {isNewUser ? 'Create New User' : `Edit Profile · ${freshUser?.preferred_first_name || user?.preferred_first_name} ${freshUser?.preferred_last_name || user?.preferred_last_name}`}
+              {isNewUser
+                ? 'Create New User'
+                : `Edit Profile · ${freshUser?.preferred_first_name || user?.preferred_first_name} ${freshUser?.preferred_last_name || user?.preferred_last_name}`}
             </h3>
             <p className="text-sm text-luxury-gray-3">
-              {isNewUser ? 'Fill in the required fields to create a new user.' : 'Changes sync automatically with the public roster.'}
+              {isNewUser
+                ? 'Fill in the required fields to create a new user.'
+                : 'Changes sync automatically with the public roster.'}
             </p>
           </div>
           <button onClick={onClose} className="text-2xl text-luxury-gray-2 hover:text-luxury-black">
@@ -687,7 +717,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
             <button
               onClick={() => setActiveTab('basic')}
               className={`px-4 py-2 rounded ${
-                activeTab === 'basic' ? 'bg-luxury-black text-white' : 'bg-luxury-light text-luxury-gray-2'
+                activeTab === 'basic'
+                  ? 'bg-luxury-black text-white'
+                  : 'bg-luxury-light text-luxury-gray-2'
               }`}
             >
               Basic
@@ -695,7 +727,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
             <button
               onClick={() => setActiveTab('real_estate')}
               className={`px-4 py-2 rounded ${
-                activeTab === 'real_estate' ? 'bg-luxury-black text-white' : 'bg-luxury-light text-luxury-gray-2'
+                activeTab === 'real_estate'
+                  ? 'bg-luxury-black text-white'
+                  : 'bg-luxury-light text-luxury-gray-2'
               }`}
             >
               Real Estate
@@ -704,7 +738,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
               <button
                 onClick={() => setActiveTab('prospect_form')}
                 className={`px-4 py-2 rounded ${
-                  activeTab === 'prospect_form' ? 'bg-luxury-black text-white' : 'bg-luxury-light text-luxury-gray-2'
+                  activeTab === 'prospect_form'
+                    ? 'bg-luxury-black text-white'
+                    : 'bg-luxury-light text-luxury-gray-2'
                 }`}
               >
                 Prospective Agent Form
@@ -720,15 +756,23 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
             <div className="space-y-6">
               {/* Headshot Upload Section */}
               <div className="border-b border-luxury-gray-5 pb-6">
-                <label className="text-sm font-medium text-luxury-gray-2 mb-3 block">Profile Photo</label>
+                <label className="text-sm font-medium text-luxury-gray-2 mb-3 block">
+                  Profile Photo
+                </label>
                 {(freshUser || user) && (
                   <HeadshotUpload
                     currentHeadshotUrl={headshotUrl}
                     userId={(freshUser || user).id}
-                    firstName={(freshUser || user).preferred_first_name || (freshUser || user).first_name || ''}
-                    lastName={(freshUser || user).preferred_last_name || (freshUser || user).last_name || ''}
+                    firstName={
+                      (freshUser || user).preferred_first_name ||
+                      (freshUser || user).first_name ||
+                      ''
+                    }
+                    lastName={
+                      (freshUser || user).preferred_last_name || (freshUser || user).last_name || ''
+                    }
                     initialCrop={(freshUser || user).headshot_crop || null}
-                    onUploadComplete={(url) => {
+                    onUploadComplete={url => {
                       setHeadshotUrl(url)
                     }}
                     onRemove={() => {
@@ -745,7 +789,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.preferred_first_name}
-                    onChange={(e) => handleInputChange('preferred_first_name', e.target.value)}
+                    onChange={e => handleInputChange('preferred_first_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -753,7 +797,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.preferred_last_name}
-                    onChange={(e) => handleInputChange('preferred_last_name', e.target.value)}
+                    onChange={e => handleInputChange('preferred_last_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -761,7 +805,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.first_name}
-                    onChange={(e) => handleInputChange('first_name', e.target.value)}
+                    onChange={e => handleInputChange('first_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -769,31 +813,37 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.last_name}
-                    onChange={(e) => handleInputChange('last_name', e.target.value)}
+                    onChange={e => handleInputChange('last_name', e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-luxury-gray-2">Primary Email <span className="text-red-500">*</span></label>
+                  <label className="text-sm text-luxury-gray-2">
+                    Primary Email <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="email"
                     className="input-luxury"
                     value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    onChange={e => handleInputChange('email', e.target.value)}
                     required
                   />
                 </div>
                 {isNewUser && (
                   <div>
-                    <label className="text-sm text-luxury-gray-2">Password <span className="text-red-500">*</span></label>
+                    <label className="text-sm text-luxury-gray-2">
+                      Password <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="password"
                       className="input-luxury"
                       value={formData.password || ''}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      onChange={e => handleInputChange('password', e.target.value)}
                       placeholder="Minimum 8 characters"
                       required
                     />
-                    <p className="text-xs text-luxury-gray-3 mt-1">Password must be at least 8 characters</p>
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      Password must be at least 8 characters
+                    </p>
                   </div>
                 )}
                 <div>
@@ -802,7 +852,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     type="email"
                     className="input-luxury"
                     value={formData.personal_email}
-                    onChange={(e) => handleInputChange('personal_email', e.target.value)}
+                    onChange={e => handleInputChange('personal_email', e.target.value)}
                   />
                 </div>
                 <div>
@@ -811,7 +861,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     type="email"
                     className="input-luxury"
                     value={formData.office_email}
-                    onChange={(e) => handleInputChange('office_email', e.target.value)}
+                    onChange={e => handleInputChange('office_email', e.target.value)}
                   />
                 </div>
                 <div>
@@ -819,7 +869,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.personal_phone}
-                    onChange={(e) => handlePhoneChange('personal_phone', e.target.value)}
+                    onChange={e => handlePhoneChange('personal_phone', e.target.value)}
                     placeholder="1234567890"
                     maxLength={10}
                   />
@@ -829,7 +879,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.business_phone}
-                    onChange={(e) => handlePhoneChange('business_phone', e.target.value)}
+                    onChange={e => handlePhoneChange('business_phone', e.target.value)}
                     placeholder="1234567890"
                     maxLength={10}
                   />
@@ -839,10 +889,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <select
                     className="select-luxury"
                     value={formData.birth_month}
-                    onChange={(e) => handleInputChange('birth_month', e.target.value)}
+                    onChange={e => handleInputChange('birth_month', e.target.value)}
                   >
                     <option value="">Select month</option>
-                    {months.map((month) => (
+                    {months.map(month => (
                       <option key={month} value={month}>
                         {month}
                       </option>
@@ -855,14 +905,14 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     type="date"
                     className="input-luxury"
                     value={formData.date_of_birth}
-                    onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
+                    onChange={e => handleInputChange('date_of_birth', e.target.value)}
                   />
                 </div>
                 <div className="flex items-center gap-3 pt-6">
                   <input
                     type="checkbox"
                     checked={formData.is_active}
-                    onChange={(e) => handleInputChange('is_active', e.target.checked)}
+                    onChange={e => handleInputChange('is_active', e.target.checked)}
                   />
                   <span className="text-sm">Active Agent</span>
                 </div>
@@ -876,9 +926,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <select
                       className="select-luxury"
                       value={formData.shirt_type}
-                      onChange={(e) => handleInputChange('shirt_type', e.target.value)}
+                      onChange={e => handleInputChange('shirt_type', e.target.value)}
                     >
-                      {shirtTypeOptions.map((option) => (
+                      {shirtTypeOptions.map(option => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -890,9 +940,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <select
                       className="select-luxury"
                       value={formData.shirt_size}
-                      onChange={(e) => handleInputChange('shirt_size', e.target.value)}
+                      onChange={e => handleInputChange('shirt_size', e.target.value)}
                     >
-                      {shirtSizeOptions.map((option) => (
+                      {shirtSizeOptions.map(option => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -910,7 +960,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <input
                       className="input-luxury"
                       value={formData.shipping_address_line1}
-                      onChange={(e) => handleInputChange('shipping_address_line1', e.target.value)}
+                      onChange={e => handleInputChange('shipping_address_line1', e.target.value)}
                     />
                   </div>
                   <div>
@@ -918,7 +968,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <input
                       className="input-luxury"
                       value={formData.shipping_address_line2}
-                      onChange={(e) => handleInputChange('shipping_address_line2', e.target.value)}
+                      onChange={e => handleInputChange('shipping_address_line2', e.target.value)}
                     />
                   </div>
                   <div>
@@ -926,7 +976,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <input
                       className="input-luxury"
                       value={formData.shipping_city}
-                      onChange={(e) => handleInputChange('shipping_city', e.target.value)}
+                      onChange={e => handleInputChange('shipping_city', e.target.value)}
                     />
                   </div>
                   <div>
@@ -934,7 +984,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <input
                       className="input-luxury"
                       value={formData.shipping_state}
-                      onChange={(e) => handleInputChange('shipping_state', e.target.value)}
+                      onChange={e => handleInputChange('shipping_state', e.target.value)}
                     />
                   </div>
                   <div>
@@ -942,7 +992,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     <input
                       className="input-luxury"
                       value={formData.shipping_zip}
-                      onChange={(e) => handleInputChange('shipping_zip', e.target.value)}
+                      onChange={e => handleInputChange('shipping_zip', e.target.value)}
                     />
                   </div>
                 </div>
@@ -958,7 +1008,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://instagram.com/username"
                       value={formData.instagram_handle}
-                      onChange={(e) => handleInputChange('instagram_handle', e.target.value)}
+                      onChange={e => handleInputChange('instagram_handle', e.target.value)}
                     />
                   </div>
                   <div>
@@ -968,7 +1018,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://www.tiktok.com/@username"
                       value={formData.tiktok_handle}
-                      onChange={(e) => handleInputChange('tiktok_handle', e.target.value)}
+                      onChange={e => handleInputChange('tiktok_handle', e.target.value)}
                     />
                   </div>
                   <div>
@@ -978,7 +1028,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://www.threads.net/@username"
                       value={formData.threads_handle}
-                      onChange={(e) => handleInputChange('threads_handle', e.target.value)}
+                      onChange={e => handleInputChange('threads_handle', e.target.value)}
                     />
                   </div>
                   <div>
@@ -988,7 +1038,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://youtube.com/..."
                       value={formData.youtube_url}
-                      onChange={(e) => handleInputChange('youtube_url', e.target.value)}
+                      onChange={e => handleInputChange('youtube_url', e.target.value)}
                     />
                   </div>
                   <div>
@@ -998,7 +1048,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://linkedin.com/in/..."
                       value={formData.linkedin_url}
-                      onChange={(e) => handleInputChange('linkedin_url', e.target.value)}
+                      onChange={e => handleInputChange('linkedin_url', e.target.value)}
                     />
                   </div>
                   <div>
@@ -1008,7 +1058,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       className="input-luxury"
                       placeholder="https://facebook.com/..."
                       value={formData.facebook_url}
-                      onChange={(e) => handleInputChange('facebook_url', e.target.value)}
+                      onChange={e => handleInputChange('facebook_url', e.target.value)}
                     />
                   </div>
                 </div>
@@ -1024,9 +1074,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <select
                     className="select-luxury"
                     value={formData.status}
-                    onChange={(e) => handleInputChange('status', e.target.value)}
+                    onChange={e => handleInputChange('status', e.target.value)}
                   >
-                    {statusOptions.map((option) => (
+                    {statusOptions.map(option => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -1039,7 +1089,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     type="date"
                     className="input-luxury"
                     value={formData.join_date}
-                    onChange={(e) => handleInputChange('join_date', e.target.value)}
+                    onChange={e => handleInputChange('join_date', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1047,9 +1097,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <select
                     className="select-luxury"
                     value={formData.office}
-                    onChange={(e) => handleInputChange('office', e.target.value)}
+                    onChange={e => handleInputChange('office', e.target.value)}
                   >
-                    {officeOptions.map((option) => (
+                    {officeOptions.map(option => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -1061,7 +1111,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.team_name}
-                    onChange={(e) => handleInputChange('team_name', e.target.value)}
+                    onChange={e => handleInputChange('team_name', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1069,7 +1119,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.team_lead}
-                    onChange={(e) => handleInputChange('team_lead', e.target.value)}
+                    onChange={e => handleInputChange('team_lead', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1077,7 +1127,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.division}
-                    onChange={(e) => handleInputChange('division', e.target.value)}
+                    onChange={e => handleInputChange('division', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1085,7 +1135,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.license_number}
-                    onChange={(e) => handleInputChange('license_number', e.target.value)}
+                    onChange={e => handleInputChange('license_number', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1094,7 +1144,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     type="date"
                     className="input-luxury"
                     value={formData.license_expiration}
-                    onChange={(e) => handleInputChange('license_expiration', e.target.value)}
+                    onChange={e => handleInputChange('license_expiration', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1102,7 +1152,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.nrds_id}
-                    onChange={(e) => handleInputChange('nrds_id', e.target.value)}
+                    onChange={e => handleInputChange('nrds_id', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1110,7 +1160,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.mls_id}
-                    onChange={(e) => handleInputChange('mls_id', e.target.value)}
+                    onChange={e => handleInputChange('mls_id', e.target.value)}
                   />
                 </div>
                 <div>
@@ -1118,9 +1168,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <select
                     className="select-luxury"
                     value={formData.association}
-                    onChange={(e) => handleInputChange('association', e.target.value)}
+                    onChange={e => handleInputChange('association', e.target.value)}
                   >
-                    {associationOptions.map((option) => (
+                    {associationOptions.map(option => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -1132,9 +1182,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <select
                     className="select-luxury"
                     value={formData.commission_plan}
-                    onChange={(e) => handleInputChange('commission_plan', e.target.value)}
+                    onChange={e => handleInputChange('commission_plan', e.target.value)}
                   >
-                    {commissionPlans.map((option) => (
+                    {commissionPlans.map(option => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -1146,7 +1196,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.job_title}
-                    onChange={(e) => handleInputChange('job_title', e.target.value)}
+                    onChange={e => handleInputChange('job_title', e.target.value)}
                     placeholder="e.g., Senior Agent, Team Lead, etc."
                   />
                 </div>
@@ -1155,7 +1205,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     className="input-luxury"
                     value={formData.referring_agent}
-                    onChange={(e) => handleInputChange('referring_agent', e.target.value)}
+                    onChange={e => handleInputChange('referring_agent', e.target.value)}
                     placeholder="Name of agent who referred them"
                   />
                 </div>
@@ -1167,7 +1217,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   <input
                     type="url"
                     value={formData.onedrive_folder_url || ''}
-                    onChange={(e) => handleInputChange('onedrive_folder_url', e.target.value)}
+                    onChange={e => handleInputChange('onedrive_folder_url', e.target.value)}
                     placeholder="https://collectiverealtyco-my.sharepoint.com/..."
                     className="input-luxury"
                   />
@@ -1176,7 +1226,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
 
               <div className="border-t border-luxury-gray-5 pt-4">
                 <h4 className="text-sm font-medium text-luxury-gray-2 mb-2">Revenue Share</h4>
-                <p className="text-xs text-luxury-gray-3 mb-2">Select users who receive revenue share from this agent</p>
+                <p className="text-xs text-luxury-gray-3 mb-2">
+                  Select users who receive revenue share from this agent
+                </p>
                 <UserAutocomplete
                   selectedUsers={formData.revenue_share}
                   onSelect={handleRevenueShareSelect}
@@ -1188,12 +1240,14 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
               <div className="border-t border-luxury-gray-5 pt-4">
                 <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Roles</h4>
                 <div className="space-y-2">
-                  {['admin', 'agent', 'tc'].map((role) => (
+                  {['admin', 'agent', 'tc'].map(role => (
                     <label key={role} className="flex items-center space-x-2 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={formData.roles?.some((r: string) => r.toLowerCase() === role) || false}
-                        onChange={(e) => {
+                        checked={
+                          formData.roles?.some((r: string) => r.toLowerCase() === role) || false
+                        }
+                        onChange={e => {
                           const currentRoles = formData.roles || []
                           if (e.target.checked) {
                             // Add role if not already present (case-insensitive check)
@@ -1202,7 +1256,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                             }
                           } else {
                             // Remove role (case-insensitive)
-                            setFormData({ ...formData, roles: currentRoles.filter((r: string) => r.toLowerCase() !== role) })
+                            setFormData({
+                              ...formData,
+                              roles: currentRoles.filter((r: string) => r.toLowerCase() !== role),
+                            })
                           }
                         }}
                         className="w-4 h-4"
@@ -1211,14 +1268,21 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     </label>
                   ))}
                   {/* Display any additional roles that aren't in the standard list */}
-                  {formData.roles?.filter((r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase())).length > 0 && (
+                  {formData.roles?.filter(
+                    (r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase())
+                  ).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-luxury-gray-5">
                       <p className="text-xs text-luxury-gray-2 mb-2">Additional Roles:</p>
                       <div className="flex flex-wrap gap-2">
                         {formData.roles
-                          .filter((r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase()))
+                          .filter(
+                            (r: string) => !['admin', 'agent', 'tc'].includes(r.toLowerCase())
+                          )
                           .map((role: string) => (
-                            <span key={role} className="px-2 py-1 rounded bg-luxury-gray-5 text-luxury-gray-1 text-xs">
+                            <span
+                              key={role}
+                              className="px-2 py-1 rounded bg-luxury-gray-5 text-luxury-gray-1 text-xs"
+                            >
                               {role}
                             </span>
                           ))}
@@ -1233,7 +1297,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           {activeTab === 'prospect_form' && (
             <div className="space-y-6">
               <p className="text-sm text-luxury-gray-3 italic">
-                This information was submitted when the agent filled out the prospective agent form. These fields are read-only.
+                This information was submitted when the agent filled out the prospective agent form.
+                These fields are read-only.
               </p>
 
               {/* Contact Information from Form */}
@@ -1309,7 +1374,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                 <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Expectations</h4>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm text-luxury-gray-2">What expectations do you have for Collective Realty Co.?</label>
+                    <label className="text-sm text-luxury-gray-2">
+                      What expectations do you have for Collective Realty Co.?
+                    </label>
                     <textarea
                       className="input-luxury bg-gray-50 min-h-[100px] w-full"
                       value={user.expectations || ''}
@@ -1318,7 +1385,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                   </div>
                   <div>
-                    <label className="text-sm text-luxury-gray-2">Do you want to be held accountable?</label>
+                    <label className="text-sm text-luxury-gray-2">
+                      Do you want to be held accountable?
+                    </label>
                     <textarea
                       className="input-luxury bg-gray-50 min-h-[100px] w-full"
                       value={user.accountability || ''}
@@ -1327,7 +1396,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                   </div>
                   <div>
-                    <label className="text-sm text-luxury-gray-2">How do you plan to produce business leads?</label>
+                    <label className="text-sm text-luxury-gray-2">
+                      How do you plan to produce business leads?
+                    </label>
                     <textarea
                       className="input-luxury bg-gray-50 min-h-[100px] w-full"
                       value={user.lead_generation || ''}
@@ -1336,7 +1407,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                   </div>
                   <div>
-                    <label className="text-sm text-luxury-gray-2">Is there anything you would like to add?</label>
+                    <label className="text-sm text-luxury-gray-2">
+                      Is there anything you would like to add?
+                    </label>
                     <textarea
                       className="input-luxury bg-gray-50 min-h-[100px] w-full"
                       value={user.additional_info || ''}
@@ -1349,7 +1422,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
 
               {/* Referral & Team Information from Form */}
               <div className="border-t border-luxury-gray-5 pt-4">
-                <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Referral & Team Information</h4>
+                <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">
+                  Referral & Team Information
+                </h4>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <label className="text-sm text-luxury-gray-2">How did you hear about us?</label>
@@ -1419,7 +1494,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     className="input-luxury"
                     placeholder="Enter new password (min 8 characters)"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={e => setNewPassword(e.target.value)}
                     disabled={resettingPassword}
                   />
                   <button
@@ -1436,11 +1511,24 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
 
           {/* Action Buttons */}
           <div className="flex items-center justify-between">
-            <button onClick={onClose} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary">
+            <button
+              onClick={onClose}
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
+            >
               Cancel
             </button>
-            <button onClick={handleSave} disabled={saving} className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
-              {saving ? (isNewUser ? 'Creating...' : 'Saving...') : (isNewUser ? 'Create User' : 'Save Changes')}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving
+                ? isNewUser
+                  ? 'Creating...'
+                  : 'Saving...'
+                : isNewUser
+                  ? 'Create User'
+                  : 'Save Changes'}
             </button>
           </div>
         </div>

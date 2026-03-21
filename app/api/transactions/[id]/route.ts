@@ -14,9 +14,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const [txnRes, typesRes, agentsRes, teamsRes, contactsRes, intAgentsRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('id', txnId).single(),
-      supabase.from('processing_fee_types').select('*').eq('is_active', true).order('display_order', { ascending: true }),
-      supabase.from('users').select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, team_name, commission_plan, is_active').eq('is_active', true).order('preferred_first_name', { ascending: true }),
-      supabase.from('users').select('team_name').not('team_name', 'is', null).not('team_name', 'eq', ''),
+      supabase
+        .from('processing_fee_types')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('users')
+        .select(
+          'id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, team_name, commission_plan, is_active'
+        )
+        .eq('is_active', true)
+        .order('preferred_first_name', { ascending: true }),
+      supabase
+        .from('users')
+        .select('team_name')
+        .not('team_name', 'is', null)
+        .not('team_name', 'eq', ''),
       supabase.from('transaction_contacts').select('*').eq('transaction_id', txnId),
       supabase.from('transaction_internal_agents').select('*').eq('transaction_id', txnId),
     ])
@@ -40,11 +54,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       requiredDocs = docs || []
     }
 
-    const uniqueTeams = Array.from(new Set((teamsRes.data || []).map((u: any) => u.team_name).filter(Boolean))) as string[]
+    const uniqueTeams = Array.from(
+      new Set((teamsRes.data || []).map((u: any) => u.team_name).filter(Boolean))
+    ) as string[]
 
     return NextResponse.json({
       transaction: txnRes.data,
-      processingFeeTypes: typesRes.data || [],  // matches what page expects
+      processingFeeTypes: typesRes.data || [], // matches what page expects
       agents: agentsRes.data || [],
       teams: uniqueTeams.sort(),
       contacts: contactsRes.data || [],
@@ -78,7 +94,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (contacts && Array.isArray(contacts)) {
       for (const contact of contacts) {
-        await supabase.from('transaction_contacts').upsert(contact, { onConflict: 'transaction_id,contact_type,name' }).select()
+        await supabase
+          .from('transaction_contacts')
+          .upsert(contact, { onConflict: 'transaction_id,contact_type,name' })
+          .select()
       }
     }
 

@@ -51,6 +51,6 @@ export function usePermissions(): UsePermissionsResult {
     loading,
     hasPermission,
     hasAnyPermission,
-    hasAllPermissions
+    hasAllPermissions,
   }
 }

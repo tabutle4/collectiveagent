@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const start = searchParams.get('start') || new Date().toISOString()
-    const end = searchParams.get('end') || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+    const end =
+      searchParams.get('end') || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
 
     const url = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`
     console.log('Calendar GET - fetching:', url)
@@ -48,7 +49,10 @@ export async function GET(request: NextRequest) {
     console.log('Calendar GET - response status:', res.status)
     if (!res.ok) {
       console.error('Calendar GET - error:', JSON.stringify(data))
-      return NextResponse.json({ error: data.error?.message || 'Failed to fetch events', details: data }, { status: 500 })
+      return NextResponse.json(
+        { error: data.error?.message || 'Failed to fetch events', details: data },
+        { status: 500 }
+      )
     }
     return NextResponse.json({ events: data.value || [] })
   } catch (err: any) {
@@ -72,16 +76,17 @@ export async function POST(request: NextRequest) {
     }
     if (location) event.location = { displayName: location }
 
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(event),
-      }
-    )
+    const res = await fetch(`https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    })
     const data = await res.json()
-    if (!res.ok) return NextResponse.json({ error: data.error?.message || 'Failed to create event' }, { status: 500 })
+    if (!res.ok)
+      return NextResponse.json(
+        { error: data.error?.message || 'Failed to create event' },
+        { status: 500 }
+      )
     return NextResponse.json({ event: data })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -113,7 +118,10 @@ export async function PATCH(request: NextRequest) {
     )
     if (!res.ok) {
       const data = await res.json()
-      return NextResponse.json({ error: data.error?.message || 'Failed to update event' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.error?.message || 'Failed to update event' },
+        { status: 500 }
+      )
     }
     return NextResponse.json({ success: true })
   } catch (err: any) {

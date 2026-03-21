@@ -23,10 +23,7 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Check if user is a prospect (has prospect_status)
@@ -37,10 +34,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (targetError || !targetUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Only allow deleting prospects (users with prospect_status)
@@ -53,30 +47,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete the user
-    const { error: deleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', targetUserId)
+    const { error: deleteError } = await supabase.from('users').delete().eq('id', targetUserId)
 
     if (deleteError) {
       console.error('Error deleting user:', deleteError)
-      return NextResponse.json(
-        { error: 'Failed to delete user' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'User deleted successfully'
+      message: 'User deleted successfully',
     })
-
   } catch (error: any) {
     console.error('Error in delete user API:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to delete user' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || 'Failed to delete user' }, { status: 500 })
   }
 }
-

@@ -5,11 +5,7 @@ import { useRouter } from 'next/navigation'
 import AppSidebar from '@/components/shared/AppSidebar'
 import { useAuth } from '@/lib/context/AuthContext'
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading } = useAuth()
 

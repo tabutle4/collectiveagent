@@ -17,10 +17,7 @@ export async function POST(request: NextRequest) {
     const userId = formData.get('userId') as string
 
     if (!file || !userId) {
-      return NextResponse.json(
-        { error: 'File and userId are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'File and userId are required' }, { status: 400 })
     }
 
     // Validate file type
@@ -59,9 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('headshots')
-      .getPublicUrl(filePath)
+    const { data: urlData } = supabase.storage.from('headshots').getPublicUrl(filePath)
 
     const publicUrl = urlData.publicUrl
 
@@ -101,10 +96,7 @@ export async function DELETE(request: NextRequest) {
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json(
-        { error: 'userId is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
     // Get current headshot URL
@@ -115,10 +107,7 @@ export async function DELETE(request: NextRequest) {
       .single()
 
     if (fetchError || !user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Delete from storage if exists
@@ -156,4 +145,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-

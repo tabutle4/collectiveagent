@@ -80,8 +80,13 @@ export function canEditTransaction(role: AppRole, status: string): boolean {
   if (role === 'tc') {
     // TC can edit up through compliant status
     const tcEditableStatuses = [
-      'prospect', 'active_listing', 'pending', 'submitted',
-      'in_review', 'revision_requested', 'compliant',
+      'prospect',
+      'active_listing',
+      'pending',
+      'submitted',
+      'in_review',
+      'revision_requested',
+      'compliant',
     ]
     return tcEditableStatuses.includes(status)
   }

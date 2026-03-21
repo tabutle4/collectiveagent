@@ -117,4 +117,3 @@ export interface ListingFormData {
   coordination_payment_method?: 'client_direct' | 'agent_pays'
   photography_requested: boolean
 }
-

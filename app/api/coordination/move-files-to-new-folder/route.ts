@@ -11,10 +11,7 @@ export async function POST(request: NextRequest) {
     const { listingId, userId } = body
 
     if (!listingId || !userId) {
-      return NextResponse.json(
-        { error: 'Listing ID and User ID are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Listing ID and User ID are required' }, { status: 400 })
     }
 
     // Verify user is admin
@@ -26,24 +23,18 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get listing
     const listing = await getListingById(listingId)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
 
     const sanitizedAddress = listing.property_address.replace(/[/\\?%*:|"<>]/g, '-')
     const transactionLabel = (listing.transaction_type || 'sale') === 'lease' ? 'Lease' : 'Sale'
-    
+
     // Old folder path (without Sale/Lease)
     const oldFolderPath = `Listing Reports/Active/${sanitizedAddress}-${listingId}`
     // New folder path (with Sale/Lease)
@@ -82,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // List files in old folder
     const files = await graphClient.listFiles(oldFolderPath)
-    
+
     if (files.length === 0) {
       return NextResponse.json({
         success: true,
@@ -113,7 +104,7 @@ export async function POST(request: NextRequest) {
       if (coordination) {
         // Regenerate sharing link for new folder
         const newSharingUrl = await graphClient.createSharingLink(newFolderPath, 'view')
-        
+
         await updateCoordination(coordination.id, {
           onedrive_folder_url: newSharingUrl,
         })
@@ -126,13 +117,8 @@ export async function POST(request: NextRequest) {
       filesMoved,
       errors: errors.length > 0 ? errors : undefined,
     })
-
   } catch (error: any) {
     console.error('Error moving files:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to move files' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || 'Failed to move files' }, { status: 500 })
   }
 }
-

@@ -68,18 +68,16 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', existingResponse.id)
     } else {
-      await supabase
-        .from('campaign_responses')
-        .insert({
-          campaign_id,
-          user_id,
-          commission_plan_2026: profile_data.commission_plan,
-          commission_plan_2026_other: profile_data.commission_plan_other,
-          profile_updates: profile_data,
-        })
+      await supabase.from('campaign_responses').insert({
+        campaign_id,
+        user_id,
+        commission_plan_2026: profile_data.commission_plan,
+        commission_plan_2026_other: profile_data.commission_plan_other,
+        profile_updates: profile_data,
+      })
     }
 
-    regenerateRoster().catch((err) => console.error('Roster regenerate error:', err))
+    regenerateRoster().catch(err => console.error('Roster regenerate error:', err))
 
     return NextResponse.json({ success: true })
   } catch (error) {

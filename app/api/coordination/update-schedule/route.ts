@@ -10,30 +10,24 @@ export async function POST(request: NextRequest) {
     const supabase = createClient()
     const body = await request.json()
     const { coordinationId, scheduleDate, scheduleTime, applyToAll } = body
-    
+
     if (!scheduleDate || !scheduleTime) {
-      return NextResponse.json(
-        { error: 'Schedule date and time are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Schedule date and time are required' }, { status: 400 })
     }
-    
+
     // Combine date and time into a single datetime
     const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}`)
-    
+
     if (isNaN(scheduledDateTime.getTime())) {
-      return NextResponse.json(
-        { error: 'Invalid date or time format' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid date or time format' }, { status: 400 })
     }
-    
+
     if (applyToAll) {
       // Update all active coordinations
       const coordinations = await getAllActiveCoordinations()
       let updated = 0
       let scheduled = 0
-      
+
       for (const coordination of coordinations) {
         try {
           // Update coordination schedule
@@ -41,7 +35,7 @@ export async function POST(request: NextRequest) {
             next_email_scheduled_for: scheduledDateTime.toISOString(),
           })
           updated++
-          
+
           // Find unsent weekly reports and schedule them
           const { data: unsentReports } = await supabase
             .from('coordination_weekly_reports')
@@ -51,7 +45,7 @@ export async function POST(request: NextRequest) {
             .is('email_id', null)
             .order('week_start_date', { ascending: false })
             .limit(1)
-          
+
           // Schedule weekly reports if available
           if (unsentReports && unsentReports.length > 0) {
             const listing = await getListingById(coordination.listing_id)
@@ -61,15 +55,15 @@ export async function POST(request: NextRequest) {
                 .select('email')
                 .eq('id', coordination.agent_id)
                 .single()
-              
+
               if (agentData) {
-                const dateSentStr = scheduledDateTime.toLocaleDateString('en-US', { 
+                const dateSentStr = scheduledDateTime.toLocaleDateString('en-US', {
                   weekday: 'long',
-                  month: 'long', 
-                  day: 'numeric', 
-                  year: 'numeric' 
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
                 })
-                
+
                 const latestReport = unsentReports[0]
                 const emailResult = await sendWeeklyReportEmail(
                   coordination,
@@ -80,7 +74,7 @@ export async function POST(request: NextRequest) {
                   latestReport.report_file_url_2 || undefined,
                   scheduledDateTime
                 )
-                
+
                 if (emailResult.success && emailResult.emailId) {
                   await supabase
                     .from('coordination_weekly_reports')
@@ -89,7 +83,7 @@ export async function POST(request: NextRequest) {
                       email_scheduled_for: scheduledDateTime.toISOString(),
                     })
                     .eq('id', latestReport.id)
-                  
+
                   scheduled++
                 }
               }
@@ -99,7 +93,7 @@ export async function POST(request: NextRequest) {
           console.error(`Error updating coordination ${coordination.id}:`, error)
         }
       }
-      
+
       return NextResponse.json({
         success: true,
         message: `Updated schedule for ${updated} coordinations. Scheduled ${scheduled} emails.`,
@@ -114,28 +108,30 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      
+
       await updateCoordination(coordinationId, {
         next_email_scheduled_for: scheduledDateTime.toISOString(),
       })
-      
+
       // Get coordination data with transaction
       const { data: coordinationData } = await supabase
         .from('listing_coordination')
         .select('*, transactions(*)')
         .eq('id', coordinationId)
         .single()
-      
+
       let scheduled = 0
-      
+
       if (coordinationData) {
         const listing = coordinationData.transactions as any
         const { data: agentData } = await supabase
           .from('users')
-          .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+          .select(
+            'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+          )
           .eq('id', coordinationData.agent_id)
           .single()
-        
+
         if (agentData && listing) {
           // Schedule unsent weekly reports
           const { data: unsentReports } = await supabase
@@ -146,15 +142,15 @@ export async function POST(request: NextRequest) {
             .is('email_id', null)
             .order('week_start_date', { ascending: false })
             .limit(1)
-          
+
           if (unsentReports && unsentReports.length > 0) {
-            const dateSentStr = scheduledDateTime.toLocaleDateString('en-US', { 
+            const dateSentStr = scheduledDateTime.toLocaleDateString('en-US', {
               weekday: 'long',
-              month: 'long', 
-              day: 'numeric', 
-              year: 'numeric' 
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
             })
-            
+
             const latestReport = unsentReports[0]
             const emailResult = await sendWeeklyReportEmail(
               coordinationData as any,
@@ -165,7 +161,7 @@ export async function POST(request: NextRequest) {
               latestReport.report_file_url_2 || undefined,
               scheduledDateTime
             )
-            
+
             if (emailResult.success && emailResult.emailId) {
               await supabase
                 .from('coordination_weekly_reports')
@@ -174,20 +170,19 @@ export async function POST(request: NextRequest) {
                   email_scheduled_for: scheduledDateTime.toISOString(),
                 })
                 .eq('id', latestReport.id)
-              
+
               scheduled++
             }
           }
         }
       }
-      
+
       return NextResponse.json({
         success: true,
         message: `Schedule updated. ${scheduled} email(s) scheduled.`,
         scheduled,
       })
     }
-    
   } catch (error: any) {
     console.error('Error updating schedule:', error)
     return NextResponse.json(

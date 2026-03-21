@@ -61,7 +61,9 @@ export default function TeamAgreementsPage() {
   }, [router, user])
   const [agreements, setAgreements] = useState<TeamAgreement[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'terminated'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'terminated'>(
+    'all'
+  )
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -72,9 +74,10 @@ export default function TeamAgreementsPage() {
   const loadAgreements = async () => {
     setLoading(true)
     try {
-      const url = statusFilter === 'all'
-        ? '/api/team-agreements'
-        : `/api/team-agreements?status=${statusFilter}`
+      const url =
+        statusFilter === 'all'
+          ? '/api/team-agreements'
+          : `/api/team-agreements?status=${statusFilter}`
       const response = await fetch(url)
       const data = await response.json()
       if (response.ok) {
@@ -95,7 +98,11 @@ export default function TeamAgreementsPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
   }
 
   const getTeamLeadName = (agreement: TeamAgreement) => {
@@ -109,10 +116,14 @@ export default function TeamAgreementsPage() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-50 text-green-700'
-      case 'expired': return 'bg-yellow-50 text-yellow-700'
-      case 'terminated': return 'bg-red-50 text-red-600'
-      default: return 'bg-luxury-gray-5/40 text-luxury-gray-3'
+      case 'active':
+        return 'bg-green-50 text-green-700'
+      case 'expired':
+        return 'bg-yellow-50 text-yellow-700'
+      case 'terminated':
+        return 'bg-red-50 text-red-600'
+      default:
+        return 'bg-luxury-gray-5/40 text-luxury-gray-3'
     }
   }
 
@@ -123,9 +134,10 @@ export default function TeamAgreementsPage() {
       agreement.team_name.toLowerCase().includes(query) ||
       getTeamLeadName(agreement).toLowerCase().includes(query) ||
       agreement.team_members.some(m => {
-        const name = m.agent.preferred_first_name && m.agent.preferred_last_name
-          ? `${m.agent.preferred_first_name} ${m.agent.preferred_last_name}`
-          : `${m.agent.first_name} ${m.agent.last_name}`
+        const name =
+          m.agent.preferred_first_name && m.agent.preferred_last_name
+            ? `${m.agent.preferred_first_name} ${m.agent.preferred_last_name}`
+            : `${m.agent.first_name} ${m.agent.last_name}`
         return name.toLowerCase().includes(query)
       })
     )
@@ -138,7 +150,9 @@ export default function TeamAgreementsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="page-title">TEAMS</h1>
-          <p className="text-xs text-luxury-gray-3 mt-1">Manage team agreements, splits, and revenue share</p>
+          <p className="text-xs text-luxury-gray-3 mt-1">
+            Manage team agreements, splits, and revenue share
+          </p>
         </div>
         <Link href="/admin/team-agreements/new" className="btn btn-primary flex items-center gap-2">
           <Plus size={16} />
@@ -150,7 +164,7 @@ export default function TeamAgreementsPage() {
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 mb-5">
           <div className="flex gap-2">
-            {(['all', 'active', 'expired', 'terminated'] as const).map((status) => (
+            {(['all', 'active', 'expired', 'terminated'] as const).map(status => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -161,11 +175,14 @@ export default function TeamAgreementsPage() {
             ))}
           </div>
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3"
+              size={18}
+            />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search by team name, lead, or member..."
               className="input-luxury pl-10"
             />
@@ -185,14 +202,18 @@ export default function TeamAgreementsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredAgreements.map((agreement) => (
+            {filteredAgreements.map(agreement => (
               <div key={agreement.id} className="inner-card">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-luxury-gray-1 mb-1">{agreement.team_name}</h3>
+                    <h3 className="text-sm font-semibold text-luxury-gray-1 mb-1">
+                      {agreement.team_name}
+                    </h3>
                     <p className="text-xs text-luxury-gray-3">Lead: {getTeamLeadName(agreement)}</p>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded capitalize font-medium flex-shrink-0 ml-2 ${getStatusStyle(agreement.status)}`}>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded capitalize font-medium flex-shrink-0 ml-2 ${getStatusStyle(agreement.status)}`}
+                  >
                     {agreement.status}
                   </span>
                 </div>
@@ -208,7 +229,10 @@ export default function TeamAgreementsPage() {
                   <div>
                     {agreement.member_count} active member{agreement.member_count !== 1 ? 's' : ''}
                     {agreement.total_members > agreement.member_count && (
-                      <span className="text-luxury-gray-3/60"> ({agreement.total_members} total)</span>
+                      <span className="text-luxury-gray-3/60">
+                        {' '}
+                        ({agreement.total_members} total)
+                      </span>
                     )}
                   </div>
                 </div>

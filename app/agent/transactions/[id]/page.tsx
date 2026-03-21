@@ -4,11 +4,24 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Save, FileText, Upload, Check, X, Plus, Trash2, ArrowLeft } from 'lucide-react'
 import { ProcessingFeeType } from '@/lib/transactions/types'
-import { getVisibleSlides, LOAN_TYPES, LEAD_SOURCES, FLYER_DIVISIONS, LegacySlideConfig as SlideConfig } from '@/lib/transactions/constants'
+import {
+  getVisibleSlides,
+  LOAN_TYPES,
+  LEAD_SOURCES,
+  FLYER_DIVISIONS,
+  LegacySlideConfig as SlideConfig,
+} from '@/lib/transactions/constants'
 import SummaryPanel from '@/components/transactions/SummaryPanel'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
-import { toTitleCase, formatAddress, formatState, formatPhone, formatMoney, buildPropertyAddress } from '@/lib/transactions/utils'
+import {
+  toTitleCase,
+  formatAddress,
+  formatState,
+  formatPhone,
+  formatMoney,
+  buildPropertyAddress,
+} from '@/lib/transactions/utils'
 
 interface Client {
   name: string
@@ -101,11 +114,17 @@ export default function AgentTransactionDetailPage() {
         fetch(`/api/transactions/${txnId}`),
       ])
 
-      if (!meRes.ok) { router.push('/auth/login'); return }
+      if (!meRes.ok) {
+        router.push('/auth/login')
+        return
+      }
       const meData = await meRes.json()
       setUser(meData.user)
 
-      if (!txnRes.ok) { router.push('/transactions'); return }
+      if (!txnRes.ok) {
+        router.push('/transactions')
+        return
+      }
       const txnData = await txnRes.json()
 
       setTransaction(txnData.transaction)
@@ -116,17 +135,17 @@ export default function AgentTransactionDetailPage() {
       setRequiredDocs(txnData.requiredDocs || [])
 
       // Extract team names from agents
-      const names = [...new Set(
-        (txnData.agents || [])
-          .map((a: any) => a.team_name)
-          .filter(Boolean)
-      )] as string[]
+      const names = [
+        ...new Set((txnData.agents || []).map((a: any) => a.team_name).filter(Boolean)),
+      ] as string[]
       setTeamNames(names)
 
       // Initialize form from transaction
       const t = txnData.transaction
       if (t) {
-        const matchedType = (txnData.processingFeeTypes || []).find((pt: any) => pt.name === t.transaction_type)
+        const matchedType = (txnData.processingFeeTypes || []).find(
+          (pt: any) => pt.name === t.transaction_type
+        )
         setForm({
           transaction_type: t.transaction_type_id || '',
           transaction_type_name: t.transaction_type || '',
@@ -142,11 +161,13 @@ export default function AgentTransactionDetailPage() {
           mls_link: t.mls_link || '',
           mls_number: t.mls_number || '',
           mls_type: t.mls_type || '',
-          clients: txnData.contacts?.filter((c: any) => c.contact_type === 'client').map((c: any) => ({
-            name: c.name || '',
-            email: c.email || '',
-            phone: c.phone || '',
-          })) || [{ name: '', email: '', phone: '' }],
+          clients: txnData.contacts
+            ?.filter((c: any) => c.contact_type === 'client')
+            .map((c: any) => ({
+              name: c.name || '',
+              email: c.email || '',
+              phone: c.phone || '',
+            })) || [{ name: '', email: '', phone: '' }],
           sales_price: t.sales_price || '',
           monthly_rent: t.monthly_rent || '',
           gross_commission: t.gross_commission || '',
@@ -193,7 +214,10 @@ export default function AgentTransactionDetailPage() {
   }
 
   const searchContacts = useCallback(async (query: string) => {
-    if (!query || query.length < 2) { setContactSuggestions([]); return }
+    if (!query || query.length < 2) {
+      setContactSuggestions([])
+      return
+    }
     setSearchingContacts(true)
     try {
       const res = await fetch(`/api/transactions/contacts/search?q=${encodeURIComponent(query)}`)
@@ -287,7 +311,7 @@ export default function AgentTransactionDetailPage() {
   }
 
   const updateForm = (field: keyof TransactionForm, value: any) => {
-    setForm(prev => prev ? { ...prev, [field]: value } : prev)
+    setForm(prev => (prev ? { ...prev, [field]: value } : prev))
   }
 
   const updateClient = (index: number, field: keyof Client, value: string) => {
@@ -300,7 +324,9 @@ export default function AgentTransactionDetailPage() {
   }
 
   const addClient = () => {
-    setForm(prev => prev ? { ...prev, clients: [...prev.clients, { name: '', email: '', phone: '' }] } : prev)
+    setForm(prev =>
+      prev ? { ...prev, clients: [...prev.clients, { name: '', email: '', phone: '' }] } : prev
+    )
   }
 
   const removeClient = (index: number) => {
@@ -312,21 +338,37 @@ export default function AgentTransactionDetailPage() {
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
-  if (!transaction || !form) return <div className="text-center py-12 text-sm text-luxury-gray-3">Transaction not found.</div>
+  if (!transaction || !form)
+    return (
+      <div className="text-center py-12 text-sm text-luxury-gray-3">Transaction not found.</div>
+    )
 
   const visibleSlides = getVisibleSlides(form.is_lease)
   const currentSlide: SlideConfig | undefined = visibleSlides[activeSlide]
-  const propertyAddress = buildPropertyAddress(form.street_address, form.unit_suite, form.city, form.state_code, form.zip_code)
+  const propertyAddress = buildPropertyAddress(
+    form.street_address,
+    form.unit_suite,
+    form.city,
+    form.state_code,
+    form.zip_code
+  )
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => router.push('/transactions')} className="flex items-center gap-2 text-sm text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+        <button
+          onClick={() => router.push('/transactions')}
+          className="flex items-center gap-2 text-sm text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
           <ArrowLeft size={16} /> Back to Transactions
         </button>
         <div className="flex items-center gap-3">
           <StatusBadge status={transaction.status as TransactionStatus} />
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50"
+          >
             <Save size={14} />
             {saving ? 'Saving...' : 'Save'}
           </button>
@@ -359,12 +401,16 @@ export default function AgentTransactionDetailPage() {
           {/* Active slide content */}
           {currentSlide && (
             <div className="container-card">
-              <h2 className="text-sm font-semibold text-luxury-gray-1 mb-4">{currentSlide.title}</h2>
+              <h2 className="text-sm font-semibold text-luxury-gray-1 mb-4">
+                {currentSlide.title}
+              </h2>
 
               {currentSlide.id === 'type' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Transaction Type</label>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Transaction Type
+                    </label>
                     <select
                       className="select-luxury"
                       value={form.transaction_type}
@@ -380,25 +426,53 @@ export default function AgentTransactionDetailPage() {
                       }}
                     >
                       <option value="">Select type...</option>
-                      {processingFeeTypes.filter(pt => pt.is_active).map(pt => (
-                        <option key={pt.id} value={pt.id}>{pt.name}</option>
-                      ))}
+                      {processingFeeTypes
+                        .filter(pt => pt.is_active)
+                        .map(pt => (
+                          <option key={pt.id} value={pt.id}>
+                            {pt.name}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">Lead Source</label>
-                    <select className="select-luxury" value={form.lead_source} onChange={e => updateForm('lead_source', e.target.value)}>
+                    <select
+                      className="select-luxury"
+                      value={form.lead_source}
+                      onChange={e => updateForm('lead_source', e.target.value)}
+                    >
                       <option value="">Select...</option>
-                      {LEAD_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      {LEAD_SOURCES.map(s => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="has_referral" checked={form.has_referral} onChange={e => updateForm('has_referral', e.target.checked)} className="accent-luxury-accent" />
-                    <label htmlFor="has_referral" className="text-sm text-luxury-gray-2">This transaction has a referral</label>
+                    <input
+                      type="checkbox"
+                      id="has_referral"
+                      checked={form.has_referral}
+                      onChange={e => updateForm('has_referral', e.target.checked)}
+                      className="accent-luxury-accent"
+                    />
+                    <label htmlFor="has_referral" className="text-sm text-luxury-gray-2">
+                      This transaction has a referral
+                    </label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="expedite" checked={form.expedite_requested} onChange={e => updateForm('expedite_requested', e.target.checked)} className="accent-luxury-accent" />
-                    <label htmlFor="expedite" className="text-sm text-luxury-gray-2">Request expedited processing (+$95)</label>
+                    <input
+                      type="checkbox"
+                      id="expedite"
+                      checked={form.expedite_requested}
+                      onChange={e => updateForm('expedite_requested', e.target.checked)}
+                      className="accent-luxury-accent"
+                    />
+                    <label htmlFor="expedite" className="text-sm text-luxury-gray-2">
+                      Request expedited processing (+$95)
+                    </label>
                   </div>
                 </div>
               )}
@@ -407,43 +481,84 @@ export default function AgentTransactionDetailPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">Street Address</label>
-                      <input className="input-luxury" value={form.street_address} onChange={e => updateForm('street_address', formatAddress(e.target.value))} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Street Address
+                      </label>
+                      <input
+                        className="input-luxury"
+                        value={form.street_address}
+                        onChange={e => updateForm('street_address', formatAddress(e.target.value))}
+                      />
                     </div>
                     <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">Unit / Suite</label>
-                      <input className="input-luxury" value={form.unit_suite} onChange={e => updateForm('unit_suite', e.target.value)} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Unit / Suite
+                      </label>
+                      <input
+                        className="input-luxury"
+                        value={form.unit_suite}
+                        onChange={e => updateForm('unit_suite', e.target.value)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">City</label>
-                      <input className="input-luxury" value={form.city} onChange={e => updateForm('city', toTitleCase(e.target.value))} />
+                      <input
+                        className="input-luxury"
+                        value={form.city}
+                        onChange={e => updateForm('city', toTitleCase(e.target.value))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">State</label>
-                      <input className="input-luxury" value={form.state_code} onChange={e => updateForm('state_code', formatState(e.target.value))} maxLength={2} />
+                      <input
+                        className="input-luxury"
+                        value={form.state_code}
+                        onChange={e => updateForm('state_code', formatState(e.target.value))}
+                        maxLength={2}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">ZIP</label>
-                      <input className="input-luxury" value={form.zip_code} onChange={e => updateForm('zip_code', e.target.value)} />
+                      <input
+                        className="input-luxury"
+                        value={form.zip_code}
+                        onChange={e => updateForm('zip_code', e.target.value)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">County</label>
-                      <input className="input-luxury" value={form.county} onChange={e => updateForm('county', toTitleCase(e.target.value))} />
+                      <input
+                        className="input-luxury"
+                        value={form.county}
+                        onChange={e => updateForm('county', toTitleCase(e.target.value))}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS Number</label>
-                      <input className="input-luxury" value={form.mls_number} onChange={e => updateForm('mls_number', e.target.value)} />
+                      <input
+                        className="input-luxury"
+                        value={form.mls_number}
+                        onChange={e => updateForm('mls_number', e.target.value)}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS Link</label>
-                      <input className="input-luxury" value={form.mls_link} onChange={e => updateForm('mls_link', e.target.value)} placeholder="https://" />
+                      <input
+                        className="input-luxury"
+                        value={form.mls_link}
+                        onChange={e => updateForm('mls_link', e.target.value)}
+                        placeholder="https://"
+                      />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs text-luxury-gray-3">Clients</label>
-                      <button onClick={addClient} className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
+                      <button
+                        onClick={addClient}
+                        className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                      >
                         <Plus size={12} /> Add Client
                       </button>
                     </div>
@@ -451,9 +566,14 @@ export default function AgentTransactionDetailPage() {
                       {form.clients.map((client, i) => (
                         <div key={i} className="inner-card">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-semibold text-luxury-gray-2">Client {i + 1}</p>
+                            <p className="text-xs font-semibold text-luxury-gray-2">
+                              Client {i + 1}
+                            </p>
                             {form.clients.length > 1 && (
-                              <button onClick={() => removeClient(i)} className="text-luxury-gray-3 hover:text-red-500">
+                              <button
+                                onClick={() => removeClient(i)}
+                                className="text-luxury-gray-3 hover:text-red-500"
+                              >
                                 <X size={14} />
                               </button>
                             )}
@@ -461,15 +581,30 @@ export default function AgentTransactionDetailPage() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                             <div>
                               <label className="block text-xs text-luxury-gray-3 mb-1">Name</label>
-                              <input className="input-luxury text-sm" value={client.name} onChange={e => updateClient(i, 'name', toTitleCase(e.target.value))} />
+                              <input
+                                className="input-luxury text-sm"
+                                value={client.name}
+                                onChange={e => updateClient(i, 'name', toTitleCase(e.target.value))}
+                              />
                             </div>
                             <div>
                               <label className="block text-xs text-luxury-gray-3 mb-1">Email</label>
-                              <input className="input-luxury text-sm" type="email" value={client.email} onChange={e => updateClient(i, 'email', e.target.value)} />
+                              <input
+                                className="input-luxury text-sm"
+                                type="email"
+                                value={client.email}
+                                onChange={e => updateClient(i, 'email', e.target.value)}
+                              />
                             </div>
                             <div>
                               <label className="block text-xs text-luxury-gray-3 mb-1">Phone</label>
-                              <input className="input-luxury text-sm" value={client.phone} onChange={e => updateClient(i, 'phone', formatPhone(e.target.value))} />
+                              <input
+                                className="input-luxury text-sm"
+                                value={client.phone}
+                                onChange={e =>
+                                  updateClient(i, 'phone', formatPhone(e.target.value))
+                                }
+                              />
                             </div>
                           </div>
                         </div>
@@ -479,7 +614,12 @@ export default function AgentTransactionDetailPage() {
 
                   <div>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">Notes</label>
-                    <textarea className="textarea-luxury" rows={3} value={form.notes} onChange={e => updateForm('notes', e.target.value)} />
+                    <textarea
+                      className="textarea-luxury"
+                      rows={3}
+                      value={form.notes}
+                      onChange={e => updateForm('notes', e.target.value)}
+                    />
                   </div>
                 </div>
               )}
@@ -488,41 +628,95 @@ export default function AgentTransactionDetailPage() {
                 <div className="space-y-4">
                   {form.is_lease ? (
                     <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">Monthly Rent ($)</label>
-                      <input className="input-luxury" type="number" value={form.monthly_rent} onChange={e => updateForm('monthly_rent', e.target.value)} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Monthly Rent ($)
+                      </label>
+                      <input
+                        className="input-luxury"
+                        type="number"
+                        value={form.monthly_rent}
+                        onChange={e => updateForm('monthly_rent', e.target.value)}
+                      />
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">Sales Price ($)</label>
-                      <input className="input-luxury" type="number" value={form.sales_price} onChange={e => updateForm('sales_price', e.target.value)} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Sales Price ($)
+                      </label>
+                      <input
+                        className="input-luxury"
+                        type="number"
+                        value={form.sales_price}
+                        onChange={e => updateForm('sales_price', e.target.value)}
+                      />
                     </div>
                   )}
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Gross Commission</label>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Gross Commission
+                    </label>
                     <div className="flex gap-2">
-                      <input className="input-luxury flex-1" type="number" value={form.gross_commission} onChange={e => updateForm('gross_commission', e.target.value)} />
-                      <select className="select-luxury w-24" value={form.gross_commission_type} onChange={e => updateForm('gross_commission_type', e.target.value)}>
+                      <input
+                        className="input-luxury flex-1"
+                        type="number"
+                        value={form.gross_commission}
+                        onChange={e => updateForm('gross_commission', e.target.value)}
+                      />
+                      <select
+                        className="select-luxury w-24"
+                        value={form.gross_commission_type}
+                        onChange={e => updateForm('gross_commission_type', e.target.value)}
+                      >
                         <option value="percent">%</option>
                         <option value="flat">$</option>
                       </select>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Bonus Amount ($)</label>
-                    <input className="input-luxury" type="number" value={form.bonus_amount} onChange={e => updateForm('bonus_amount', e.target.value)} />
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Bonus Amount ($)
+                    </label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      value={form.bonus_amount}
+                      onChange={e => updateForm('bonus_amount', e.target.value)}
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Rebate Amount ($)</label>
-                    <input className="input-luxury" type="number" value={form.rebate_amount} onChange={e => updateForm('rebate_amount', e.target.value)} />
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Rebate Amount ($)
+                    </label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      value={form.rebate_amount}
+                      onChange={e => updateForm('rebate_amount', e.target.value)}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
-                    <input type="checkbox" id="has_btsa" checked={form.has_btsa} onChange={e => updateForm('has_btsa', e.target.checked)} className="accent-luxury-accent" />
-                    <label htmlFor="has_btsa" className="text-sm text-luxury-gray-2">Has BTSA</label>
+                    <input
+                      type="checkbox"
+                      id="has_btsa"
+                      checked={form.has_btsa}
+                      onChange={e => updateForm('has_btsa', e.target.checked)}
+                      className="accent-luxury-accent"
+                    />
+                    <label htmlFor="has_btsa" className="text-sm text-luxury-gray-2">
+                      Has BTSA
+                    </label>
                   </div>
                   {form.has_btsa && (
                     <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">BTSA Amount ($)</label>
-                      <input className="input-luxury" type="number" value={form.btsa_amount} onChange={e => updateForm('btsa_amount', e.target.value)} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        BTSA Amount ($)
+                      </label>
+                      <input
+                        className="input-luxury"
+                        type="number"
+                        value={form.btsa_amount}
+                        onChange={e => updateForm('btsa_amount', e.target.value)}
+                      />
                     </div>
                   )}
                 </div>
@@ -533,58 +727,145 @@ export default function AgentTransactionDetailPage() {
                   {form.is_lease ? (
                     <>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Move-In Date</label>
-                        <input type="date" className="input-luxury" value={form.move_in_date} onChange={e => updateForm('move_in_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Move-In Date
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.move_in_date}
+                          onChange={e => updateForm('move_in_date', e.target.value)}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Lease Term (months)</label>
-                        <input className="input-luxury" type="number" value={form.lease_term} onChange={e => updateForm('lease_term', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Lease Term (months)
+                        </label>
+                        <input
+                          className="input-luxury"
+                          type="number"
+                          value={form.lease_term}
+                          onChange={e => updateForm('lease_term', e.target.value)}
+                        />
                       </div>
                     </>
                   ) : (
                     <>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Listing Date</label>
-                        <input type="date" className="input-luxury" value={form.listing_date} onChange={e => updateForm('listing_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Listing Date
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.listing_date}
+                          onChange={e => updateForm('listing_date', e.target.value)}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Listing Expiration</label>
-                        <input type="date" className="input-luxury" value={form.listing_expiration_date} onChange={e => updateForm('listing_expiration_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Listing Expiration
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.listing_expiration_date}
+                          onChange={e => updateForm('listing_expiration_date', e.target.value)}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Buyer Agreement Date</label>
-                        <input type="date" className="input-luxury" value={form.buyer_agreement_date} onChange={e => updateForm('buyer_agreement_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Buyer Agreement Date
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.buyer_agreement_date}
+                          onChange={e => updateForm('buyer_agreement_date', e.target.value)}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Buyer Agreement Expiration</label>
-                        <input type="date" className="input-luxury" value={form.buyer_agreement_expiration_date} onChange={e => updateForm('buyer_agreement_expiration_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Buyer Agreement Expiration
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.buyer_agreement_expiration_date}
+                          onChange={e =>
+                            updateForm('buyer_agreement_expiration_date', e.target.value)
+                          }
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Acceptance Date</label>
-                        <input type="date" className="input-luxury" value={form.acceptance_date} onChange={e => updateForm('acceptance_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Acceptance Date
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.acceptance_date}
+                          onChange={e => updateForm('acceptance_date', e.target.value)}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Closing Date</label>
-                        <input type="date" className="input-luxury" value={form.closing_date} onChange={e => updateForm('closing_date', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Closing Date
+                        </label>
+                        <input
+                          type="date"
+                          className="input-luxury"
+                          value={form.closing_date}
+                          onChange={e => updateForm('closing_date', e.target.value)}
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-luxury-gray-3 mb-1.5">Loan Type</label>
-                        <select className="select-luxury" value={form.loan_type} onChange={e => updateForm('loan_type', e.target.value)}>
+                        <select
+                          className="select-luxury"
+                          value={form.loan_type}
+                          onChange={e => updateForm('loan_type', e.target.value)}
+                        >
                           <option value="">Select...</option>
-                          {LOAN_TYPES.map(lt => <option key={lt.value} value={lt.value}>{lt.label}</option>)}
+                          {LOAN_TYPES.map(lt => (
+                            <option key={lt.value} value={lt.value}>
+                              {lt.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Title Officer Name</label>
-                        <input className="input-luxury" value={form.title_officer_name} onChange={e => updateForm('title_officer_name', toTitleCase(e.target.value))} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Title Officer Name
+                        </label>
+                        <input
+                          className="input-luxury"
+                          value={form.title_officer_name}
+                          onChange={e =>
+                            updateForm('title_officer_name', toTitleCase(e.target.value))
+                          }
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Title Company</label>
-                        <input className="input-luxury" value={form.title_company} onChange={e => updateForm('title_company', toTitleCase(e.target.value))} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Title Company
+                        </label>
+                        <input
+                          className="input-luxury"
+                          value={form.title_company}
+                          onChange={e => updateForm('title_company', toTitleCase(e.target.value))}
+                        />
                       </div>
                       <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1.5">Title Company Email</label>
-                        <input type="email" className="input-luxury" value={form.title_company_email} onChange={e => updateForm('title_company_email', e.target.value)} />
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Title Company Email
+                        </label>
+                        <input
+                          type="email"
+                          className="input-luxury"
+                          value={form.title_company_email}
+                          onChange={e => updateForm('title_company_email', e.target.value)}
+                        />
                       </div>
                     </>
                   )}
@@ -594,10 +875,20 @@ export default function AgentTransactionDetailPage() {
               {currentSlide.id === 'details' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Flyer Division</label>
-                    <select className="select-luxury" value={form.flyer_division} onChange={e => updateForm('flyer_division', e.target.value)}>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Flyer Division
+                    </label>
+                    <select
+                      className="select-luxury"
+                      value={form.flyer_division}
+                      onChange={e => updateForm('flyer_division', e.target.value)}
+                    >
                       <option value="">Select...</option>
-                      {FLYER_DIVISIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      {FLYER_DIVISIONS.map(d => (
+                        <option key={d.value} value={d.value}>
+                          {d.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

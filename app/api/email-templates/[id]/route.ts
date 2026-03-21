@@ -25,10 +25,7 @@ export async function GET(
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Template ID is required' }, { status: 400 })
     }
 
     const { data, error } = await supabase
@@ -40,19 +37,13 @@ export async function GET(
     if (error) throw error
 
     if (!data) {
-      return NextResponse.json(
-        { error: 'Template not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
 
     return NextResponse.json({ template: data })
   } catch (error) {
     console.error('Get email template error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch email template' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch email template' }, { status: 500 })
   }
 }
 
@@ -67,10 +58,7 @@ export async function PUT(
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Template ID is required' }, { status: 400 })
     }
 
     const body = await request.json()
@@ -118,7 +106,7 @@ export async function PUT(
           .eq('category', currentTemplate.category || 'campaign')
           .eq('is_default', true)
           .neq('id', normalizedId)
-        
+
         if (unsetError) {
           console.error('Error unsetting other defaults:', unsetError)
         }
@@ -157,10 +145,7 @@ export async function PUT(
 
     if (!data) {
       console.error('No data returned from update')
-      return NextResponse.json(
-        { error: 'Template not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
     }
 
     console.log('Template updated successfully:', { id: data.id, name: data.name })
@@ -173,12 +158,9 @@ export async function PUT(
       details: error?.details,
       hint: error?.hint,
     })
-    
+
     const errorMessage = error?.message || error?.details || 'Failed to update email template'
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: error?.code ? 400 : 500 }
-    )
+    return NextResponse.json({ error: errorMessage }, { status: error?.code ? 400 : 500 })
   }
 }
 
@@ -193,10 +175,7 @@ export async function DELETE(
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Template ID is required' }, { status: 400 })
     }
 
     // First check if template is default
@@ -215,10 +194,7 @@ export async function DELETE(
       )
     }
 
-    const { error } = await supabase
-      .from('email_templates')
-      .delete()
-      .eq('id', normalizedId)
+    const { error } = await supabase.from('email_templates').delete().eq('id', normalizedId)
 
     if (error) throw error
 
@@ -231,10 +207,6 @@ export async function DELETE(
         { status: 400 }
       )
     }
-    return NextResponse.json(
-      { error: 'Failed to delete email template' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete email template' }, { status: 500 })
   }
 }
-

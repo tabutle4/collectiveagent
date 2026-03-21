@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const res = await fetch(
       `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=unpaid&limit=20`,
-      { headers: { 'Authorization': authHeader() } }
+      { headers: { Authorization: authHeader() } }
     )
 
     if (!res.ok) return NextResponse.json({ invoices: [] })

@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
     // Fetch the check with its linked transaction and agent
     const { data: check, error: checkError } = await supabase
       .from('checks_received')
-      .select(`
+      .select(
+        `
         id, property_address, check_amount, received_date, cleared_date,
         compliance_complete_date, notes, transaction_id,
         transactions (
@@ -30,7 +31,8 @@ export async function POST(request: NextRequest) {
             email, office_email
           )
         )
-      `)
+      `
+      )
       .eq('id', check_id)
       .single()
 
@@ -43,7 +45,10 @@ export async function POST(request: NextRequest) {
     const agent = transaction?.users
 
     if (!agent) {
-      return NextResponse.json({ error: 'No agent linked to this check. Link a transaction first.' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'No agent linked to this check. Link a transaction first.' },
+        { status: 400 }
+      )
     }
 
     const agentEmail = agent.office_email || agent.email
@@ -54,7 +59,11 @@ export async function POST(request: NextRequest) {
     // Use cleared_date if set, otherwise compliance_complete_date, otherwise received_date
     const dateToShow = check.cleared_date || check.compliance_complete_date || check.received_date
     const formattedDate = dateToShow
-      ? new Date(dateToShow).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      ? new Date(dateToShow).toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        })
       : null
 
     const subject = `Check - ${address} - ${agentName}`

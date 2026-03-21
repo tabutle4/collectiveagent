@@ -11,13 +11,32 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient()
 
-    const [agentsRes, itemsRes, completionsRes, adminTasksRes, adminCompletionsRes] = await Promise.all([
-      supabase.from('users').select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, status, full_nav_access, onboarding_fee_paid, accepted_trec, independent_contractor_agreement_signed, w9_completed').eq('status', 'active').order('first_name'),
-      supabase.from('onboarding_checklist_items').select('id, section, section_title, item_key, label, priority, display_order').eq('is_active', true).order('display_order'),
-      supabase.from('onboarding_checklist_completions').select('user_id, checklist_item_id, completed_at, completed_by'),
-      supabase.from('onboarding_admin_tasks').select('id, label, display_order').eq('is_active', true).order('display_order'),
-      supabase.from('onboarding_admin_task_completions').select('user_id, task_id, completed_at, completed_by, notes'),
-    ])
+    const [agentsRes, itemsRes, completionsRes, adminTasksRes, adminCompletionsRes] =
+      await Promise.all([
+        supabase
+          .from('users')
+          .select(
+            'id, first_name, last_name, preferred_first_name, preferred_last_name, email, status, full_nav_access, onboarding_fee_paid, accepted_trec, independent_contractor_agreement_signed, w9_completed'
+          )
+          .eq('status', 'active')
+          .order('first_name'),
+        supabase
+          .from('onboarding_checklist_items')
+          .select('id, section, section_title, item_key, label, priority, display_order')
+          .eq('is_active', true)
+          .order('display_order'),
+        supabase
+          .from('onboarding_checklist_completions')
+          .select('user_id, checklist_item_id, completed_at, completed_by'),
+        supabase
+          .from('onboarding_admin_tasks')
+          .select('id, label, display_order')
+          .eq('is_active', true)
+          .order('display_order'),
+        supabase
+          .from('onboarding_admin_task_completions')
+          .select('user_id, task_id, completed_at, completed_by, notes'),
+      ])
 
     return NextResponse.json({
       users: agentsRes.data || [],
@@ -47,9 +66,15 @@ export async function POST(request: NextRequest) {
     if (action === 'toggle_checklist') {
       const { user_id, checklist_item_id, completing } = body
       if (completing) {
-        await supabase.from('onboarding_checklist_completions').insert({ user_id, checklist_item_id, completed_by: adminId })
+        await supabase
+          .from('onboarding_checklist_completions')
+          .insert({ user_id, checklist_item_id, completed_by: adminId })
       } else {
-        await supabase.from('onboarding_checklist_completions').delete().eq('user_id', user_id).eq('checklist_item_id', checklist_item_id)
+        await supabase
+          .from('onboarding_checklist_completions')
+          .delete()
+          .eq('user_id', user_id)
+          .eq('checklist_item_id', checklist_item_id)
       }
       return NextResponse.json({ success: true })
     }
@@ -58,9 +83,15 @@ export async function POST(request: NextRequest) {
     if (action === 'toggle_admin_task') {
       const { user_id, task_id, completing } = body
       if (completing) {
-        await supabase.from('onboarding_admin_task_completions').insert({ user_id, task_id, completed_by: adminId })
+        await supabase
+          .from('onboarding_admin_task_completions')
+          .insert({ user_id, task_id, completed_by: adminId })
       } else {
-        await supabase.from('onboarding_admin_task_completions').delete().eq('user_id', user_id).eq('task_id', task_id)
+        await supabase
+          .from('onboarding_admin_task_completions')
+          .delete()
+          .eq('user_id', user_id)
+          .eq('task_id', task_id)
       }
       return NextResponse.json({ success: true })
     }
@@ -68,7 +99,11 @@ export async function POST(request: NextRequest) {
     // Page sends: update_task_notes, { user_id, task_id, notes }
     if (action === 'update_task_notes') {
       const { user_id, task_id, notes } = body
-      await supabase.from('onboarding_admin_task_completions').update({ notes }).eq('user_id', user_id).eq('task_id', task_id)
+      await supabase
+        .from('onboarding_admin_task_completions')
+        .update({ notes })
+        .eq('user_id', user_id)
+        .eq('task_id', task_id)
       return NextResponse.json({ success: true })
     }
 

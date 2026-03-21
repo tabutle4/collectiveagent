@@ -9,13 +9,13 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 /**
  * FROM Email Addresses - Different addresses for different purposes
  * All use the verified domain: coachingbrokeragetools.com
- * 
+ *
  * - onboarding: New agent welcome emails
  * - support: Password resets, help emails
  * - notifications: Admin notifications, system alerts
  * - office: Official communications from office
  * - admin: Admin-specific emails
- * 
+ *
  * To add new addresses, just add them here. No need to verify each one individually
  * in Resend - as long as the domain is verified, any address works.
  */
@@ -101,14 +101,10 @@ export async function sendProspectWelcomeEmail(prospect: {
     html,
   })
 }
-export async function sendPasswordResetEmail(
-  email: string,
-  resetToken: string,
-  userName: string
-) {
+export async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const resetUrl = `${appUrl}/auth/reset-password?token=${resetToken}`
-  
+
   const html = getLuxuryEmailTemplate({
     greeting: `Hi ${userName},`,
     content: `
@@ -434,7 +430,7 @@ export async function sendContactEmail({
       
       <div class="section-box">
         <h3 style="margin-top: 0; color: #000;">YOUR MESSAGE</h3>
-        ${subject ? `<p style="margin-bottom: 10px; font-weight: bold; color: #333;">Subject: ${subject}</p>` : ""}
+        ${subject ? `<p style="margin-bottom: 10px; font-weight: bold; color: #333;">Subject: ${subject}</p>` : ''}
         <div style="background: #f8f8f8; padding: 15px; border-left: 3px solid #C9A961; margin-top: 10px;">
           <p style="margin: 0; color: #333; white-space: pre-wrap;">${message}</p>
         </div>
@@ -471,8 +467,11 @@ export async function sendFormSubmissionNotification({
   notificationEmail: string
 }) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const submissionDate = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
-  
+  const submissionDate = new Date().toLocaleString('en-US', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  })
+
   // Format field labels and values
   const formatFieldLabel = (key: string): string => {
     return key
@@ -480,7 +479,7 @@ export async function sendFormSubmissionNotification({
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ')
   }
-  
+
   const formatFieldValue = (value: any): string => {
     if (value === null || value === undefined || value === '') {
       return 'N/A'
@@ -493,10 +492,22 @@ export async function sendFormSubmissionNotification({
     }
     return String(value)
   }
-  
+
   // Build form fields HTML
   const fieldsHtml = Object.entries(submissionData)
-    .filter(([key]) => !['id', 'created_at', 'updated_at', 'formType', 'form_type', 'listing_id', 'user_id', 'agent_id'].includes(key))
+    .filter(
+      ([key]) =>
+        ![
+          'id',
+          'created_at',
+          'updated_at',
+          'formType',
+          'form_type',
+          'listing_id',
+          'user_id',
+          'agent_id',
+        ].includes(key)
+    )
     .map(([key, value]) => {
       const label = formatFieldLabel(key)
       const formattedValue = formatFieldValue(value)
@@ -508,11 +519,11 @@ export async function sendFormSubmissionNotification({
       `
     })
     .join('')
-  
-  const viewResponseLink = responseId 
+
+  const viewResponseLink = responseId
     ? `${appUrl}/admin/form-responses?tab=${formType === 'pre-listing' ? 'pre-listing' : formType === 'just-listed' ? 'just-listed' : 'prospects'}`
     : null
-  
+
   const html = getLuxuryEmailTemplate({
     greeting: 'New Form Submission',
     content: `
@@ -527,11 +538,15 @@ export async function sendFormSubmissionNotification({
         ${fieldsHtml}
       </div>
       
-      ${viewResponseLink ? `
+      ${
+        viewResponseLink
+          ? `
         <div style="text-align: center; margin: 30px 0;">
           <a href="${viewResponseLink}" class="btn btn-black">View Response in Dashboard</a>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     `,
     closing: `
       <p style="text-align: center; color: #666; font-size: 14px; font-style: italic;">Collective Realty Co. Form Notification</p>

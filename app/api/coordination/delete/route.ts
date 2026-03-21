@@ -26,10 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Check role (simple string, not array)
     if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get coordination and listing before deletion to archive the OneDrive folder
@@ -39,7 +36,11 @@ export async function POST(request: NextRequest) {
         const listing = await getListingById(coordination.listing_id)
         if (listing) {
           // Archive the OneDrive folder before deleting the coordination
-          await archiveListingFolder(listing.property_address, listing.id, listing.transaction_type || 'sale')
+          await archiveListingFolder(
+            listing.property_address,
+            listing.id,
+            listing.transaction_type || 'sale'
+          )
         }
       } catch (error) {
         console.error('Error archiving OneDrive folder:', error)
@@ -48,10 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete related email history first (cascade)
-    await supabase
-      .from('coordination_email_history')
-      .delete()
-      .eq('coordination_id', coordinationId)
+    await supabase.from('coordination_email_history').delete().eq('coordination_id', coordinationId)
 
     // Delete related weekly reports (cascade)
     await supabase
@@ -67,17 +65,13 @@ export async function POST(request: NextRequest) {
 
     if (deleteError) {
       console.error('Error deleting coordination:', deleteError)
-      return NextResponse.json(
-        { error: 'Failed to delete coordination' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to delete coordination' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Coordination and OneDrive folder archived successfully'
+      message: 'Coordination and OneDrive folder archived successfully',
     })
-
   } catch (error: any) {
     console.error('Error in delete coordination API:', error)
     return NextResponse.json(
@@ -86,4 +80,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

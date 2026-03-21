@@ -1,6 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose'
-
-const SESSION_DURATION = 8 * 60 * 60 // 8 hours in seconds
+import { SESSION_DURATION_SECONDS } from '@/lib/constants'
 
 export interface SessionUser {
   id: string
@@ -24,7 +23,7 @@ export async function createSessionToken(user: SessionUser, sessionId: string): 
   return new SignJWT({ user, sessionId })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_DURATION}s`)
+    .setExpirationTime(`${SESSION_DURATION_SECONDS}s`)
     .sign(secret)
 }
 
@@ -46,8 +45,8 @@ export function getSessionCookieOptions() {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax' as const,
-      maxAge: SESSION_DURATION,
+      maxAge: SESSION_DURATION_SECONDS,
       path: '/',
-    }
+    },
   }
 }

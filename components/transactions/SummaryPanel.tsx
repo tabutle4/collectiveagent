@@ -18,9 +18,19 @@ interface SummaryPanelProps {
 }
 
 export default function SummaryPanel({
-  typeName, typeId, isLease, propertyAddress, clientName,
-  salesPrice, monthlyRent, commissionRate, closingDate, moveInDate,
-  expediteRequested, processingFee, onClose,
+  typeName,
+  typeId,
+  isLease,
+  propertyAddress,
+  clientName,
+  salesPrice,
+  monthlyRent,
+  commissionRate,
+  closingDate,
+  moveInDate,
+  expediteRequested,
+  processingFee,
+  onClose,
 }: SummaryPanelProps) {
   const priceValue = isLease ? monthlyRent : salesPrice
   const dateValue = isLease ? moveInDate : closingDate
@@ -30,7 +40,10 @@ export default function SummaryPanel({
       <div className="flex items-center justify-between mb-4">
         <h2 className="section-title mb-0">Summary</h2>
         {onClose && (
-          <button onClick={onClose} className="lg:hidden text-luxury-gray-3 hover:text-luxury-gray-1">
+          <button
+            onClick={onClose}
+            className="lg:hidden text-luxury-gray-3 hover:text-luxury-gray-1"
+          >
             <X size={16} />
           </button>
         )}

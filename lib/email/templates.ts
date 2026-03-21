@@ -11,13 +11,17 @@ export function getWelcomeEmailHtml(
   scheduledTime?: Date | string | null
 ): string {
   const magicLink = getMagicLinkUrl(coordination.seller_magic_link!)
-  
+
   let scheduleText = 'every Monday at 6:00 PM'
   if (scheduledTime) {
     const scheduleDate = typeof scheduledTime === 'string' ? new Date(scheduledTime) : scheduledTime
     if (!isNaN(scheduleDate.getTime())) {
       const dayOfWeek = scheduleDate.toLocaleDateString('en-US', { weekday: 'long' })
-      const time = scheduleDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      const time = scheduleDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
       scheduleText = `every ${dayOfWeek} at ${time}`
     }
   }
@@ -29,22 +33,30 @@ export function getWelcomeEmailHtml(
     
     <p>We're excited to keep you informed every step of the way as we market your home.</p>
     
-    ${emailSection('What to Expect', `
+    ${emailSection(
+      'What to Expect',
+      `
       <ul>
         <li>Weekly email updates ${scheduleText}</li>
         <li>Showing activity and agent feedback</li>
         <li>MLS property views and engagement</li>
         <li>Your listing featured in our weekly email to 7,000+ buyers and agents</li>
       </ul>
-    `)}
+    `
+    )}
     
-    ${emailSection('Your Listing Dashboard', `
+    ${emailSection(
+      'Your Listing Dashboard',
+      `
       <p>Access your personalized dashboard anytime to view all reports, showing history, and listing details:</p>
       ${emailButton('Access Your Dashboard', magicLink)}
       <p style="font-size: 11px; text-align: center; color: #888;">Bookmark this link for easy access to your reports anytime.</p>
-    `)}
+    `
+    )}
     
-    ${emailSection('Your Team', `
+    ${emailSection(
+      'Your Team',
+      `
       <p><strong>Listing Agent:</strong><br>
       ${agentName}<br>
       ${agentEmail}<br>
@@ -54,7 +66,8 @@ export function getWelcomeEmailHtml(
       Leah Parpan<br>
       transactions@coachingbrokeragetools.com<br>
       (281) 638-9416</p>
-    `)}
+    `
+    )}
     
     <p>If you have any questions, feel free to reach out to your listing agent or our coordination team.</p>
     
@@ -78,12 +91,18 @@ export function getWeeklyReportEmailHtml(
 ): string {
   const magicLink = getMagicLinkUrl(coordination.seller_magic_link!)
 
-  const reportButtons = (reportDownloadUrl1 || reportDownloadUrl2) ? emailSection('This Week\'s Reports', `
+  const reportButtons =
+    reportDownloadUrl1 || reportDownloadUrl2
+      ? emailSection(
+          "This Week's Reports",
+          `
     <p style="text-align: center;">
       ${reportDownloadUrl1 ? `<a href="${reportDownloadUrl1}" class="email-btn" style="margin: 5px;">Download Showing Report</a>` : ''}
       ${reportDownloadUrl2 ? `<a href="${reportDownloadUrl2}" class="email-btn" style="margin: 5px;">Download Traffic Report</a>` : ''}
     </p>
-  `) : ''
+  `
+        )
+      : ''
 
   const content = `
     <p class="email-greeting">Hi ${coordination.seller_name},</p>
@@ -92,11 +111,14 @@ export function getWeeklyReportEmailHtml(
     
     ${reportButtons}
     
-    ${emailSection('Your Dashboard', `
+    ${emailSection(
+      'Your Dashboard',
+      `
       <p>View all your reports and listing details anytime:</p>
       ${emailButton('Your Listing Dashboard', magicLink)}
       <p style="font-size: 11px; text-align: center; color: #888;">This link remains active as long as your listing coordination service is active.</p>
-    `)}
+    `
+    )}
     
     <p>If you have any questions about this week's activity or your listing, please don't hesitate to reach out to your listing agent.</p>
     

@@ -20,28 +20,30 @@ export async function GET(request: NextRequest) {
 
     const res = await fetch(
       `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=paid&limit=20`,
-      { headers: { 'Authorization': authHeader() } }
+      { headers: { Authorization: authHeader() } }
     )
 
     if (!res.ok) return NextResponse.json({ receipts: [] })
 
     const data = await res.json()
 
-    const receipts = await Promise.all((data.values || []).map(async (inv: any) => {
-      const { data: pl } = await supabase
-        .from('payment_links')
-        .select('url')
-        .eq('invoice_id', inv.id)
-        .single()
+    const receipts = await Promise.all(
+      (data.values || []).map(async (inv: any) => {
+        const { data: pl } = await supabase
+          .from('payment_links')
+          .select('url')
+          .eq('invoice_id', inv.id)
+          .single()
 
-      return {
-        id: inv.id,
-        amount: parseFloat(inv.total_paid) || 0,
-        paid_at: inv.paid_timestamp || inv.modified_at || null,
-        description: inv.items?.[0]?.type || 'Payment',
-        url: pl?.url || null,
-      }
-    }))
+        return {
+          id: inv.id,
+          amount: parseFloat(inv.total_paid) || 0,
+          paid_at: inv.paid_timestamp || inv.modified_at || null,
+          description: inv.items?.[0]?.type || 'Payment',
+          url: pl?.url || null,
+        }
+      })
+    )
 
     return NextResponse.json({ receipts })
   } catch (error: any) {

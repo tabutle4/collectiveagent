@@ -6,10 +6,28 @@ import { supabase } from '@/lib/supabase'
 
 type GoalMetric = 'volume' | 'units' | 'agent_net'
 
-const METRICS: { key: GoalMetric; label: string; shortLabel: string; icon: any; goalField: string }[] = [
-  { key: 'volume', label: 'Sales Volume', shortLabel: 'Volume', icon: TrendingUp, goalField: 'sales_volume_goal' },
+const METRICS: {
+  key: GoalMetric
+  label: string
+  shortLabel: string
+  icon: any
+  goalField: string
+}[] = [
+  {
+    key: 'volume',
+    label: 'Sales Volume',
+    shortLabel: 'Volume',
+    icon: TrendingUp,
+    goalField: 'sales_volume_goal',
+  },
   { key: 'units', label: 'Units Closed', shortLabel: 'Units', icon: Hash, goalField: 'units_goal' },
-  { key: 'agent_net', label: 'Agent Net', shortLabel: 'Net', icon: DollarSign, goalField: 'agent_net_goal' },
+  {
+    key: 'agent_net',
+    label: 'Agent Net',
+    shortLabel: 'Net',
+    icon: DollarSign,
+    goalField: 'agent_net_goal',
+  },
 ]
 
 interface SalesGoalWidgetProps {
@@ -30,15 +48,28 @@ interface SalesGoalWidgetProps {
 }
 
 export default function SalesGoalWidget({
-  userId, volume, units, agentNet, goals, activeGoals,
-  closedCount, pendingCount, capProgress, capAmount, hasCap,
-  qualifyingCount, commissionPlan, onUpdate,
+  userId,
+  volume,
+  units,
+  agentNet,
+  goals,
+  activeGoals,
+  closedCount,
+  pendingCount,
+  capProgress,
+  capAmount,
+  hasCap,
+  qualifyingCount,
+  commissionPlan,
+  onUpdate,
 }: SalesGoalWidgetProps) {
   const [editingGoal, setEditingGoal] = useState<GoalMetric | null>(null)
   const [goalInput, setGoalInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [localActiveGoals, setLocalActiveGoals] = useState<GoalMetric[]>(activeGoals.length > 0 ? activeGoals : ['volume', 'agent_net'])
+  const [localActiveGoals, setLocalActiveGoals] = useState<GoalMetric[]>(
+    activeGoals.length > 0 ? activeGoals : ['volume', 'agent_net']
+  )
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -67,14 +98,21 @@ export default function SalesGoalWidget({
     setSaving(true)
     const goalField = METRICS.find(m => m.key === metric)?.goalField || 'sales_volume_goal'
     try {
-      await supabase.from('users').update({ [goalField]: parsed }).eq('id', userId)
+      await supabase
+        .from('users')
+        .update({ [goalField]: parsed })
+        .eq('id', userId)
       setEditingGoal(null)
       onUpdate?.()
-    } catch (error) { console.error('Error saving goal:', error) }
-    finally { setSaving(false) }
+    } catch (error) {
+      console.error('Error saving goal:', error)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const getValue = (metric: GoalMetric) => metric === 'volume' ? volume : metric === 'units' ? units : agentNet
+  const getValue = (metric: GoalMetric) =>
+    metric === 'volume' ? volume : metric === 'units' ? units : agentNet
   const getGoal = (metric: GoalMetric) => goals[metric] || 0
   const isCurrency = (metric: GoalMetric) => metric !== 'units'
 
@@ -87,7 +125,12 @@ export default function SalesGoalWidget({
 
   const formatFull = (amount: number, currency: boolean) => {
     if (!currency) return amount.toLocaleString()
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)
   }
 
   return (
@@ -95,7 +138,10 @@ export default function SalesGoalWidget({
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h2 className="section-title mb-0">My Goals</h2>
-        <button onClick={() => setShowSettings(!showSettings)} className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+        >
           <Settings size={16} />
         </button>
       </div>
@@ -103,11 +149,18 @@ export default function SalesGoalWidget({
       {/* Settings */}
       {showSettings && (
         <div className="inner-card mb-5">
-          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Choose which goals to display:</p>
+          <p className="text-xs font-semibold text-luxury-gray-2 mb-3">
+            Choose which goals to display:
+          </p>
           <div className="flex flex-wrap gap-3">
             {METRICS.map(m => (
               <label key={m.key} className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={localActiveGoals.includes(m.key)} onChange={() => toggleGoal(m.key)} className="w-4 h-4" />
+                <input
+                  type="checkbox"
+                  checked={localActiveGoals.includes(m.key)}
+                  onChange={() => toggleGoal(m.key)}
+                  className="w-4 h-4"
+                />
                 <span className="text-xs text-luxury-gray-2">{m.label}</span>
               </label>
             ))}
@@ -116,7 +169,9 @@ export default function SalesGoalWidget({
       )}
 
       {/* Goal Rings - always in one row */}
-      <div className={`grid gap-4 ${localActiveGoals.length === 1 ? 'grid-cols-1 max-w-xs mx-auto' : localActiveGoals.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      <div
+        className={`grid gap-4 ${localActiveGoals.length === 1 ? 'grid-cols-1 max-w-xs mx-auto' : localActiveGoals.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}
+      >
         {localActiveGoals.map(metric => {
           const metricInfo = METRICS.find(m => m.key === metric)!
           const Icon = metricInfo.icon
@@ -129,40 +184,79 @@ export default function SalesGoalWidget({
 
           return (
             <div key={metric} className="flex flex-col items-center">
-              <GoalRing percentage={percentage} isComplete={isComplete} goal={goal} count={localActiveGoals.length} />
+              <GoalRing
+                percentage={percentage}
+                isComplete={isComplete}
+                goal={goal}
+                count={localActiveGoals.length}
+              />
 
               {/* Label */}
               <div className="flex items-center gap-1 mt-2 mb-0.5">
                 <Icon size={12} className="text-luxury-accent" />
-                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest hidden sm:inline">{metricInfo.label}</span>
-                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest sm:hidden">{metricInfo.shortLabel}</span>
+                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest hidden sm:inline">
+                  {metricInfo.label}
+                </span>
+                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest sm:hidden">
+                  {metricInfo.shortLabel}
+                </span>
               </div>
 
               {/* Current value */}
-              <p className="text-sm sm:text-lg font-bold text-luxury-gray-1">{formatFull(current, currency)}</p>
+              <p className="text-sm sm:text-lg font-bold text-luxury-gray-1">
+                {formatFull(current, currency)}
+              </p>
 
               {/* Editable goal */}
               <div className="mt-1">
                 {editingGoal === metric ? (
                   <div className="flex items-center gap-1">
                     <span className="text-xs text-luxury-gray-3">{currency ? '$' : ''}</span>
-                    <input ref={inputRef} className="input-luxury w-20 sm:w-28 text-xs" value={goalInput}
-                      onChange={(e) => setGoalInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveGoal(metric); if (e.key === 'Escape') setEditingGoal(null) }}
-                      placeholder={currency ? '1,000,000' : '25'} />
-                    <button onClick={() => handleSaveGoal(metric)} disabled={saving} className="text-green-600 hover:text-green-700"><Check size={14} /></button>
+                    <input
+                      ref={inputRef}
+                      className="input-luxury w-20 sm:w-28 text-xs"
+                      value={goalInput}
+                      onChange={e => setGoalInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleSaveGoal(metric)
+                        if (e.key === 'Escape') setEditingGoal(null)
+                      }}
+                      placeholder={currency ? '1,000,000' : '25'}
+                    />
+                    <button
+                      onClick={() => handleSaveGoal(metric)}
+                      disabled={saving}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <Check size={14} />
+                    </button>
                   </div>
                 ) : (
-                  <button onClick={() => { setGoalInput(goal > 0 ? goal.toString() : ''); setEditingGoal(metric) }}
-                    className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors group">
-                    <span>Goal: <span className="font-medium text-luxury-gray-2">{goal > 0 ? formatFull(goal, currency) : 'Set goal'}</span></span>
-                    <Pencil size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <button
+                    onClick={() => {
+                      setGoalInput(goal > 0 ? goal.toString() : '')
+                      setEditingGoal(metric)
+                    }}
+                    className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors group"
+                  >
+                    <span>
+                      Goal:{' '}
+                      <span className="font-medium text-luxury-gray-2">
+                        {goal > 0 ? formatFull(goal, currency) : 'Set goal'}
+                      </span>
+                    </span>
+                    <Pencil
+                      size={10}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    />
                   </button>
                 )}
               </div>
 
               {goal > 0 && !isComplete && (
-                <p className="text-xs text-luxury-gray-3 mt-0.5">{formatValue(remaining, currency)} left</p>
+                <p className="text-xs text-luxury-gray-3 mt-0.5">
+                  {formatValue(remaining, currency)} left
+                </p>
               )}
             </div>
           )
@@ -181,7 +275,9 @@ export default function SalesGoalWidget({
         </div>
         {hasCap && capAmount && capAmount > 0 && (
           <div className="text-center">
-            <p className="text-lg font-bold text-luxury-gray-1">{formatValue(capProgress || 0, true)}</p>
+            <p className="text-lg font-bold text-luxury-gray-1">
+              {formatValue(capProgress || 0, true)}
+            </p>
             <p className="text-xs text-luxury-gray-3">of {formatValue(capAmount, true)} Cap</p>
           </div>
         )}
@@ -196,7 +292,17 @@ export default function SalesGoalWidget({
   )
 }
 
-function GoalRing({ percentage, isComplete, goal, count }: { percentage: number; isComplete: boolean; goal: number; count: number }) {
+function GoalRing({
+  percentage,
+  isComplete,
+  goal,
+  count,
+}: {
+  percentage: number
+  isComplete: boolean
+  goal: number
+  count: number
+}) {
   const [animatedPercent, setAnimatedPercent] = useState(0)
 
   useEffect(() => {
@@ -215,22 +321,40 @@ function GoalRing({ percentage, isComplete, goal, count }: { percentage: number;
   return (
     <div className="relative">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E5E5E5" strokeWidth={strokeWidth} />
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none"
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#E5E5E5"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
           stroke={isComplete ? '#22C55E' : 'var(--accent-color, #C5A278)'}
-          strokeWidth={strokeWidth} strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={strokeDashoffset}
-          style={{ transition: 'stroke-dashoffset 1.2s ease-out' }} />
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          style={{ transition: 'stroke-dashoffset 1.2s ease-out' }}
+        />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {isComplete ? (
           <>
             <Trophy size={count >= 3 ? 16 : 20} className="text-green-500 mb-0.5" />
-            <p className={`font-bold text-green-600 ${count >= 3 ? 'text-xs' : 'text-sm'}`}>Done!</p>
+            <p className={`font-bold text-green-600 ${count >= 3 ? 'text-xs' : 'text-sm'}`}>
+              Done!
+            </p>
           </>
         ) : goal > 0 ? (
           <>
-            <p className={`font-bold text-luxury-gray-1 ${count >= 3 ? 'text-lg' : 'text-xl'}`}>{Math.round(percentage)}%</p>
+            <p className={`font-bold text-luxury-gray-1 ${count >= 3 ? 'text-lg' : 'text-xl'}`}>
+              {Math.round(percentage)}%
+            </p>
             <p className="text-xs text-luxury-gray-3">of goal</p>
           </>
         ) : (

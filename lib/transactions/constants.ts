@@ -17,7 +17,7 @@ export const CONTACT_TYPES = [
   { value: 'coop_broker', label: 'Co-op Broker' },
 ] as const
 
-export type ContactType = typeof CONTACT_TYPES[number]['value']
+export type ContactType = (typeof CONTACT_TYPES)[number]['value']
 
 // ===== Referral Types =====
 export const REFERRAL_TYPES = [
@@ -175,15 +175,78 @@ export interface LegacySlideConfig {
 }
 
 export const CREATION_SLIDES: LegacySlideConfig[] = [
-  { id: 'type', title: 'Transaction Type', description: 'Select the type of transaction', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'property', title: 'Property Details', description: 'Property address and MLS info', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'client', title: 'Client Information', description: 'Client name, email, and phone', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'financials', title: 'Financial Details', description: 'Price, commission, and fees', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'dates', title: 'Key Dates', description: 'Closing date, move-in date, lease term', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'details', title: 'Additional Details', description: 'Representation, referrals, expedite', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'title_info', title: 'Title Information', description: 'Title company and officer', requiredForCompliance: true, showForLeases: false, showForSales: true },
-  { id: 'documents', title: 'Documents', description: 'Upload required documents', requiredForCompliance: true, showForLeases: true, showForSales: true },
-  { id: 'review', title: 'Review & Submit', description: 'Review and save or submit', requiredForCompliance: false, showForLeases: true, showForSales: true },
+  {
+    id: 'type',
+    title: 'Transaction Type',
+    description: 'Select the type of transaction',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'property',
+    title: 'Property Details',
+    description: 'Property address and MLS info',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'client',
+    title: 'Client Information',
+    description: 'Client name, email, and phone',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'financials',
+    title: 'Financial Details',
+    description: 'Price, commission, and fees',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'dates',
+    title: 'Key Dates',
+    description: 'Closing date, move-in date, lease term',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'details',
+    title: 'Additional Details',
+    description: 'Representation, referrals, expedite',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'title_info',
+    title: 'Title Information',
+    description: 'Title company and officer',
+    requiredForCompliance: true,
+    showForLeases: false,
+    showForSales: true,
+  },
+  {
+    id: 'documents',
+    title: 'Documents',
+    description: 'Upload required documents',
+    requiredForCompliance: true,
+    showForLeases: true,
+    showForSales: true,
+  },
+  {
+    id: 'review',
+    title: 'Review & Submit',
+    description: 'Review and save or submit',
+    requiredForCompliance: false,
+    showForLeases: true,
+    showForSales: true,
+  },
 ]
 
 // ===== Status Groups (for filtering) =====
@@ -199,6 +262,13 @@ export const STATUS_GROUPS = {
 // ===== Auto-fill fields from agent profile =====
 
 export const AGENT_AUTOFILL_FIELDS = [
-  'preferred_first_name', 'preferred_last_name', 'email', 'office',
-  'team_name', 'team_lead', 'commission_plan', 'license_number', 'division',
+  'preferred_first_name',
+  'preferred_last_name',
+  'email',
+  'office',
+  'team_name',
+  'team_lead',
+  'commission_plan',
+  'license_number',
+  'division',
 ] as const

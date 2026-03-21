@@ -16,12 +16,16 @@ export async function GET(request: NextRequest) {
     const [userRes, txnRes, agentRowsRes] = await Promise.all([
       supabase
         .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, commission_plan, cap_progress, qualifying_transaction_count, sales_volume_goal, units_goal, agent_net_goal, active_goals, division, monthly_fee_paid_through, full_nav_access')
+        .select(
+          'id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, commission_plan, cap_progress, qualifying_transaction_count, sales_volume_goal, units_goal, agent_net_goal, active_goals, division, monthly_fee_paid_through, full_nav_access'
+        )
         .eq('id', userId)
         .single(),
       supabase
         .from('transactions')
-        .select('id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date')
+        .select(
+          'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date'
+        )
         .eq('submitted_by', userId)
         .order('updated_at', { ascending: false }),
       supabase
@@ -38,7 +42,9 @@ export async function GET(request: NextRequest) {
     if (user?.commission_plan) {
       const { data: plan } = await supabase
         .from('commission_plans')
-        .select('id, name, has_cap, cap_amount, agent_split_percentage, firm_split_percentage, post_cap_agent_split, min_transactions_to_upgrade')
+        .select(
+          'id, name, has_cap, cap_amount, agent_split_percentage, firm_split_percentage, post_cap_agent_split, min_transactions_to_upgrade'
+        )
         .eq('name', user.commission_plan)
         .eq('is_active', true)
         .single()

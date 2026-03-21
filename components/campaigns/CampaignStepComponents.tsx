@@ -7,16 +7,16 @@ import React from 'react'
 // Helper to render markdown-like text (bold, links)
 function renderMarkdownText(text: string) {
   if (!text) return ''
-  
+
   // Split by markdown patterns
   const parts: (string | React.ReactElement)[] = []
   let lastIndex = 0
   let key = 0
-  
+
   // Handle **bold**
   const boldRegex = /\*\*(.*?)\*\*/g
   let match
-  
+
   while ((match = boldRegex.exec(text)) !== null) {
     // Add text before match
     if (match.index > lastIndex) {
@@ -26,17 +26,17 @@ function renderMarkdownText(text: string) {
     parts.push(<strong key={key++}>{match[1]}</strong>)
     lastIndex = match.index + match[0].length
   }
-  
+
   // Add remaining text
   if (lastIndex < text.length) {
     parts.push(text.substring(lastIndex))
   }
-  
+
   // Handle links [text](url)
   const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
   const processedParts: (string | React.ReactElement)[] = []
-  
-  parts.forEach((part) => {
+
+  parts.forEach(part => {
     if (typeof part === 'string') {
       let partLastIndex = 0
       let partMatch
@@ -64,7 +64,7 @@ function renderMarkdownText(text: string) {
       processedParts.push(part)
     }
   })
-  
+
   return processedParts.length > 0 ? processedParts : text
 }
 
@@ -87,24 +87,32 @@ export function InfoStep({
   buttonText?: string
 }) {
   const content = step.content || {}
-  const greeting = content.greeting?.replace('{first_name}', userData.preferred_first_name || userData.first_name || '') || ''
-  
+  const greeting =
+    content.greeting?.replace(
+      '{first_name}',
+      userData.preferred_first_name || userData.first_name || ''
+    ) || ''
+
   return (
     <div className="card-section">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
-        <div style={{ 
-          marginTop: '-24px',
-          marginLeft: '-24px',
-          marginRight: '-24px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ 
-            height: '4px',
-            backgroundColor: '#f5f5f4',
-            borderTopLeftRadius: '8px',
-            borderTopRightRadius: '8px'
-          }}>
+        <div
+          style={{
+            marginTop: '-24px',
+            marginLeft: '-24px',
+            marginRight: '-24px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              height: '4px',
+              backgroundColor: '#f5f5f4',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+            }}
+          >
             <div className="h-full flex">
               {Array.from({ length: totalSteps }).map((_, idx) => (
                 <div
@@ -113,7 +121,7 @@ export function InfoStep({
                     idx + 1 <= currentStep ? 'bg-luxury-gold' : 'bg-luxury-gray-5'
                   }`}
                   style={{
-                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none',
                   }}
                 />
               ))}
@@ -124,18 +132,16 @@ export function InfoStep({
           </p>
         </div>
       )}
-      
-      <h2 className="text-2xl font-light mb-6 tracking-luxury">
-        {step.title}
-      </h2>
-      
+
+      <h2 className="text-2xl font-light mb-6 tracking-luxury">{step.title}</h2>
+
       <div className="space-y-6 text-base">
         {greeting && (
           <div>
             <p className="text-luxury-gray-1 mb-3">{greeting}</p>
           </div>
         )}
-        
+
         {content.sections?.map((section: any, sectionIdx: number) => (
           <div key={sectionIdx}>
             <h3 className="font-medium mb-3">{section.heading}</h3>
@@ -160,14 +166,14 @@ export function InfoStep({
 
       <div className="mt-8 flex justify-center gap-4">
         {currentStep > 1 && (
-          <button 
+          <button
             onClick={onBack}
             className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
           >
             ← Back
           </button>
         )}
-        <button 
+        <button
           onClick={onNext}
           className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
         >
@@ -200,7 +206,7 @@ export function ProfileStep({
 }) {
   const content = step.content || {}
   const fields = content.fields || []
-  
+
   const fieldLabels: Record<string, string> = {
     first_name: 'First Name',
     last_name: 'Last Name',
@@ -228,12 +234,27 @@ export function ProfileStep({
     commission_plan: 'Commission Plan',
     commission_plan_other: 'Commission Plan Other',
   }
-  
-  const requiredFields = ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name', 'personal_email', 'personal_phone', 'business_phone', 'date_of_birth', 'shirt_type', 'shirt_size', 'shipping_address_line1', 'shipping_city', 'shipping_state', 'shipping_zip']
-  
+
+  const requiredFields = [
+    'first_name',
+    'last_name',
+    'preferred_first_name',
+    'preferred_last_name',
+    'personal_email',
+    'personal_phone',
+    'business_phone',
+    'date_of_birth',
+    'shirt_type',
+    'shirt_size',
+    'shipping_address_line1',
+    'shipping_city',
+    'shipping_state',
+    'shipping_zip',
+  ]
+
   const renderField = (fieldKey: string) => {
     const isRequired = requiredFields.includes(fieldKey)
-    
+
     if (fieldKey === 'commission_plan') {
       return (
         <div key={fieldKey}>
@@ -242,7 +263,7 @@ export function ProfileStep({
           </label>
           <select
             value={profileData[fieldKey] || ''}
-            onChange={(e) => setProfileData({...profileData, [fieldKey]: e.target.value})}
+            onChange={e => setProfileData({ ...profileData, [fieldKey]: e.target.value })}
             className="select-luxury"
             required={isRequired}
           >
@@ -256,7 +277,7 @@ export function ProfileStep({
         </div>
       )
     }
-    
+
     if (fieldKey === 'shirt_type') {
       return (
         <div key={fieldKey}>
@@ -265,7 +286,7 @@ export function ProfileStep({
           </label>
           <select
             value={profileData[fieldKey] || ''}
-            onChange={(e) => setProfileData({...profileData, [fieldKey]: e.target.value})}
+            onChange={e => setProfileData({ ...profileData, [fieldKey]: e.target.value })}
             className="select-luxury"
             required={isRequired}
           >
@@ -276,7 +297,7 @@ export function ProfileStep({
         </div>
       )
     }
-    
+
     if (fieldKey === 'date_of_birth') {
       return (
         <div key={fieldKey}>
@@ -286,14 +307,14 @@ export function ProfileStep({
           <input
             type="date"
             value={profileData[fieldKey] || ''}
-            onChange={(e) => setProfileData({...profileData, [fieldKey]: e.target.value})}
+            onChange={e => setProfileData({ ...profileData, [fieldKey]: e.target.value })}
             className="input-luxury"
             required={isRequired}
           />
         </div>
       )
     }
-    
+
     if (fieldKey.includes('url') || fieldKey === 'personal_email' || fieldKey === 'office_email') {
       return (
         <div key={fieldKey}>
@@ -303,14 +324,14 @@ export function ProfileStep({
           <input
             type={fieldKey.includes('email') ? 'email' : 'url'}
             value={profileData[fieldKey] || ''}
-            onChange={(e) => setProfileData({...profileData, [fieldKey]: e.target.value})}
+            onChange={e => setProfileData({ ...profileData, [fieldKey]: e.target.value })}
             className="input-luxury"
             required={isRequired}
           />
         </div>
       )
     }
-    
+
     if (fieldKey.includes('phone')) {
       return (
         <div key={fieldKey}>
@@ -320,9 +341,9 @@ export function ProfileStep({
           <input
             type="tel"
             value={profileData[fieldKey] || ''}
-            onChange={(e) => {
+            onChange={e => {
               const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10)
-              setProfileData({...profileData, [fieldKey]: digitsOnly})
+              setProfileData({ ...profileData, [fieldKey]: digitsOnly })
             }}
             className="input-luxury"
             required={isRequired}
@@ -330,7 +351,7 @@ export function ProfileStep({
         </div>
       )
     }
-    
+
     // Default text input
     return (
       <div key={fieldKey}>
@@ -340,13 +361,13 @@ export function ProfileStep({
         <input
           type="text"
           value={profileData[fieldKey] || ''}
-          onChange={(e) => {
+          onChange={e => {
             const value = e.target.value
-            setProfileData({...profileData, [fieldKey]: value})
+            setProfileData({ ...profileData, [fieldKey]: value })
           }}
-          onBlur={(e) => {
+          onBlur={e => {
             if (fieldKey.includes('name')) {
-              setProfileData({...profileData, [fieldKey]: formatNameToTitleCase(e.target.value)})
+              setProfileData({ ...profileData, [fieldKey]: formatNameToTitleCase(e.target.value) })
             }
           }}
           className="input-luxury"
@@ -355,44 +376,67 @@ export function ProfileStep({
       </div>
     )
   }
-  
+
   // Group fields into sections
-  const personalFields = fields.filter((f: string) => 
-    ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name', 'personal_email', 'office_email', 'personal_phone', 'business_phone', 'date_of_birth', 'birth_month'].includes(f)
+  const personalFields = fields.filter((f: string) =>
+    [
+      'first_name',
+      'last_name',
+      'preferred_first_name',
+      'preferred_last_name',
+      'personal_email',
+      'office_email',
+      'personal_phone',
+      'business_phone',
+      'date_of_birth',
+      'birth_month',
+    ].includes(f)
   )
-  const shippingFields = fields.filter((f: string) => 
-    f.startsWith('shipping_')
+  const shippingFields = fields.filter((f: string) => f.startsWith('shipping_'))
+  const shirtFields = fields.filter((f: string) => ['shirt_type', 'shirt_size'].includes(f))
+  const socialFields = fields.filter((f: string) =>
+    [
+      'instagram_handle',
+      'tiktok_handle',
+      'threads_handle',
+      'youtube_url',
+      'linkedin_url',
+      'facebook_url',
+    ].includes(f)
   )
-  const shirtFields = fields.filter((f: string) => 
-    ['shirt_type', 'shirt_size'].includes(f)
-  )
-  const socialFields = fields.filter((f: string) => 
-    ['instagram_handle', 'tiktok_handle', 'threads_handle', 'youtube_url', 'linkedin_url', 'facebook_url'].includes(f)
-  )
-  const commissionFields = fields.filter((f: string) => 
+  const commissionFields = fields.filter((f: string) =>
     ['commission_plan', 'commission_plan_other'].includes(f)
   )
-  const otherFields = fields.filter((f: string) => 
-    !personalFields.includes(f) && !shippingFields.includes(f) && !shirtFields.includes(f) && !socialFields.includes(f) && !commissionFields.includes(f)
+  const otherFields = fields.filter(
+    (f: string) =>
+      !personalFields.includes(f) &&
+      !shippingFields.includes(f) &&
+      !shirtFields.includes(f) &&
+      !socialFields.includes(f) &&
+      !commissionFields.includes(f)
   )
-  
+
   return (
     <div className="space-y-6">
       <div className="card-section">
         {/* Progress Bar */}
         {currentStep <= totalSteps && (
-          <div style={{ 
-            marginTop: '-24px',
-            marginLeft: '-24px',
-            marginRight: '-24px',
-            marginBottom: '16px'
-          }}>
-            <div style={{ 
-              height: '4px',
-              backgroundColor: '#f5f5f4',
-              borderTopLeftRadius: '8px',
-              borderTopRightRadius: '8px'
-            }}>
+          <div
+            style={{
+              marginTop: '-24px',
+              marginLeft: '-24px',
+              marginRight: '-24px',
+              marginBottom: '16px',
+            }}
+          >
+            <div
+              style={{
+                height: '4px',
+                backgroundColor: '#f5f5f4',
+                borderTopLeftRadius: '8px',
+                borderTopRightRadius: '8px',
+              }}
+            >
               <div className="h-full flex">
                 {Array.from({ length: totalSteps }).map((_, idx) => (
                   <div
@@ -401,7 +445,7 @@ export function ProfileStep({
                       idx + 1 <= currentStep ? 'bg-luxury-gold' : 'bg-luxury-gray-5'
                     }`}
                     style={{
-                      borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                      borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none',
                     }}
                   />
                 ))}
@@ -412,19 +456,15 @@ export function ProfileStep({
             </p>
           </div>
         )}
-        
-        <h2 className="text-2xl font-light mb-6 tracking-luxury">
-          {step.title}
-        </h2>
+
+        <h2 className="text-2xl font-light mb-6 tracking-luxury">{step.title}</h2>
 
         {personalFields.length > 0 && (
           <div className="mb-8">
             <h3 className="text-lg font-medium mb-4 pb-2 border-b border-luxury-gray-5">
               Personal Information
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {personalFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{personalFields.map(renderField)}</div>
           </div>
         )}
 
@@ -433,9 +473,7 @@ export function ProfileStep({
             <h3 className="text-lg font-medium mb-4 pb-2 border-b border-luxury-gray-5">
               Shirt Information
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {shirtFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{shirtFields.map(renderField)}</div>
           </div>
         )}
 
@@ -444,9 +482,7 @@ export function ProfileStep({
             <h3 className="text-lg font-medium mb-4 pb-2 border-b border-luxury-gray-5">
               Shipping Address
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {shippingFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{shippingFields.map(renderField)}</div>
           </div>
         )}
 
@@ -455,9 +491,7 @@ export function ProfileStep({
             <h3 className="text-lg font-medium mb-4 pb-2 border-b border-luxury-gray-5">
               Social Media
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {socialFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{socialFields.map(renderField)}</div>
           </div>
         )}
 
@@ -466,17 +500,13 @@ export function ProfileStep({
             <h3 className="text-lg font-medium mb-4 pb-2 border-b border-luxury-gray-5">
               Commission Plan
             </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {commissionFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{commissionFields.map(renderField)}</div>
           </div>
         )}
 
         {otherFields.length > 0 && (
           <div className="mb-8">
-            <div className="grid md:grid-cols-2 gap-4">
-              {otherFields.map(renderField)}
-            </div>
+            <div className="grid md:grid-cols-2 gap-4">{otherFields.map(renderField)}</div>
           </div>
         )}
 
@@ -525,23 +555,27 @@ export function RsvpStep({
   setShowFlyerModal: (show: boolean) => void
 }) {
   const content = step.content || {}
-  
+
   return (
     <div className="card-section">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
-        <div style={{ 
-          marginTop: '-24px',
-          marginLeft: '-24px',
-          marginRight: '-24px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ 
-            height: '4px',
-            backgroundColor: '#f5f5f4',
-            borderTopLeftRadius: '8px',
-            borderTopRightRadius: '8px'
-          }}>
+        <div
+          style={{
+            marginTop: '-24px',
+            marginLeft: '-24px',
+            marginRight: '-24px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              height: '4px',
+              backgroundColor: '#f5f5f4',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+            }}
+          >
             <div className="h-full flex">
               {Array.from({ length: totalSteps }).map((_, idx) => (
                 <div
@@ -550,7 +584,7 @@ export function RsvpStep({
                     idx + 1 <= currentStep ? 'bg-luxury-gold' : 'bg-luxury-gray-5'
                   }`}
                   style={{
-                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none',
                   }}
                 />
               ))}
@@ -561,39 +595,43 @@ export function RsvpStep({
           </p>
         </div>
       )}
-      
+
       <h2 className="text-2xl font-light mb-6 tracking-luxury">
         {content.eventTitle || step.title}
       </h2>
 
       {content.eventSubtitle && (
-        <p className="text-lg italic text-luxury-gray-2 mb-6">
-          {content.eventSubtitle}
-        </p>
+        <p className="text-lg italic text-luxury-gray-2 mb-6">{content.eventSubtitle}</p>
       )}
 
-      {content.eventDescription && (
-        <p className="text-base mb-6">
-          {content.eventDescription}
-        </p>
-      )}
+      {content.eventDescription && <p className="text-base mb-6">{content.eventDescription}</p>}
 
       <div className="bg-luxury-light p-6 rounded mb-6">
         <div className="space-y-3 text-sm">
           {content.hostedBy && (
-            <p><strong className="text-luxury-gold">Hosted by:</strong> {content.hostedBy}</p>
+            <p>
+              <strong className="text-luxury-gold">Hosted by:</strong> {content.hostedBy}
+            </p>
           )}
           {content.when && (
-            <p><strong className="text-luxury-gold">When:</strong> {content.when}</p>
+            <p>
+              <strong className="text-luxury-gold">When:</strong> {content.when}
+            </p>
           )}
           {content.where && (
-            <p><strong className="text-luxury-gold">Where:</strong> {content.where}</p>
+            <p>
+              <strong className="text-luxury-gold">Where:</strong> {content.where}
+            </p>
           )}
           {content.rsvpBy && (
-            <p><strong className="text-luxury-gold">RSVP by:</strong> {content.rsvpBy}</p>
+            <p>
+              <strong className="text-luxury-gold">RSVP by:</strong> {content.rsvpBy}
+            </p>
           )}
           {content.dressCode && (
-            <p><strong className="text-luxury-gold">Dress Code:</strong> {content.dressCode}</p>
+            <p>
+              <strong className="text-luxury-gold">Dress Code:</strong> {content.dressCode}
+            </p>
           )}
         </div>
         {content.eventFlyerUrl && (
@@ -618,7 +656,9 @@ export function RsvpStep({
               type="radio"
               name="attending"
               checked={rsvpData.attending === true || rsvpData.attending_luncheon === true}
-              onChange={() => setRsvpData({...rsvpData, attending: true, attending_luncheon: true})}
+              onChange={() =>
+                setRsvpData({ ...rsvpData, attending: true, attending_luncheon: true })
+              }
               className="w-4 h-4"
             />
             <span className="text-base">Yes, I'll be there!</span>
@@ -628,7 +668,9 @@ export function RsvpStep({
               type="radio"
               name="attending"
               checked={rsvpData.attending === false || rsvpData.attending_luncheon === false}
-              onChange={() => setRsvpData({...rsvpData, attending: false, attending_luncheon: false})}
+              onChange={() =>
+                setRsvpData({ ...rsvpData, attending: false, attending_luncheon: false })
+              }
               className="w-4 h-4"
             />
             <span className="text-base">No, I can't make it</span>
@@ -642,7 +684,13 @@ export function RsvpStep({
         </label>
         <textarea
           value={rsvpData.comments || rsvpData.luncheon_comments || ''}
-          onChange={(e) => setRsvpData({...rsvpData, comments: e.target.value, luncheon_comments: e.target.value})}
+          onChange={e =>
+            setRsvpData({
+              ...rsvpData,
+              comments: e.target.value,
+              luncheon_comments: e.target.value,
+            })
+          }
           className="textarea-luxury"
           rows={3}
           placeholder={content.commentsPrompt || 'Any dietary restrictions or special requests?'}
@@ -650,9 +698,7 @@ export function RsvpStep({
       </div>
 
       {content.closingText && (
-        <p className="text-lg font-medium text-luxury-gold mb-6">
-          {content.closingText}
-        </p>
+        <p className="text-lg font-medium text-luxury-gold mb-6">{content.closingText}</p>
       )}
 
       <div className="text-center flex justify-center gap-4">
@@ -664,7 +710,9 @@ export function RsvpStep({
         </button>
         <button
           onClick={onNext}
-          disabled={loading || (rsvpData.attending === null && rsvpData.attending_luncheon === null)}
+          disabled={
+            loading || (rsvpData.attending === null && rsvpData.attending_luncheon === null)
+          }
           className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50"
         >
           {loading ? 'Saving...' : 'Next →'}
@@ -696,17 +744,17 @@ export function SurveyStep({
 }) {
   const content = step.content || {}
   const questions = content.questions || []
-  
+
   const updateAnswer = (questionId: string, value: any) => {
     setSurveyData({
       ...surveyData,
-      [questionId]: value
+      [questionId]: value,
     })
   }
-  
+
   const renderQuestion = (question: any) => {
     const answer = surveyData[question.id]
-    
+
     switch (question.type) {
       case 'slider':
         return (
@@ -721,7 +769,7 @@ export function SurveyStep({
                 min={question.min || 1}
                 max={question.max || 10}
                 value={answer || question.min || 1}
-                onChange={(e) => updateAnswer(question.id, parseInt(e.target.value))}
+                onChange={e => updateAnswer(question.id, parseInt(e.target.value))}
                 className="flex-1"
               />
               <span className="text-sm text-luxury-gray-2">{question.maxLabel || 'Max'}</span>
@@ -731,7 +779,7 @@ export function SurveyStep({
             </div>
           </div>
         )
-      
+
       case 'textarea':
         return (
           <div key={question.id} className="mb-8">
@@ -740,14 +788,14 @@ export function SurveyStep({
             </label>
             <textarea
               value={answer || ''}
-              onChange={(e) => updateAnswer(question.id, e.target.value)}
+              onChange={e => updateAnswer(question.id, e.target.value)}
               className="textarea-luxury"
               rows={4}
               required={question.required}
             />
           </div>
         )
-      
+
       case 'radio':
         return (
           <div key={question.id} className="mb-8">
@@ -762,7 +810,7 @@ export function SurveyStep({
                     name={question.id}
                     value={option.toLowerCase().replace(/\s+/g, '_')}
                     checked={answer === option.toLowerCase().replace(/\s+/g, '_')}
-                    onChange={(e) => updateAnswer(question.id, e.target.value)}
+                    onChange={e => updateAnswer(question.id, e.target.value)}
                     className="w-4 h-4"
                     required={question.required}
                   />
@@ -772,7 +820,7 @@ export function SurveyStep({
             </div>
           </div>
         )
-      
+
       case 'checkbox':
         return (
           <div key={question.id} className="mb-8">
@@ -788,12 +836,15 @@ export function SurveyStep({
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={(e) => {
+                      onChange={e => {
                         const currentAnswers = Array.isArray(answer) ? answer : []
                         if (e.target.checked) {
                           updateAnswer(question.id, [...currentAnswers, optionValue])
                         } else {
-                          updateAnswer(question.id, currentAnswers.filter((a: string) => a !== optionValue))
+                          updateAnswer(
+                            question.id,
+                            currentAnswers.filter((a: string) => a !== optionValue)
+                          )
                         }
                       }}
                       className="w-4 h-4"
@@ -805,28 +856,32 @@ export function SurveyStep({
             </div>
           </div>
         )
-      
+
       default:
         return null
     }
   }
-  
+
   return (
     <div className="card-section">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
-        <div style={{ 
-          marginTop: '-24px',
-          marginLeft: '-24px',
-          marginRight: '-24px',
-          marginBottom: '16px'
-        }}>
-          <div style={{ 
-            height: '4px',
-            backgroundColor: '#f5f5f4',
-            borderTopLeftRadius: '8px',
-            borderTopRightRadius: '8px'
-          }}>
+        <div
+          style={{
+            marginTop: '-24px',
+            marginLeft: '-24px',
+            marginRight: '-24px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              height: '4px',
+              backgroundColor: '#f5f5f4',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+            }}
+          >
             <div className="h-full flex">
               {Array.from({ length: totalSteps }).map((_, idx) => (
                 <div
@@ -835,7 +890,7 @@ export function SurveyStep({
                     idx + 1 <= currentStep ? 'bg-luxury-gold' : 'bg-luxury-gray-5'
                   }`}
                   style={{
-                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none'
+                    borderRight: idx + 1 < totalSteps ? '1px solid rgba(0,0,0,0.1)' : 'none',
                   }}
                 />
               ))}
@@ -846,14 +901,10 @@ export function SurveyStep({
           </p>
         </div>
       )}
-      
-      <h2 className="text-2xl font-light mb-6 tracking-luxury">
-        {step.title}
-      </h2>
 
-      <div className="space-y-8">
-        {questions.map(renderQuestion)}
-      </div>
+      <h2 className="text-2xl font-light mb-6 tracking-luxury">{step.title}</h2>
+
+      <div className="space-y-8">{questions.map(renderQuestion)}</div>
 
       <div className="text-center flex justify-center gap-4 mt-8">
         <button
@@ -873,4 +924,3 @@ export function SurveyStep({
     </div>
   )
 }
-

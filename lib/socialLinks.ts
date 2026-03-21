@@ -59,4 +59,3 @@ export const friendlySocialLabel = (value: string | null | undefined) => {
   }
   return value.startsWith('@') ? value : `@${value}`
 }
-

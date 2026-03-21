@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
     // Fetch all RSVPs
     const { data: rsvps } = await supabase
       .from('campaign_responses')
-      .select(`
+      .select(
+        `
         *,
         users!inner(
           first_name,
@@ -36,7 +37,8 @@ export async function POST(request: NextRequest) {
           email,
           personal_phone
         )
-      `)
+      `
+      )
       .eq('campaign_id', campaign_id)
       .not('attending_luncheon', 'is', null)
 
@@ -85,22 +87,38 @@ export async function POST(request: NextRequest) {
       </div>
 
       <h2>Attending (${attending.length})</h2>
-      ${attending.length === 0 ? '<p style="color: #999;">No attendees yet</p>' : attending.map(rsvp => `
+      ${
+        attending.length === 0
+          ? '<p style="color: #999;">No attendees yet</p>'
+          : attending
+              .map(
+                rsvp => `
         <div class="attendee">
           <div class="attendee-name">${rsvp.users.preferred_first_name} ${rsvp.users.preferred_last_name}</div>
           ${rsvp.users.email ? `<div style="font-size: 13px; color: #666;">${rsvp.users.email}</div>` : ''}
           ${rsvp.users.personal_phone ? `<div style="font-size: 13px; color: #666;">${rsvp.users.personal_phone}</div>` : ''}
           ${rsvp.luncheon_comments ? `<div class="comment">"${rsvp.luncheon_comments}"</div>` : ''}
         </div>
-      `).join('')}
+      `
+              )
+              .join('')
+      }
 
       <h2 style="margin-top: 40px;">Not Attending (${notAttending.length})</h2>
-      ${notAttending.length === 0 ? '<p style="color: #999;">Everyone is attending!</p>' : notAttending.map(rsvp => `
+      ${
+        notAttending.length === 0
+          ? '<p style="color: #999;">Everyone is attending!</p>'
+          : notAttending
+              .map(
+                rsvp => `
         <div class="attendee">
           <div class="attendee-name">${rsvp.users.preferred_first_name} ${rsvp.users.preferred_last_name}</div>
           ${rsvp.luncheon_comments ? `<div class="comment">"${rsvp.luncheon_comments}"</div>` : ''}
         </div>
-      `).join('')}
+      `
+              )
+              .join('')
+      }
 
       <div style="margin-top: 40px; padding: 20px; background: #f8f8f8; border-left: 3px solid #2d2d2d;">
         <p style="margin: 0; font-size: 13px; color: #666;">

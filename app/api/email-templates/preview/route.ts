@@ -6,10 +6,7 @@ export async function POST(request: NextRequest) {
     const { html_content, variables } = await request.json()
 
     if (!html_content) {
-      return NextResponse.json(
-        { error: 'HTML content is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'HTML content is required' }, { status: 400 })
     }
 
     // Sample data for preview
@@ -25,10 +22,13 @@ export async function POST(request: NextRequest) {
     // Replace variables in HTML
     let previewHtml = html_content
     // Always include logo_url in variables for replacement
-    const variablesToReplace = variables && Array.isArray(variables) 
-      ? (variables.includes('logo_url') ? variables : [...variables, 'logo_url'])
-      : null
-    
+    const variablesToReplace =
+      variables && Array.isArray(variables)
+        ? variables.includes('logo_url')
+          ? variables
+          : [...variables, 'logo_url']
+        : null
+
     if (variablesToReplace) {
       variablesToReplace.forEach((varName: string) => {
         const placeholder = `{{${varName}}}`
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       })
     } else {
       // Fallback: replace common variables
-      Object.keys(sampleData).forEach((key) => {
+      Object.keys(sampleData).forEach(key => {
         const placeholder = `{{${key}}}`
         previewHtml = previewHtml.split(placeholder).join(sampleData[key])
       })
@@ -46,10 +46,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ preview_html: previewHtml })
   } catch (error) {
     console.error('Preview email template error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate preview' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate preview' }, { status: 500 })
   }
 }
-

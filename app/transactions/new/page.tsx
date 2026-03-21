@@ -14,7 +14,10 @@ export default function NewTransactionPage() {
     const init = async () => {
       try {
         const res = await fetch('/api/auth/me')
-        if (!res.ok) { router.push('/auth/login'); return }
+        if (!res.ok) {
+          router.push('/auth/login')
+          return
+        }
         const data = await res.json()
         setUser(data.user)
         setRole(getAppRole(data.user))
@@ -27,9 +30,7 @@ export default function NewTransactionPage() {
     init()
   }, [router])
 
-  if (loading) return (
-    <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
-  )
+  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   // TODO: render NewTransactionForm component with user and role props
   return (

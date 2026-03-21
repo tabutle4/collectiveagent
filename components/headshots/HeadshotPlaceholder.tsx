@@ -7,11 +7,11 @@ interface HeadshotPlaceholderProps {
   className?: string
 }
 
-export default function HeadshotPlaceholder({ 
-  firstName, 
-  lastName, 
+export default function HeadshotPlaceholder({
+  firstName,
+  lastName,
   size = 48,
-  className = '' 
+  className = '',
 }: HeadshotPlaceholderProps) {
   // Get initials
   const firstInitial = firstName?.charAt(0)?.toUpperCase() || ''
@@ -34,4 +34,3 @@ export default function HeadshotPlaceholder({
     </div>
   )
 }
-

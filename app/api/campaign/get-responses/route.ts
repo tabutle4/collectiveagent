@@ -8,10 +8,7 @@ export async function GET(request: NextRequest) {
     const campaignId = searchParams.get('campaign_id')
 
     if (!token || !campaignId) {
-      return NextResponse.json(
-        { error: 'Token and campaign_id are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Token and campaign_id are required' }, { status: 400 })
     }
 
     // Verify token and get user
@@ -24,10 +21,7 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid or expired campaign link' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Invalid or expired campaign link' }, { status: 404 })
     }
 
     // Get campaign responses
@@ -53,9 +47,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Get responses error:', error)
-    return NextResponse.json(
-      { error: 'An error occurred' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }

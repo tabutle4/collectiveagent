@@ -1,12 +1,23 @@
 // ===== Transaction Status Types =====
 
 export const TRANSACTION_STATUSES = [
-  'prospect', 'active_listing', 'pending', 'submitted', 'in_review',
-  'revision_requested', 'compliant', 'cda_in_progress', 'payout_in_progress',
-  'broker_review', 'cda_sent', 'payout_processed', 'closed', 'cancelled',
+  'prospect',
+  'active_listing',
+  'pending',
+  'submitted',
+  'in_review',
+  'revision_requested',
+  'compliant',
+  'cda_in_progress',
+  'payout_in_progress',
+  'broker_review',
+  'cda_sent',
+  'payout_processed',
+  'closed',
+  'cancelled',
 ] as const
 
-export type TransactionStatus = typeof TRANSACTION_STATUSES[number]
+export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
 export const STATUS_LABELS: Record<TransactionStatus, string> = {
   prospect: 'Prospect',
@@ -45,14 +56,22 @@ export const STATUS_COLORS: Record<TransactionStatus, string> = {
 // ===== Compliance Status =====
 
 export const COMPLIANCE_STATUSES = [
-  'not_requested', 'submitted', 'in_review', 'approved', 'revision_requested',
+  'not_requested',
+  'submitted',
+  'in_review',
+  'approved',
+  'revision_requested',
 ] as const
 
-export type ComplianceStatus = typeof COMPLIANCE_STATUSES[number]
+export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number]
 
 // ===== Permission Helpers =====
 
-export const AGENT_EDITABLE_STATUSES: TransactionStatus[] = ['prospect', 'active_listing', 'pending']
+export const AGENT_EDITABLE_STATUSES: TransactionStatus[] = [
+  'prospect',
+  'active_listing',
+  'pending',
+]
 export const AGENT_LIMITED_EDIT_STATUSES: TransactionStatus[] = ['revision_requested']
 export const LOCKED_STATUSES: TransactionStatus[] = ['closed', 'cancelled']
 

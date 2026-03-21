@@ -7,30 +7,30 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { coordination_id, listing_id } = body
-    
+
     const success = await deactivateCoordination(coordination_id)
-    
+
     if (!success) {
-      return NextResponse.json(
-        { error: 'Failed to deactivate coordination' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to deactivate coordination' }, { status: 500 })
     }
-    
+
     try {
       const listing = await getListingById(listing_id)
       if (listing) {
-        await archiveListingFolder(listing.property_address, listing_id, listing.transaction_type || 'sale')
+        await archiveListingFolder(
+          listing.property_address,
+          listing_id,
+          listing.transaction_type || 'sale'
+        )
       }
     } catch (error) {
       console.error('Error archiving folder:', error)
     }
-    
+
     return NextResponse.json({
       success: true,
-      message: 'Coordination deactivated successfully'
+      message: 'Coordination deactivated successfully',
     })
-    
   } catch (error: any) {
     console.error('Error deactivating coordination:', error)
     return NextResponse.json(
@@ -39,4 +39,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

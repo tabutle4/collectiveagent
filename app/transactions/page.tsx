@@ -65,10 +65,11 @@ export default function TransactionsPage() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      list = list.filter(t =>
-        t.property_address?.toLowerCase().includes(q) ||
-        t.client_name?.toLowerCase().includes(q) ||
-        (canViewAll && getAgentName(t.submitted_by).toLowerCase().includes(q))
+      list = list.filter(
+        t =>
+          t.property_address?.toLowerCase().includes(q) ||
+          t.client_name?.toLowerCase().includes(q) ||
+          (canViewAll && getAgentName(t.submitted_by).toLowerCase().includes(q))
       )
     }
 
@@ -88,13 +89,16 @@ export default function TransactionsPage() {
     return list
   }, [transactions, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll])
 
-  const statusCounts = useMemo(() => ({
-    all: transactions.length,
-    active: transactions.filter(t => STATUS_GROUPS.active.includes(t.status)).length,
-    compliance: transactions.filter(t => STATUS_GROUPS.compliance.includes(t.status)).length,
-    processing: transactions.filter(t => STATUS_GROUPS.processing.includes(t.status)).length,
-    complete: transactions.filter(t => STATUS_GROUPS.complete.includes(t.status)).length,
-  }), [transactions])
+  const statusCounts = useMemo(
+    () => ({
+      all: transactions.length,
+      active: transactions.filter(t => STATUS_GROUPS.active.includes(t.status)).length,
+      compliance: transactions.filter(t => STATUS_GROUPS.compliance.includes(t.status)).length,
+      processing: transactions.filter(t => STATUS_GROUPS.processing.includes(t.status)).length,
+      complete: transactions.filter(t => STATUS_GROUPS.complete.includes(t.status)).length,
+    }),
+    [transactions]
+  )
 
   const formatPrice = (t: any) => {
     const amount = t.monthly_rent || t.sales_price
@@ -107,9 +111,7 @@ export default function TransactionsPage() {
     return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  if (loading) return (
-    <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
-  )
+  if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
     <div>
@@ -128,10 +130,17 @@ export default function TransactionsPage() {
       <div className="container-card">
         <div className="flex flex-col gap-3 mb-5">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3"
+              size={18}
+            />
             <input
               type="text"
-              placeholder={canViewAll ? 'Search by address, client, or agent...' : 'Search by address or client...'}
+              placeholder={
+                canViewAll
+                  ? 'Search by address, client, or agent...'
+                  : 'Search by address or client...'
+              }
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="input-luxury pl-10"
@@ -174,7 +183,9 @@ export default function TransactionsPage() {
               >
                 <option value="all">All Types</option>
                 {transactionTypes.map(t => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
                 ))}
               </select>
             )}
@@ -216,31 +227,48 @@ export default function TransactionsPage() {
                       onClick={() => router.push(`/transactions/${t.id}`)}
                     >
                       <td className="py-3 px-4">
-                        <p className="text-sm font-semibold text-luxury-gray-1">{t.property_address || 'No address'}</p>
+                        <p className="text-sm font-semibold text-luxury-gray-1">
+                          {t.property_address || 'No address'}
+                        </p>
                         {canViewAll && t.office_location && (
                           <p className="text-xs text-luxury-gray-3">{t.office_location}</p>
                         )}
                       </td>
                       {canViewAll && (
-                        <td className="py-3 px-4 text-xs text-luxury-gray-2">{getAgentName(t.submitted_by)}</td>
+                        <td className="py-3 px-4 text-xs text-luxury-gray-2">
+                          {getAgentName(t.submitted_by)}
+                        </td>
                       )}
-                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{t.transaction_type || ''}</td>
-                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{t.client_name || ''}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">
+                        {t.transaction_type || ''}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">
+                        {t.client_name || ''}
+                      </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{formatPrice(t)}</td>
-                      <td className="py-3 px-4"><StatusBadge status={t.status as TransactionStatus} /></td>
+                      <td className="py-3 px-4">
+                        <StatusBadge status={t.status as TransactionStatus} />
+                      </td>
                       {canViewAll && (
                         <td className="py-3 px-4">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            t.compliance_status === 'approved' ? 'bg-green-50 text-green-700' :
-                            t.compliance_status === 'revision_requested' ? 'bg-orange-50 text-orange-700' :
-                            ['submitted', 'in_review'].includes(t.compliance_status) ? 'bg-purple-50 text-purple-700' :
-                            'bg-luxury-light text-luxury-gray-3'
-                          }`}>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded ${
+                              t.compliance_status === 'approved'
+                                ? 'bg-green-50 text-green-700'
+                                : t.compliance_status === 'revision_requested'
+                                  ? 'bg-orange-50 text-orange-700'
+                                  : ['submitted', 'in_review'].includes(t.compliance_status)
+                                    ? 'bg-purple-50 text-purple-700'
+                                    : 'bg-luxury-light text-luxury-gray-3'
+                            }`}
+                          >
                             {t.compliance_status?.replace(/_/g, ' ') || 'not requested'}
                           </span>
                         </td>
                       )}
-                      <td className="py-3 px-4 text-xs text-luxury-gray-3">{formatDate(t.updated_at)}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-3">
+                        {formatDate(t.updated_at)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -255,18 +283,29 @@ export default function TransactionsPage() {
                   onClick={() => router.push(`/transactions/${t.id}`)}
                 >
                   <div className="flex items-start justify-between mb-1">
-                    <p className="text-sm font-semibold text-luxury-gray-1 flex-1">{t.property_address || 'No address'}</p>
-                    <span className="flex-shrink-0 ml-2"><StatusBadge status={t.status as TransactionStatus} /></span>
+                    <p className="text-sm font-semibold text-luxury-gray-1 flex-1">
+                      {t.property_address || 'No address'}
+                    </p>
+                    <span className="flex-shrink-0 ml-2">
+                      <StatusBadge status={t.status as TransactionStatus} />
+                    </span>
                   </div>
                   <div className="text-xs text-luxury-gray-3 space-y-0.5">
                     {canViewAll && getAgentName(t.submitted_by) && (
-                      <p className="font-medium text-luxury-gray-2">{getAgentName(t.submitted_by)}</p>
+                      <p className="font-medium text-luxury-gray-2">
+                        {getAgentName(t.submitted_by)}
+                      </p>
                     )}
-                    <p>{t.transaction_type}{t.client_name ? ` · ${t.client_name}` : ''}</p>
+                    <p>
+                      {t.transaction_type}
+                      {t.client_name ? ` · ${t.client_name}` : ''}
+                    </p>
                     {formatPrice(t) && <p>{formatPrice(t)}</p>}
-                    {canViewAll && t.compliance_status && t.compliance_status !== 'not_requested' && (
-                      <p>{t.compliance_status.replace(/_/g, ' ')}</p>
-                    )}
+                    {canViewAll &&
+                      t.compliance_status &&
+                      t.compliance_status !== 'not_requested' && (
+                        <p>{t.compliance_status.replace(/_/g, ' ')}</p>
+                      )}
                   </div>
                 </div>
               ))}

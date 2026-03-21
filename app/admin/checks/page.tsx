@@ -2,15 +2,31 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, ChevronDown, ChevronUp, RefreshCw, Edit2, Check,
-  X, AlertCircle, Clock, Building2, Mail, Camera, ImageIcon
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Edit2,
+  Check,
+  X,
+  AlertCircle,
+  Clock,
+  Building2,
+  Mail,
+  Camera,
+  ImageIcon,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type CheckStatus =
-  | 'received' | 'deposited' | 'cleared' | 'pending_compliance'
-  | 'compliance_complete' | 'payouts_in_progress' | 'paid'
+  | 'received'
+  | 'deposited'
+  | 'cleared'
+  | 'pending_compliance'
+  | 'compliance_complete'
+  | 'payouts_in_progress'
+  | 'paid'
 
 type PayoutStatus = 'pending' | 'processed' | 'paid'
 
@@ -61,13 +77,22 @@ interface DashboardData {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)
 
 const fmtShort = (n: number) => fmt(n)
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(d).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 function addBusinessDays(date: Date, days: number): Date {
@@ -84,7 +109,8 @@ function addBusinessDays(date: Date, days: number): Date {
 function getPayByDate(check: CheckRecord): Date | null {
   if (!check.cleared_date && !check.compliance_complete_date) return null
   const dates = [check.cleared_date, check.compliance_complete_date]
-    .filter(Boolean).map(d => new Date(d!))
+    .filter(Boolean)
+    .map(d => new Date(d!))
   const latest = new Date(Math.max(...dates.map(d => d.getTime())))
   return addBusinessDays(latest, 10)
 }
@@ -103,12 +129,20 @@ function PayByBadge({ check }: { check: CheckRecord }) {
   const payBy = getPayByDate(check)
   if (!payBy) return null
   const days = daysUntil(payBy)
-  const color = days < 0 ? 'bg-red-100 text-red-700' : days <= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-luxury-light text-luxury-gray-2'
+  const color =
+    days < 0
+      ? 'bg-red-100 text-red-700'
+      : days <= 3
+        ? 'bg-yellow-100 text-yellow-700'
+        : 'bg-luxury-light text-luxury-gray-2'
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${color}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded ${color}`}
+    >
       <Clock size={10} />
       {days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : `${days}d`}
-      {' · '}{fmtDate(payBy.toISOString())}
+      {' · '}
+      {fmtDate(payBy.toISOString())}
     </span>
   )
 }
@@ -124,9 +158,13 @@ function StatusBadge({ status }: { status: CheckStatus }) {
     paid: 'bg-luxury-accent/10 text-luxury-accent',
   }
   const labels: Record<CheckStatus, string> = {
-    received: 'Received', deposited: 'Deposited', cleared: 'Cleared',
-    pending_compliance: 'Pending Compliance', compliance_complete: 'Compliance Complete',
-    payouts_in_progress: 'Payouts In Progress', paid: 'Paid',
+    received: 'Received',
+    deposited: 'Deposited',
+    cleared: 'Cleared',
+    pending_compliance: 'Pending Compliance',
+    compliance_complete: 'Compliance Complete',
+    payouts_in_progress: 'Payouts In Progress',
+    paid: 'Paid',
   }
   return (
     <span className={`text-xs font-medium px-2 py-0.5 rounded whitespace-nowrap ${map[status]}`}>
@@ -149,12 +187,23 @@ function PayoutStatusBadge({ status }: { status: PayoutStatus }) {
 }
 
 const STATUS_STEPS: CheckStatus[] = [
-  'received', 'deposited', 'cleared', 'pending_compliance',
-  'compliance_complete', 'payouts_in_progress', 'paid',
+  'received',
+  'deposited',
+  'cleared',
+  'pending_compliance',
+  'compliance_complete',
+  'payouts_in_progress',
+  'paid',
 ]
 
 // Tap-friendly status advancer
-function StatusStepper({ current, onChange }: { current: CheckStatus; onChange: (s: CheckStatus) => void }) {
+function StatusStepper({
+  current,
+  onChange,
+}: {
+  current: CheckStatus
+  onChange: (s: CheckStatus) => void
+}) {
   const idx = STATUS_STEPS.indexOf(current)
   const next = STATUS_STEPS[idx + 1]
   const prev = STATUS_STEPS[idx - 1]
@@ -179,7 +228,10 @@ function StatusStepper({ current, onChange }: { current: CheckStatus; onChange: 
         </button>
       )}
       {prev && (
-        <button onClick={() => onChange(prev)} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1">
+        <button
+          onClick={() => onChange(prev)}
+          className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1"
+        >
           ← Undo
         </button>
       )}
@@ -188,9 +240,15 @@ function StatusStepper({ current, onChange }: { current: CheckStatus; onChange: 
 }
 
 const PAYEE_TYPES = [
-  'Agent', 'Team Lead', 'Selling Agent', 'Listing Agent',
-  'Referral Agent', 'Referral Brokerage', 'Co-op Brokerage',
-  'eCommission', 'Rev Share Agent',
+  'Agent',
+  'Team Lead',
+  'Selling Agent',
+  'Listing Agent',
+  'Referral Agent',
+  'Referral Brokerage',
+  'Co-op Brokerage',
+  'eCommission',
+  'Rev Share Agent',
 ]
 
 // ─── Check Image Upload ───────────────────────────────────────────────────────
@@ -244,7 +302,9 @@ function CheckImageUpload({
               className="w-full max-h-48 object-cover rounded-lg border border-luxury-gray-5 cursor-pointer"
             />
           </a>
-          <label className={`absolute bottom-2 right-2 bg-white/90 backdrop-blur-sm border border-luxury-gray-5 rounded-lg px-2 py-1.5 flex items-center gap-1.5 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+          <label
+            className={`absolute bottom-2 right-2 bg-white/90 backdrop-blur-sm border border-luxury-gray-5 rounded-lg px-2 py-1.5 flex items-center gap-1.5 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+          >
             <Camera size={12} />
             {uploading ? 'Uploading...' : 'Replace'}
             <input
@@ -257,7 +317,9 @@ function CheckImageUpload({
           </label>
         </div>
       ) : (
-        <label className={`flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+        <label
+          className={`flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+        >
           {uploading ? (
             <p className="text-xs text-luxury-gray-3">Uploading...</p>
           ) : (
@@ -289,7 +351,9 @@ export default function AdminChecksPage() {
   const [history, setHistory] = useState<CheckRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedSection, setExpandedSection] = useState<Record<string, boolean>>({
-    on_hold: true, active: true, history: false,
+    on_hold: true,
+    active: true,
+    history: false,
   })
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null)
   const [showAddCheck, setShowAddCheck] = useState(false)
@@ -300,10 +364,17 @@ export default function AdminChecksPage() {
   const [showOptionalFields, setShowOptionalFields] = useState(false)
 
   const emptyCheckForm = {
-    check_amount: '', received_date: new Date().toISOString().split('T')[0],
-    check_from: '', check_number: '', property_address: '',
-    deposited_date: '', cleared_date: '', compliance_complete_date: '',
-    brokerage_amount: '', notes: '', check_image_url: '',
+    check_amount: '',
+    received_date: new Date().toISOString().split('T')[0],
+    check_from: '',
+    check_number: '',
+    property_address: '',
+    deposited_date: '',
+    cleared_date: '',
+    compliance_complete_date: '',
+    brokerage_amount: '',
+    notes: '',
+    check_image_url: '',
   }
   const [checkForm, setCheckForm] = useState(emptyCheckForm)
   const [savingCheck, setSavingCheck] = useState(false)
@@ -312,7 +383,10 @@ export default function AdminChecksPage() {
   const [editCheckData, setEditCheckData] = useState<Partial<CheckRecord>>({})
   const [addingPayoutFor, setAddingPayoutFor] = useState<string | null>(null)
   const [payoutForm, setPayoutForm] = useState({
-    payee_type: 'Agent', payee_name: '', amount: '', payment_method: 'ach',
+    payee_type: 'Agent',
+    payee_name: '',
+    amount: '',
+    payment_method: 'ach',
   })
   const [savingPayout, setSavingPayout] = useState(false)
   const [editingPayout, setEditingPayout] = useState<string | null>(null)
@@ -331,17 +405,23 @@ export default function AdminChecksPage() {
       setOnHold(h.checks || [])
       setActive(a.checks || [])
       setHistory(hi.checks || [])
-    } catch (e) { console.error('Failed to load checks:', e) }
-    finally { setLoading(false) }
+    } catch (e) {
+      console.error('Failed to load checks:', e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => {
+    loadAll()
+  }, [loadAll])
 
   const saveBalance = async () => {
     if (!balanceInput) return
     setSavingBalance(true)
     await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update_balance', balance: parseFloat(balanceInput) }),
     })
     setSavingBalance(false)
@@ -350,10 +430,17 @@ export default function AdminChecksPage() {
   }
 
   const saveCheck = async () => {
-    if (!checkForm.check_amount || !checkForm.received_date || !checkForm.check_from || !checkForm.property_address) return
+    if (
+      !checkForm.check_amount ||
+      !checkForm.received_date ||
+      !checkForm.check_from ||
+      !checkForm.property_address
+    )
+      return
     setSavingCheck(true)
     await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'create_check', check: checkForm }),
     })
     setSavingCheck(false)
@@ -368,7 +455,8 @@ export default function AdminChecksPage() {
     const finalUpdates = { ...safeUpdates }
     if (check_image_url !== undefined) finalUpdates.check_image_url = check_image_url
     const res = await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update_check', check_id: checkId, updates: finalUpdates }),
     })
     const data = await res.json()
@@ -380,21 +468,25 @@ export default function AdminChecksPage() {
     setSendingEmail(check.id)
     try {
       const res = await fetch('/api/checks/notify-agent', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ check_id: check.id }),
       })
       if (!res.ok) throw new Error()
       alert('Email sent to agent.')
     } catch {
       alert('Could not send email. /api/checks/notify-agent needs to be set up.')
-    } finally { setSendingEmail(null) }
+    } finally {
+      setSendingEmail(null)
+    }
   }
 
   const savePayout = async (checkId: string) => {
     if (!payoutForm.amount || !payoutForm.payee_type) return
     setSavingPayout(true)
     await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'add_payout', payout: { check_id: checkId, ...payoutForm } }),
     })
     setSavingPayout(false)
@@ -405,7 +497,8 @@ export default function AdminChecksPage() {
 
   const updatePayout = async (payoutId: string, updates: Partial<Payout>) => {
     await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update_payout', payout_id: payoutId, updates }),
     })
     setEditingPayout(null)
@@ -415,7 +508,8 @@ export default function AdminChecksPage() {
   const deletePayout = async (payoutId: string) => {
     if (!confirm('Delete this payout?')) return
     await fetch('/api/checks', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete_payout', payout_id: payoutId }),
     })
     loadAll()
@@ -432,11 +526,15 @@ export default function AdminChecksPage() {
 
     return (
       <div className="mt-3 pt-3 border-t border-luxury-gray-5/50 space-y-5">
-
         {/* Status stepper — primary action on mobile */}
         <div>
-          <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">Status</p>
-          <StatusStepper current={check.status} onChange={(s) => updateCheck(check.id, { status: s })} />
+          <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
+            Status
+          </p>
+          <StatusStepper
+            current={check.status}
+            onChange={s => updateCheck(check.id, { status: s })}
+          />
         </div>
 
         {/* Quick action buttons */}
@@ -465,10 +563,11 @@ export default function AdminChecksPage() {
 
         {/* Desktop: side by side. Mobile: stacked */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
           {/* Check Info */}
           <div className="space-y-3">
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Check Info</p>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+              Check Info
+            </p>
 
             {editingCheck === check.id ? (
               <div className="space-y-3">
@@ -476,26 +575,51 @@ export default function AdminChecksPage() {
                   { label: 'Received Date', field: 'received_date', type: 'date' },
                   { label: 'Deposited Date', field: 'deposited_date', type: 'date' },
                   { label: 'Cleared Date', field: 'cleared_date', type: 'date' },
-                  { label: 'Compliance Complete Date', field: 'compliance_complete_date', type: 'date' },
+                  {
+                    label: 'Compliance Complete Date',
+                    field: 'compliance_complete_date',
+                    type: 'date',
+                  },
                   { label: 'CRC Amount ($)', field: 'brokerage_amount', type: 'number' },
                 ].map(({ label, field, type }) => (
                   <div key={field}>
                     <label className="field-label">{label}</label>
                     <input
-                      type={type} step={type === 'number' ? '0.01' : undefined}
+                      type={type}
+                      step={type === 'number' ? '0.01' : undefined}
                       className="input-luxury"
                       value={(editCheckData as any)[field] || ''}
-                      onChange={e => setEditCheckData(p => ({ ...p, [field]: type === 'number' ? parseFloat(e.target.value) : e.target.value }))}
+                      onChange={e =>
+                        setEditCheckData(p => ({
+                          ...p,
+                          [field]: type === 'number' ? parseFloat(e.target.value) : e.target.value,
+                        }))
+                      }
                     />
                   </div>
                 ))}
                 <div>
                   <label className="field-label">Notes</label>
-                  <textarea className="input-luxury resize-none" rows={2} value={editCheckData.notes as string || ''} onChange={e => setEditCheckData(p => ({ ...p, notes: e.target.value }))} />
+                  <textarea
+                    className="input-luxury resize-none"
+                    rows={2}
+                    value={(editCheckData.notes as string) || ''}
+                    onChange={e => setEditCheckData(p => ({ ...p, notes: e.target.value }))}
+                  />
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => updateCheck(check.id, editCheckData)} className="btn btn-primary text-xs flex-1">Save</button>
-                  <button onClick={() => setEditingCheck(null)} className="btn btn-secondary text-xs">Cancel</button>
+                  <button
+                    onClick={() => updateCheck(check.id, editCheckData)}
+                    className="btn btn-primary text-xs flex-1"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingCheck(null)}
+                    className="btn btn-secondary text-xs"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             ) : (
@@ -511,7 +635,10 @@ export default function AdminChecksPage() {
                     ['Cleared', fmtDate(check.cleared_date)],
                     ['Compliance', fmtDate(check.compliance_complete_date)],
                   ].map(([label, value]) => (
-                    <div key={label as string} className="flex items-center justify-between text-xs py-0.5">
+                    <div
+                      key={label as string}
+                      className="flex items-center justify-between text-xs py-0.5"
+                    >
                       <span className="text-luxury-gray-3">{label}</span>
                       <span className="text-luxury-gray-1 font-medium">{value || '—'}</span>
                     </div>
@@ -523,9 +650,14 @@ export default function AdminChecksPage() {
                     </div>
                   )}
                 </div>
-                {check.notes && <p className="text-xs text-luxury-gray-3 italic mb-3">{check.notes}</p>}
+                {check.notes && (
+                  <p className="text-xs text-luxury-gray-3 italic mb-3">{check.notes}</p>
+                )}
                 <button
-                  onClick={() => { setEditingCheck(check.id); setEditCheckData({ ...check }) }}
+                  onClick={() => {
+                    setEditingCheck(check.id)
+                    setEditCheckData({ ...check })
+                  }}
                   className="btn btn-secondary text-xs flex items-center gap-1 w-full justify-center"
                 >
                   <Edit2 size={11} /> Edit Check Info
@@ -537,7 +669,7 @@ export default function AdminChecksPage() {
                     checkId={check.id}
                     existingUrl={check.check_image_url}
                     transactionFolderPath={check.onedrive_folder_url}
-                    onUploaded={(url) => updateCheck(check.id, { check_image_url: url })}
+                    onUploaded={url => updateCheck(check.id, { check_image_url: url })}
                   />
                 </div>
               </div>
@@ -547,7 +679,9 @@ export default function AdminChecksPage() {
           {/* Payouts */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Payouts</p>
+              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+                Payouts
+              </p>
               <button
                 onClick={() => setAddingPayoutFor(addingPayoutFor === check.id ? null : check.id)}
                 className="btn btn-secondary text-xs flex items-center gap-1"
@@ -561,17 +695,37 @@ export default function AdminChecksPage() {
               <div className="inner-card space-y-3">
                 <div>
                   <label className="field-label">Payee Type</label>
-                  <select className="select-luxury" value={payoutForm.payee_type} onChange={e => setPayoutForm(p => ({ ...p, payee_type: e.target.value }))}>
-                    {PAYEE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <select
+                    className="select-luxury"
+                    value={payoutForm.payee_type}
+                    onChange={e => setPayoutForm(p => ({ ...p, payee_type: e.target.value }))}
+                  >
+                    {PAYEE_TYPES.map(t => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="field-label">Name</label>
-                  <input className="input-luxury" placeholder="Agent or brokerage name" value={payoutForm.payee_name} onChange={e => setPayoutForm(p => ({ ...p, payee_name: e.target.value }))} />
+                  <input
+                    className="input-luxury"
+                    placeholder="Agent or brokerage name"
+                    value={payoutForm.payee_name}
+                    onChange={e => setPayoutForm(p => ({ ...p, payee_name: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="field-label">Amount ($)</label>
-                  <input type="number" step="0.01" inputMode="decimal" className="input-luxury" value={payoutForm.amount} onChange={e => setPayoutForm(p => ({ ...p, amount: e.target.value }))} />
+                  <input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    className="input-luxury"
+                    value={payoutForm.amount}
+                    onChange={e => setPayoutForm(p => ({ ...p, amount: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="field-label">Payment Method</label>
@@ -588,10 +742,19 @@ export default function AdminChecksPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => savePayout(check.id)} disabled={savingPayout || !payoutForm.amount} className="btn btn-primary text-xs flex-1 disabled:opacity-50">
+                  <button
+                    onClick={() => savePayout(check.id)}
+                    disabled={savingPayout || !payoutForm.amount}
+                    className="btn btn-primary text-xs flex-1 disabled:opacity-50"
+                  >
                     {savingPayout ? 'Adding...' : 'Add Payee'}
                   </button>
-                  <button onClick={() => setAddingPayoutFor(null)} className="btn btn-secondary text-xs">Cancel</button>
+                  <button
+                    onClick={() => setAddingPayoutFor(null)}
+                    className="btn btn-secondary text-xs"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}
@@ -607,7 +770,16 @@ export default function AdminChecksPage() {
                       <div className="space-y-2">
                         <div>
                           <label className="field-label">Status</label>
-                          <select className="select-luxury" value={editPayoutData.payment_status || payout.payment_status} onChange={e => setEditPayoutData(p => ({ ...p, payment_status: e.target.value as PayoutStatus }))}>
+                          <select
+                            className="select-luxury"
+                            value={editPayoutData.payment_status || payout.payment_status}
+                            onChange={e =>
+                              setEditPayoutData(p => ({
+                                ...p,
+                                payment_status: e.target.value as PayoutStatus,
+                              }))
+                            }
+                          >
                             <option value="pending">Pending</option>
                             <option value="processed">Processed</option>
                             <option value="paid">Paid</option>
@@ -615,39 +787,88 @@ export default function AdminChecksPage() {
                         </div>
                         <div>
                           <label className="field-label">Payment Date</label>
-                          <input type="date" className="input-luxury" value={editPayoutData.payment_date || ''} onChange={e => setEditPayoutData(p => ({ ...p, payment_date: e.target.value }))} />
+                          <input
+                            type="date"
+                            className="input-luxury"
+                            value={editPayoutData.payment_date || ''}
+                            onChange={e =>
+                              setEditPayoutData(p => ({ ...p, payment_date: e.target.value }))
+                            }
+                          />
                         </div>
                         <div>
                           <label className="field-label">Payment Reference</label>
-                          <input className="input-luxury" placeholder="Payload ACH ref or Zelle confirmation" value={editPayoutData.payment_reference || ''} onChange={e => setEditPayoutData(p => ({ ...p, payment_reference: e.target.value }))} />
+                          <input
+                            className="input-luxury"
+                            placeholder="Payload ACH ref or Zelle confirmation"
+                            value={editPayoutData.payment_reference || ''}
+                            onChange={e =>
+                              setEditPayoutData(p => ({ ...p, payment_reference: e.target.value }))
+                            }
+                          />
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => updatePayout(payout.id, editPayoutData)} className="btn btn-primary text-xs flex-1">Save</button>
-                          <button onClick={() => setEditingPayout(null)} className="btn btn-secondary text-xs">Cancel</button>
+                          <button
+                            onClick={() => updatePayout(payout.id, editPayoutData)}
+                            className="btn btn-primary text-xs flex-1"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingPayout(null)}
+                            className="btn btn-secondary text-xs"
+                          >
+                            Cancel
+                          </button>
                         </div>
                       </div>
                     ) : (
                       <div>
                         <div className="flex items-start justify-between gap-2 mb-1.5">
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold text-luxury-gray-1 truncate">{payout.payee_name || payout.payee_type}</p>
+                            <p className="text-xs font-semibold text-luxury-gray-1 truncate">
+                              {payout.payee_name || payout.payee_type}
+                            </p>
                             <p className="text-xs text-luxury-gray-3">{payout.payee_type}</p>
                           </div>
-                          <p className="text-sm font-bold text-luxury-gray-1 flex-shrink-0">{fmt(payout.amount)}</p>
+                          <p className="text-sm font-bold text-luxury-gray-1 flex-shrink-0">
+                            {fmt(payout.amount)}
+                          </p>
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <PayoutStatusBadge status={payout.payment_status} />
-                            <span className="text-xs text-luxury-gray-3 uppercase">{payout.payment_method}</span>
-                            {payout.payment_date && <span className="text-xs text-luxury-gray-3">{fmtDate(payout.payment_date)}</span>}
+                            <span className="text-xs text-luxury-gray-3 uppercase">
+                              {payout.payment_method}
+                            </span>
+                            {payout.payment_date && (
+                              <span className="text-xs text-luxury-gray-3">
+                                {fmtDate(payout.payment_date)}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            <button onClick={() => { setEditingPayout(payout.id); setEditPayoutData({ ...payout }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
-                            <button onClick={() => deletePayout(payout.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                            <button
+                              onClick={() => {
+                                setEditingPayout(payout.id)
+                                setEditPayoutData({ ...payout })
+                              }}
+                              className="text-xs text-luxury-gray-3 hover:text-luxury-accent"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deletePayout(payout.id)}
+                              className="text-xs text-red-400 hover:text-red-600"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </div>
                         {payout.payment_reference && (
-                          <p className="text-xs text-luxury-gray-3 font-mono mt-1 truncate">{payout.payment_reference}</p>
+                          <p className="text-xs text-luxury-gray-3 font-mono mt-1 truncate">
+                            {payout.payment_reference}
+                          </p>
                         )}
                       </div>
                     )}
@@ -662,21 +883,35 @@ export default function AdminChecksPage() {
                 <div className="flex items-center gap-2">
                   <Building2 size={13} className="text-luxury-gray-3" />
                   <span className="text-xs font-semibold text-luxury-gray-2">CRC (Brokerage)</span>
-                  {check.crc_transferred && <span className="text-xs text-green-600"><Check size={10} /></span>}
+                  {check.crc_transferred && (
+                    <span className="text-xs text-green-600">
+                      <Check size={10} />
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm font-bold text-luxury-gray-1">{fmt(check.brokerage_amount!)}</p>
+                <p className="text-sm font-bold text-luxury-gray-1">
+                  {fmt(check.brokerage_amount!)}
+                </p>
               </div>
             )}
 
             {/* Balance check */}
-            <div className={`inner-card flex items-center justify-between ${balanced ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}>
+            <div
+              className={`inner-card flex items-center justify-between ${balanced ? 'bg-green-50 border border-green-100' : 'bg-red-50 border border-red-100'}`}
+            >
               <div className="flex items-center gap-2">
-                {balanced ? <Check size={13} className="text-green-600" /> : <AlertCircle size={13} className="text-red-500" />}
+                {balanced ? (
+                  <Check size={13} className="text-green-600" />
+                ) : (
+                  <AlertCircle size={13} className="text-red-500" />
+                )}
                 <span className="text-xs font-semibold">
                   {balanced ? 'Balanced' : `${fmt(Math.abs(diff))} ${diff > 0 ? 'under' : 'over'}`}
                 </span>
               </div>
-              <span className="text-xs text-luxury-gray-2">{fmt(total)} / {fmt(check.check_amount)}</span>
+              <span className="text-xs text-luxury-gray-2">
+                {fmt(total)} / {fmt(check.check_amount)}
+              </span>
             </div>
           </div>
         </div>
@@ -688,7 +923,9 @@ export default function AdminChecksPage() {
 
   const renderCheckRow = (check: CheckRecord, showPayBy = false, showPaidOut = false) => {
     const isOpen = expandedCheck === check.id
-    const totalPaid = check.check_payouts.filter(p => p.payment_status === 'paid').reduce((s, p) => s + p.amount, 0)
+    const totalPaid = check.check_payouts
+      .filter(p => p.payment_status === 'paid')
+      .reduce((s, p) => s + p.amount, 0)
     const remaining = check.check_amount - totalPaid - (check.brokerage_amount || 0)
 
     return (
@@ -709,17 +946,28 @@ export default function AdminChecksPage() {
               {check.check_from && <span>{check.check_from}</span>}
               <span>{fmtDate(check.received_date)}</span>
             </div>
-            {showPayBy && <div className="mt-1"><PayByBadge check={check} /></div>}
+            {showPayBy && (
+              <div className="mt-1">
+                <PayByBadge check={check} />
+              </div>
+            )}
             {showPaidOut && totalPaid > 0 && (
-              <p className="text-xs text-luxury-gray-2 mt-1">{fmt(totalPaid)} paid · {fmt(remaining)} remaining</p>
+              <p className="text-xs text-luxury-gray-2 mt-1">
+                {fmt(totalPaid)} paid · {fmt(remaining)} remaining
+              </p>
             )}
-            {check.crc_transferred === false && !['received', 'deposited'].includes(check.status) && (
-              <p className="text-xs text-orange-500 mt-0.5">CRC not transferred</p>
-            )}
+            {check.crc_transferred === false &&
+              !['received', 'deposited'].includes(check.status) && (
+                <p className="text-xs text-orange-500 mt-0.5">CRC not transferred</p>
+              )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
             <p className="text-sm font-semibold text-luxury-gray-1">{fmt(check.check_amount)}</p>
-            {isOpen ? <ChevronUp size={16} className="text-luxury-gray-3" /> : <ChevronDown size={16} className="text-luxury-gray-3" />}
+            {isOpen ? (
+              <ChevronUp size={16} className="text-luxury-gray-3" />
+            ) : (
+              <ChevronDown size={16} className="text-luxury-gray-3" />
+            )}
           </div>
         </div>
         {isOpen && renderCheckDetail(check)}
@@ -739,7 +987,10 @@ export default function AdminChecksPage() {
           <button onClick={loadAll} className="btn btn-secondary p-2.5" title="Refresh">
             <RefreshCw size={15} />
           </button>
-          <button onClick={() => setShowAddCheck(true)} className="btn btn-primary flex items-center gap-1.5">
+          <button
+            onClick={() => setShowAddCheck(true)}
+            className="btn btn-primary flex items-center gap-1.5"
+          >
             <Plus size={14} /> Add Check
           </button>
         </div>
@@ -749,9 +1000,13 @@ export default function AdminChecksPage() {
       {dashboard && (
         <div className="container-card mb-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Balance</p>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+              Balance
+            </p>
             {dashboard.bank_balance_updated_at && (
-              <p className="text-xs text-luxury-gray-3">Updated {fmtDate(dashboard.bank_balance_updated_at)}</p>
+              <p className="text-xs text-luxury-gray-3">
+                Updated {fmtDate(dashboard.bank_balance_updated_at)}
+              </p>
             )}
           </div>
 
@@ -760,28 +1015,50 @@ export default function AdminChecksPage() {
             {editingBalance ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <input
-                  type="number" step="0.01" inputMode="decimal"
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
                   className="input-luxury text-xl font-bold w-44"
                   value={balanceInput}
                   onChange={e => setBalanceInput(e.target.value)}
                   autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') saveBalance(); if (e.key === 'Escape') setEditingBalance(false) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveBalance()
+                    if (e.key === 'Escape') setEditingBalance(false)
+                  }}
                 />
-                <button onClick={saveBalance} disabled={savingBalance} className="btn btn-primary text-xs">
+                <button
+                  onClick={saveBalance}
+                  disabled={savingBalance}
+                  className="btn btn-primary text-xs"
+                >
                   {savingBalance ? 'Saving...' : 'Save'}
                 </button>
-                <button onClick={() => setEditingBalance(false)} className="btn btn-secondary text-xs">Cancel</button>
+                <button
+                  onClick={() => setEditingBalance(false)}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <button
-                onClick={() => { setEditingBalance(true); setBalanceInput(dashboard.bank_balance.toString()) }}
+                onClick={() => {
+                  setEditingBalance(true)
+                  setBalanceInput(dashboard.bank_balance.toString())
+                }}
                 className="flex items-center gap-2 group"
               >
                 <div className="text-left">
                   <p className="text-xs text-luxury-gray-3 mb-0.5">Bank Balance</p>
-                  <p className="text-3xl font-bold text-luxury-gray-1">{fmtShort(dashboard.bank_balance)}</p>
+                  <p className="text-3xl font-bold text-luxury-gray-1">
+                    {fmtShort(dashboard.bank_balance)}
+                  </p>
                 </div>
-                <Edit2 size={13} className="text-luxury-gray-3 group-hover:text-luxury-accent flex-shrink-0" />
+                <Edit2
+                  size={13}
+                  className="text-luxury-gray-3 group-hover:text-luxury-accent flex-shrink-0"
+                />
               </button>
             )}
           </div>
@@ -803,26 +1080,38 @@ export default function AdminChecksPage() {
 
           {/* Key questions — compact on mobile */}
           <div className="space-y-2">
-            <div className={`inner-card border ${dashboard.coverage_check >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+            <div
+              className={`inner-card border ${dashboard.coverage_check >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-luxury-gray-3 flex-1">Available covers ACH going out?</p>
-                <p className={`text-sm font-bold flex-shrink-0 ${dashboard.coverage_check >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <p
+                  className={`text-sm font-bold flex-shrink-0 ${dashboard.coverage_check >= 0 ? 'text-green-700' : 'text-red-600'}`}
+                >
                   {fmtShort(dashboard.coverage_check)}
                 </p>
               </div>
               {dashboard.coverage_check < 0 && (
-                <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1"><AlertCircle size={10} /> Act immediately</p>
+                <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1">
+                  <AlertCircle size={10} /> Act immediately
+                </p>
               )}
             </div>
-            <div className={`inner-card border ${dashboard.total_exposure >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}>
+            <div
+              className={`inner-card border ${dashboard.total_exposure >= 0 ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-luxury-gray-3 flex-1">Total funds cover all payouts?</p>
-                <p className={`text-sm font-bold flex-shrink-0 ${dashboard.total_exposure >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                <p
+                  className={`text-sm font-bold flex-shrink-0 ${dashboard.total_exposure >= 0 ? 'text-green-700' : 'text-red-600'}`}
+                >
                   {fmtShort(dashboard.total_exposure)}
                 </p>
               </div>
               {dashboard.total_exposure < 0 && (
-                <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1"><AlertCircle size={10} /> Insufficient in pipeline</p>
+                <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1">
+                  <AlertCircle size={10} /> Insufficient in pipeline
+                </p>
               )}
             </div>
           </div>
@@ -834,33 +1123,64 @@ export default function AdminChecksPage() {
         <div className="container-card mb-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-luxury-gray-1">Add Check</p>
-            <button onClick={() => { setShowAddCheck(false); setShowOptionalFields(false) }} className="p-1 text-luxury-gray-3 hover:text-luxury-gray-1">
+            <button
+              onClick={() => {
+                setShowAddCheck(false)
+                setShowOptionalFields(false)
+              }}
+              className="p-1 text-luxury-gray-3 hover:text-luxury-gray-1"
+            >
               <X size={18} />
             </button>
           </div>
           <div className="space-y-3 mb-3">
             <div>
               <label className="field-label">Amount ($) *</label>
-              <input type="number" step="0.01" inputMode="decimal" className="input-luxury text-lg" placeholder="0.00" value={checkForm.check_amount} onChange={e => setCheckForm(p => ({ ...p, check_amount: e.target.value }))} />
+              <input
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                className="input-luxury text-lg"
+                placeholder="0.00"
+                value={checkForm.check_amount}
+                onChange={e => setCheckForm(p => ({ ...p, check_amount: e.target.value }))}
+              />
             </div>
             <div>
               <label className="field-label">Check From *</label>
-              <input className="input-luxury" placeholder="Title company, tenant, etc." value={checkForm.check_from} onChange={e => setCheckForm(p => ({ ...p, check_from: e.target.value }))} />
+              <input
+                className="input-luxury"
+                placeholder="Title company, tenant, etc."
+                value={checkForm.check_from}
+                onChange={e => setCheckForm(p => ({ ...p, check_from: e.target.value }))}
+              />
             </div>
             <div>
               <label className="field-label">Property Address *</label>
-              <input className="input-luxury" value={checkForm.property_address} onChange={e => setCheckForm(p => ({ ...p, property_address: e.target.value }))} />
+              <input
+                className="input-luxury"
+                value={checkForm.property_address}
+                onChange={e => setCheckForm(p => ({ ...p, property_address: e.target.value }))}
+              />
             </div>
             <div>
               <label className="field-label">Received Date *</label>
-              <input type="date" className="input-luxury" value={checkForm.received_date} onChange={e => setCheckForm(p => ({ ...p, received_date: e.target.value }))} />
+              <input
+                type="date"
+                className="input-luxury"
+                value={checkForm.received_date}
+                onChange={e => setCheckForm(p => ({ ...p, received_date: e.target.value }))}
+              />
             </div>
             <CheckImageUpload
-              onUploaded={(url) => setCheckForm(p => ({ ...p, check_image_url: url }))}
+              onUploaded={url => setCheckForm(p => ({ ...p, check_image_url: url }))}
             />
           </div>
 
-          <button onClick={() => setShowOptionalFields(!showOptionalFields)} className="text-xs text-luxury-accent flex items-center gap-1 mb-3">
+          <button
+            onClick={() => setShowOptionalFields(!showOptionalFields)}
+            className="text-xs text-luxury-accent flex items-center gap-1 mb-3"
+          >
             {showOptionalFields ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             {showOptionalFields ? 'Hide' : 'Add'} optional fields
           </button>
@@ -869,34 +1189,73 @@ export default function AdminChecksPage() {
             <div className="space-y-3 mb-3">
               <div>
                 <label className="field-label">Check Number</label>
-                <input className="input-luxury" value={checkForm.check_number} onChange={e => setCheckForm(p => ({ ...p, check_number: e.target.value }))} />
+                <input
+                  className="input-luxury"
+                  value={checkForm.check_number}
+                  onChange={e => setCheckForm(p => ({ ...p, check_number: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">CRC Amount ($)</label>
-                <input type="number" step="0.01" inputMode="decimal" className="input-luxury" value={checkForm.brokerage_amount} onChange={e => setCheckForm(p => ({ ...p, brokerage_amount: e.target.value }))} />
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  className="input-luxury"
+                  value={checkForm.brokerage_amount}
+                  onChange={e => setCheckForm(p => ({ ...p, brokerage_amount: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Deposited Date</label>
-                <input type="date" className="input-luxury" value={checkForm.deposited_date} onChange={e => setCheckForm(p => ({ ...p, deposited_date: e.target.value }))} />
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={checkForm.deposited_date}
+                  onChange={e => setCheckForm(p => ({ ...p, deposited_date: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Cleared Date</label>
-                <input type="date" className="input-luxury" value={checkForm.cleared_date} onChange={e => setCheckForm(p => ({ ...p, cleared_date: e.target.value }))} />
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={checkForm.cleared_date}
+                  onChange={e => setCheckForm(p => ({ ...p, cleared_date: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="field-label">Compliance Complete Date</label>
-                <input type="date" className="input-luxury" value={checkForm.compliance_complete_date} onChange={e => setCheckForm(p => ({ ...p, compliance_complete_date: e.target.value }))} />
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={checkForm.compliance_complete_date}
+                  onChange={e =>
+                    setCheckForm(p => ({ ...p, compliance_complete_date: e.target.value }))
+                  }
+                />
               </div>
               <div>
                 <label className="field-label">Notes</label>
-                <textarea className="input-luxury resize-none" rows={2} value={checkForm.notes} onChange={e => setCheckForm(p => ({ ...p, notes: e.target.value }))} />
+                <textarea
+                  className="input-luxury resize-none"
+                  rows={2}
+                  value={checkForm.notes}
+                  onChange={e => setCheckForm(p => ({ ...p, notes: e.target.value }))}
+                />
               </div>
             </div>
           )}
 
           <button
             onClick={saveCheck}
-            disabled={savingCheck || !checkForm.check_amount || !checkForm.received_date || !checkForm.check_from || !checkForm.property_address}
+            disabled={
+              savingCheck ||
+              !checkForm.check_amount ||
+              !checkForm.received_date ||
+              !checkForm.check_from ||
+              !checkForm.property_address
+            }
             className="btn btn-primary w-full disabled:opacity-50"
           >
             {savingCheck ? 'Saving...' : 'Add Check'}
@@ -916,15 +1275,21 @@ export default function AdminChecksPage() {
             onClick={() => setExpandedSection(p => ({ ...p, [key]: !p[key] }))}
           >
             <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
-              {label} <span className="text-luxury-gray-2 normal-case font-normal">({checks.length})</span>
+              {label}{' '}
+              <span className="text-luxury-gray-2 normal-case font-normal">({checks.length})</span>
             </p>
-            {expandedSection[key] ? <ChevronUp size={14} className="text-luxury-gray-3" /> : <ChevronDown size={14} className="text-luxury-gray-3" />}
+            {expandedSection[key] ? (
+              <ChevronUp size={14} className="text-luxury-gray-3" />
+            ) : (
+              <ChevronDown size={14} className="text-luxury-gray-3" />
+            )}
           </button>
-          {expandedSection[key] && (
-            checks.length === 0
-              ? <p className="text-xs text-luxury-gray-3 mb-4 px-1">No checks.</p>
-              : checks.map(c => renderCheckRow(c, showPayBy, showPaidOut))
-          )}
+          {expandedSection[key] &&
+            (checks.length === 0 ? (
+              <p className="text-xs text-luxury-gray-3 mb-4 px-1">No checks.</p>
+            ) : (
+              checks.map(c => renderCheckRow(c, showPayBy, showPaidOut))
+            ))}
         </div>
       ))}
     </div>

@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
-    
+
     const body = await request.json()
     const {
       listing_id,
@@ -20,15 +20,12 @@ export async function POST(request: NextRequest) {
       payment_method,
       custom_service_fee,
     } = body
-    
+
     // Allow broker_listing if custom_service_fee is 0, otherwise require client_direct or agent_pays
     if (!payment_method) {
-      return NextResponse.json(
-        { error: 'Payment method is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Payment method is required' }, { status: 400 })
     }
-    
+
     // If custom_service_fee is 0, allow broker_listing; otherwise require standard payment methods
     if (custom_service_fee === 0) {
       if (!['client_direct', 'agent_pays', 'broker_listing'].includes(payment_method)) {
@@ -39,24 +36,19 @@ export async function POST(request: NextRequest) {
       }
     } else {
       if (!['client_direct', 'agent_pays'].includes(payment_method)) {
-        return NextResponse.json(
-          { error: 'Valid payment method is required' },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: 'Valid payment method is required' }, { status: 400 })
       }
     }
-    
+
     const listing = await getListingById(listing_id)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
-    
+
     const serviceConfig = await getServiceConfig('listing_coordination')
-    const serviceFee = custom_service_fee !== undefined ? custom_service_fee : (serviceConfig?.price || 250.00)
-    
+    const serviceFee =
+      custom_service_fee !== undefined ? custom_service_fee : serviceConfig?.price || 250.0
+
     let paymentDueDate = null
     // Only set payment due date for agent_pays (not broker_listing)
     if (payment_method === 'agent_pays') {
@@ -64,9 +56,13 @@ export async function POST(request: NextRequest) {
       dueDate.setDate(dueDate.getDate() + 60)
       paymentDueDate = dueDate.toISOString().split('T')[0]
     }
-    
-    const { sharingUrl } = await createListingFolder(listing.property_address, listing_id, listing.transaction_type || 'sale')
-    
+
+    const { sharingUrl } = await createListingFolder(
+      listing.property_address,
+      listing_id,
+      listing.transaction_type || 'sale'
+    )
+
     let coordination = await createCoordination({
       listing_id,
       agent_id,
@@ -77,23 +73,20 @@ export async function POST(request: NextRequest) {
       payment_method,
       payment_due_date: paymentDueDate,
     })
-    
+
     if (!coordination) {
-      return NextResponse.json(
-        { error: 'Failed to create coordination' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to create coordination' }, { status: 500 })
     }
-    
+
     await supabase
       .from('listing_coordination')
       .update({ onedrive_folder_url: sharingUrl })
       .eq('id', coordination.id)
-    
+
     if (listing_website_url) {
       await updateListing(listing_id, { listing_website_url })
     }
-    
+
     // Check if there's a schedule preference (from body)
     if (body.scheduleDate && body.scheduleTime) {
       const scheduleDate = new Date(`${body.scheduleDate}T${body.scheduleTime}`)
@@ -102,39 +95,32 @@ export async function POST(request: NextRequest) {
           .from('listing_coordination')
           .update({ next_email_scheduled_for: scheduleDate.toISOString() })
           .eq('id', coordination.id)
-        
+
         // Reload coordination to get updated schedule
         const { data: updatedCoordination } = await supabase
           .from('listing_coordination')
           .select('*')
           .eq('id', coordination.id)
           .single()
-        
+
         if (updatedCoordination) {
           coordination = updatedCoordination as any
         }
       }
     }
-    
-    const { data: agentData } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', agent_id)
-      .single()
-    
+
+    const { data: agentData } = await supabase.from('users').select('*').eq('id', agent_id).single()
+
     if (agentData && coordination) {
-      const result = await sendWelcomeEmail(
-        coordination,
-        listing,
-        {
-          name: agentData.preferred_first_name && agentData.preferred_last_name
+      const result = await sendWelcomeEmail(coordination, listing, {
+        name:
+          agentData.preferred_first_name && agentData.preferred_last_name
             ? `${agentData.preferred_first_name} ${agentData.preferred_last_name}`
             : `${agentData.first_name} ${agentData.last_name}`,
-          email: agentData.email,
-          phone: agentData.business_phone || agentData.personal_phone || '',
-        }
-      )
-      
+        email: agentData.email,
+        phone: agentData.business_phone || agentData.personal_phone || '',
+      })
+
       if (result.success) {
         await supabase
           .from('listing_coordination')
@@ -147,40 +133,35 @@ export async function POST(request: NextRequest) {
           .eq('id', coordination.id)
 
         // Log email to history
-        await supabase
-          .from('coordination_email_history')
-          .insert({
-            coordination_id: coordination.id,
-            email_type: 'welcome',
-            recipient_email: coordination.seller_email,
-            recipient_name: coordination.seller_name,
-            subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
-            resend_email_id: result.emailId || null,
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-          })
+        await supabase.from('coordination_email_history').insert({
+          coordination_id: coordination.id,
+          email_type: 'welcome',
+          recipient_email: coordination.seller_email,
+          recipient_name: coordination.seller_name,
+          subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
+          resend_email_id: result.emailId || null,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        })
       } else {
         // Log failed email
-        await supabase
-          .from('coordination_email_history')
-          .insert({
-            coordination_id: coordination.id,
-            email_type: 'welcome',
-            recipient_email: coordination.seller_email,
-            recipient_name: coordination.seller_name,
-            subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
-            status: 'failed',
-            error_message: result.error || 'Unknown error',
-            sent_at: new Date().toISOString(),
-          })
+        await supabase.from('coordination_email_history').insert({
+          coordination_id: coordination.id,
+          email_type: 'welcome',
+          recipient_email: coordination.seller_email,
+          recipient_name: coordination.seller_name,
+          subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
+          status: 'failed',
+          error_message: result.error || 'Unknown error',
+          sent_at: new Date().toISOString(),
+        })
       }
     }
-    
+
     return NextResponse.json({
       success: true,
       coordination,
     })
-    
   } catch (error: any) {
     console.error('Error activating coordination:', error)
     return NextResponse.json(
@@ -189,4 +170,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

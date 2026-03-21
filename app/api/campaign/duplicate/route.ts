@@ -14,8 +14,8 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
           {
             heading: `${currentYear} Production Period`,
             items: [
-              `Your ${currentYear} numbers will reflect closings from **November 23, ${currentYear - 1} through November 22, ${currentYear}**.`
-            ]
+              `Your ${currentYear} numbers will reflect closings from **November 23, ${currentYear - 1} through November 22, ${currentYear}**.`,
+            ],
           },
           {
             heading: 'Important Information',
@@ -23,24 +23,24 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
               'There will be **NO fee, split, or cap increases for ' + newYear + '!**',
               'Your Independent Contractor Agreement remains in effect for an indefinite term. It continues unless you terminate following the [firm exit process](https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Firm-Exit-Process.aspx).',
               'You may change your commission plan annually when eligible.',
-              'If you select a new commission plan, you will receive a new agreement to sign reflecting your updated plan.'
-            ]
+              'If you select a new commission plan, you will receive a new agreement to sign reflecting your updated plan.',
+            ],
           },
           {
             heading: 'Make Your Deals Count!',
             items: [
-              'If you\'ve already been paid for your deal by November 22nd, it\'s counted because it\'s closed out in Brokermint.',
+              "If you've already been paid for your deal by November 22nd, it's counted because it's closed out in Brokermint.",
               'For unpaid leases/apartments, ensure by November 28th:',
               '  • Transaction is created in Brokermint',
               '  • Transaction is in **Pending** status',
               `  • Closing date is entered (between November 23, ${currentYear - 1} and November 22, ${currentYear})`,
               '  • Sales price is calculated as: Rent × Months in Lease Term',
-              '  • 💡 Example: $1,000 rent × 12 months = $12,000 sales price'
-            ]
-          }
+              '  • 💡 Example: $1,000 rent × 12 months = $12,000 sales price',
+            ],
+          },
         ],
-        buttonText: 'Next: Update My Profile →'
-      }
+        buttonText: 'Next: Update My Profile →',
+      },
     },
     {
       stepNumber: 2,
@@ -64,9 +64,9 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
           'shipping_state',
           'shipping_zip',
           'commission_plan',
-          'commission_plan_other'
-        ]
-      }
+          'commission_plan_other',
+        ],
+      },
     },
     {
       stepNumber: 3,
@@ -75,16 +75,16 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
       content: {
         eventTitle: 'Annual Award Ceremony Luncheon',
         eventSubtitle: 'We Made It!',
-        eventDescription: 'Join us to celebrate our entire firm\'s success this year.',
+        eventDescription: "Join us to celebrate our entire firm's success this year.",
         hostedBy: 'CJE Media',
         when: 'Tuesday, December 16 at 12:00 PM',
-        where: 'Rhay\'s Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077',
+        where: "Rhay's Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077",
         rsvpBy: 'December 9, ' + newYear,
         dressCode: 'Black Tie',
         eventFlyerUrl: '',
         commentsPrompt: 'Any dietary restrictions or special requests?',
-        closingText: 'Let\'s Celebrate!'
-      }
+        closingText: "Let's Celebrate!",
+      },
     },
     {
       stepNumber: 4,
@@ -100,24 +100,24 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
             min: 1,
             max: 10,
             minLabel: 'Not supported',
-            maxLabel: 'Very supported'
+            maxLabel: 'Very supported',
           },
           {
             id: 'q2',
             type: 'textarea',
             label: 'What are two specific ways we could better support you in ' + newYear + '?',
-            required: false
+            required: false,
           },
           {
             id: 'q3',
             type: 'radio',
             label: 'In ' + newYear + ', do you see yourself working best:',
             required: true,
-            options: ['On a team', 'Independently', 'Not sure yet']
-          }
-        ]
-      }
-    }
+            options: ['On a team', 'Independently', 'Not sure yet'],
+          },
+        ],
+      },
+    },
   ]
 }
 
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     // Calculate new year and dates
     const currentYear = originalCampaign.year || new Date().getFullYear()
     const newYear = currentYear + 1
-    
+
     // Update deadline to next year (same month/day)
     const oldDeadline = new Date(originalCampaign.deadline)
     const newDeadline = new Date(oldDeadline.setFullYear(oldDeadline.getFullYear() + 1))
@@ -147,18 +147,12 @@ export async function POST(request: NextRequest) {
       .split('T')[0]
 
     // Create new campaign name and slug
-    const newName = originalCampaign.name.replace(
-      String(currentYear),
-      String(newYear)
-    )
-    const newSlug = originalCampaign.slug.replace(
-      String(currentYear),
-      String(newYear)
-    )
+    const newName = originalCampaign.name.replace(String(currentYear), String(newYear))
+    const newSlug = originalCampaign.slug.replace(String(currentYear), String(newYear))
 
     // Copy and update steps_config if it exists, or convert hardcoded to editable format
     let updatedStepsConfig = originalCampaign.steps_config || []
-    
+
     // If steps_config is empty (legacy hardcoded campaign), convert it to editable format
     if (!Array.isArray(updatedStepsConfig) || updatedStepsConfig.length === 0) {
       updatedStepsConfig = convertHardcodedToStepsConfig(currentYear, newYear)
@@ -175,23 +169,22 @@ export async function POST(request: NextRequest) {
     // Create the duplicate campaign
     const { data: newCampaign, error: insertError } = await supabase
       .from('campaigns')
-      .insert([{
-        name: newName,
-        slug: newSlug,
-        year: newYear,
-        deadline: newDeadline,
-        event_staff_email: originalCampaign.event_staff_email,
-        is_active: false, // Start as inactive
-        email_subject: originalCampaign.email_subject?.replace(
-          String(currentYear),
-          String(newYear)
-        ),
-        email_body: originalCampaign.email_body?.replace(
-          String(currentYear),
-          String(newYear)
-        ),
-        steps_config: updatedStepsConfig, // Copy the steps configuration
-      }])
+      .insert([
+        {
+          name: newName,
+          slug: newSlug,
+          year: newYear,
+          deadline: newDeadline,
+          event_staff_email: originalCampaign.event_staff_email,
+          is_active: false, // Start as inactive
+          email_subject: originalCampaign.email_subject?.replace(
+            String(currentYear),
+            String(newYear)
+          ),
+          email_body: originalCampaign.email_body?.replace(String(currentYear), String(newYear)),
+          steps_config: updatedStepsConfig, // Copy the steps configuration
+        },
+      ])
       .select()
       .single()
 
@@ -205,16 +198,13 @@ export async function POST(request: NextRequest) {
       throw insertError
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       campaign: newCampaign,
-      message: `Created "${newName}" successfully!`
+      message: `Created "${newName}" successfully!`,
     })
   } catch (error) {
     console.error('Duplicate campaign error:', error)
-    return NextResponse.json(
-      { error: 'Failed to duplicate campaign' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to duplicate campaign' }, { status: 500 })
   }
 }

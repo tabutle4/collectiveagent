@@ -10,20 +10,32 @@ export async function POST(request: NextRequest) {
     const { user_id, user_name, user_email } = await request.json()
 
     if (!user_id || !user_name || !user_email) {
-      return NextResponse.json({ error: 'user_id, user_name, and user_email are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'user_id, user_name, and user_email are required' },
+        { status: 400 }
+      )
     }
 
-    const completionDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const completionDate = new Date().toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
 
     const content = `
       <p class="email-greeting">Onboarding Complete</p>
       <p><strong>${user_name}</strong> has completed their onboarding checklist!</p>
       
-      ${emailSection('Agent Details', `
+      ${emailSection(
+        'Agent Details',
+        `
         <p><strong>Name:</strong> ${user_name}</p>
         <p><strong>Email:</strong> ${user_email}</p>
         <p><strong>Completed:</strong> ${completionDate}</p>
-      `)}
+      `
+      )}
       
       <div class="email-section" style="border-left: 3px solid #4caf50;">
         <p style="margin: 0; color: #2e7d32; font-weight: 600;">All checklist items completed</p>
@@ -41,6 +53,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: 'Completion notification sent' })
   } catch (error: any) {
     console.error('Error sending completion notification:', error)
-    return NextResponse.json({ error: error?.message || 'Failed to send notification' }, { status: 500 })
+    return NextResponse.json(
+      { error: error?.message || 'Failed to send notification' },
+      { status: 500 }
+    )
   }
 }

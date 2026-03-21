@@ -40,8 +40,7 @@ async function uploadToOneDrive(
   const oneDriveUser = process.env.MICROSOFT_ONEDRIVE_USER! // your M365 email
   const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || 'Collective Agent'
 
-  const fullPath = `${rootFolder}/${folderPath}/${filename}`
-    .replace(/\/+/g, '/') // normalize double slashes
+  const fullPath = `${rootFolder}/${folderPath}/${filename}`.replace(/\/+/g, '/') // normalize double slashes
 
   // Upload via the user's OneDrive — simple PUT for files under 4MB
   const uploadUrl = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oneDriveUser)}/drive/root:/${fullPath}:/content`
@@ -113,10 +112,7 @@ export async function POST(request: NextRequest) {
 
     // Save URL to the check record if check_id provided
     if (checkId) {
-      await supabase
-        .from('checks_received')
-        .update({ check_image_url: fileUrl })
-        .eq('id', checkId)
+      await supabase.from('checks_received').update({ check_image_url: fileUrl }).eq('id', checkId)
     }
 
     return NextResponse.json({ url: fileUrl, filename, folder: folderPath })

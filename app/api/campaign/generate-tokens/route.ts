@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Generate tokens for each agent
     const updates = agents.map(agent => ({
       id: agent.id,
-      campaign_token: crypto.randomBytes(16).toString('hex')
+      campaign_token: crypto.randomBytes(16).toString('hex'),
     }))
 
     // Update all agents with tokens
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const recipients = updates.map(update => ({
       campaign_id,
       user_id: update.id,
-      current_step: 0
+      current_step: 0,
     }))
 
     await supabase
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       count: updates.length,
-      message: `Generated tokens for ${updates.length} agents`
+      message: `Generated tokens for ${updates.length} agents`,
     })
   } catch (error) {
     console.error('Generate tokens error:', error)

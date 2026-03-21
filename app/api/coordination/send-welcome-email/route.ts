@@ -10,26 +10,17 @@ export async function POST(request: NextRequest) {
     const { coordination_id } = await request.json()
 
     if (!coordination_id) {
-      return NextResponse.json(
-        { error: 'Coordination ID is required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Coordination ID is required' }, { status: 400 })
     }
 
     const coordination = await getCoordinationById(coordination_id)
     if (!coordination) {
-      return NextResponse.json(
-        { error: 'Coordination not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Coordination not found' }, { status: 404 })
     }
 
     const listing = await getListingById(coordination.listing_id)
     if (!listing) {
-      return NextResponse.json(
-        { error: 'Listing not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
     }
 
     // Get agent information
@@ -40,14 +31,17 @@ export async function POST(request: NextRequest) {
     if (coordination.agent_id) {
       const { data: agentData } = await supabase
         .from('users')
-        .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+        .select(
+          'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+        )
         .eq('id', coordination.agent_id)
         .single()
 
       if (agentData) {
-        agentName = agentData.preferred_first_name && agentData.preferred_last_name
-          ? `${agentData.preferred_first_name} ${agentData.preferred_last_name}`
-          : `${agentData.first_name} ${agentData.last_name}`
+        agentName =
+          agentData.preferred_first_name && agentData.preferred_last_name
+            ? `${agentData.preferred_first_name} ${agentData.preferred_last_name}`
+            : `${agentData.first_name} ${agentData.last_name}`
         agentEmail = agentData.email || ''
         agentPhone = agentData.business_phone || agentData.personal_phone || ''
       }
@@ -61,7 +55,9 @@ export async function POST(request: NextRequest) {
         // Try preferred name first
         const { data: agentsByPreferred } = await supabase
           .from('users')
-          .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+          .select(
+            'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+          )
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
           .eq('is_licensed_agent', true)
@@ -74,7 +70,9 @@ export async function POST(request: NextRequest) {
           // Try legal name
           const { data: agentsByLegal } = await supabase
             .from('users')
-            .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
+            .select(
+              'preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone'
+            )
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
             .eq('is_licensed_agent', true)
@@ -92,15 +90,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const emailResult = await sendWelcomeEmail(
-      coordination,
-      listing,
-      {
-        name: agentName,
-        email: agentEmail,
-        phone: agentPhone,
-      }
-    )
+    const emailResult = await sendWelcomeEmail(coordination, listing, {
+      name: agentName,
+      email: agentEmail,
+      phone: agentPhone,
+    })
 
     if (!emailResult.success) {
       return NextResponse.json(
@@ -118,18 +112,16 @@ export async function POST(request: NextRequest) {
     })
 
     // Log email to history
-    await supabase
-      .from('coordination_email_history')
-      .insert({
-        coordination_id,
-        email_type: 'welcome',
-        recipient_email: coordination.seller_email,
-        recipient_name: coordination.seller_name,
-        subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
-        resend_email_id: emailResult.emailId || null,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-      })
+    await supabase.from('coordination_email_history').insert({
+      coordination_id,
+      email_type: 'welcome',
+      recipient_email: coordination.seller_email,
+      recipient_name: coordination.seller_name,
+      subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
+      resend_email_id: emailResult.emailId || null,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+    })
 
     return NextResponse.json({
       success: true,

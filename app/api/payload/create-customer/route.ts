@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const res = await fetch('https://api.payload.com/customers/', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     if (!res.ok) {
       console.error('Payload customer creation failed:', data)
-      return NextResponse.json({ error: data.message || 'Failed to create customer' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.message || 'Failed to create customer' },
+        { status: 500 }
+      )
     }
 
     const supabase = createClient()
@@ -36,6 +39,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, customer_id: data.id })
   } catch (error: any) {
     console.error('Error creating Payload customer:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create customer' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to create customer' },
+      { status: 500 }
+    )
   }
 }

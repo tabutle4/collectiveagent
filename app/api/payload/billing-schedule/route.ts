@@ -20,7 +20,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (!user?.payload_payee_id) {
-      return NextResponse.json({ error: 'Agent does not have a Payload customer ID.' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Agent does not have a Payload customer ID.' },
+        { status: 400 }
+      )
     }
 
     const now = new Date()
@@ -29,15 +32,15 @@ export async function POST(request: NextRequest) {
     const res = await fetch('https://api.payload.com/billing_schedules/', {
       method: 'POST',
       headers: {
-        'Authorization': authHeader(),
+        Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        'type': 'subscription',
-        'processing_id': process.env.PAYLOAD_PROCESSING_ID!,
-        'customer_id': user.payload_payee_id,
-        'start_date': startDate,
-        'recurring_frequency': 'monthly',
+        type: 'subscription',
+        processing_id: process.env.PAYLOAD_PROCESSING_ID!,
+        customer_id: user.payload_payee_id,
+        start_date: startDate,
+        recurring_frequency: 'monthly',
         'charges[0][type]': 'Monthly Fee',
         'charges[0][amount]': '50',
       }),
@@ -46,12 +49,18 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     if (!res.ok) {
       console.error('Payload billing schedule creation failed:', data)
-      return NextResponse.json({ error: data.message || 'Failed to create billing schedule' }, { status: 500 })
+      return NextResponse.json(
+        { error: data.message || 'Failed to create billing schedule' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true, schedule_id: data.id, start_date: startDate })
   } catch (error: any) {
     console.error('Error creating billing schedule:', error)
-    return NextResponse.json({ error: error.message || 'Failed to create billing schedule' }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Failed to create billing schedule' },
+      { status: 500 }
+    )
   }
 }

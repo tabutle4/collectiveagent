@@ -16,12 +16,12 @@ function CampaignBuilderContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const campaignId = searchParams?.get('id') || undefined
-  
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [previewMode, setPreviewMode] = useState(false)
-  
+
   // Campaign basic info
   const [campaignInfo, setCampaignInfo] = useState({
     name: '',
@@ -33,7 +33,7 @@ function CampaignBuilderContent() {
     email_subject: '',
     email_body: '',
   })
-  
+
   // Steps configuration
   const [steps, setSteps] = useState<StepConfig[]>([])
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
@@ -84,19 +84,35 @@ function CampaignBuilderContent() {
                     'There will be **NO fee, split, or cap increases for 2026!**',
                     'Your Independent Contractor Agreement remains in effect for an indefinite term.',
                     'You may change your commission plan annually when eligible.',
-                  ]
-                }
+                  ],
+                },
               ],
-              buttonText: 'Next: Update My Profile →'
-            }
+              buttonText: 'Next: Update My Profile →',
+            },
           },
           {
             stepNumber: 2,
             type: 'profile',
             title: 'Update Your Profile',
             content: {
-              fields: ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name', 'personal_email', 'personal_phone', 'business_phone', 'date_of_birth', 'shirt_type', 'shirt_size', 'shipping_address_line1', 'shipping_address_line2', 'shipping_city', 'shipping_state', 'shipping_zip']
-            }
+              fields: [
+                'first_name',
+                'last_name',
+                'preferred_first_name',
+                'preferred_last_name',
+                'personal_email',
+                'personal_phone',
+                'business_phone',
+                'date_of_birth',
+                'shirt_type',
+                'shirt_size',
+                'shipping_address_line1',
+                'shipping_address_line2',
+                'shipping_city',
+                'shipping_state',
+                'shipping_zip',
+              ],
+            },
           },
           {
             stepNumber: 3,
@@ -105,16 +121,16 @@ function CampaignBuilderContent() {
             content: {
               eventTitle: 'Annual Award Ceremony Luncheon',
               eventSubtitle: 'We Made It!',
-              eventDescription: 'Join us to celebrate our entire firm\'s success this year.',
+              eventDescription: "Join us to celebrate our entire firm's success this year.",
               hostedBy: 'CJE Media',
               when: 'Tuesday, December 16 at 12:00 PM',
-              where: 'Rhay\'s Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077',
+              where: "Rhay's Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077",
               rsvpBy: 'December 9, 2025',
               dressCode: 'Black Tie',
               eventFlyerUrl: '',
               commentsPrompt: 'Any dietary restrictions or special requests?',
-              closingText: 'Let\'s Celebrate!'
-            }
+              closingText: "Let's Celebrate!",
+            },
           },
           {
             stepNumber: 4,
@@ -130,24 +146,24 @@ function CampaignBuilderContent() {
                   min: 1,
                   max: 10,
                   minLabel: 'Not supported',
-                  maxLabel: 'Very supported'
+                  maxLabel: 'Very supported',
                 },
                 {
                   id: 'q2',
                   type: 'textarea',
                   label: 'What are two specific ways we could better support you in 2026?',
-                  required: false
+                  required: false,
                 },
                 {
                   id: 'q3',
                   type: 'radio',
                   label: 'In 2026, do you see yourself working best:',
                   required: true,
-                  options: ['On a team', 'Independently', 'Not sure yet']
-                }
-              ]
-            }
-          }
+                  options: ['On a team', 'Independently', 'Not sure yet'],
+                },
+              ],
+            },
+          },
         ])
       }
     } catch (err: any) {
@@ -178,7 +194,7 @@ function CampaignBuilderContent() {
       // Ensure step numbers are sequential
       const sortedSteps = steps.map((step, index) => ({
         ...step,
-        stepNumber: index + 1
+        stepNumber: index + 1,
       }))
 
       const updateData: any = {
@@ -195,10 +211,7 @@ function CampaignBuilderContent() {
 
       if (campaignId) {
         // Update existing campaign
-        const { error } = await supabase
-          .from('campaigns')
-          .update(updateData)
-          .eq('id', campaignId)
+        const { error } = await supabase.from('campaigns').update(updateData).eq('id', campaignId)
 
         if (error) throw error
         alert('Campaign saved successfully!')
@@ -244,7 +257,7 @@ function CampaignBuilderContent() {
       stepNumber: steps.length + 1,
       type,
       title: `Step ${steps.length + 1}`,
-      content: getDefaultContentForType(type)
+      content: getDefaultContentForType(type),
     }
     setSteps([...steps, newStep])
     setSelectedStepIndex(steps.length)
@@ -256,10 +269,12 @@ function CampaignBuilderContent() {
         return {
           greeting: 'Hi, {first_name}',
           sections: [{ heading: 'Information', items: ['Add your content here'] }],
-          buttonText: 'Next →'
+          buttonText: 'Next →',
         }
       case 'profile':
-        return { fields: ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name'] }
+        return {
+          fields: ['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name'],
+        }
       case 'rsvp':
         return {
           eventTitle: 'Event Title',
@@ -272,7 +287,7 @@ function CampaignBuilderContent() {
           dressCode: '',
           eventFlyerUrl: '',
           commentsPrompt: 'Any dietary restrictions or special requests?',
-          closingText: ''
+          closingText: '',
         }
       case 'survey':
         return { questions: [] }
@@ -283,10 +298,12 @@ function CampaignBuilderContent() {
 
   const removeStep = (index: number) => {
     if (confirm('Are you sure you want to remove this step?')) {
-      const newSteps = steps.filter((_, i) => i !== index).map((step, i) => ({
-        ...step,
-        stepNumber: i + 1
-      }))
+      const newSteps = steps
+        .filter((_, i) => i !== index)
+        .map((step, i) => ({
+          ...step,
+          stepNumber: i + 1,
+        }))
       setSteps(newSteps)
       if (selectedStepIndex === index) {
         setSelectedStepIndex(null)
@@ -303,10 +320,10 @@ function CampaignBuilderContent() {
     const newSteps = [...steps]
     const targetIndex = direction === 'up' ? index - 1 : index + 1
     ;[newSteps[index], newSteps[targetIndex]] = [newSteps[targetIndex], newSteps[index]]
-    
+
     const renumbered = newSteps.map((step, i) => ({ ...step, stepNumber: i + 1 }))
     setSteps(renumbered)
-    
+
     if (selectedStepIndex === index) {
       setSelectedStepIndex(targetIndex)
     } else if (selectedStepIndex === targetIndex) {
@@ -327,9 +344,9 @@ function CampaignBuilderContent() {
           >
             ← Back to Campaigns
           </Link>
-          
+
           <div className="flex items-center justify-between">
-            <h2 className="text-xl md:text-2xl font-semibold tracking-wide" >
+            <h2 className="text-xl md:text-2xl font-semibold tracking-wide">
               {campaignId ? 'Edit Campaign' : 'Create New Campaign'}
             </h2>
             <div className="flex gap-3">
@@ -366,7 +383,9 @@ function CampaignBuilderContent() {
               {steps.map((step, index) => (
                 <div key={index} className="border border-luxury-gray-5 p-4 rounded">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-luxury-gray-2">Step {step.stepNumber} of {steps.length}</span>
+                    <span className="text-xs text-luxury-gray-2">
+                      Step {step.stepNumber} of {steps.length}
+                    </span>
                     <span className="px-2 py-1 text-xs rounded bg-luxury-gray-5">{step.type}</span>
                   </div>
                   <h4 className="font-medium">{step.title}</h4>
@@ -389,7 +408,7 @@ function CampaignBuilderContent() {
                     <input
                       type="text"
                       value={campaignInfo.name}
-                      onChange={(e) => {
+                      onChange={e => {
                         setCampaignInfo({ ...campaignInfo, name: e.target.value })
                         if (!campaignId) {
                           const slug = e.target.value
@@ -403,7 +422,7 @@ function CampaignBuilderContent() {
                       placeholder="2027 Plan Selection"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium mb-2">
                       Slug <span className="text-red-500">*</span>
@@ -411,7 +430,7 @@ function CampaignBuilderContent() {
                     <input
                       type="text"
                       value={campaignInfo.slug}
-                      onChange={(e) => setCampaignInfo({ ...campaignInfo, slug: e.target.value })}
+                      onChange={e => setCampaignInfo({ ...campaignInfo, slug: e.target.value })}
                       className="input-luxury"
                       placeholder="2027-plan-selection"
                     />
@@ -424,7 +443,7 @@ function CampaignBuilderContent() {
                     <input
                       type="date"
                       value={campaignInfo.deadline}
-                      onChange={(e) => setCampaignInfo({ ...campaignInfo, deadline: e.target.value })}
+                      onChange={e => setCampaignInfo({ ...campaignInfo, deadline: e.target.value })}
                       className="input-luxury"
                     />
                   </div>
@@ -437,7 +456,7 @@ function CampaignBuilderContent() {
                   <h3 className="text-lg font-medium">Steps ({steps.length})</h3>
                   <div className="flex gap-2">
                     <select
-                      onChange={(e) => {
+                      onChange={e => {
                         if (e.target.value) {
                           addStep(e.target.value as StepConfig['type'])
                           e.target.value = ''
@@ -453,7 +472,7 @@ function CampaignBuilderContent() {
                     </select>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   {steps.map((step, index) => (
                     <div
@@ -474,7 +493,7 @@ function CampaignBuilderContent() {
                       <p className="text-xs text-luxury-gray-2 truncate">{step.title}</p>
                       <div className="flex gap-1 mt-2">
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation()
                             moveStep(index, 'up')
                           }}
@@ -484,7 +503,7 @@ function CampaignBuilderContent() {
                           ↑
                         </button>
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation()
                             moveStep(index, 'down')
                           }}
@@ -494,7 +513,7 @@ function CampaignBuilderContent() {
                           ↓
                         </button>
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation()
                             removeStep(index)
                           }}
@@ -514,7 +533,7 @@ function CampaignBuilderContent() {
               {selectedStep ? (
                 <StepEditor
                   step={selectedStep}
-                  onChange={(updatedStep) => {
+                  onChange={updatedStep => {
                     const newSteps = [...steps]
                     newSteps[selectedStepIndex!] = updatedStep
                     setSteps(newSteps)
@@ -534,11 +553,17 @@ function CampaignBuilderContent() {
 }
 
 // Step Editor Component
-function StepEditor({ step, onChange }: { step: StepConfig; onChange: (step: StepConfig) => void }) {
+function StepEditor({
+  step,
+  onChange,
+}: {
+  step: StepConfig
+  onChange: (step: StepConfig) => void
+}) {
   const updateContent = (updates: any) => {
     onChange({
       ...step,
-      content: { ...step.content, ...updates }
+      content: { ...step.content, ...updates },
     })
   }
 
@@ -561,7 +586,13 @@ function StepEditor({ step, onChange }: { step: StepConfig; onChange: (step: Ste
 }
 
 // Info Step Editor
-function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step: StepConfig) => void }) {
+function InfoStepEditor({
+  step,
+  onChange,
+}: {
+  step: StepConfig
+  onChange: (step: StepConfig) => void
+}) {
   const content = step.content || { greeting: '', sections: [], buttonText: '' }
 
   const updateTitle = (title: string) => {
@@ -571,14 +602,14 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
   const updateContent = (updates: any) => {
     onChange({
       ...step,
-      content: { ...content, ...updates }
+      content: { ...content, ...updates },
     })
   }
 
   const addSection = () => {
     const sections = content.sections || []
     updateContent({
-      sections: [...sections, { heading: 'New Section', items: [''] }]
+      sections: [...sections, { heading: 'New Section', items: [''] }],
     })
   }
 
@@ -607,7 +638,9 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
 
   const removeItem = (sectionIndex: number, itemIndex: number) => {
     const sections = [...(content.sections || [])]
-    sections[sectionIndex].items = sections[sectionIndex].items.filter((_: any, i: number) => i !== itemIndex)
+    sections[sectionIndex].items = sections[sectionIndex].items.filter(
+      (_: any, i: number) => i !== itemIndex
+    )
     updateContent({ sections })
   }
 
@@ -618,7 +651,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
         <input
           type="text"
           value={step.title}
-          onChange={(e) => updateTitle(e.target.value)}
+          onChange={e => updateTitle(e.target.value)}
           className="input-luxury"
           placeholder="Commission Plan Selection"
         />
@@ -629,7 +662,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
         <input
           type="text"
           value={content.greeting || ''}
-          onChange={(e) => updateContent({ greeting: e.target.value })}
+          onChange={e => updateContent({ greeting: e.target.value })}
           className="input-luxury"
           placeholder="Hi, {first_name}"
         />
@@ -646,7 +679,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
             + Add Section
           </button>
         </div>
-        
+
         <div className="space-y-4">
           {content.sections?.map((section: any, sectionIndex: number) => (
             <div key={sectionIndex} className="border border-luxury-gray-5 p-4 rounded">
@@ -654,7 +687,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
                 <input
                   type="text"
                   value={section.heading || ''}
-                  onChange={(e) => updateSection(sectionIndex, { heading: e.target.value })}
+                  onChange={e => updateSection(sectionIndex, { heading: e.target.value })}
                   className="input-luxury flex-1"
                   placeholder="Section Heading"
                 />
@@ -665,14 +698,14 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
                   Remove
                 </button>
               </div>
-              
+
               <div className="space-y-2">
                 {section.items?.map((item: string, itemIndex: number) => (
                   <div key={itemIndex} className="flex gap-2">
                     <input
                       type="text"
                       value={item}
-                      onChange={(e) => updateItem(sectionIndex, itemIndex, e.target.value)}
+                      onChange={e => updateItem(sectionIndex, itemIndex, e.target.value)}
                       className="input-luxury flex-1"
                       placeholder="Bullet point (use **text** for bold)"
                     />
@@ -701,7 +734,7 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
         <input
           type="text"
           value={content.buttonText || ''}
-          onChange={(e) => updateContent({ buttonText: e.target.value })}
+          onChange={e => updateContent({ buttonText: e.target.value })}
           className="input-luxury"
           placeholder="Next: Update My Profile →"
         />
@@ -711,7 +744,13 @@ function InfoStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
 }
 
 // Profile Step Editor
-function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (step: StepConfig) => void }) {
+function ProfileStepEditor({
+  step,
+  onChange,
+}: {
+  step: StepConfig
+  onChange: (step: StepConfig) => void
+}) {
   const content = step.content || { fields: [] }
   const availableFields = [
     { key: 'first_name', label: 'First Name' },
@@ -753,7 +792,7 @@ function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (st
   const updateContent = (updates: any) => {
     onChange({
       ...step,
-      content: { ...content, ...updates }
+      content: { ...content, ...updates },
     })
   }
 
@@ -768,7 +807,7 @@ function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (st
         <input
           type="text"
           value={step.title}
-          onChange={(e) => updateTitle(e.target.value)}
+          onChange={e => updateTitle(e.target.value)}
           className="input-luxury"
           placeholder="Update Your Profile"
         />
@@ -777,7 +816,7 @@ function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (st
       <div>
         <label className="block text-sm font-medium mb-2">Select Fields to Show</label>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {availableFields.map((field) => (
+          {availableFields.map(field => (
             <label key={field.key} className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -795,13 +834,19 @@ function ProfileStepEditor({ step, onChange }: { step: StepConfig; onChange: (st
 }
 
 // RSVP Step Editor
-function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step: StepConfig) => void }) {
+function RsvpStepEditor({
+  step,
+  onChange,
+}: {
+  step: StepConfig
+  onChange: (step: StepConfig) => void
+}) {
   const content = step.content || {}
 
   const updateContent = (updates: any) => {
     onChange({
       ...step,
-      content: { ...content, ...updates }
+      content: { ...content, ...updates },
     })
   }
 
@@ -816,7 +861,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
         <input
           type="text"
           value={step.title}
-          onChange={(e) => updateTitle(e.target.value)}
+          onChange={e => updateTitle(e.target.value)}
           className="input-luxury"
           placeholder="Event RSVP"
         />
@@ -828,7 +873,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.eventTitle || ''}
-            onChange={(e) => updateContent({ eventTitle: e.target.value })}
+            onChange={e => updateContent({ eventTitle: e.target.value })}
             className="input-luxury"
             placeholder="Annual Award Ceremony Luncheon"
           />
@@ -839,7 +884,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.eventSubtitle || ''}
-            onChange={(e) => updateContent({ eventSubtitle: e.target.value })}
+            onChange={e => updateContent({ eventSubtitle: e.target.value })}
             className="input-luxury"
             placeholder="We Made It!"
           />
@@ -849,7 +894,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <label className="block text-sm font-medium mb-2">Event Description</label>
           <textarea
             value={content.eventDescription || ''}
-            onChange={(e) => updateContent({ eventDescription: e.target.value })}
+            onChange={e => updateContent({ eventDescription: e.target.value })}
             className="textarea-luxury"
             rows={3}
             placeholder="Join us to celebrate our entire firm's success this year."
@@ -861,7 +906,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.hostedBy || ''}
-            onChange={(e) => updateContent({ hostedBy: e.target.value })}
+            onChange={e => updateContent({ hostedBy: e.target.value })}
             className="input-luxury"
             placeholder="CJE Media"
           />
@@ -872,7 +917,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.when || ''}
-            onChange={(e) => updateContent({ when: e.target.value })}
+            onChange={e => updateContent({ when: e.target.value })}
             className="input-luxury"
             placeholder="Tuesday, December 16 at 12:00 PM"
           />
@@ -883,7 +928,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.where || ''}
-            onChange={(e) => updateContent({ where: e.target.value })}
+            onChange={e => updateContent({ where: e.target.value })}
             className="input-luxury"
             placeholder="Rhay's Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077"
           />
@@ -894,7 +939,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.rsvpBy || ''}
-            onChange={(e) => updateContent({ rsvpBy: e.target.value })}
+            onChange={e => updateContent({ rsvpBy: e.target.value })}
             className="input-luxury"
             placeholder="December 9, 2025"
           />
@@ -905,7 +950,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.dressCode || ''}
-            onChange={(e) => updateContent({ dressCode: e.target.value })}
+            onChange={e => updateContent({ dressCode: e.target.value })}
             className="input-luxury"
             placeholder="Black Tie"
           />
@@ -916,7 +961,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="url"
             value={content.eventFlyerUrl || ''}
-            onChange={(e) => updateContent({ eventFlyerUrl: e.target.value })}
+            onChange={e => updateContent({ eventFlyerUrl: e.target.value })}
             className="input-luxury"
             placeholder="https://..."
           />
@@ -927,7 +972,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.commentsPrompt || ''}
-            onChange={(e) => updateContent({ commentsPrompt: e.target.value })}
+            onChange={e => updateContent({ commentsPrompt: e.target.value })}
             className="input-luxury"
             placeholder="Any dietary restrictions or special requests?"
           />
@@ -938,7 +983,7 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
           <input
             type="text"
             value={content.closingText || ''}
-            onChange={(e) => updateContent({ closingText: e.target.value })}
+            onChange={e => updateContent({ closingText: e.target.value })}
             className="input-luxury"
             placeholder="Let's Celebrate!"
           />
@@ -949,13 +994,19 @@ function RsvpStepEditor({ step, onChange }: { step: StepConfig; onChange: (step:
 }
 
 // Survey Step Editor
-function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (step: StepConfig) => void }) {
+function SurveyStepEditor({
+  step,
+  onChange,
+}: {
+  step: StepConfig
+  onChange: (step: StepConfig) => void
+}) {
   const content = step.content || { questions: [] }
 
   const updateContent = (updates: any) => {
     onChange({
       ...step,
-      content: { ...content, ...updates }
+      content: { ...content, ...updates },
     })
   }
 
@@ -966,12 +1017,15 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
   const addQuestion = () => {
     const questions = content.questions || []
     updateContent({
-      questions: [...questions, {
-        id: `q${Date.now()}`,
-        type: 'textarea',
-        label: '',
-        required: false
-      }]
+      questions: [
+        ...questions,
+        {
+          id: `q${Date.now()}`,
+          type: 'textarea',
+          label: '',
+          required: false,
+        },
+      ],
     })
   }
 
@@ -993,7 +1047,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
         <input
           type="text"
           value={step.title}
-          onChange={(e) => updateTitle(e.target.value)}
+          onChange={e => updateTitle(e.target.value)}
           className="input-luxury"
           placeholder="Quick Feedback Survey"
         />
@@ -1016,7 +1070,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
               <div className="flex items-center justify-between mb-3">
                 <select
                   value={question.type || 'textarea'}
-                  onChange={(e) => updateQuestion(index, { type: e.target.value })}
+                  onChange={e => updateQuestion(index, { type: e.target.value })}
                   className="text-xs px-2 py-1 border border-luxury-gray-5 rounded"
                 >
                   <option value="textarea">Text Area</option>
@@ -1037,7 +1091,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                 <input
                   type="text"
                   value={question.label || ''}
-                  onChange={(e) => updateQuestion(index, { label: e.target.value })}
+                  onChange={e => updateQuestion(index, { label: e.target.value })}
                   className="input-luxury"
                   placeholder="Enter your question"
                 />
@@ -1048,7 +1102,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                   <input
                     type="checkbox"
                     checked={question.required || false}
-                    onChange={(e) => updateQuestion(index, { required: e.target.checked })}
+                    onChange={e => updateQuestion(index, { required: e.target.checked })}
                     className="w-4 h-4"
                   />
                   <span className="text-xs">Required</span>
@@ -1062,7 +1116,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                     <input
                       type="number"
                       value={question.min || 1}
-                      onChange={(e) => updateQuestion(index, { min: parseInt(e.target.value) })}
+                      onChange={e => updateQuestion(index, { min: parseInt(e.target.value) })}
                       className="input-luxury"
                     />
                   </div>
@@ -1071,7 +1125,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                     <input
                       type="number"
                       value={question.max || 10}
-                      onChange={(e) => updateQuestion(index, { max: parseInt(e.target.value) })}
+                      onChange={e => updateQuestion(index, { max: parseInt(e.target.value) })}
                       className="input-luxury"
                     />
                   </div>
@@ -1080,7 +1134,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                     <input
                       type="text"
                       value={question.minLabel || ''}
-                      onChange={(e) => updateQuestion(index, { minLabel: e.target.value })}
+                      onChange={e => updateQuestion(index, { minLabel: e.target.value })}
                       className="input-luxury"
                       placeholder="Not supported"
                     />
@@ -1090,7 +1144,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                     <input
                       type="text"
                       value={question.maxLabel || ''}
-                      onChange={(e) => updateQuestion(index, { maxLabel: e.target.value })}
+                      onChange={e => updateQuestion(index, { maxLabel: e.target.value })}
                       className="input-luxury"
                       placeholder="Very supported"
                     />
@@ -1103,7 +1157,7 @@ function SurveyStepEditor({ step, onChange }: { step: StepConfig; onChange: (ste
                   <label className="block text-xs font-medium mb-2">Options (one per line)</label>
                   <textarea
                     value={question.options?.join('\n') || ''}
-                    onChange={(e) => {
+                    onChange={e => {
                       const options = e.target.value.split('\n').filter(o => o.trim())
                       updateQuestion(index, { options })
                     }}
@@ -1128,4 +1182,3 @@ export default function CampaignBuilderPage() {
     </Suspense>
   )
 }
-
