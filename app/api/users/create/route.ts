@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase/server'
 import { hashPassword } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createClient()
+
     const {
       email,
       password,
@@ -15,7 +17,6 @@ export async function POST(request: NextRequest) {
       is_active,
     } = await request.json()
 
-    // Validation
     if (!email || !password || !first_name || !last_name || !preferred_first_name || !preferred_last_name) {
       return NextResponse.json(
         { error: 'Email, password, and all name fields are required' },
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if email already exists
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
@@ -44,10 +44,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash password
     const password_hash = await hashPassword(password)
 
-    // Create user
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert({
@@ -69,7 +67,6 @@ export async function POST(request: NextRequest) {
       throw insertError
     }
 
-    // Remove sensitive data
     const { password_hash: _, reset_token, reset_token_expires, ...userData } = newUser
 
     return NextResponse.json({
@@ -84,4 +81,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-
