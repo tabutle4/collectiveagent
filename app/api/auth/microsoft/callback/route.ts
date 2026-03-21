@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
     const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString())
 
     const microsoftEmail = payload.email || payload.preferred_username
+
     if (!microsoftEmail) {
       throw new Error('No email in Microsoft token')
     }
@@ -103,11 +104,10 @@ export async function GET(request: NextRequest) {
     const userRole = (user.role || '').toLowerCase()
     const redirectTo = ADMIN_ROLES.includes(userRole as any)
       ? '/admin/dashboard'
-      : '/agent/dashboard'
+      : '/agent/profile'
 
     const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}${redirectTo}`)
     response.cookies.set(name, sessionToken, options)
-
     return response
   } catch (error) {
     console.error('Microsoft auth error:', error)

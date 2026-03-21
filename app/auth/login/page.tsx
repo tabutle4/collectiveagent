@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AuthFooter from '@/components/shared/AuthFooter'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import { useAuth } from '@/lib/context/AuthContext'
 
 function LoginForm() {
   const router = useRouter()
@@ -12,6 +13,8 @@ function LoginForm() {
   const redirectTo = searchParams.get('redirect')
   const authError = searchParams.get('error')
   const showEmailLogin = searchParams.get('dev') === 'true'
+
+  const { login, clearAuth } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,31 +34,27 @@ function LoginForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        setError(data.error || 'Login failed')
-        setLoading(false)
-        return
-      }
-      if (redirectTo && redirectTo.startsWith('/')) {
-        router.push(redirectTo)
-        return
-      }
-      router.push(data.redirectTo)
-    } catch (err) {
-      setError('An error occurred. Please try again.')
+
+    const result = await login({ email, password })
+
+    if (!result.success) {
+      setError(result.error || 'Login failed')
       setLoading(false)
+      return
+    }
+
+    // Navigate to redirect or default path
+    if (redirectTo && redirectTo.startsWith('/')) {
+      router.push(redirectTo)
+    } else {
+      router.push(result.redirectTo || '/agent/profile')
     }
   }
 
   const handleMicrosoftSignIn = () => {
     setMicrosoftLoading(true)
+    // Clear existing auth state before Microsoft redirect
+    clearAuth()
     window.location.href = '/api/auth/microsoft'
   }
 
