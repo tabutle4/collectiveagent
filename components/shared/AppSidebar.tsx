@@ -11,6 +11,7 @@ import {
   BarChart3, BookOpen
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
+import { useAuth } from '@/lib/context/AuthContext'
 
 interface NavItem {
   href: string
@@ -97,7 +98,7 @@ const agentNav: NavItem[] = [
 export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<any>(null)
+  const { user, loading } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [contactOpen, setContactOpen] = useState(false)
@@ -141,22 +142,12 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   }, [])
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await fetch('/api/auth/me')
-        if (!response.ok) {
-          const currentPath = window.location.pathname + window.location.search
-          router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
-          return
-        }
-        const data = await response.json()
-        setUser(data.user)
-      } catch {
-        router.push('/auth/login')
-      }
+    // Redirect to login if not authenticated and done loading
+    if (!loading && !user) {
+      const currentPath = window.location.pathname + window.location.search
+      router.push(`/auth/login?redirect=${encodeURIComponent(currentPath)}`)
     }
-    if (!user) fetchUser()
-  }, [router, user])
+  }, [loading, user, router])
 
   useEffect(() => {
     setMobileMenuOpen(false)
@@ -167,7 +158,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     router.push('/auth/login')
   }
 
-  if (!user || !mounted) return null
+  if (loading || !user || !mounted) return null
 
   const sidebarContent = (
     <>

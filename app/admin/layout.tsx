@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AppSidebar from '@/components/shared/AppSidebar'
+import { useAuth } from '@/lib/context/AuthContext'
 
 export default function AdminLayout({
   children,
@@ -10,21 +11,15 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
+  const { user, loading } = useAuth()
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await fetch('/api/auth/me')
-        if (!response.ok) {
-          router.push('/auth/login')
-          return
-        }
-      } catch {
-        router.push('/auth/login')
-      }
+    if (!loading && !user) {
+      router.push('/auth/login')
     }
-    fetchUser()
-  }, [router])
+  }, [loading, user, router])
+
+  if (loading) return null
 
   return <AppSidebar>{children}</AppSidebar>
 }

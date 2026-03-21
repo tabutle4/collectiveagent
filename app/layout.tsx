@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Montserrat, Inter } from 'next/font/google'
 import './globals.css'
+import { AuthProvider } from '@/lib/context/AuthContext'
 
 const montserrat = Montserrat({ 
   subsets: ['latin'],
@@ -48,7 +49,11 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Collective Agent" />
       </head>
-      <body className={`${montserrat.className} ${inter.variable}`} suppressHydrationWarning>{children}</body>
+      <body className={`${montserrat.className} ${inter.variable}`} suppressHydrationWarning>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   )
 }
