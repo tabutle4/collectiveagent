@@ -609,10 +609,18 @@ export default function AgentTransactionDetailPage() {
         {/* Right: summary panel */}
         <div className="w-64 flex-shrink-0 hidden lg:block">
           <SummaryPanel
-            form={form as any}
-            transaction={transaction}
-            agent={user}
-            processingFeeTypes={processingFeeTypes}
+            typeName={form.transaction_type_name || null}
+            typeId={form.transaction_type}
+            isLease={form.is_lease}
+            propertyAddress={propertyAddress}
+            clientName={form.clients[0]?.name || ''}
+            salesPrice={form.sales_price}
+            monthlyRent={form.monthly_rent}
+            commissionRate={form.gross_commission}
+            closingDate={form.closing_date}
+            moveInDate={form.move_in_date}
+            expediteRequested={form.expedite_requested}
+            processingFee={form.processing_fee}
           />
         </div>
       </div>
