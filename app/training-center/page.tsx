@@ -254,13 +254,13 @@ export default function TrainingCenterPage() {
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-6 pt-20 md:pt-24">
         {/* Back link */}
         <div className="mb-4">
-          <a
-            href="/agent/dashboard"
+          <button
+            onClick={() => window.history.back()} type="button"
             className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
           >
             <ChevronRight size={12} className="rotate-180" />
             Back to Collective Agent
-          </a>
+          </button>
         </div>
 
         {/* Header Banner */}
