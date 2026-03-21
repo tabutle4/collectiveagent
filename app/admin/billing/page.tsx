@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { Search, ChevronDown, ChevronUp, Send, ExternalLink } from 'lucide-react'
 
 declare global {
@@ -71,41 +70,42 @@ export default function AdminBillingPage() {
 
   const loadAgents = async () => {
     setLoading(true)
-    const [{ data }, { data: debtData, count: openDebtsCount }] = await Promise.all([
-      supabase
-        .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, division, monthly_fee_waived, onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, payload_payee_id, status')
-        .eq('status', 'active')
-        .order('first_name'),
-      supabase
-        .from('agent_debts')
-        .select('agent_id', { count: 'exact' })
-        .eq('status', 'outstanding')
-        .eq('debt_type', 'custom_invoice'),
-    ])
-    setAgents(data || [])
-    setOpenCustomInvoices(openDebtsCount || 0)
-    setOpenDebtAgentIds((debtData || []).map((d: any) => d.agent_id))
-    setLoading(false)
+    try {
+      const [usersRes, debtsRes] = await Promise.all([
+        fetch('/api/users/list'),
+        fetch('/api/billing?status=outstanding&debt_type=custom_invoice'),
+      ])
+      const usersData = await usersRes.json()
+      const debtsData = await debtsRes.json()
+
+      const activeAgents = (usersData.users || []).filter((u: any) => u.status === 'active')
+      setAgents(activeAgents)
+
+      const outstandingDebts = (debtsData.records || []).filter((d: any) =>
+        d.status === 'outstanding' && d.debt_type === 'custom_invoice'
+      )
+      setOpenCustomInvoices(outstandingDebts.length)
+      setOpenDebtAgentIds([...new Set(outstandingDebts.map((d: any) => d.agent_id))] as string[])
+    } catch (e) {
+      console.error('Error loading agents:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const fetchAgentRecords = async (agentId: string) => {
-    const [invoiceRes, receiptRes, { data: records }] = await Promise.all([
+    const [invoiceRes, receiptRes, recordsRes] = await Promise.all([
       fetch(`/api/payload/open-invoices?user_id=${agentId}`),
       fetch(`/api/payload/receipts?user_id=${agentId}`),
-      supabase
-        .from('agent_debts')
-        .select('id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes')
-        .eq('agent_id', agentId)
-        .eq('status', 'outstanding')
-        .order('date_incurred', { ascending: false }),
+      fetch(`/api/billing?agent_id=${agentId}`),
     ])
     const invoices = await invoiceRes.json()
     const receipts = await receiptRes.json()
+    const records = await recordsRes.json()
     return {
       invoices: invoices.invoices || [],
       receipts: receipts.receipts || [],
-      records: records || [],
+      records: (records.records || []).filter((r: any) => r.status === 'outstanding'),
     }
   }
 
@@ -123,11 +123,7 @@ export default function AdminBillingPage() {
   }
 
   const refreshAgentData = async (agentId: string) => {
-    setAgentData(prev => {
-      const updated = { ...prev }
-      delete updated[agentId]
-      return updated
-    })
+    setAgentData(prev => { const updated = { ...prev }; delete updated[agentId]; return updated })
     setLoadingAgent(agentId)
     try {
       const result = await fetchAgentRecords(agentId)
@@ -137,13 +133,14 @@ export default function AdminBillingPage() {
     } finally {
       setLoadingAgent(null)
     }
-    const { data: debtData, count } = await supabase
-      .from('agent_debts')
-      .select('agent_id', { count: 'exact' })
-      .eq('status', 'outstanding')
-      .eq('debt_type', 'custom_invoice')
-    setOpenCustomInvoices(count || 0)
-    setOpenDebtAgentIds((debtData || []).map((d: any) => d.agent_id))
+
+    const debtsRes = await fetch('/api/billing?status=outstanding&debt_type=custom_invoice')
+    const debtsData = await debtsRes.json()
+    const outstandingDebts = (debtsData.records || []).filter((d: any) =>
+      d.status === 'outstanding' && d.debt_type === 'custom_invoice'
+    )
+    setOpenCustomInvoices(outstandingDebts.length)
+    setOpenDebtAgentIds([...new Set(outstandingDebts.map((d: any) => d.agent_id))] as string[])
   }
 
   const toggleAgent = (agentId: string) => {
@@ -159,7 +156,7 @@ export default function AdminBillingPage() {
     if (agent.monthly_fee_waived) return 'waived'
     if (!agent.monthly_fee_paid_through) return 'unpaid'
     const [y, m, d] = agent.monthly_fee_paid_through.split('-').map(Number)
-const paidThrough = new Date(y, m - 1, d)
+    const paidThrough = new Date(y, m - 1, d)
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
     return paidThrough >= endOfMonth ? 'current' : 'overdue'
   }
@@ -172,6 +169,16 @@ const paidThrough = new Date(y, m - 1, d)
   const formatCurrency = (amount: any) => {
     const num = parseFloat(amount)
     return isNaN(num) ? '$0.00' : `$${num.toFixed(2)}`
+  }
+
+  const billingPost = async (action: string, payload: Record<string, any>) => {
+    const res = await fetch('/api/billing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    })
+    if (!res.ok) throw new Error(`Billing action failed: ${action}`)
+    return res.json()
   }
 
   const sendInvoice = async (agentId: string, invoiceId: string) => {
@@ -226,10 +233,10 @@ const paidThrough = new Date(y, m - 1, d)
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
-      await supabase
-        .from('agent_debts')
-        .update({ notes: `${record.notes || ''} | Payload invoice: ${invoiceData.invoice_id}`.trim() })
-        .eq('id', record.id)
+      await billingPost('update', {
+        id: record.id,
+        updates: { notes: `${record.notes || ''} | Payload invoice: ${invoiceData.invoice_id}`.trim() },
+      })
       await fetch('/api/payload/send-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -245,15 +252,12 @@ const paidThrough = new Date(y, m - 1, d)
 
   const deleteRecord = async (agentId: string, recordId: string) => {
     if (!confirm('Delete this record? This cannot be undone.')) return
-    await supabase.from('agent_debts').delete().eq('id', recordId)
+    await billingPost('delete', { id: recordId })
     await refreshAgentData(agentId)
   }
 
   const updateRecord = async (agentId: string, recordId: string, description: string, amount: number) => {
-    await supabase
-      .from('agent_debts')
-      .update({ description, amount_owed: amount })
-      .eq('id', recordId)
+    await billingPost('update', { id: recordId, updates: { description, amount_owed: amount } })
     setEditingRecord(null)
     await refreshAgentData(agentId)
   }
@@ -262,16 +266,17 @@ const paidThrough = new Date(y, m - 1, d)
     if (!creditAmount || !creditDesc) return
     setSavingCredit(agentId)
     try {
-      const { error } = await supabase.from('agent_debts').insert({
-        agent_id: agentId,
-        record_type: 'credit',
-        debt_type: 'brokerage_credit',
-        description: creditDesc,
-        amount_owed: parseFloat(creditAmount),
-        date_incurred: new Date().toISOString().split('T')[0],
-        status: 'outstanding',
+      await billingPost('create', {
+        record: {
+          agent_id: agentId,
+          record_type: 'credit',
+          debt_type: 'brokerage_credit',
+          description: creditDesc,
+          amount_owed: parseFloat(creditAmount),
+          date_incurred: new Date().toISOString().split('T')[0],
+          status: 'outstanding',
+        },
       })
-      if (error) throw new Error(error.message)
       setShowCreditForm(null)
       setCreditAmount('')
       setCreditDesc('')
@@ -289,12 +294,7 @@ const paidThrough = new Date(y, m - 1, d)
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: agentId,
-          type: 'monthly',
-          month: invoiceMonth,
-          year: invoiceYear,
-        }),
+        body: JSON.stringify({ user_id: agentId, type: 'monthly', month: invoiceMonth, year: invoiceYear }),
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
@@ -319,12 +319,7 @@ const paidThrough = new Date(y, m - 1, d)
       const invoiceRes = await fetch('/api/payload/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: agentId,
-          type: 'custom',
-          amount: parseFloat(customAmount),
-          description: customDesc,
-        }),
+        body: JSON.stringify({ user_id: agentId, type: 'custom', amount: parseFloat(customAmount), description: customDesc }),
       })
       const invoiceData = await invoiceRes.json()
       if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
@@ -368,9 +363,7 @@ const paidThrough = new Date(y, m - 1, d)
     return matchesSearch && matchesFilter
   })
 
-  const toggleFilter = (filter: string) => {
-    setStatusFilter(prev => prev === filter ? null : filter)
-  }
+  const toggleFilter = (filter: string) => setStatusFilter(prev => prev === filter ? null : filter)
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
@@ -379,34 +372,22 @@ const paidThrough = new Date(y, m - 1, d)
       <h1 className="page-title mb-6">BILLING</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
-          onClick={() => setStatusFilter(null)}
-        >
+        <div className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`} onClick={() => setStatusFilter(null)}>
           <p className="text-xs text-luxury-gray-3 mb-1">Total Agents</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
           {statusFilter === null && <p className="text-xs text-luxury-accent mt-1">All agents</p>}
         </div>
-        <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openCustomInvoices' ? 'ring-2 ring-orange-400' : ''}`}
-          onClick={() => toggleFilter('openCustomInvoices')}
-        >
+        <div className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openCustomInvoices' ? 'ring-2 ring-orange-400' : ''}`} onClick={() => toggleFilter('openCustomInvoices')}>
           <p className="text-xs text-luxury-gray-3 mb-1">Open Custom Invoices</p>
           <p className="text-2xl font-semibold text-orange-500">{stats.openCustomInvoices}</p>
           {statusFilter === 'openCustomInvoices' && <p className="text-xs text-orange-400 mt-1">Filtering ✕</p>}
         </div>
-        <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`}
-          onClick={() => toggleFilter('monthlyOverdue')}
-        >
+        <div className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`} onClick={() => toggleFilter('monthlyOverdue')}>
           <p className="text-xs text-luxury-gray-3 mb-1">Monthly Overdue</p>
           <p className="text-2xl font-semibold text-red-500">{stats.monthlyOverdue}</p>
           {statusFilter === 'monthlyOverdue' && <p className="text-xs text-red-400 mt-1">Filtering ✕</p>}
         </div>
-        <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyUnpaid' ? 'ring-2 ring-luxury-accent' : ''}`}
-          onClick={() => toggleFilter('monthlyUnpaid')}
-        >
+        <div className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyUnpaid' ? 'ring-2 ring-luxury-accent' : ''}`} onClick={() => toggleFilter('monthlyUnpaid')}>
           <p className="text-xs text-luxury-gray-3 mb-1">Monthly No Invoice Yet</p>
           <p className="text-2xl font-semibold text-luxury-accent">{stats.monthlyUnpaid}</p>
           {statusFilter === 'monthlyUnpaid' && <p className="text-xs text-luxury-accent mt-1">Filtering ✕</p>}
@@ -416,13 +397,7 @@ const paidThrough = new Date(y, m - 1, d)
       <div className="container-card mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
-          <input
-            type="text"
-            placeholder="Search agents..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="input-luxury pl-8"
-          />
+          <input type="text" placeholder="Search agents..." value={search} onChange={e => setSearch(e.target.value)} className="input-luxury pl-8" />
         </div>
       </div>
 
@@ -440,10 +415,7 @@ const paidThrough = new Date(y, m - 1, d)
 
           return (
             <div key={agent.id} className="container-card">
-              <div
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleAgent(agent.id)}
-              >
+              <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleAgent(agent.id)}>
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
@@ -472,14 +444,10 @@ const paidThrough = new Date(y, m - 1, d)
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-5">
-
-                  {loadingAgent === agent.id && (
-                    <p className="text-xs text-luxury-gray-3">Loading...</p>
-                  )}
+                  {loadingAgent === agent.id && <p className="text-xs text-luxury-gray-3">Loading...</p>}
 
                   {loadingAgent !== agent.id && data && (
                     <>
-                      {/* Outstanding Balances */}
                       <div>
                         <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Outstanding Balances</p>
                         {debts.length === 0 ? (
@@ -521,11 +489,7 @@ const paidThrough = new Date(y, m - 1, d)
                                         <button onClick={() => { setEditingRecord(record.id); setEditDesc(record.description || ''); setEditAmount(String(record.amount_owed)) }} className="text-xs text-luxury-gray-3 hover:text-luxury-accent">Edit</button>
                                         <button onClick={() => deleteRecord(agent.id, record.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
                                         {agent.payload_payee_id && !isInvoiced && (
-                                          <button
-                                            onClick={() => sendDebtInvoice(agent.id, record)}
-                                            disabled={sending === `debt-${record.id}`}
-                                            className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
-                                          >
+                                          <button onClick={() => sendDebtInvoice(agent.id, record)} disabled={sending === `debt-${record.id}`} className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50">
                                             <Send size={11} />
                                             {sending === `debt-${record.id}` ? 'Sending...' : 'Invoice'}
                                           </button>
@@ -540,14 +504,10 @@ const paidThrough = new Date(y, m - 1, d)
                         )}
                       </div>
 
-                      {/* Brokerage Credits */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs font-semibold text-luxury-gray-2">Brokerage Credits</p>
-                          <button
-                            onClick={() => setShowCreditForm(showCreditForm === agent.id ? null : agent.id)}
-                            className="text-xs text-luxury-accent hover:underline"
-                          >
+                          <button onClick={() => setShowCreditForm(showCreditForm === agent.id ? null : agent.id)} className="text-xs text-luxury-accent hover:underline">
                             {showCreditForm === agent.id ? 'Cancel' : '+ Add Credit'}
                           </button>
                         </div>
@@ -563,11 +523,7 @@ const paidThrough = new Date(y, m - 1, d)
                                 <input type="text" value={creditDesc} onChange={e => setCreditDesc(e.target.value)} className="input-luxury text-xs" placeholder="e.g. Monthly fee credit" />
                               </div>
                             </div>
-                            <button
-                              onClick={() => addCredit(agent.id)}
-                              disabled={!creditAmount || !creditDesc || savingCredit === agent.id}
-                              className="btn btn-primary text-xs w-full disabled:opacity-50"
-                            >
+                            <button onClick={() => addCredit(agent.id)} disabled={!creditAmount || !creditDesc || savingCredit === agent.id} className="btn btn-primary text-xs w-full disabled:opacity-50">
                               {savingCredit === agent.id ? 'Saving...' : 'Add Credit'}
                             </button>
                           </div>
@@ -594,7 +550,6 @@ const paidThrough = new Date(y, m - 1, d)
                         )}
                       </div>
 
-                      {/* Net Balance */}
                       {(debts.length > 0 || credits.length > 0) && (
                         <div className="inner-card flex items-center justify-between">
                           <p className="text-xs font-semibold text-luxury-gray-2">Net Balance</p>
@@ -612,7 +567,6 @@ const paidThrough = new Date(y, m - 1, d)
 
                       {agent.payload_payee_id && (
                         <>
-                          {/* Open Invoices */}
                           <div>
                             <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Outstanding Invoices</p>
                             {data.invoices.length === 0 ? (
@@ -635,19 +589,11 @@ const paidThrough = new Date(y, m - 1, d)
                                       </div>
                                       <div className="flex items-center gap-2 ml-4">
                                         <p className="text-sm font-semibold text-luxury-gray-1">{formatCurrency(inv.amount_due ?? inv.amount)}</p>
-                                        <button
-                                          onClick={() => sendInvoice(agent.id, inv.id)}
-                                          disabled={sending === `invoice-${inv.id}`}
-                                          className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
-                                        >
+                                        <button onClick={() => sendInvoice(agent.id, inv.id)} disabled={sending === `invoice-${inv.id}`} className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50">
                                           <Send size={11} />
                                           {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
                                         </button>
-                                        <button
-                                          onClick={() => voidInvoice(agent.id, inv.id)}
-                                          disabled={sending === `void-${inv.id}`}
-                                          className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
-                                        >
+                                        <button onClick={() => voidInvoice(agent.id, inv.id)} disabled={sending === `void-${inv.id}`} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">
                                           {sending === `void-${inv.id}` ? 'Voiding...' : 'Void'}
                                         </button>
                                       </div>
@@ -658,15 +604,11 @@ const paidThrough = new Date(y, m - 1, d)
                             )}
                           </div>
 
-                          {/* Monthly Invoice */}
                           {monthlyStatus === 'overdue' && (
                             <div>
                               <div className="flex items-center justify-between mb-2">
                                 <p className="text-xs font-semibold text-luxury-gray-2">Monthly Fee Invoice</p>
-                                <button
-                                  onClick={() => setShowMonthlyForm(showMonthlyForm === agent.id ? null : agent.id)}
-                                  className="text-xs text-luxury-accent hover:underline"
-                                >
+                                <button onClick={() => setShowMonthlyForm(showMonthlyForm === agent.id ? null : agent.id)} className="text-xs text-luxury-accent hover:underline">
                                   {showMonthlyForm === agent.id ? 'Cancel' : '+ Send Monthly Invoice'}
                                 </button>
                               </div>
@@ -686,14 +628,8 @@ const paidThrough = new Date(y, m - 1, d)
                                       </select>
                                     </div>
                                   </div>
-                                  <p className="text-xs text-luxury-gray-3">
-                                    Will send: <span className="font-medium text-luxury-gray-1">{invoiceMonth} {invoiceYear} Monthly Brokerage Fee — $50</span>
-                                  </p>
-                                  <button
-                                    onClick={() => sendMonthlyInvoice(agent.id)}
-                                    disabled={creatingInvoice === agent.id}
-                                    className="btn btn-primary text-xs w-full disabled:opacity-50"
-                                  >
+                                  <p className="text-xs text-luxury-gray-3">Will send: <span className="font-medium text-luxury-gray-1">{invoiceMonth} {invoiceYear} Monthly Brokerage Fee — $50</span></p>
+                                  <button onClick={() => sendMonthlyInvoice(agent.id)} disabled={creatingInvoice === agent.id} className="btn btn-primary text-xs w-full disabled:opacity-50">
                                     {creatingInvoice === agent.id ? 'Sending...' : 'Create & Send Monthly Invoice'}
                                   </button>
                                 </div>
@@ -701,14 +637,10 @@ const paidThrough = new Date(y, m - 1, d)
                             </div>
                           )}
 
-                          {/* Custom Invoice */}
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <p className="text-xs font-semibold text-luxury-gray-2">Custom Invoice</p>
-                              <button
-                                onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)}
-                                className="text-xs text-luxury-accent hover:underline"
-                              >
+                              <button onClick={() => setShowCustomForm(showCustomForm === agent.id ? null : agent.id)} className="text-xs text-luxury-accent hover:underline">
                                 {showCustomForm === agent.id ? 'Cancel' : '+ New'}
                               </button>
                             </div>
@@ -724,18 +656,13 @@ const paidThrough = new Date(y, m - 1, d)
                                     <input type="text" value={customDesc} onChange={e => setCustomDesc(e.target.value)} className="input-luxury text-xs" placeholder="e.g. HAR dues reimbursement" />
                                   </div>
                                 </div>
-                                <button
-                                  onClick={() => createAndSendCustomInvoice(agent.id)}
-                                  disabled={!customAmount || !customDesc || creatingInvoice === agent.id}
-                                  className="btn btn-primary text-xs w-full disabled:opacity-50"
-                                >
+                                <button onClick={() => createAndSendCustomInvoice(agent.id)} disabled={!customAmount || !customDesc || creatingInvoice === agent.id} className="btn btn-primary text-xs w-full disabled:opacity-50">
                                   {creatingInvoice === agent.id ? 'Sending...' : 'Send Invoice'}
                                 </button>
                               </div>
                             )}
                           </div>
 
-                          {/* Payment History */}
                           <div>
                             <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment History</p>
                             {data.receipts.length === 0 ? (
@@ -751,13 +678,7 @@ const paidThrough = new Date(y, m - 1, d)
                                     <div className="flex items-center gap-2">
                                       <p className="text-xs font-semibold text-luxury-gray-1">{formatCurrency(r.amount)}</p>
                                       {r.url && (
-                                        <a
-                                          href={r.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-luxury-gray-3 hover:text-luxury-accent"
-                                          title="View receipt"
-                                        >
+                                        <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-luxury-gray-3 hover:text-luxury-accent" title="View receipt">
                                           <ExternalLink size={13} />
                                         </a>
                                       )}
@@ -778,9 +699,7 @@ const paidThrough = new Date(y, m - 1, d)
         })}
 
         {filtered.length === 0 && (
-          <div className="container-card text-center py-12">
-            <p className="text-sm text-luxury-gray-3">No agents found</p>
-          </div>
+          <div className="container-card text-center py-12"><p className="text-sm text-luxury-gray-3">No agents found</p></div>
         )}
       </div>
     </div>

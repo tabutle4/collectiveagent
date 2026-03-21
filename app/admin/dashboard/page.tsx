@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
 
 type DateRange = 'ytd' | 'mtd' | 'qtd' | 'last_month' | 'last_quarter' | 'last_year' | 'last_q1' | 'last_q2' | 'last_q3' | 'last_q4' | 'next_month' | 'next_quarter' | 'q1' | 'q2' | 'q3' | 'q4'
@@ -33,59 +32,23 @@ function getDateRange(range: DateRange): { start: Date; end: Date; label: string
   const quarter = Math.floor(month / 3)
 
   switch (range) {
-    case 'ytd':
-      return { start: new Date(year, 0, 1), end: now, label: `${year} Year to Date`, isFuture: false }
-    case 'mtd':
-      return { start: new Date(year, month, 1), end: now, label: `${now.toLocaleString('en-US', { month: 'long' })} ${year}`, isFuture: false }
-    case 'qtd': {
-      const qStart = new Date(year, quarter * 3, 1)
-      return { start: qStart, end: now, label: `Q${quarter + 1} ${year} to Date`, isFuture: false }
-    }
-    case 'last_month': {
-      const lmStart = new Date(year, month - 1, 1)
-      const lmEnd = new Date(year, month, 0, 23, 59, 59)
-      return { start: lmStart, end: lmEnd, label: `${lmStart.toLocaleString('en-US', { month: 'long' })} ${lmStart.getFullYear()}`, isFuture: false }
-    }
-    case 'last_quarter': {
-      const lq = quarter === 0 ? 3 : quarter - 1
-      const lqYear = quarter === 0 ? year - 1 : year
-      const lqStart = new Date(lqYear, lq * 3, 1)
-      const lqEnd = new Date(lqYear, (lq + 1) * 3, 0, 23, 59, 59)
-      return { start: lqStart, end: lqEnd, label: `Q${lq + 1} ${lqYear}`, isFuture: false }
-    }
-    case 'last_year':
-      return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `${year - 1} Full Year`, isFuture: false }
-    case 'last_q1':
-      return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 2, 31, 23, 59, 59), label: `Q1 ${year - 1}`, isFuture: false }
-    case 'last_q2':
-      return { start: new Date(year - 1, 3, 1), end: new Date(year - 1, 5, 30, 23, 59, 59), label: `Q2 ${year - 1}`, isFuture: false }
-    case 'last_q3':
-      return { start: new Date(year - 1, 6, 1), end: new Date(year - 1, 8, 30, 23, 59, 59), label: `Q3 ${year - 1}`, isFuture: false }
-    case 'last_q4':
-      return { start: new Date(year - 1, 9, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `Q4 ${year - 1}`, isFuture: false }
-    case 'next_month': {
-      const nmStart = new Date(year, month + 1, 1)
-      const nmEnd = new Date(year, month + 2, 0, 23, 59, 59)
-      return { start: nmStart, end: nmEnd, label: `${nmStart.toLocaleString('en-US', { month: 'long' })} ${nmStart.getFullYear()}`, isFuture: true }
-    }
-    case 'next_quarter': {
-      const nq = quarter + 1
-      const nqYear = nq > 3 ? year + 1 : year
-      const nqActual = nq > 3 ? 0 : nq
-      const nqStart = new Date(nqYear, nqActual * 3, 1)
-      const nqEnd = new Date(nqYear, (nqActual + 1) * 3, 0, 23, 59, 59)
-      return { start: nqStart, end: nqEnd, label: `Q${nqActual + 1} ${nqYear}`, isFuture: true }
-    }
-    case 'q1':
-      return { start: new Date(year, 0, 1), end: quarter > 0 ? new Date(year, 2, 31, 23, 59, 59) : now, label: `Q1 ${year}`, isFuture: false }
-    case 'q2':
-      return { start: new Date(year, 3, 1), end: quarter > 1 ? new Date(year, 5, 30, 23, 59, 59) : quarter === 1 ? now : new Date(year, 5, 30, 23, 59, 59), label: `Q2 ${year}`, isFuture: quarter < 1 }
-    case 'q3':
-      return { start: new Date(year, 6, 1), end: quarter > 2 ? new Date(year, 8, 30, 23, 59, 59) : quarter === 2 ? now : new Date(year, 8, 30, 23, 59, 59), label: `Q3 ${year}`, isFuture: quarter < 2 }
-    case 'q4':
-      return { start: new Date(year, 9, 1), end: quarter === 3 ? now : new Date(year, 11, 31, 23, 59, 59), label: `Q4 ${year}`, isFuture: quarter < 3 }
-    default:
-      return { start: new Date(year, 0, 1), end: now, label: `${year} Year to Date`, isFuture: false }
+    case 'ytd': return { start: new Date(year, 0, 1), end: now, label: `${year} Year to Date`, isFuture: false }
+    case 'mtd': return { start: new Date(year, month, 1), end: now, label: `${now.toLocaleString('en-US', { month: 'long' })} ${year}`, isFuture: false }
+    case 'qtd': { const qStart = new Date(year, quarter * 3, 1); return { start: qStart, end: now, label: `Q${quarter + 1} ${year} to Date`, isFuture: false } }
+    case 'last_month': { const lmStart = new Date(year, month - 1, 1); const lmEnd = new Date(year, month, 0, 23, 59, 59); return { start: lmStart, end: lmEnd, label: `${lmStart.toLocaleString('en-US', { month: 'long' })} ${lmStart.getFullYear()}`, isFuture: false } }
+    case 'last_quarter': { const lq = quarter === 0 ? 3 : quarter - 1; const lqYear = quarter === 0 ? year - 1 : year; const lqStart = new Date(lqYear, lq * 3, 1); const lqEnd = new Date(lqYear, (lq + 1) * 3, 0, 23, 59, 59); return { start: lqStart, end: lqEnd, label: `Q${lq + 1} ${lqYear}`, isFuture: false } }
+    case 'last_year': return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `${year - 1} Full Year`, isFuture: false }
+    case 'last_q1': return { start: new Date(year - 1, 0, 1), end: new Date(year - 1, 2, 31, 23, 59, 59), label: `Q1 ${year - 1}`, isFuture: false }
+    case 'last_q2': return { start: new Date(year - 1, 3, 1), end: new Date(year - 1, 5, 30, 23, 59, 59), label: `Q2 ${year - 1}`, isFuture: false }
+    case 'last_q3': return { start: new Date(year - 1, 6, 1), end: new Date(year - 1, 8, 30, 23, 59, 59), label: `Q3 ${year - 1}`, isFuture: false }
+    case 'last_q4': return { start: new Date(year - 1, 9, 1), end: new Date(year - 1, 11, 31, 23, 59, 59), label: `Q4 ${year - 1}`, isFuture: false }
+    case 'next_month': { const nmStart = new Date(year, month + 1, 1); const nmEnd = new Date(year, month + 2, 0, 23, 59, 59); return { start: nmStart, end: nmEnd, label: `${nmStart.toLocaleString('en-US', { month: 'long' })} ${nmStart.getFullYear()}`, isFuture: true } }
+    case 'next_quarter': { const nq = quarter + 1; const nqYear = nq > 3 ? year + 1 : year; const nqActual = nq > 3 ? 0 : nq; const nqStart = new Date(nqYear, nqActual * 3, 1); const nqEnd = new Date(nqYear, (nqActual + 1) * 3, 0, 23, 59, 59); return { start: nqStart, end: nqEnd, label: `Q${nqActual + 1} ${nqYear}`, isFuture: true } }
+    case 'q1': return { start: new Date(year, 0, 1), end: quarter > 0 ? new Date(year, 2, 31, 23, 59, 59) : now, label: `Q1 ${year}`, isFuture: false }
+    case 'q2': return { start: new Date(year, 3, 1), end: quarter > 1 ? new Date(year, 5, 30, 23, 59, 59) : quarter === 1 ? now : new Date(year, 5, 30, 23, 59, 59), label: `Q2 ${year}`, isFuture: quarter < 1 }
+    case 'q3': return { start: new Date(year, 6, 1), end: quarter > 2 ? new Date(year, 8, 30, 23, 59, 59) : quarter === 2 ? now : new Date(year, 8, 30, 23, 59, 59), label: `Q3 ${year}`, isFuture: quarter < 2 }
+    case 'q4': return { start: new Date(year, 9, 1), end: quarter === 3 ? now : new Date(year, 11, 31, 23, 59, 59), label: `Q4 ${year}`, isFuture: quarter < 3 }
+    default: return { start: new Date(year, 0, 1), end: now, label: `${year} Year to Date`, isFuture: false }
   }
 }
 
@@ -122,14 +85,12 @@ export default function AdminDashboard() {
 
   const fetchTransactionData = async () => {
     try {
-      const [txnRes, agentRes, typesRes] = await Promise.all([
-        supabase.from('transactions').select('id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net'),
-        supabase.from('transaction_internal_agents').select('transaction_id, agent_net'),
-        supabase.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
-      ])
-      setAllTransactions(txnRes.data || [])
-      setAllAgentRows(agentRes.data || [])
-      const leaseNames = (typesRes.data || []).filter((t: any) => t.is_lease).map((t: any) => t.name)
+      const res = await fetch('/api/dashboard/transactions')
+      if (!res.ok) throw new Error('Failed to fetch transaction data')
+      const data = await res.json()
+      setAllTransactions(data.transactions || [])
+      setAllAgentRows(data.agentRows || [])
+      const leaseNames = (data.processingFeeTypes || []).filter((t: any) => t.is_lease).map((t: any) => t.name)
       setLeaseTypes(leaseNames)
     } catch (error) {
       console.error('Error fetching transactions:', error)
@@ -210,7 +171,6 @@ export default function AdminDashboard() {
     <div>
       <h1 className="page-title mb-6">DASHBOARD</h1>
 
-      {/* Reporting */}
       <div className="container-card mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">{rangeInfo.label}</h2>
@@ -322,9 +282,7 @@ export default function AdminDashboard() {
                 <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">0</span>
               </div>
               <p className="text-xs text-luxury-gray-3 mb-2">No new contact submissions</p>
-              <Link href="/admin/contact-submissions" className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors">
-                View all submissions
-              </Link>
+              <Link href="/admin/contact-submissions" className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors">View all submissions</Link>
             </div>
             <div className="inner-card">
               <h3 className="text-sm font-semibold text-luxury-gray-1 mb-3 pb-3 border-b border-luxury-gray-5/50">Recent Activity</h3>

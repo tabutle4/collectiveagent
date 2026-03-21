@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search } from 'lucide-react'
 
 interface Agent {
@@ -89,27 +88,23 @@ export default function AdminOnboardingPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [agentsRes, itemsRes, completionsRes, adminTasksRes, adminCompletionsRes] = await Promise.all([
-        supabase.from('users').select('id, first_name, last_name, preferred_first_name, preferred_last_name, email, status, full_nav_access, onboarding_fee_paid, accepted_trec, independent_contractor_agreement_signed, w9_completed').eq('status', 'active').order('first_name'),
-        supabase.from('onboarding_checklist_items').select('id, section, section_title, item_key, label, priority, display_order').eq('is_active', true).order('display_order'),
-        supabase.from('onboarding_checklist_completions').select('user_id, checklist_item_id, completed_at, completed_by'),
-        supabase.from('onboarding_admin_tasks').select('id, label, display_order').eq('is_active', true).order('display_order'),
-        supabase.from('onboarding_admin_task_completions').select('user_id, task_id, completed_at, completed_by, notes'),
-      ])
+      const res = await fetch('/api/onboarding')
+      if (!res.ok) throw new Error('Failed to load onboarding data')
+      const data = await res.json()
 
-      setAgents(agentsRes.data || [])
-      setItems(itemsRes.data || [])
-      setAdminTasks(adminTasksRes.data || [])
+      setAgents(data.users || [])
+      setItems(data.checklistItems || [])
+      setAdminTasks(data.adminTasks || [])
 
       const compMap: Record<string, Record<string, Completion>> = {}
-      for (const c of completionsRes.data || []) {
+      for (const c of data.checklistCompletions || []) {
         if (!compMap[c.user_id]) compMap[c.user_id] = {}
         compMap[c.user_id][c.checklist_item_id] = c
       }
       setCompletions(compMap)
 
       const adminCompMap: Record<string, Record<string, AdminTaskCompletion>> = {}
-      for (const c of adminCompletionsRes.data || []) {
+      for (const c of data.adminTaskCompletions || []) {
         if (!adminCompMap[c.user_id]) adminCompMap[c.user_id] = {}
         adminCompMap[c.user_id][c.task_id] = c
       }
@@ -138,17 +133,26 @@ export default function AdminOnboardingPage() {
     return 'incomplete'
   }
 
+  const apiPost = async (action: string, payload: Record<string, any>) => {
+    const res = await fetch('/api/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...payload }),
+    })
+    if (!res.ok) throw new Error(`Failed: ${action}`)
+    return res.json()
+  }
+
   const toggleItem = async (agentId: string, item: ChecklistItem) => {
     const key = `${agentId}-${item.id}`
     if (toggling === key) return
     setToggling(key)
     try {
       const isCompleted = !!completions[agentId]?.[item.id]
+      await apiPost('toggle_checklist', { user_id: agentId, checklist_item_id: item.id, completing: !isCompleted })
       if (isCompleted) {
-        await supabase.from('onboarding_checklist_completions').delete().eq('user_id', agentId).eq('checklist_item_id', item.id)
         setCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][item.id]; return next })
       } else {
-        await supabase.from('onboarding_checklist_completions').insert({ user_id: agentId, checklist_item_id: item.id, completed_by: user.id })
         setCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [item.id]: { user_id: agentId, checklist_item_id: item.id, completed_at: new Date().toISOString(), completed_by: user.id } } }))
       }
     } catch (e) { console.error('Error toggling item:', e) }
@@ -161,11 +165,10 @@ export default function AdminOnboardingPage() {
     setToggling(key)
     try {
       const isCompleted = !!adminCompletions[agentId]?.[task.id]
+      await apiPost('toggle_admin_task', { user_id: agentId, task_id: task.id, completing: !isCompleted })
       if (isCompleted) {
-        await supabase.from('onboarding_admin_task_completions').delete().eq('user_id', agentId).eq('task_id', task.id)
         setAdminCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][task.id]; return next })
       } else {
-        await supabase.from('onboarding_admin_task_completions').insert({ user_id: agentId, task_id: task.id, completed_by: user.id })
         setAdminCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [task.id]: { user_id: agentId, task_id: task.id, completed_at: new Date().toISOString(), completed_by: user.id, notes: null } } }))
       }
     } catch (e) { console.error('Error toggling admin task:', e) }
@@ -173,7 +176,7 @@ export default function AdminOnboardingPage() {
   }
 
   const saveNote = async (agentId: string, taskId: string) => {
-    await supabase.from('onboarding_admin_task_completions').update({ notes: noteText }).eq('user_id', agentId).eq('task_id', taskId)
+    await apiPost('update_task_notes', { user_id: agentId, task_id: taskId, notes: noteText })
     setAdminCompletions(prev => ({
       ...prev,
       [agentId]: { ...prev[agentId], [taskId]: { ...prev[agentId][taskId], notes: noteText } }
@@ -185,12 +188,12 @@ export default function AdminOnboardingPage() {
   const togglePreAccessStep = async (agentId: string, field: string, current: boolean) => {
     const updates: Record<string, any> = { [field]: !current }
     if (field === 'onboarding_fee_paid' && !current) updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
-    await supabase.from('users').update(updates).eq('id', agentId)
+    await apiPost('update_user', { user_id: agentId, updates })
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, [field]: !current } : a))
   }
 
   const toggleNavAccess = async (agentId: string, current: boolean) => {
-    await supabase.from('users').update({ full_nav_access: !current }).eq('id', agentId)
+    await apiPost('toggle_nav_access', { user_id: agentId, current })
     setAgents(prev => prev.map(a => a.id === agentId ? { ...a, full_nav_access: !current } : a))
   }
 
@@ -246,22 +249,10 @@ export default function AdminOnboardingPage() {
       <h1 className="page-title mb-6">ONBOARDING</h1>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Total</p>
-          <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Ready to Unlock</p>
-          <p className="text-2xl font-semibold text-yellow-600">{stats.ready}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">In Progress</p>
-          <p className="text-2xl font-semibold text-luxury-accent">{stats.inProgress}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Complete</p>
-          <p className="text-2xl font-semibold text-green-600">{stats.complete}</p>
-        </div>
+        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Total</p><p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p></div>
+        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Ready to Unlock</p><p className="text-2xl font-semibold text-yellow-600">{stats.ready}</p></div>
+        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">In Progress</p><p className="text-2xl font-semibold text-luxury-accent">{stats.inProgress}</p></div>
+        <div className="container-card text-center"><p className="text-xs text-luxury-gray-3 mb-1">Complete</p><p className="text-2xl font-semibold text-green-600">{stats.complete}</p></div>
       </div>
 
       <div className="container-card mb-4 space-y-3">
@@ -317,11 +308,8 @@ export default function AdminOnboardingPage() {
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
-                  <div className="progress-bar">
-                    <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
-                  </div>
+                  <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress}%` }} /></div>
 
-                  {/* Pre-Access Steps */}
                   <div className="inner-card">
                     <p className="text-xs font-semibold text-luxury-gray-2 mb-3">Pre-Access Steps</p>
                     <div className="space-y-2">
@@ -342,7 +330,6 @@ export default function AdminOnboardingPage() {
                     </div>
                   </div>
 
-                  {/* Admin Setup Tasks */}
                   <div className="inner-card">
                     <div className="flex items-center justify-between mb-3">
                       <p className="text-xs font-semibold text-luxury-gray-2">Admin Setup Tasks</p>
@@ -365,10 +352,7 @@ export default function AdminOnboardingPage() {
                               }
                               <span className={`text-xs flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{task.label}</span>
                               {isCompleted && (
-                                <button
-                                  onClick={e => { e.stopPropagation(); setAddingNote(isAddingNote ? null : taskKey); setNoteText(completion.notes || '') }}
-                                  className="text-xs text-luxury-accent hover:underline flex-shrink-0"
-                                >
+                                <button onClick={e => { e.stopPropagation(); setAddingNote(isAddingNote ? null : taskKey); setNoteText(completion.notes || '') }} className="text-xs text-luxury-accent hover:underline flex-shrink-0">
                                   {completion.notes ? 'Edit note' : 'Add note'}
                                 </button>
                               )}
@@ -378,14 +362,7 @@ export default function AdminOnboardingPage() {
                             )}
                             {isAddingNote && (
                               <div className="ml-7 mt-1 flex gap-2">
-                                <input
-                                  type="text"
-                                  value={noteText}
-                                  onChange={e => setNoteText(e.target.value)}
-                                  placeholder="Add a note..."
-                                  className="input-luxury text-xs flex-1"
-                                  autoFocus
-                                />
+                                <input type="text" value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note..." className="input-luxury text-xs flex-1" autoFocus />
                                 <button onClick={() => saveNote(agent.id, task.id)} className="btn btn-primary text-xs">Save</button>
                                 <button onClick={() => setAddingNote(null)} className="btn btn-secondary text-xs">Cancel</button>
                               </div>
@@ -396,7 +373,6 @@ export default function AdminOnboardingPage() {
                     </div>
                   </div>
 
-                  {/* Nav Access */}
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-luxury-gray-3">App Navigation Access</p>
                     <button
@@ -407,7 +383,6 @@ export default function AdminOnboardingPage() {
                     </button>
                   </div>
 
-                  {/* Agent Checklist */}
                   {Object.entries(sections).map(([sectionKey, section]) => {
                     const sectionCompleted = section.items.filter(i => agentCompletions[i.id]).length
                     return (
@@ -441,9 +416,7 @@ export default function AdminOnboardingPage() {
         })}
 
         {filtered.length === 0 && (
-          <div className="container-card text-center py-12">
-            <p className="text-sm text-luxury-gray-3">No agents found</p>
-          </div>
+          <div className="container-card text-center py-12"><p className="text-sm text-luxury-gray-3">No agents found</p></div>
         )}
       </div>
     </div>

@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
 import { Search, ChevronDown, ExternalLink, Download } from 'lucide-react'
 
@@ -21,9 +20,10 @@ export default function AdminUsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false })
-      if (error) throw error
-      setUsers(data || [])
+      const res = await fetch('/api/users/list')
+      if (!res.ok) throw new Error('Failed to fetch users')
+      const data = await res.json()
+      setUsers(data.users || [])
     } catch (error) { console.error('Error fetching users:', error) }
     finally { setLoading(false) }
   }
@@ -216,9 +216,7 @@ export default function AdminUsersPage() {
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-        <h1 className="page-title">
-          AGENTS ({statusCounts.active} Active)
-        </h1>
+        <h1 className="page-title">AGENTS ({statusCounts.active} Active)</h1>
         <div className="flex flex-wrap gap-2">
           <a href="/roster" target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex items-center gap-1.5"><ExternalLink size={14} /> Roster</a>
           <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5"><Download size={14} /> CSV</button>
@@ -286,9 +284,7 @@ export default function AdminUsersPage() {
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.office || ''}</td>
                       <td className="py-3 px-4"><span className="text-xs text-luxury-gray-2 capitalize">{getDisplayRole(user)}</span></td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">{user.team_name || ''}</td>
-                      <td className="py-3 px-4">
-                        <span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
-                      </td>
+                      <td className="py-3 px-4"><span className={`text-xs font-medium ${user.is_active ? 'text-green-700' : 'text-luxury-gray-3'}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-3">{new Date(user.created_at).toLocaleDateString()}</td>
                       <td className="py-3 px-4"><span className="text-xs text-luxury-accent">View</span></td>
                     </tr>
@@ -296,7 +292,6 @@ export default function AdminUsersPage() {
                 </tbody>
               </table>
             </div>
-
             <div className="md:hidden space-y-3">
               {filteredAndSortedUsers.map((user) => (
                 <div key={user.id} className="inner-card cursor-pointer" onClick={() => router.push(`/admin/users/${user.id}`)}>

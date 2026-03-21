@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { Plus, FileText, Clock, CheckCircle } from 'lucide-react'
 import SalesGoalWidget from '@/components/transactions/SalesGoalWidget'
 import StatusBadge from '@/components/transactions/StatusBadge'
@@ -34,47 +33,16 @@ export default function AgentDashboard() {
 
   const loadDashboard = async () => {
     try {
-      const meRes = await fetch('/api/auth/me')
-      if (!meRes.ok) { router.push('/auth/login'); return }
-      const meData = await meRes.json()
-      const userId = meData.user?.id
-      if (!userId) { router.push('/auth/login'); return }
+      const res = await fetch('/api/dashboard/agent')
+      if (!res.ok) { router.push('/auth/login'); return }
+      const data = await res.json()
 
-      const { data: freshUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
+      const { user: freshUser, transactions, agentRows, commissionPlan } = data
       if (!freshUser) { router.push('/auth/login'); return }
       setUser(freshUser)
 
-      let capAmount = 0
-      let hasCap = false
-      if (freshUser.commission_plan) {
-        const { data: plan } = await supabase
-          .from('commission_plans')
-          .select('*')
-          .eq('name', freshUser.commission_plan)
-          .eq('is_active', true)
-          .single()
-        if (plan) {
-          hasCap = plan.has_cap || false
-          capAmount = plan.cap_amount || 0
-        }
-      }
-
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date')
-        .eq('submitted_by', freshUser.id)
-        .order('updated_at', { ascending: false })
-
-      const { data: agentRows } = await supabase
-        .from('transaction_internal_agents')
-        .select('transaction_id, agent_net, sales_volume, units')
-        .eq('agent_id', freshUser.id)
-
+      const hasCap = commissionPlan?.has_cap || false
+      const capAmount = commissionPlan?.cap_amount || 0
       const txns = transactions || []
       const agentData = agentRows || []
       const currentYear = new Date().getFullYear()
@@ -82,26 +50,22 @@ export default function AgentDashboard() {
       let totalVolume = 0, totalUnits = 0, totalAgentNet = 0
       let closedCount = 0, pendingCount = 0, activeCount = 0, complianceCount = 0
 
-      txns.forEach(t => {
+      txns.forEach((t: any) => {
         const closedYear = t.closed_date ? new Date(t.closed_date).getFullYear() : null
-
         if (t.status === 'closed' && closedYear === currentYear) {
           closedCount++
           totalUnits++
           if (t.sales_price) totalVolume += parseFloat(t.sales_price)
           else if (t.monthly_rent && t.lease_term) totalVolume += parseFloat(t.monthly_rent) * parseInt(t.lease_term)
           else if (t.monthly_rent) totalVolume += parseFloat(t.monthly_rent) * 12
-          const agentRow = agentData.find(a => a.transaction_id === t.id)
+          const agentRow = agentData.find((a: any) => a.transaction_id === t.id)
           if (agentRow?.agent_net) totalAgentNet += parseFloat(agentRow.agent_net)
         } else if (['pending', 'submitted', 'in_review', 'compliant', 'cda_in_progress', 'payout_in_progress', 'broker_review', 'cda_sent', 'payout_processed'].includes(t.status)) {
           pendingCount++
         } else if (['prospect', 'active_listing'].includes(t.status)) {
           activeCount++
         }
-
-        if (['submitted', 'in_review', 'revision_requested'].includes(t.status)) {
-          complianceCount++
-        }
+        if (['submitted', 'in_review', 'revision_requested'].includes(t.status)) complianceCount++
       })
 
       let activeGoals: ('volume' | 'units' | 'agent_net')[] = ['volume', 'units', 'agent_net']
@@ -141,7 +105,6 @@ export default function AgentDashboard() {
         </button>
       </div>
 
-      {/* Sales Goal Widget */}
       <SalesGoalWidget
         userId={user.id}
         volume={stats.totalVolume}
@@ -159,7 +122,6 @@ export default function AgentDashboard() {
         onUpdate={loadDashboard}
       />
 
-      {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
         <div className="container-card text-center">
           <div className="flex items-center justify-center mb-2">
@@ -191,7 +153,6 @@ export default function AgentDashboard() {
         </div>
       </div>
 
-      {/* Recent Transactions */}
       <div className="container-card mt-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="section-title mb-0">Recent Transactions</h2>

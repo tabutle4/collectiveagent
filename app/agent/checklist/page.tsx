@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, PartyPopper } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
@@ -28,7 +27,7 @@ interface Completion {
 
 const HAR_NEW = [
   "Visit the HAR Join Page at har.com/joinhar",
-  'Click \"Apply Now\"',
+  'Click "Apply Now"',
   "Complete the Application Form",
   "Check your email for login credentials from HAR",
   "Pay any required fees",
@@ -42,7 +41,7 @@ const HAR_TRANSFER = [
 ]
 const METRO_NEW = [
   "Visit mymetrotex.com",
-  'Click \"Join Today\"',
+  'Click "Join Today"',
   "Complete the Member Application",
   "Fill out all required information and submit",
   "Check your email for login credentials from MetroTex",
@@ -51,7 +50,7 @@ const METRO_NEW = [
 ]
 const METRO_TRANSFER = [
   "Visit mymetrotex.com",
-  'Click \"Manage My Membership\"',
+  'Click "Manage My Membership"',
   "Log in with your existing MetroTex credentials",
   "Complete the Transfer Form",
   "Pay any required fees",
@@ -80,9 +79,7 @@ function MLSSetupCard({ item, isCompleted, onComplete }: { item: ChecklistItem, 
         <div className="flex-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
-                {item.label}
-              </span>
+              <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>{item.label}</span>
               {item.priority === 'high' && !isCompleted && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">Priority</span>
               )}
@@ -162,9 +159,7 @@ function MLSSetupCard({ item, isCompleted, onComplete }: { item: ChecklistItem, 
           )}
 
           {mls && (
-            <button onClick={onComplete} className="btn btn-primary text-xs">
-              Mark MLS Setup Complete
-            </button>
+            <button onClick={onComplete} className="btn btn-primary text-xs">Mark MLS Setup Complete</button>
           )}
         </div>
       )}
@@ -208,19 +203,19 @@ export default function AgentChecklistPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [itemsRes, completionsRes] = await Promise.all([
-        supabase.from('onboarding_checklist_items').select('*').eq('is_active', true).order('display_order'),
-        supabase.from('onboarding_checklist_completions').select('checklist_item_id, completed_at').eq('user_id', user.id),
-      ])
-      setItems(itemsRes.data || [])
+      const res = await fetch(`/api/checklist/list?user_id=${user.id}`)
+      if (!res.ok) throw new Error('Failed to load checklist')
+      const data = await res.json()
+
+      setItems(data.items || [])
       const completionMap: Record<string, Completion> = {}
-      for (const c of completionsRes.data || []) {
+      for (const c of data.completions || []) {
         completionMap[c.checklist_item_id] = c
       }
       setCompletions(completionMap)
 
-      const total = (itemsRes.data || []).length
-      const completed = (completionsRes.data || []).length
+      const total = (data.items || []).length
+      const completed = (data.completions || []).length
       if (total > 0 && completed === total && !confettiFired.current) {
         confettiFired.current = true
         setShowComplete(true)
@@ -237,15 +232,22 @@ export default function AgentChecklistPage() {
     setToggling(item.id)
     try {
       const isCompleted = !!completions[item.id]
+      const res = await fetch('/api/checklist/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: isCompleted ? 'uncomplete' : 'complete',
+          user_id: user.id,
+          checklist_item_id: item.id,
+        }),
+      })
+      if (!res.ok) throw new Error('Failed to toggle item')
+
       if (isCompleted) {
-        await supabase.from('onboarding_checklist_completions')
-          .delete().eq('user_id', user.id).eq('checklist_item_id', item.id)
         setCompletions(prev => { const next = { ...prev }; delete next[item.id]; return next })
         setShowComplete(false)
         confettiFired.current = false
       } else {
-        await supabase.from('onboarding_checklist_completions')
-          .insert({ user_id: user.id, checklist_item_id: item.id, completed_by: user.id })
         const newCompletions = { ...completions, [item.id]: { checklist_item_id: item.id, completed_at: new Date().toISOString() } }
         setCompletions(newCompletions)
         if (Object.keys(newCompletions).length === items.length && !confettiFired.current) {
@@ -336,34 +338,25 @@ export default function AgentChecklistPage() {
                         onClick={() => toggleItem(item)}
                       >
                         <div className="flex-shrink-0 mt-0.5">
-                          {isCompleted
-                            ? <CheckCircle2 size={18} className="text-green-600" />
-                            : <Circle size={18} className="text-luxury-gray-3" />
-                          }
+                          {isCompleted ? <CheckCircle2 size={18} className="text-green-600" /> : <Circle size={18} className="text-luxury-gray-3" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>
-                              {item.label}
-                            </span>
+                            <span className={`text-sm font-medium ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}>{item.label}</span>
                             {item.priority === 'high' && !isCompleted && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">Priority</span>
                             )}
                           </div>
-                          {item.description && (
-                            <p className="text-xs text-luxury-gray-3 mt-0.5">{item.description}</p>
-                          )}
+                          {item.description && <p className="text-xs text-luxury-gray-3 mt-0.5">{item.description}</p>}
                           {(item.link_url || item.second_link_url) && (
                             <div className="flex gap-3 mt-1.5" onClick={e => e.stopPropagation()}>
                               {item.link_url && (
-                                <a href={item.link_url} target="_blank" rel="noopener noreferrer"
-                                  className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
+                                <a href={item.link_url} target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
                                   <ExternalLink size={11} /> {item.link_text}
                                 </a>
                               )}
                               {item.second_link_url && (
-                                <a href={item.second_link_url} target="_blank" rel="noopener noreferrer"
-                                  className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
+                                <a href={item.second_link_url} target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
                                   <ExternalLink size={11} /> {item.second_link_text}
                                 </a>
                               )}
