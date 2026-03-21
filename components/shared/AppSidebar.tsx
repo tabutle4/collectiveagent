@@ -47,6 +47,38 @@ const adminNav: NavItem[] = [
   { href: '/admin/settings', label: 'Settings', icon: Settings, disabled: true },
 ]
 
+const tcNav: NavItem[] = [
+  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/admin/users', label: 'Agents', icon: UserCog },
+  { href: '/admin/team-agreements', label: 'Teams', icon: UsersRound },
+  { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
+  { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
+  { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
+  { href: '/admin/billing', label: 'Billing', icon: Wallet },
+  { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/admin/form-responses', label: 'Forms', icon: FileText },
+  { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
+  { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+]
+
+const supportNav: NavItem[] = [
+  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/admin/users', label: 'Agents', icon: UserCog },
+  { href: '/admin/team-agreements', label: 'Teams', icon: UsersRound },
+  { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
+  { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
+  { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
+  { href: '/admin/form-responses', label: 'Forms', icon: FileText },
+  { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
+  { href: '/training-center', label: 'Training Center', icon: BookOpen },
+  { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
+]
+
 const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
@@ -72,7 +104,12 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  const isAdmin = user ? ['admin', 'broker', 'operations', 'tc'].includes((user.role || '').toLowerCase()) : pathname?.startsWith('/admin')
+  const userRole = user ? (user.role || '').toLowerCase() : ''
+  const isAdmin = ['admin', 'broker', 'operations'].includes(userRole)
+  const isTC = userRole === 'tc'
+  const isSupport = userRole === 'support'
+  const isStaff = isAdmin || isTC || isSupport
+
   const restrictedAgentNav: NavItem[] = [
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
@@ -82,7 +119,15 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: 'https://agent.collectiverealtyco.com/roster', label: 'Roster', icon: FileText, external: true },
   ]
 
-  const navItems = isAdmin ? adminNav : (user?.full_nav_access ? agentNav : restrictedAgentNav)
+  const getNavItems = () => {
+    if (isAdmin) return adminNav
+    if (isTC) return tcNav
+    if (isSupport) return supportNav
+    if (user?.full_nav_access) return agentNav
+    return restrictedAgentNav
+  }
+
+  const navItems = getNavItems()
   const logo = logoUrl || '/logo.png'
 
   useEffect(() => {
@@ -127,7 +172,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const sidebarContent = (
     <>
       <div className="flex items-center justify-center px-4 py-4 flex-shrink-0">
-        <Link href={isAdmin ? '/admin/dashboard' : '/agent/profile'}>
+        <Link href={isStaff ? '/admin/dashboard' : '/agent/profile'}>
           <img src={logo} alt="Logo" className="sidebar-logo" />
         </Link>
         {isMobile && (
@@ -230,7 +275,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
             <div className="absolute bottom-full left-3 mb-2 w-52 bg-white rounded-lg shadow-lg border border-luxury-gray-5/50 py-1.5 z-50">
-              {!isAdmin && (
+              {!isStaff && (
                 <Link
                   href="/agent/profile"
                   className="block px-4 py-2 text-[13px] text-luxury-gray-2 hover:bg-luxury-gray-5/30 transition-colors"
