@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
+import { useAuth } from '@/lib/context/AuthContext'
 
 type DateRange = 'ytd' | 'mtd' | 'qtd' | 'last_month' | 'last_quarter' | 'last_year' | 'last_q1' | 'last_q2' | 'last_q3' | 'last_q4' | 'next_month' | 'next_quarter' | 'q1' | 'q2' | 'q3' | 'q4'
 type TxnFilter = 'all' | 'sales' | 'leases'
@@ -53,6 +54,7 @@ function getDateRange(range: DateRange): { start: Date; end: Date; label: string
 }
 
 export default function AdminDashboard() {
+  const { hasPermission } = useAuth()
   const [prospects, setProspects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>('ytd')
@@ -61,6 +63,8 @@ export default function AdminDashboard() {
   const [allTransactions, setAllTransactions] = useState<any[]>([])
   const [allAgentRows, setAllAgentRows] = useState<any[]>([])
   const [leaseTypes, setLeaseTypes] = useState<string[]>([])
+
+  const canViewFinancials = hasPermission('can_view_dashboard_financials')
 
   useEffect(() => {
     fetchProspects()
@@ -154,12 +158,14 @@ export default function AdminDashboard() {
   const radius = (ringSize - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
 
-  const REPORT_METRICS = [
+  const ALL_REPORT_METRICS = [
     { key: 'volume', label: 'Sales Volume', icon: TrendingUp, value: metrics.volume, isCurrency: true },
     { key: 'units', label: 'Units Closed', icon: Hash, value: metrics.units, isCurrency: false },
-    { key: 'agentNet', label: 'Agent Net', icon: DollarSign, value: metrics.agentNet, isCurrency: true },
-    { key: 'officeNet', label: 'Office Net', icon: DollarSign, value: metrics.officeNet, isCurrency: true },
+    { key: 'agentNet', label: 'Agent Net', icon: DollarSign, value: metrics.agentNet, isCurrency: true, requiresPermission: true },
+    { key: 'officeNet', label: 'Office Net', icon: DollarSign, value: metrics.officeNet, isCurrency: true, requiresPermission: true },
   ]
+
+  const REPORT_METRICS = ALL_REPORT_METRICS.filter(m => !m.requiresPermission || canViewFinancials)
 
   const rangeInfo = getDateRange(dateRange)
 
@@ -187,7 +193,7 @@ export default function AdminDashboard() {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className={`grid gap-6 ${REPORT_METRICS.length === 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
           {REPORT_METRICS.map(metric => {
             const Icon = metric.icon
             return (
