@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifySessionToken } from '@/lib/session'
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const sessionToken = request.cookies.get('ca_session')?.value
     if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
     const supabase = createClient()
-    const txnId = params.id
+    const { id: txnId } = await params
 
     const [txnRes, typesRes, agentsRes, teamsRes, contactsRes, intAgentsRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('id', txnId).single(),
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const sessionToken = request.cookies.get('ca_session')?.value
     if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
     const supabase = createClient()
-    const txnId = params.id
+    const { id: txnId } = await params
     const body = await request.json()
 
     // Page sends: { transaction: payload, contacts: contactsPayload }
