@@ -97,7 +97,7 @@ export default function CampaignDetailPage() {
           )
         `)
         .eq('is_active', true)
-        .filter('roles', 'cs', '{"agent"}')
+        .eq('is_licensed_agent', true)
 
       // Filter campaign_recipients and campaign_responses to only this campaign
       const agentsWithProgress = (agentsData || []).map(agent => ({

@@ -24,10 +24,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - You can only request updates for your own listings' }, { status: 403 })
     }
 
+    // Get admin users (operations and broker roles)
     const { data: admins } = await supabase
       .from('users')
       .select('email, preferred_first_name, preferred_last_name')
-      .filter('roles', 'cs', '{"admin"}')
+      .in('role', ['operations', 'broker'])
 
     if (!admins || admins.length === 0) {
       return NextResponse.json({ error: 'No admin users found to notify' }, { status: 500 })

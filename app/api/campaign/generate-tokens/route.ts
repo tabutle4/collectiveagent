@@ -6,12 +6,12 @@ export async function POST(request: NextRequest) {
   try {
     const { campaign_id } = await request.json()
 
-    // Get all active agents without campaign tokens
+    // Get all active licensed agents without campaign tokens
     const { data: agents, error } = await supabase
       .from('users')
       .select('id, email, first_name, last_name')
       .eq('is_active', true)
-      .filter('roles', 'cs', '{"agent"}')
+      .eq('is_licensed_agent', true)
       .is('campaign_token', null)
 
     if (error) throw error

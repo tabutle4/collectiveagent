@@ -28,28 +28,27 @@ export default function AdminUsersPage() {
     finally { setLoading(false) }
   }
 
-  const getRoles = (user: any): string[] => {
-    if (!user.roles) return []
-    if (Array.isArray(user.roles)) return user.roles.map((r: string) => r.toLowerCase())
-    try { const parsed = JSON.parse(user.roles); return Array.isArray(parsed) ? parsed.map((r: string) => r.toLowerCase()) : [] }
-    catch { return [] }
-  }
-
+  // Get display role from the role column (not roles array)
   const getDisplayRole = (user: any): string => {
-    const roles = getRoles(user)
-    if (roles.includes('broker')) return 'Broker'
-    if (roles.includes('admin')) return 'Admin'
-    if (roles.includes('operations')) return 'Operations'
-    if (roles.includes('tc')) return 'TC'
-    if (roles.includes('team_lead')) return 'Team Lead'
-    if (roles.includes('agent')) return 'Agent'
-    return roles[0] || ''
+    const role = (user.role || '').toLowerCase()
+    switch (role) {
+      case 'broker': return 'Broker'
+      case 'operations': return 'Operations'
+      case 'tc': return 'TC'
+      case 'agent': return 'Agent'
+      default: return role || 'Agent'
+    }
   }
 
+  // Get role value for filtering (lowercase)
+  const getUserRole = (user: any): string => {
+    return (user.role || 'agent').toLowerCase()
+  }
+
+  // Additional roles from additional_roles field if present
   const getAdditionalRoles = (user: any): string => {
-    const roles = getRoles(user)
-    const primary = getDisplayRole(user).toLowerCase().replace(' ', '_')
-    return roles.filter(r => r !== primary && r !== 'agent').map(r => r.replace('_', ' ')).join(', ')
+    if (!user.additional_roles) return ''
+    return user.additional_roles
   }
 
   const getSocialLinks = (user: any): string => {
@@ -65,7 +64,10 @@ export default function AdminUsersPage() {
 
   const allRoles = useMemo(() => {
     const rolesSet = new Set<string>()
-    users.forEach(user => { getRoles(user).forEach(role => rolesSet.add(role)) })
+    users.forEach(user => { 
+      const role = getUserRole(user)
+      if (role) rolesSet.add(role)
+    })
     return Array.from(rolesSet).sort()
   }, [users])
 
@@ -82,7 +84,7 @@ export default function AdminUsersPage() {
         return fullName.includes(query) || legalName.includes(query) || email.includes(query) || office.includes(query) || team.includes(query)
       })
     }
-    if (roleFilter !== 'all') filtered = filtered.filter(user => getRoles(user).includes(roleFilter))
+    if (roleFilter !== 'all') filtered = filtered.filter(user => getUserRole(user) === roleFilter)
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
@@ -131,7 +133,7 @@ export default function AdminUsersPage() {
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { all: users.length }
-    allRoles.forEach(role => { counts[role] = users.filter(user => getRoles(user).includes(role)).length })
+    allRoles.forEach(role => { counts[role] = users.filter(user => getUserRole(user) === role).length })
     return counts
   }, [users, allRoles])
 
@@ -147,43 +149,51 @@ export default function AdminUsersPage() {
   }
 
   const SortHeader = ({ field, children }: { field: string; children: React.ReactNode }) => (
-    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider cursor-pointer hover:text-luxury-gray-1 transition-colors" onClick={() => handleSort(field)}>
-      <div className="flex items-center gap-1">{children} {sortBy === field && <ChevronDown size={14} className={`transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />}</div>
+    <th className="py-3 px-4 cursor-pointer select-none" onClick={() => handleSort(field)}>
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold text-luxury-gray-3">
+        {children}
+        <ChevronDown size={12} className={`transition-transform ${sortBy === field ? (sortOrder === 'asc' ? 'rotate-180' : '') : 'opacity-0'}`} />
+      </div>
     </th>
   )
 
   const exportCSV = () => {
-    const headers = ['Agent Name', 'Email', 'Office', 'Role', 'Additional Roles', 'Team', 'Phone', 'Birthday', 'Social Media', 'Division', 'License #', 'MLS ID', 'Association', 'Commission Plan', 'Status', 'Join Date']
+    const headers = ['Preferred Name', 'Legal Name', 'Email', 'Office', 'Role', 'Additional Roles', 'Team', 'Phone', 'Birthday Month', 'Status', 'Social Links', 'Division']
     const rows = filteredAndSortedUsers.map(user => [
-      `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`,
-      user.email || '', user.office || '', getDisplayRole(user), getAdditionalRoles(user),
-      user.team_name || '', user.personal_phone || '', user.birth_month || '',
-      getSocialLinks(user), user.division || '', user.license_number || '',
-      user.mls_id || '', user.association || '', user.commission_plan || '',
-      user.is_active ? 'Active' : 'Inactive', user.join_date ? new Date(user.join_date).toLocaleDateString() : '',
+      `${user.preferred_first_name || ''} ${user.preferred_last_name || ''}`.trim(),
+      `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      user.email || '',
+      user.office || '',
+      getDisplayRole(user),
+      getAdditionalRoles(user) || '',
+      user.team_name || '',
+      user.personal_phone || '',
+      user.birth_month || '',
+      user.is_active ? 'Active' : 'Inactive',
+      getSocialLinks(user) || '',
+      user.division || ''
     ])
-    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => {
-      const str = cell?.toString() || ''
-      return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str.replace(/"/g, '""')}"` : str
-    }).join(','))].join('\n')
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `agents-${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `agents_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
     URL.revokeObjectURL(url)
   }
 
   const exportPDF = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
-    const tableRows = filteredAndSortedUsers.map(user => {
-      const headshot = user.headshot_url
-        ? `<img src="${user.headshot_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;object-position:top center;" />`
-        : `<div style="width:32px;height:32px;border-radius:50%;background:#C5A278;display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600;">${(user.preferred_first_name || user.first_name || '?')[0]}${(user.preferred_last_name || user.last_name || '?')[0]}</div>`
+    const tableRows = filteredAndSortedUsers.map((user, idx) => {
+      const headshotCell = user.headshot_url 
+        ? `<img src="${user.headshot_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:center top;" />`
+        : `<div style="width:24px;height:24px;border-radius:50%;background:#C5A278;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:600;">${(user.preferred_first_name || user.first_name || '?')[0]}${(user.preferred_last_name || user.last_name || '?')[0]}</div>`
       return `<tr>
-        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${headshot}</td>
-        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;font-weight:600;">${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}</td>
-        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;width:30px;">${headshotCell}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;"><strong>${user.preferred_first_name} ${user.preferred_last_name}</strong><br/><span style="color:#888;font-size:8px;">${user.first_name} ${user.last_name}</span></td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.office || ''}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getDisplayRole(user)}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getAdditionalRoles(user) || ''}</td>

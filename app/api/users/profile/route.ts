@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    // If no id provided, use the current session user
+    const id = searchParams.get('id') || session.user.id
 
     const supabase = createClient()
     const { data, error } = await supabase.from('users').select('*').eq('id', id).single()

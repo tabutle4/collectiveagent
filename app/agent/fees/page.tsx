@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
 
 declare global {
@@ -47,30 +46,32 @@ export default function AgentFeesPage() {
   }, [user?.id])
 
   const loadData = async () => {
-    const { data: userData } = await supabase
-      .from('users')
-      .select('onboarding_fee_paid, onboarding_fee_paid_date, monthly_fee_paid_through, monthly_fee_waived, payload_payee_id, division')
-      .eq('id', user.id)
-      .single()
-    if (userData) setUser((prev: any) => ({ ...prev, ...userData }))
+    // Fetch fresh user profile data
+    const profileRes = await fetch('/api/users/profile')
+    if (profileRes.ok) {
+      const profileData = await profileRes.json()
+      if (profileData.user) {
+        setUser((prev: any) => ({ ...prev, ...profileData.user }))
+      }
+    }
 
-    const [invoiceRes, receiptRes, { data: records }] = await Promise.all([
+    // Fetch invoices, receipts, and billing records via API
+    const [invoiceRes, receiptRes, billingRes] = await Promise.all([
       fetch(`/api/payload/open-invoices?user_id=${user.id}`),
       fetch(`/api/payload/receipts?user_id=${user.id}`),
-      supabase
-        .from('agent_debts')
-        .select('id, record_type, description, amount_owed, amount_remaining, date_incurred, notes')
-        .eq('agent_id', user.id)
-        .eq('status', 'outstanding')
-        .order('date_incurred', { ascending: false }),
+      fetch(`/api/billing?agent_id=${user.id}&status=outstanding`),
     ])
 
     const invoiceData = await invoiceRes.json()
     const receiptData = await receiptRes.json()
+    const billingData = await billingRes.json()
+
     setOpenInvoices(invoiceData.invoices || [])
     setReceipts(receiptData.receipts || [])
-    setDebts((records || []).filter((r: any) => r.record_type !== 'credit'))
-    setCredits((records || []).filter((r: any) => r.record_type === 'credit'))
+
+    const records = billingData.records || []
+    setDebts(records.filter((r: any) => r.record_type !== 'credit'))
+    setCredits(records.filter((r: any) => r.record_type === 'credit'))
     setLoading(false)
   }
 

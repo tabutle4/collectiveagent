@@ -24,13 +24,13 @@ export async function POST(request: NextRequest) {
         
         let newAgentId = null
         
-        // Try preferred name first
+        // Try preferred name first - use is_licensed_agent instead of roles array
         const { data: agentsByPreferred, error: preferredError } = await supabase
           .from('users')
-          .select('id, preferred_first_name, preferred_last_name, roles')
+          .select('id, preferred_first_name, preferred_last_name')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .filter('roles', 'cs', '{"agent"}')
+          .eq('is_licensed_agent', true)
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
           // Try legal name
           const { data: agentsByLegal, error: legalError } = await supabase
             .from('users')
-            .select('id, first_name, last_name, roles')
+            .select('id, first_name, last_name')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .filter('roles', 'cs', '{"agent"}')
+            .eq('is_licensed_agent', true)
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('campaign_token', token)
       .eq('is_active', true)
-      .filter('roles', 'cs', '{"agent"}')
+      .eq('is_licensed_agent', true)
       .single()
 
     if (error || !user) {

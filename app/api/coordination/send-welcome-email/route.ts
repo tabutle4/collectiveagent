@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         agentPhone = agentData.business_phone || agentData.personal_phone || ''
       }
     } else if (listing.agent_name) {
-      // Try to find agent by name
+      // Try to find agent by name - use is_licensed_agent instead of roles array
       const agentNameParts = listing.agent_name.trim().split(/\s+/)
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
           .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .filter('roles', 'cs', '{"agent"}')
+          .eq('is_licensed_agent', true)
           .limit(1)
 
         let agentData = null
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
             .select('preferred_first_name, preferred_last_name, first_name, last_name, email, business_phone, personal_phone')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .filter('roles', 'cs', '{"agent"}')
+            .eq('is_licensed_agent', true)
             .limit(1)
 
           if (agentsByLegal && agentsByLegal.length > 0) {
@@ -144,4 +144,3 @@ export async function POST(request: NextRequest) {
     )
   }
 }
-

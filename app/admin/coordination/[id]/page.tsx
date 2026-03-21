@@ -84,7 +84,7 @@ export default function CoordinationDetailPage() {
     const { data, error } = await supabase
       .from('users')
       .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .filter('roles', 'cs', '{"agent"}')
+      .eq('is_licensed_agent', true)
     
     if (!error && data) {
       const agentsList = data.map(user => ({

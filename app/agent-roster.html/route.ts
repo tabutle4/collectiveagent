@@ -21,36 +21,31 @@ export async function GET() {
   try {
     console.log('🔄 Generating roster HTML dynamically...')
     
-    // Fetch active agents
-    const { data: allUsers, error: fetchError } = await supabaseAdmin
+    // Fetch active licensed agents
+    const { data: agents, error: fetchError } = await supabaseAdmin
       .from('users')
       .select(
         'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, role, roles, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
       )
       .eq('is_active', true)
+      .eq('is_licensed_agent', true)
 
     if (fetchError) {
       console.error('❌ Error fetching users for roster:', fetchError)
       throw fetchError
     }
 
-    // Filter for users with 'agent' in roles array
-    const agents = (allUsers || []).filter(user => {
-      const roles = Array.isArray(user.roles) ? user.roles : []
-      return roles.includes('agent')
-    })
-
     // Sort agents
-    agents.sort((a, b) => {
+    const sortedAgents = (agents || []).sort((a, b) => {
       const aName = `${a.preferred_first_name} ${a.preferred_last_name}`.toLowerCase()
       const bName = `${b.preferred_first_name} ${b.preferred_last_name}`.toLowerCase()
       return aName.localeCompare(bName)
     })
 
-    console.log(`✅ Found ${agents?.length || 0} active agents with 'agent' role`)
+    console.log(`✅ Found ${sortedAgents.length} active licensed agents`)
     
-    const offices = getUniqueSorted((agents || []).map((agent) => agent.office?.trim() || null))
-    const teams = getUniqueSorted((agents || []).map((agent) => agent.team_name?.trim() || null))
+    const offices = getUniqueSorted(sortedAgents.map((agent) => agent.office?.trim() || null))
+    const teams = getUniqueSorted(sortedAgents.map((agent) => agent.team_name?.trim() || null))
     // Extract individual divisions from combined divisions (split by |)
     const extractDivisions = (division: string | null): string[] => {
       if (!division || !division.trim()) return []
@@ -59,16 +54,16 @@ export async function GET() {
         .map(d => d.trim())
         .filter(d => d.length > 0)
     }
-    const allDivisions = (agents || []).flatMap((agent) => extractDivisions(agent.division))
+    const allDivisions = sortedAgents.flatMap((agent) => extractDivisions(agent.division))
     const divisions = getUniqueSorted(allDivisions)
 
     // Generate HTML
     const html = buildRosterHtml({
-      agentCount: agents?.length || 0,
+      agentCount: sortedAgents.length,
       officeOptions: buildOptions(offices),
       teamOptions: buildOptions(teams),
       divisionOptions: buildOptions(divisions),
-      tableRows: buildTableRows(agents || []),
+      tableRows: buildTableRows(sortedAgents),
     })
 
     console.log('✅ Roster HTML generated successfully')

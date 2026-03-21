@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     if (body.agent_id) {
       agentIdForListing = body.agent_id
     } else if (body.agent_name) {
-      // Look up agent by name
+      // Look up agent by name - use is_licensed_agent instead of roles array
       const agentNameParts = body.agent_name.trim().split(/\s+/)
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
@@ -60,10 +60,10 @@ export async function POST(request: NextRequest) {
         
         const { data: agentsByPreferred } = await supabase
           .from('users')
-          .select('id, preferred_first_name, preferred_last_name, roles')
+          .select('id, preferred_first_name, preferred_last_name')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .filter('roles', 'cs', '{"agent"}')
+          .eq('is_licensed_agent', true)
           .limit(1)
         
         if (agentsByPreferred && agentsByPreferred.length > 0) {
@@ -71,10 +71,10 @@ export async function POST(request: NextRequest) {
         } else {
           const { data: agentsByLegal } = await supabase
             .from('users')
-            .select('id, first_name, last_name, roles')
+            .select('id, first_name, last_name')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .filter('roles', 'cs', '{"agent"}')
+            .eq('is_licensed_agent', true)
             .limit(1)
           
           if (agentsByLegal && agentsByLegal.length > 0) {
@@ -361,9 +361,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Allow both agents and admins to create listings
-    // Check role (simple string, not array)
-    const isAdmin = userData.role === 'Admin'
-    const isAgent = userData.role === 'Agent'
+    // Check role column (lowercase values: agent, tc, operations, broker)
+    const userRole = (userData.role || '').toLowerCase()
+    const isAdmin = ['operations', 'broker', 'tc'].includes(userRole)
+    const isAgent = userData.is_licensed_agent === true
 
     if (!isAdmin && !isAgent) {
       return NextResponse.json(
@@ -377,7 +378,7 @@ export async function POST(request: NextRequest) {
     if (body.agent_id) {
       agentIdForListingAuth = body.agent_id
     } else if (body.agent_name) {
-      // Look up agent by name (fallback for old forms)
+      // Look up agent by name (fallback for old forms) - use is_licensed_agent
       const agentNameParts = body.agent_name.trim().split(/\s+/)
       if (agentNameParts.length >= 2) {
         const firstName = agentNameParts[0].trim()
@@ -385,10 +386,10 @@ export async function POST(request: NextRequest) {
         
         const { data: agentsByPreferred, error: preferredError } = await supabase
           .from('users')
-          .select('id, preferred_first_name, preferred_last_name, roles')
+          .select('id, preferred_first_name, preferred_last_name')
           .ilike('preferred_first_name', firstName)
           .ilike('preferred_last_name', lastName)
-          .filter('roles', 'cs', '{"agent"}')
+          .eq('is_licensed_agent', true)
           .limit(1)
         
         if (!preferredError && agentsByPreferred && agentsByPreferred.length > 0) {
@@ -396,10 +397,10 @@ export async function POST(request: NextRequest) {
         } else {
           const { data: agentsByLegal, error: legalError } = await supabase
             .from('users')
-            .select('id, first_name, last_name, roles')
+            .select('id, first_name, last_name')
             .ilike('first_name', firstName)
             .ilike('last_name', lastName)
-            .filter('roles', 'cs', '{"agent"}')
+            .eq('is_licensed_agent', true)
             .limit(1)
           
           if (!legalError && agentsByLegal && agentsByLegal.length > 0) {

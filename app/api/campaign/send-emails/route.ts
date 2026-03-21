@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         campaign_recipients: null,
       }))
     } else {
-      // Handle agent filters
+      // Handle agent filters - filter by is_licensed_agent instead of roles array
       let query = supabase
         .from('users')
         .select(`
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           is_active,
           campaign_recipients!left(fully_completed_at, campaign_id)
         `)
-        .filter('roles', 'cs', '{"agent"}')
+        .eq('is_licensed_agent', true)
 
       // Apply filter-specific conditions
       if (recipient_filter === 'individual') {
