@@ -314,9 +314,9 @@ export default function AgentTransactionDetailPage() {
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
   if (!transaction || !form) return <div className="text-center py-12 text-sm text-luxury-gray-3">Transaction not found.</div>
 
-  const visibleSlides = getVisibleSlides(form as any, processingFeeTypes)
+  const visibleSlides = getVisibleSlides(form.is_lease)
   const currentSlide: SlideConfig | undefined = visibleSlides[activeSlide]
-  const propertyAddress = buildPropertyAddress(form as any)
+  const propertyAddress = buildPropertyAddress(form.street_address, form.unit_suite, form.city, form.state_code, form.zip_code)
 
   return (
     <div className="max-w-4xl mx-auto">
