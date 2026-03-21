@@ -29,7 +29,7 @@ const PUBLIC_PATHS = [
 
 const ADMIN_PATHS = ['/admin']
 const AGENT_PATHS = ['/agent']
-const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc']
+const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
 
 // Paths accessible to all authenticated users regardless of role
 const SHARED_PATHS = ['/transactions']
