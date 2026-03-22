@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
-import { useAuth } from '@/lib/AuthContext'
 import {
   BookOpen,
   Video,
@@ -192,7 +191,7 @@ function getFileIcon(name: string) {
 }
 
 export default function TrainingCenterPage() {
-  const { user } = useAuth()
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [resources, setResources] = useState<Resource[]>([])
   const [videoFolders, setVideoFolders] = useState<VideoFolder[]>([])
@@ -212,7 +211,7 @@ export default function TrainingCenterPage() {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Build quick links with role-based calendar URL
-  const isAdmin = user?.role && ['operations', 'broker', 'tc'].includes(user.role)
+  const isAdmin = userRole && ['operations', 'broker', 'tc'].includes(userRole)
   const calendarHref = isAdmin ? '/admin/calendar' : '/agent/calendar'
   
   const quickLinks = [
@@ -230,9 +229,10 @@ export default function TrainingCenterPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [trainingRes, bookmarksRes] = await Promise.all([
+        const [trainingRes, bookmarksRes, userRes] = await Promise.all([
           fetch('/api/training-center'),
           fetch('/api/training-center/bookmarks'),
+          fetch('/api/auth/me'),
         ])
 
         if (!trainingRes.ok) throw new Error('Failed to load training center data')
@@ -249,6 +249,11 @@ export default function TrainingCenterPage() {
           setBookmarkedUrls(
             new Set((bookmarksData.bookmarks || []).map((b: BookmarkItem) => b.resource_url))
           )
+        }
+
+        if (userRes.ok) {
+          const userData = await userRes.json()
+          setUserRole(userData.user?.role || null)
         }
       } catch (err: any) {
         setError(err.message)
