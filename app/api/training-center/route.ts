@@ -134,19 +134,18 @@ export async function GET(request: NextRequest) {
       console.log('KQL Query:', kqlQuery)
 
       const searchBody = {
-        requests: [
-          {
-            entityTypes: ['driveItem', 'listItem'],
-            query: {
-              queryString: kqlQuery,
-            },
-            from: 0,
-            size: 50,
-            // Uncomment if you get region errors:
-            // region: 'NAM',
-          },
-        ],
-      }
+  requests: [
+    {
+      entityTypes: ['driveItem', 'listItem'],
+      query: {
+        queryString: kqlQuery,
+      },
+      from: 0,
+      size: 50,
+      region: 'NAM',
+    },
+  ],
+}
       
       console.log('Search request body:', JSON.stringify(searchBody, null, 2))
 
