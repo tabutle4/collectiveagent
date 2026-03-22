@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
+import { useAuth } from '@/lib/AuthContext'
 import {
   BookOpen,
   Video,
@@ -21,6 +22,7 @@ import {
   X,
   FileCode,
   Calendar,
+  CalendarDays,
   Bookmark,
   BookmarkCheck,
   Image,
@@ -190,6 +192,7 @@ function getFileIcon(name: string) {
 }
 
 export default function TrainingCenterPage() {
+  const { user } = useAuth()
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [resources, setResources] = useState<Resource[]>([])
   const [videoFolders, setVideoFolders] = useState<VideoFolder[]>([])
@@ -207,6 +210,21 @@ export default function TrainingCenterPage() {
 
   const currentSearchRef = useRef<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Build quick links with role-based calendar URL
+  const isAdmin = user?.role && ['operations', 'broker', 'tc'].includes(user.role)
+  const calendarHref = isAdmin ? '/admin/calendar' : '/agent/calendar'
+  
+  const quickLinks = [
+    {
+      label: 'Calendar',
+      shortLabel: 'Calendar',
+      href: calendarHref,
+      icon: CalendarDays,
+      internal: true,
+    },
+    ...QUICK_LINKS,
+  ]
 
   // Fetch initial data
   useEffect(() => {
@@ -400,7 +418,7 @@ export default function TrainingCenterPage() {
 
       {/* Quick Links at top of nav */}
       <div className="py-2 border-b border-luxury-gray-5">
-        {QUICK_LINKS.map(link => {
+        {quickLinks.map(link => {
           const Icon = link.icon
           if (link.internal) {
             return (
@@ -605,7 +623,7 @@ export default function TrainingCenterPage() {
         <div className="md:hidden mb-4">
           <div className="container-card p-3">
             <div className="flex justify-around">
-              {QUICK_LINKS.map(link => {
+              {quickLinks.map(link => {
                 const Icon = link.icon
                 if (link.internal) {
                   return (
