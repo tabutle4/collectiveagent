@@ -130,10 +130,23 @@ function shouldExcludeResult(item: any): boolean {
 }
 
 // Extract URL from text (for meeting links in location field)
+// Handles URLs with or without protocol (e.g., visit.collectiverealtyco.com/training)
 function extractUrlFromText(text: string | null): string | null {
   if (!text) return null
-  const urlMatch = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/i)
-  return urlMatch ? urlMatch[0] : null
+  
+  // First try to match URLs with protocol
+  const withProtocol = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\];,]+/i)
+  if (withProtocol) {
+    return withProtocol[0]
+  }
+  
+  // Then try to match domain-like patterns without protocol
+  const withoutProtocol = text.match(/(?:^|\s)((?:[\w-]+\.)+(?:com|org|net|io|co|us|me|app|dev|info|biz|edu|gov)[^\s<>"{}|\\^`\[\];,]*)/i)
+  if (withoutProtocol) {
+    return `https://${withoutProtocol[1]}`
+  }
+  
+  return null
 }
 
 // Get this week's coaching sessions from Agents group calendar

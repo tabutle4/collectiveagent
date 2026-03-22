@@ -126,23 +126,39 @@ const DIVISION_SESSIONS = [
   },
 ]
 
-// Extract URL from text if present
-function extractUrl(text: string | null | undefined): string | null {
+// Extract URL from text if present (handles URLs with or without protocol)
+function extractUrl(text: string | null | undefined): { url: string; href: string } | null {
   if (!text) return null
-  const urlMatch = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/i)
-  return urlMatch ? urlMatch[0] : null
+  
+  // First try to match URLs with protocol
+  const withProtocol = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\];,]+/i)
+  if (withProtocol) {
+    return { url: withProtocol[0], href: withProtocol[0] }
+  }
+  
+  // Then try to match domain-like patterns without protocol
+  // Matches: domain.com, sub.domain.com, domain.com/path, etc.
+  const withoutProtocol = text.match(/(?:^|\s)((?:[\w-]+\.)+(?:com|org|net|io|co|us|me|app|dev|info|biz|edu|gov)[^\s<>"{}|\\^`\[\];,]*)/i)
+  if (withoutProtocol) {
+    const url = withoutProtocol[1]
+    return { url, href: `https://${url}` }
+  }
+  
+  return null
 }
 
 // Render location with clickable URL if present
 function LocationDisplay({ location }: { location: string }) {
-  const url = extractUrl(location)
+  const extracted = extractUrl(location)
   
-  if (url) {
+  if (extracted) {
+    const { url, href } = extracted
+    
     // If the entire location is just a URL, show it as a link
     if (location.trim() === url) {
       return (
         <a
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
@@ -159,7 +175,7 @@ function LocationDisplay({ location }: { location: string }) {
       <span className="text-xs text-luxury-gray-2">
         {parts[0]}
         <a
-          href={url}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           className="text-luxury-accent hover:underline inline-flex items-center gap-0.5"
