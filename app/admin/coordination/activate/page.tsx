@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Listing } from '@/types/listing-coordination'
-import { supabase } from '@/lib/supabase'
+
 
 export default function ActivateCoordinationPage() {
   const router = useRouter()
@@ -50,13 +50,11 @@ export default function ActivateCoordinationPage() {
       } else if (listing.agent_id) {
         // Fetch agent data to check name
         try {
-          const { data: agentData } = await supabase
-            .from('users')
-            .select('preferred_first_name, preferred_last_name, first_name, last_name')
-            .eq('id', listing.agent_id)
-            .single()
+          const res = await fetch(`/api/users/profile?id=${listing.agent_id}`)
+          const agentResult = await res.json()
 
-          if (agentData) {
+          if (res.ok && agentResult.user) {
+            const agentData = agentResult.user
             const agentName =
               `${agentData.preferred_first_name || agentData.first_name} ${agentData.preferred_last_name || agentData.last_name}`.toLowerCase()
             isCourtneyOkanlomo =

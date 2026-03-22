@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import CampaignEmailModal from '@/components/campaigns/CampaignEmailModal'
 import AgentCampaignResponseModal from '@/components/campaigns/AgentCampaignResponseModal'
 
@@ -36,123 +35,26 @@ export default function CampaignDetailPage() {
 
   const fetchCampaignData = async () => {
     try {
-      // Fetch campaign
-      const { data: campaignData, error: campaignError } = await supabase
-        .from('campaigns')
-        .select('*')
-        .eq('id', params.id)
-        .single()
+      const res = await fetch(`/api/campaigns/${params.id}`)
+      const data = await res.json()
 
-      if (campaignError) throw campaignError
-      setCampaign(campaignData)
-      setEventStaffEmail(campaignData.event_staff_email || '')
-      // Initialize deadline for editing (format: YYYY-MM-DDTHH:MM)
-      if (campaignData.deadline) {
-        const deadlineDate = new Date(campaignData.deadline)
+      if (!res.ok) throw new Error(data.error || 'Failed to load campaign')
+
+      setCampaign(data.campaign)
+      setStats(data.stats)
+      setAgents(data.agents || [])
+      setRsvps(data.rsvps || [])
+      setSurveys(data.surveys || [])
+      setEventStaffEmail(data.campaign.event_staff_email || '')
+
+      if (data.campaign.deadline) {
+        const deadlineDate = new Date(data.campaign.deadline)
         const localDateTime = new Date(
           deadlineDate.getTime() - deadlineDate.getTimezoneOffset() * 60000
         )
         setNewDeadline(localDateTime.toISOString().slice(0, 16))
       }
 
-      // Fetch stats
-      const { data: statsData } = await supabase.rpc('get_campaign_completion_stats', {
-        campaign_uuid: params.id,
-      })
-
-      if (statsData && statsData.length > 0) {
-        setStats(statsData[0])
-      }
-
-      // Fetch all active agents (including those who haven't started the campaign)
-      const { data: agentsData, error: agentsError } = await supabase
-        .from('users')
-        .select(
-          `
-          id,
-          first_name,
-          last_name,
-          preferred_first_name,
-          preferred_last_name,
-          email,
-          campaign_token,
-          commission_plan,
-          commission_plan_other,
-          campaign_recipients(
-            current_step,
-            step_1_completed_at,
-            step_2_completed_at,
-            step_3_completed_at,
-            step_4_completed_at,
-            fully_completed_at,
-            campaign_id
-          ),
-          campaign_responses(
-            commission_plan_2026,
-            commission_plan_2026_other,
-            attending_luncheon,
-            luncheon_comments,
-            support_rating,
-            support_improvements,
-            work_preference,
-            profile_updates,
-            campaign_id
-          )
-        `
-        )
-        .eq('is_active', true)
-        .eq('is_licensed_agent', true)
-
-      // Filter campaign_recipients and campaign_responses to only this campaign
-      const agentsWithProgress = (agentsData || []).map(agent => ({
-        ...agent,
-        campaign_recipients:
-          agent.campaign_recipients?.filter((cr: any) => cr.campaign_id === params.id) || [],
-        campaign_responses:
-          agent.campaign_responses?.filter((cr: any) => cr.campaign_id === params.id) || [],
-      }))
-
-      setAgents(agentsWithProgress)
-
-      // Fetch RSVPs (agents who responded to luncheon question)
-      const { data: rsvpData } = await supabase
-        .from('campaign_responses')
-        .select(
-          `
-          *,
-          users!inner(
-            first_name,
-            last_name,
-            preferred_first_name,
-            preferred_last_name,
-            email
-          )
-        `
-        )
-        .eq('campaign_id', params.id)
-        .not('attending_luncheon', 'is', null)
-
-      setRsvps(rsvpData || [])
-
-      // Fetch Survey responses (agents who completed feedback survey)
-      const { data: surveyData } = await supabase
-        .from('campaign_responses')
-        .select(
-          `
-          *,
-          users!inner(
-            first_name,
-            last_name,
-            preferred_first_name,
-            preferred_last_name,
-            email
-          )
-        `
-        )
-        .eq('campaign_id', params.id)
-        .not('support_rating', 'is', null)
-
-      setSurveys(surveyData || [])
       setLoading(false)
     } catch (error) {
       console.error('Error fetching campaign data:', error)
@@ -162,16 +64,54 @@ export default function CampaignDetailPage() {
 
   const saveEventStaffEmail = async () => {
     try {
-      const { error } = await supabase
-        .from('campaigns')
-        .update({ event_staff_email: eventStaffEmail })
-        .eq('id', params.id)
+      const res = await fetch(`/api/campaigns/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_staff_email: eventStaffEmail }),
+      })
 
-      if (error) throw error
+      if (!res.ok) throw new Error('Failed to save')
       alert('Event staff email saved!')
     } catch (error) {
       console.error('Error saving email:', error)
       alert('Failed to save email')
+    }
+  }
+
+  const saveDeadline = async () => {
+    if (!newDeadline) {
+      alert('Please enter a deadline')
+      return
+    }
+
+    setSavingDeadline(true)
+    try {
+      const deadlineValue =
+        newDeadline.includes(':') && newDeadline.split(':').length === 2
+          ? `${newDeadline}:00`
+          : newDeadline
+
+      const testDate = new Date(deadlineValue)
+      if (isNaN(testDate.getTime())) {
+        throw new Error('Invalid date format')
+      }
+
+      const res = await fetch(`/api/campaigns/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deadline: deadlineValue }),
+      })
+
+      if (!res.ok) throw new Error('Failed to update deadline')
+
+      setCampaign({ ...campaign, deadline: deadlineValue })
+      setEditingDeadline(false)
+      alert('Deadline updated successfully!')
+    } catch (error: any) {
+      console.error('Error updating deadline:', error)
+      alert('Failed to update deadline: ' + (error.message || 'Unknown error'))
+    } finally {
+      setSavingDeadline(false)
     }
   }
 
@@ -254,7 +194,7 @@ export default function CampaignDetailPage() {
         <div className="flex items-center justify-between mb-4 md:mb-6">
           <h2 className="text-xl md:text-2xl font-semibold tracking-wide">{campaign.name}</h2>
           <Link
-            href={`/admin/campaigns/builder/${params.id}`}
+            href={`/admin/campaigns/builder?id=${params.id}`}
             className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Edit Campaign Design
@@ -292,44 +232,7 @@ export default function CampaignDetailPage() {
                 className="input-luxury"
               />
               <button
-                onClick={async () => {
-                  if (!newDeadline) {
-                    alert('Please enter a deadline')
-                    return
-                  }
-
-                  setSavingDeadline(true)
-                  try {
-                    // Convert datetime-local format (YYYY-MM-DDTHH:MM) to ISO format for database
-                    // Add seconds if not present, ensure proper format
-                    const deadlineValue =
-                      newDeadline.includes(':') && newDeadline.split(':').length === 2
-                        ? `${newDeadline}:00` // Add seconds
-                        : newDeadline
-
-                    // Validate the date
-                    const testDate = new Date(deadlineValue)
-                    if (isNaN(testDate.getTime())) {
-                      throw new Error('Invalid date format')
-                    }
-
-                    const { error } = await supabase
-                      .from('campaigns')
-                      .update({ deadline: deadlineValue })
-                      .eq('id', params.id)
-
-                    if (error) throw error
-
-                    setCampaign({ ...campaign, deadline: deadlineValue })
-                    setEditingDeadline(false)
-                    alert('Deadline updated successfully!')
-                  } catch (error: any) {
-                    console.error('Error updating deadline:', error)
-                    alert('Failed to update deadline: ' + (error.message || 'Unknown error'))
-                  } finally {
-                    setSavingDeadline(false)
-                  }
-                }}
+                onClick={saveDeadline}
                 disabled={savingDeadline}
                 className="px-3 py-1.5 text-xs rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -338,7 +241,6 @@ export default function CampaignDetailPage() {
               <button
                 onClick={() => {
                   setEditingDeadline(false)
-                  // Reset to original deadline
                   if (campaign.deadline) {
                     const deadlineDate = new Date(campaign.deadline)
                     const localDateTime = new Date(
@@ -355,6 +257,7 @@ export default function CampaignDetailPage() {
             </div>
           )}
         </div>
+
         <div className="flex gap-3 mt-4 flex-wrap">
           <button
             onClick={() => {
@@ -481,22 +384,20 @@ export default function CampaignDetailPage() {
           This will email the complete RSVP list with headcount and dietary restrictions
         </p>
       </div>
+
       {/* Send Campaign Emails */}
       <div className="container-card mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-wide">Send Campaign Emails</h3>
-
         <div className="space-y-4">
           <p className="text-sm text-luxury-gray-2">
             Preview, edit, and send personalized campaign emails to agents
           </p>
-
           <button
             onClick={() => setEmailModalOpen(true)}
             className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary"
           >
             Preview & Send Emails
           </button>
-
           {campaign.sent_at && (
             <p className="text-xs text-luxury-gray-2">
               Last sent: {new Date(campaign.sent_at).toLocaleString()}
@@ -524,7 +425,7 @@ export default function CampaignDetailPage() {
                 body: JSON.stringify({
                   campaign_id: params.id,
                   recipient_filter: recipientFilter,
-                  template_id: templateId || null, // Ensure null instead of undefined
+                  template_id: templateId || null,
                   custom_html: customHtml || null,
                   custom_subject: customSubject || null,
                   individual_agent_id: individualAgentId || null,
@@ -543,6 +444,7 @@ export default function CampaignDetailPage() {
           }}
         />
       )}
+
       {/* Token Generator */}
       <div className="container-card mb-8">
         <h3 className="text-lg font-medium mb-4 tracking-wide">Campaign Tokens</h3>
@@ -594,7 +496,7 @@ export default function CampaignDetailPage() {
               alert(
                 `Migration complete!\n\nUpdated: ${data.results.updated}\nSkipped: ${data.results.skipped}\nErrors: ${data.results.errors.length}`
               )
-              fetchCampaignData() // Refresh data
+              fetchCampaignData()
             } catch (error: any) {
               console.error('Migration error:', error)
               alert(`Migration failed: ${error.message}`)
@@ -620,25 +522,15 @@ export default function CampaignDetailPage() {
               <p className="text-sm text-red-600">{migrationResult.error}</p>
             ) : (
               <div className="text-sm text-luxury-gray-2">
-                <p>
-                  <strong>Total:</strong> {migrationResult.results.total}
-                </p>
-                <p>
-                  <strong>Updated:</strong> {migrationResult.results.updated}
-                </p>
-                <p>
-                  <strong>Skipped:</strong> {migrationResult.results.skipped}
-                </p>
+                <p><strong>Total:</strong> {migrationResult.results.total}</p>
+                <p><strong>Updated:</strong> {migrationResult.results.updated}</p>
+                <p><strong>Skipped:</strong> {migrationResult.results.skipped}</p>
                 {migrationResult.results.errors.length > 0 && (
                   <div className="mt-2">
-                    <p>
-                      <strong>Errors:</strong>
-                    </p>
+                    <p><strong>Errors:</strong></p>
                     <ul className="list-disc list-inside text-xs">
                       {migrationResult.results.errors.map((err: any, idx: number) => (
-                        <li key={idx}>
-                          {err.user_id}: {err.error}
-                        </li>
+                        <li key={idx}>{err.user_id}: {err.error}</li>
                       ))}
                     </ul>
                   </div>
@@ -662,40 +554,23 @@ export default function CampaignDetailPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-luxury-gray-5">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
-                    Agent
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
-                    Progress
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
-                    Commission Plan
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
-                    Luncheon RSVP
-                  </th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">
-                    Actions
-                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Agent</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Progress</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Commission Plan</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Luncheon RSVP</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {agents.map(agent => {
-                  const recipient =
-                    agent.campaign_recipients?.find((cr: any) => cr.campaign_id === params.id) ||
-                    agent.campaign_recipients?.[0]
-                  const response =
-                    agent.campaign_responses?.find((cr: any) => cr.campaign_id === params.id) ||
-                    agent.campaign_responses?.[0]
+                  const recipient = agent.campaign_recipients?.[0]
+                  const response = agent.campaign_responses?.[0]
                   const progress = recipient?.current_step || 0
                   const isComplete = recipient?.fully_completed_at
                   const hasStarted = !!recipient
 
                   return (
-                    <tr
-                      key={agent.id}
-                      className="border-b border-luxury-gray-5 hover:bg-luxury-light"
-                    >
+                    <tr key={agent.id} className="border-b border-luxury-gray-5 hover:bg-luxury-light">
                       <td className="py-4 px-4">
                         <p className="font-medium">
                           {agent.preferred_first_name} {agent.preferred_last_name}
@@ -708,9 +583,7 @@ export default function CampaignDetailPage() {
                             <div className="w-24 h-2 bg-luxury-gray-5 rounded">
                               <div
                                 className={`h-full rounded ${isComplete ? 'bg-green-500' : 'bg-luxury-accent'}`}
-                                style={{
-                                  width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}`,
-                                }}
+                                style={{ width: `${isComplete ? '100%' : `${(progress / 4) * 100}%`}` }}
                               />
                             </div>
                             <span className="text-sm">
@@ -722,24 +595,13 @@ export default function CampaignDetailPage() {
                         )}
                       </td>
                       <td className="py-4 px-4 text-sm">
-                        {(() => {
-                          // Priority: campaign response > user's current commission plan
-                          if (response?.commission_plan_2026) {
-                            return response.commission_plan_2026
-                          }
-
-                          // Get current commission plan from user record
-                          if (agent.commission_plan) {
-                            // Format: "new_agent" -> "New Agent", "no_cap" -> "No Cap", etc.
-                            const plan = agent.commission_plan
-                            return plan
-                              .split('_')
-                              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-                              .join(' ')
-                          }
-
-                          return '-'
-                        })()}
+                        {response?.commission_plan_2026 ||
+                          (agent.commission_plan
+                            ? agent.commission_plan
+                                .split('_')
+                                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ')
+                            : '-')}
                       </td>
                       <td className="py-4 px-4">
                         {response?.attending_luncheon === true && (
@@ -825,9 +687,7 @@ export default function CampaignDetailPage() {
             {/* Average Support Rating */}
             {surveys.some(s => s.support_rating) && (
               <div>
-                <h4 className="text-sm font-medium mb-2 text-luxury-gray-2">
-                  Average Support Rating
-                </h4>
+                <h4 className="text-sm font-medium mb-2 text-luxury-gray-2">Average Support Rating</h4>
                 <div className="flex items-center gap-3">
                   <div className="w-48 h-3 bg-luxury-gray-5 rounded">
                     <div
@@ -838,10 +698,7 @@ export default function CampaignDetailPage() {
                     />
                   </div>
                   <span className="text-lg font-medium">
-                    {(
-                      surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length
-                    ).toFixed(1)}
-                    /10
+                    {(surveys.reduce((sum, s) => sum + (s.support_rating || 0), 0) / surveys.length).toFixed(1)}/10
                   </span>
                 </div>
               </div>
@@ -877,9 +734,7 @@ export default function CampaignDetailPage() {
             {/* Support Improvements */}
             {surveys.some(s => s.support_improvements) && (
               <div>
-                <h4 className="text-sm font-medium mb-3 text-luxury-gray-2">
-                  Support Improvement Suggestions
-                </h4>
+                <h4 className="text-sm font-medium mb-3 text-luxury-gray-2">Support Improvement Suggestions</h4>
                 <div className="space-y-3">
                   {surveys
                     .filter(s => s.support_improvements)
@@ -888,9 +743,7 @@ export default function CampaignDetailPage() {
                         <p className="font-medium text-sm">
                           {survey.users.preferred_first_name} {survey.users.preferred_last_name}
                         </p>
-                        <p className="text-sm text-luxury-gray-2 mt-1">
-                          "{survey.support_improvements}"
-                        </p>
+                        <p className="text-sm text-luxury-gray-2 mt-1">"{survey.support_improvements}"</p>
                       </div>
                     ))}
                 </div>

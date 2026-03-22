@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import EmailTemplateBuilder from '@/components/admin/EmailTemplateBuilder'
 
 export default function EditEmailTemplatePage() {
@@ -20,14 +19,12 @@ export default function EditEmailTemplatePage() {
 
   const fetchTemplate = async () => {
     try {
-      const { data, error } = await supabase
-        .from('email_templates')
-        .select('*')
-        .eq('id', params.id)
-        .single()
+      const res = await fetch(`/api/email-templates/${params.id}`)
+      const data = await res.json()
 
-      if (error) throw error
-      setTemplate(data)
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch template')
+
+      setTemplate(data.template)
     } catch (error) {
       console.error('Error fetching template:', error)
     } finally {

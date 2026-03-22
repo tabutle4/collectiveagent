@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
 
 interface CampaignEmailModalProps {
   campaign: any
@@ -100,62 +99,40 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
           }
         }
 
-        textNodes.forEach(textNode => {
-          const parent = textNode.parentNode
-          if (
-            parent &&
-            parent instanceof Element &&
-            parent.tagName !== 'SCRIPT' &&
-            parent.tagName !== 'STYLE'
-          ) {
-            const span = iframeDoc.createElement('span')
-            span.contentEditable = 'true'
-            span.style.outline = '1px dashed #C5A278'
-            span.style.outlineOffset = '2px'
-            span.style.cursor = 'text'
-            span.textContent = textNode.textContent
-            parent.replaceChild(span, textNode)
-          }
-        })
+        // Make body editable
+        iframeDoc.body.contentEditable = 'true'
+        iframeDoc.body.style.outline = 'none'
 
-        // Update edited HTML when iframe content changes
-        const updateHandler = () => {
-          if (iframeDoc.body) {
-            const htmlContent = iframeDoc.documentElement.outerHTML
-            setEditedPreviewHtml(htmlContent)
-          }
+        // Track changes
+        const handleInput = () => {
+          setEditedPreviewHtml(iframeDoc.body.innerHTML)
         }
-
-        iframeDoc.body.addEventListener('input', updateHandler)
-        iframeDoc.body.addEventListener('blur', updateHandler)
+        iframeDoc.body.addEventListener('input', handleInput)
 
         return () => {
-          iframeDoc.body?.removeEventListener('input', updateHandler)
-          iframeDoc.body?.removeEventListener('blur', updateHandler)
+          if (iframeDoc.body) {
+            iframeDoc.body.removeEventListener('input', handleInput)
+          }
         }
       } catch (error) {
         console.error('Error making iframe editable:', error)
       }
-    }, 100)
+    }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [previewEditMode]) // Only re-run when edit mode changes
+  }, [previewEditMode])
 
   const fetchTemplates = async () => {
     try {
-      const { data, error } = await supabase
-        .from('email_templates')
-        .select('*')
-        .eq('category', 'campaign')
-        .eq('is_active', true)
-        .order('is_default', { ascending: false })
-        .order('created_at', { ascending: false })
+      const res = await fetch('/api/email-templates?category=campaign&active_only=true')
+      const data = await res.json()
 
-      if (error) throw error
-      setTemplates(data || [])
+      if (!res.ok) throw new Error(data.error)
+
+      setTemplates(data.templates || [])
 
       // Set default template as selected
-      const defaultTemplate = data?.find(t => t.is_default)
+      const defaultTemplate = data.templates?.find((t: any) => t.is_default)
       if (defaultTemplate) {
         setSelectedTemplateId(defaultTemplate.id)
         setSelectedTemplate(defaultTemplate)
@@ -170,15 +147,12 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
   const fetchAgents = async () => {
     try {
       setLoadingAgents(true)
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, preferred_first_name, preferred_last_name, email, is_active')
-        .filter('roles', 'cs', '{"agent"}')
-        .order('preferred_first_name', { ascending: true })
-        .order('preferred_last_name', { ascending: true })
+      const res = await fetch('/api/agents/list?status=active&licensed_only=true')
+      const data = await res.json()
 
-      if (error) throw error
-      setAgents(data || [])
+      if (!res.ok) throw new Error(data.error)
+
+      setAgents(data.agents || [])
     } catch (error) {
       console.error('Error fetching agents:', error)
     } finally {
@@ -187,118 +161,57 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
   }
 
   const generatePreview = async () => {
-    if (!selectedTemplate) {
-      setPreviewHtml('')
-      setPreviewSubject('')
-      return
-    }
+    if (!selectedTemplate) return
 
     setPreviewLoading(true)
+
     try {
-      const htmlToPreview = selectedTemplate?.html_content || ''
-      const subjectToPreview = selectedTemplate?.subject_line || ''
-
-      const baseUrl =
-        process.env.NEXT_PUBLIC_BASE_URL ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        'http://localhost:3000'
-      const sampleLink = `${baseUrl}/campaign/${campaign.slug}?token=sample-token-12345`
-
-      const variables: Record<string, string> = {
-        first_name: 'John',
-        last_name: 'Doe',
-        campaign_name: campaign.name,
-        campaign_link: sampleLink,
-        deadline: new Date(campaign.deadline).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
+      // Generate preview using API
+      const response = await fetch('/api/email/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: selectedTemplate.id,
+          campaign_id: campaign.id,
         }),
-        logo_url: `${baseUrl}/logo.png`,
-      }
-
-      let preview = htmlToPreview
-      let subject = subjectToPreview
-
-      Object.keys(variables).forEach(key => {
-        const placeholder = `{{${key}}}`
-        preview = preview.split(placeholder).join(variables[key])
-        subject = subject.split(placeholder).join(variables[key])
       })
 
-      setPreviewHtml(preview)
-      setPreviewSubject(subject)
+      const data = await response.json()
+      if (response.ok && data.html) {
+        setPreviewHtml(data.html)
+        setPreviewSubject(data.subject || selectedTemplate.subject || '')
+      } else {
+        // Fallback - use template directly with sample data
+        let html = selectedTemplate.html_content || ''
+        let subject = selectedTemplate.subject || ''
+
+        const sampleData: Record<string, string> = {
+          first_name: 'John',
+          last_name: 'Doe',
+          campaign_link: `${window.location.origin}/campaign/${campaign.slug}?token=SAMPLE`,
+          deadline: campaign.deadline
+            ? new Date(campaign.deadline).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : '',
+          campaign_name: campaign.name || '',
+        }
+
+        Object.entries(sampleData).forEach(([key, value]) => {
+          const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+          html = html.replace(regex, value)
+          subject = subject.replace(regex, value)
+        })
+
+        setPreviewHtml(html)
+        setPreviewSubject(subject)
+      }
     } catch (error) {
-      console.error('Preview error:', error)
+      console.error('Error generating preview:', error)
     } finally {
       setPreviewLoading(false)
-    }
-  }
-
-  const getFilterLabel = () => {
-    switch (recipientFilter) {
-      case 'all':
-        return 'all agents'
-      case 'active':
-        return 'active agents'
-      case 'inactive':
-        return 'inactive agents'
-      case 'prospect':
-        return 'prospects'
-      case 'campaign_incomplete':
-        return "agents who haven't completed the campaign"
-      case 'individual':
-        const selectedAgent = agents.find(a => a.id === individualAgentId)
-        return selectedAgent
-          ? `individual agent: ${selectedAgent.preferred_first_name} ${selectedAgent.preferred_last_name}`
-          : 'individual agent'
-      default:
-        return 'recipients'
-    }
-  }
-
-  const syncPreviewChanges = () => {
-    if (typeof window === 'undefined') return
-    if (!iframeRef.current) return
-
-    try {
-      const iframeDoc =
-        iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
-      if (!iframeDoc || !iframeDoc.body) return
-
-      let editedHtml = iframeDoc.body.innerHTML
-
-      // Restore variable placeholders if needed (for sync)
-      const variables: Record<string, string> = {
-        first_name: 'John',
-        last_name: 'Doe',
-        campaign_name: campaign.name,
-        campaign_link: `${process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/campaign/${campaign.slug}?token=sample-token-12345`,
-        deadline: new Date(campaign.deadline).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
-        logo_url: `${process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logo.png`,
-      }
-
-      // Replace sample values back with placeholders (optional - may not be needed for custom edits)
-      Object.keys(variables).forEach(key => {
-        const sampleValue = variables[key]
-        const placeholder = `{{${key}}}`
-        // Only replace if it's an exact match to avoid false positives
-        editedHtml = editedHtml.split(sampleValue).join(placeholder)
-      })
-
-      setEditedPreviewHtml(editedHtml)
-
-      // Get subject from any editable element (if we add subject editing)
-      const subjectElement = iframeDoc.querySelector('[data-editable-subject]')
-      if (subjectElement) {
-        setEditedPreviewSubject(subjectElement.textContent || previewSubject)
-      }
-    } catch (error) {
-      console.error('Error syncing preview changes:', error)
     }
   }
 
@@ -308,27 +221,18 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
       return
     }
 
-    if (!confirm(`Send emails to ${getFilterLabel()}?`)) {
-      return
-    }
-
     setSending(true)
     try {
-      // Use edited preview if in edit mode, otherwise use original template
-      const customHtml = previewEditMode && editedPreviewHtml ? editedPreviewHtml : undefined
-      const customSubject =
-        previewEditMode && editedPreviewSubject ? editedPreviewSubject : undefined
-
       await onSend(
         selectedTemplateId,
         recipientFilter,
-        customHtml,
-        customSubject,
+        previewEditMode ? editedPreviewHtml : undefined,
+        previewEditMode ? editedPreviewSubject : undefined,
         recipientFilter === 'individual' ? individualAgentId : undefined
       )
       onClose()
     } catch (error) {
-      console.error('Send error:', error)
+      console.error('Error sending emails:', error)
     } finally {
       setSending(false)
     }
@@ -336,218 +240,172 @@ export default function CampaignEmailModal({ campaign, onClose, onSend }: Campai
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full">
-          <p className="text-center">Loading templates...</p>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8">
+          <p className="text-luxury-gray-2">Loading templates...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-luxury-gray-5">
-          <h2 className="text-xl font-light tracking-wide">Preview & Send Campaign Email</h2>
-          <button
-            onClick={onClose}
-            className="text-luxury-gray-2 hover:text-luxury-black text-2xl leading-none"
-          >
-            ×
-          </button>
+        <div className="p-6 border-b border-luxury-gray-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-medium">Send Campaign Emails</h3>
+            <button
+              onClick={onClose}
+              className="text-luxury-gray-2 hover:text-luxury-black transition-colors"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Left: Template Selector & Settings */}
-            <div className="md:col-span-1 space-y-4">
+        <div className="flex-1 overflow-hidden flex">
+          {/* Left sidebar - Settings */}
+          <div className="w-80 border-r border-luxury-gray-5 p-6 overflow-y-auto">
+            <div className="space-y-6">
+              {/* Template Selection */}
               <div>
                 <label className="block text-sm font-medium mb-2">Email Template</label>
                 <select
                   value={selectedTemplateId || ''}
-                  onChange={e => {
-                    setSelectedTemplateId(e.target.value || null)
-                  }}
-                  className="select-luxury"
+                  onChange={e => setSelectedTemplateId(e.target.value)}
+                  className="input-luxury w-full"
                 >
-                  <option value="">Default Template</option>
                   {templates.map(template => (
                     <option key={template.id} value={template.id}>
-                      {template.name} {template.is_default && '(Default)'}
+                      {template.name}
+                      {template.is_default ? ' (Default)' : ''}
                     </option>
                   ))}
                 </select>
-                {selectedTemplate && (
-                  <p className="text-xs text-luxury-gray-2 mt-2">
-                    Template selected: {selectedTemplate.name}
-                  </p>
-                )}
               </div>
 
-              <div className="pt-4 border-t border-luxury-gray-5">
+              {/* Recipient Filter */}
+              <div>
                 <label className="block text-sm font-medium mb-2">Send To</label>
-                <div className="space-y-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="all"
-                      checked={recipientFilter === 'all'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">All agents</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="active"
-                      checked={recipientFilter === 'active'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Active agents</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="inactive"
-                      checked={recipientFilter === 'inactive'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Inactive agents</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="prospect"
-                      checked={recipientFilter === 'prospect'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Prospects</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="campaign_incomplete"
-                      checked={recipientFilter === 'campaign_incomplete'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Campaign incomplete</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="recipientFilter"
-                      value="individual"
-                      checked={recipientFilter === 'individual'}
-                      onChange={e => setRecipientFilter(e.target.value as any)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Individual</span>
-                  </label>
-                  {recipientFilter === 'individual' && (
-                    <div className="ml-6 mt-2">
-                      {loadingAgents ? (
-                        <p className="text-xs text-luxury-gray-3">Loading agents...</p>
-                      ) : (
-                        <select
-                          value={individualAgentId}
-                          onChange={e => setIndividualAgentId(e.target.value)}
-                          className="select-luxury text-sm w-full"
-                        >
-                          <option value="">Select an agent...</option>
-                          {agents.map(agent => (
-                            <option key={agent.id} value={agent.id}>
-                              {agent.preferred_first_name} {agent.preferred_last_name} (
-                              {agent.email}) {agent.is_active ? '' : '(Inactive)'}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
+                <select
+                  value={recipientFilter}
+                  onChange={e => setRecipientFilter(e.target.value as any)}
+                  className="input-luxury w-full"
+                >
+                  <option value="all">All Active Licensed Agents</option>
+                  <option value="campaign_incomplete">
+                    Agents Who Haven't Completed Campaign
+                  </option>
+                  <option value="individual">Individual Agent</option>
+                </select>
+              </div>
+
+              {/* Individual Agent Selection */}
+              {recipientFilter === 'individual' && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Select Agent</label>
+                  {loadingAgents ? (
+                    <p className="text-sm text-luxury-gray-2">Loading agents...</p>
+                  ) : (
+                    <select
+                      value={individualAgentId}
+                      onChange={e => setIndividualAgentId(e.target.value)}
+                      className="input-luxury w-full"
+                    >
+                      <option value="">-- Select Agent --</option>
+                      {agents.map(agent => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.preferred_first_name || agent.first_name}{' '}
+                          {agent.preferred_last_name || agent.last_name} ({agent.email})
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
-              </div>
-            </div>
+              )}
 
-            {/* Right: Preview */}
-            <div className="md:col-span-2">
-              <div className="border border-luxury-gray-5 rounded p-4 bg-white">
-                <div className="mb-4 pb-3 border-b border-luxury-gray-5 flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Subject:</p>
-                    {previewEditMode ? (
-                      <input
-                        type="text"
-                        value={editedPreviewSubject}
-                        onChange={e => setEditedPreviewSubject(e.target.value)}
-                        className="input-luxury text-sm w-full"
-                        placeholder="Email subject"
-                      />
-                    ) : (
-                      <p className="text-sm font-medium">{previewSubject || 'Loading...'}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (previewEditMode) {
-                        syncPreviewChanges()
-                      }
-                      setPreviewEditMode(!previewEditMode)
-                    }}
-                    className={`ml-4 text-xs px-3 py-1 rounded transition-colors ${
-                      previewEditMode
-                        ? 'bg-luxury-black text-white'
-                        : 'bg-luxury-light text-luxury-black hover:bg-luxury-gray-5'
-                    }`}
-                  >
-                    {previewEditMode ? 'Done Editing' : '✏️ Edit Preview'}
-                  </button>
-                </div>
-                {previewLoading ? (
-                  <div className="text-center py-12 text-luxury-gray-2">Generating preview...</div>
-                ) : (previewEditMode ? editedPreviewHtml : previewHtml) ? (
-                  <iframe
-                    ref={iframeRef}
-                    srcDoc={previewEditMode ? editedPreviewHtml : previewHtml}
-                    className="w-full border-0"
-                    style={{ height: '600px', minHeight: '400px' }}
-                    title="Email Preview"
+              {/* Edit Mode Toggle */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={previewEditMode}
+                    onChange={e => setPreviewEditMode(e.target.checked)}
+                    className="w-4 h-4"
                   />
-                ) : (
-                  <div className="text-center py-12 text-luxury-gray-2">No template selected</div>
-                )}
+                  <span className="text-sm">Edit email before sending</span>
+                </label>
+                <p className="text-xs text-luxury-gray-2 mt-1">
+                  Enable to customize the content for this send
+                </p>
               </div>
+
+              {/* Subject Line (editable) */}
+              {previewEditMode && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Subject Line</label>
+                  <input
+                    type="text"
+                    value={editedPreviewSubject}
+                    onChange={e => setEditedPreviewSubject(e.target.value)}
+                    className="input-luxury w-full"
+                  />
+                </div>
+              )}
+
+              {/* Send Button */}
+              <button
+                onClick={handleSend}
+                disabled={sending || (recipientFilter === 'individual' && !individualAgentId)}
+                className="w-full px-4 py-3 text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sending ? 'Sending...' : 'Send Emails'}
+              </button>
+
+              <p className="text-xs text-luxury-gray-2">
+                Variables like {'{{'} first_name {'}}'}
+                will be replaced with each agent's actual information
+              </p>
             </div>
           </div>
-        </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-4 p-6 border-t border-luxury-gray-5">
-          <button
-            onClick={onClose}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={sending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={sending || !selectedTemplate}
-            className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sending ? 'Sending...' : 'Send Emails'}
-          </button>
+          {/* Right side - Preview */}
+          <div className="flex-1 p-6 bg-luxury-gray-5/30 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-sm font-medium">Email Preview</h4>
+              {previewEditMode && (
+                <span className="text-xs px-2 py-1 bg-luxury-accent text-white rounded">
+                  Edit Mode
+                </span>
+              )}
+            </div>
+
+            {previewLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-luxury-gray-2">Generating preview...</p>
+              </div>
+            ) : (
+              <div className="flex-1 bg-white rounded border border-luxury-gray-5 overflow-hidden">
+                {/* Subject Preview */}
+                <div className="p-4 border-b border-luxury-gray-5 bg-luxury-light">
+                  <p className="text-xs text-luxury-gray-2 mb-1">Subject:</p>
+                  <p className="text-sm font-medium">
+                    {previewEditMode ? editedPreviewSubject : previewSubject}
+                  </p>
+                </div>
+
+                {/* Email Body Preview */}
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={previewEditMode ? editedPreviewHtml : previewHtml}
+                  className="w-full h-full border-0"
+                  title="Email Preview"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

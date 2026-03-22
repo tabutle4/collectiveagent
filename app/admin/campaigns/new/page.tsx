@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
 export default function NewCampaignPage() {
   const router = useRouter()
@@ -13,7 +12,7 @@ export default function NewCampaignPage() {
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
-    year: new Date().getFullYear() + 1, // Default to next year
+    year: new Date().getFullYear() + 1,
     deadline: '',
     event_staff_email: '',
     is_active: true,
@@ -21,7 +20,6 @@ export default function NewCampaignPage() {
     email_body: '',
   })
 
-  // Auto-generate slug from name
   const handleNameChange = (name: string) => {
     setFormData(prev => ({
       ...prev,
@@ -37,7 +35,6 @@ export default function NewCampaignPage() {
     e.preventDefault()
     setError('')
 
-    // Validation
     if (!formData.name || !formData.slug || !formData.deadline) {
       setError('Please fill in all required fields')
       return
@@ -46,205 +43,22 @@ export default function NewCampaignPage() {
     setLoading(true)
 
     try {
-      // Check if slug already exists and find a unique one
-      let uniqueSlug = formData.slug.trim()
-      let attempt = 1
+      const res = await fetch('/api/campaigns/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
 
-      while (attempt <= 10) {
-        const { data: existing, error: checkError } = await supabase
-          .from('campaigns')
-          .select('id')
-          .eq('slug', uniqueSlug)
-          .maybeSingle()
+      const data = await res.json()
 
-        if (checkError && checkError.code !== 'PGRST116') {
-          // Unexpected error during check
-          console.error('Error checking slug uniqueness:', checkError)
-        }
-
-        // If no record found, slug is available
-        if (!existing) {
-          // Slug is available
-          break
-        }
-
-        // Slug exists, append number
-        attempt++
-        uniqueSlug = `${formData.slug.trim()}-${attempt}`
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create campaign')
       }
 
-      if (attempt > 10) {
-        throw new Error(
-          'Unable to generate a unique slug after 10 attempts. Please modify the slug manually.'
-        )
-      }
-
-      // Update slug if it was changed
-      if (uniqueSlug !== formData.slug) {
-        setFormData(prev => ({ ...prev, slug: uniqueSlug }))
-      }
-
-      // Prepare insert data
-      const insertData = {
-        name: formData.name.trim(),
-        slug: uniqueSlug.trim(),
-        year: formData.year || null,
-        deadline: formData.deadline,
-        event_staff_email: formData.event_staff_email?.trim() || null,
-        is_active: formData.is_active,
-        email_subject: formData.email_subject?.trim() || null,
-        email_body: formData.email_body?.trim() || null,
-      }
-
-      // Log the data being inserted for debugging
-      console.log('Inserting campaign with data:', insertData)
-
-      // Validate required fields before insert
-      if (!insertData.name || !insertData.slug || !insertData.deadline) {
-        throw new Error('Campaign name, slug, and deadline are required fields.')
-      }
-
-      const { data, error: insertError } = await supabase
-        .from('campaigns')
-        .insert([insertData])
-        .select()
-        .single()
-
-      if (insertError) {
-        // Log all error properties explicitly since Supabase errors don't always serialize well
-        const errorInfo: any = {}
-        try {
-          errorInfo.message = insertError.message
-          errorInfo.code = insertError.code
-          errorInfo.details = insertError.details
-          errorInfo.hint = insertError.hint
-          // PostgrestError doesn't have status/statusText, but check if they exist
-          if ('status' in insertError) {
-            errorInfo.status = (insertError as any).status
-          }
-          if ('statusText' in insertError) {
-            errorInfo.statusText = (insertError as any).statusText
-          }
-
-          // Try to stringify the whole object
-          const errorStr = JSON.stringify(
-            insertError,
-            (key, value) => {
-              // Include all properties including non-enumerable ones
-              if (typeof value === 'object' && value !== null) {
-                const props: any = {}
-                for (const prop in value) {
-                  props[prop] = value[prop]
-                }
-                // Also try to get non-enumerable properties
-                try {
-                  Object.getOwnPropertyNames(value).forEach(name => {
-                    if (!(name in props)) {
-                      try {
-                        props[name] = (value as any)[name]
-                      } catch {}
-                    }
-                  })
-                } catch {}
-                return props
-              }
-              return value
-            },
-            2
-          )
-          console.error('Insert error full details:', errorStr)
-        } catch (logErr) {
-          console.error('Could not log error details:', logErr)
-        }
-
-        console.error('Insert error info:', errorInfo)
-
-        // Create a more informative error
-        const errorMessage =
-          insertError.message || insertError.details || insertError.hint || 'Unknown error occurred'
-        const enhancedError = new Error(errorMessage)
-        ;(enhancedError as any).code = insertError.code
-        ;(enhancedError as any).details = insertError.details
-        ;(enhancedError as any).hint = insertError.hint
-        ;(enhancedError as any).originalError = insertError
-        throw enhancedError
-      }
-
-      if (!data) {
-        throw new Error('Campaign was not created. No data returned.')
-      }
-
-      // Redirect to the new campaign's detail page
-      router.push(`/admin/campaigns/${data.id}`)
+      router.push(`/admin/campaigns/${data.campaign.id}`)
     } catch (err: any) {
-      // Comprehensive error logging with better extraction
-      const errorDetails: any = {
-        message: err?.message,
-        code: err?.code || err?.error_code,
-        details: err?.details,
-        hint: err?.hint,
-        status: err?.status,
-        statusText: err?.statusText,
-        type: typeof err,
-        constructor: err?.constructor?.name,
-        keys: Object.keys(err || {}),
-      }
-
-      // Try to access originalError if it exists
-      if (err?.originalError) {
-        errorDetails.originalError = {
-          message: err.originalError.message,
-          code: err.originalError.code,
-          details: err.originalError.details,
-          hint: err.originalError.hint,
-        }
-      }
-
-      console.error('Error creating campaign - Full details:', errorDetails)
-
-      // Try to stringify the error
-      try {
-        const errorStr = JSON.stringify(
-          err,
-          (key, value) => {
-            if (typeof value === 'object' && value !== null && !(value instanceof Error)) {
-              const props: any = {}
-              try {
-                Object.getOwnPropertyNames(value).forEach(name => {
-                  try {
-                    props[name] = (value as any)[name]
-                  } catch {}
-                })
-              } catch {}
-              return props
-            }
-            return value
-          },
-          2
-        )
-        console.error('Error JSON:', errorStr)
-      } catch (stringifyErr) {
-        console.error('Could not stringify error:', stringifyErr)
-      }
-
-      // Handle Supabase unique constraint violation
-      const errorCode =
-        err?.code || err?.error_code || (err?.details?.includes('unique') ? '23505' : null)
-
-      if (
-        errorCode === '23505' ||
-        errorCode === 'PGRST116' ||
-        err?.message?.toLowerCase().includes('unique') ||
-        err?.message?.toLowerCase().includes('duplicate')
-      ) {
-        setError('A campaign with this slug already exists. Please try a different slug.')
-      } else if (err?.message) {
-        setError(err.message)
-      } else if (err?.details) {
-        setError(err.details)
-      } else {
-        setError('Failed to create campaign. Please check the console for details and try again.')
-      }
+      console.error('Error creating campaign:', err)
+      setError(err.message || 'Failed to create campaign')
       setLoading(false)
     }
   }
@@ -272,7 +86,6 @@ export default function NewCampaignPage() {
 
       <form onSubmit={handleSubmit} className="container-card">
         <div className="space-y-6">
-          {/* Campaign Name */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Campaign Name <span className="text-red-500">*</span>
@@ -290,7 +103,6 @@ export default function NewCampaignPage() {
             </p>
           </div>
 
-          {/* Slug */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Slug <span className="text-red-500">*</span>
@@ -308,7 +120,6 @@ export default function NewCampaignPage() {
             </p>
           </div>
 
-          {/* Year (Optional) */}
           <div>
             <label className="block text-sm font-medium mb-2">Year (Optional)</label>
             <input
@@ -323,7 +134,6 @@ export default function NewCampaignPage() {
             </p>
           </div>
 
-          {/* Deadline */}
           <div>
             <label className="block text-sm font-medium mb-2">
               Deadline <span className="text-red-500">*</span>
@@ -338,7 +148,6 @@ export default function NewCampaignPage() {
             <p className="text-xs text-luxury-gray-2 mt-1">Last day agents can submit responses</p>
           </div>
 
-          {/* Event Staff Email */}
           <div>
             <label className="block text-sm font-medium mb-2">Event Staff Email (Optional)</label>
             <input
@@ -351,7 +160,6 @@ export default function NewCampaignPage() {
             <p className="text-xs text-luxury-gray-2 mt-1">RSVP lists will be sent to this email</p>
           </div>
 
-          {/* Is Active */}
           <div>
             <label className="flex items-center space-x-3 cursor-pointer">
               <input
@@ -367,7 +175,6 @@ export default function NewCampaignPage() {
             </p>
           </div>
 
-          {/* Email Subject */}
           <div>
             <label className="block text-sm font-medium mb-2">Email Subject (Optional)</label>
             <input
@@ -382,7 +189,6 @@ export default function NewCampaignPage() {
             </p>
           </div>
 
-          {/* Email Body */}
           <div>
             <label className="block text-sm font-medium mb-2">Email Body Template (Optional)</label>
             <textarea

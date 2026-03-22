@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
 export default function AdminCampaignsPage() {
   const [campaigns, setCampaigns] = useState<any[]>([])
@@ -14,39 +13,16 @@ export default function AdminCampaignsPage() {
 
   const fetchCampaigns = async () => {
     try {
-      const { data: campaigns, error } = await supabase
-        .from('campaigns')
-        .select('*')
-        .order('year', { ascending: false })
+      const res = await fetch('/api/campaigns/list')
+      const data = await res.json()
 
-      if (error) throw error
+      if (!res.ok) throw new Error(data.error || 'Failed to load campaigns')
 
-      const campaignsWithCounts = await Promise.all(
-        campaigns.map(async campaign => {
-          try {
-            const { count, error: countError } = await supabase
-              .from('campaign_recipients')
-              .select('*', { count: 'exact', head: true })
-              .eq('campaign_id', campaign.id)
-              .not('fully_completed_at', 'is', null)
-
-            if (countError)
-              console.error(`Error counting recipients for campaign ${campaign.id}:`, countError)
-            return { ...campaign, completed_count: count || 0 }
-          } catch (countErr) {
-            console.error(`Error counting recipients for campaign ${campaign.id}:`, countErr)
-            return { ...campaign, completed_count: 0 }
-          }
-        })
-      )
-
-      setCampaigns(campaignsWithCounts)
+      setCampaigns(data.campaigns || [])
       setLoading(false)
     } catch (error: any) {
       console.error('Error fetching campaigns:', error)
-      alert(
-        `Error loading campaigns: ${error?.message || 'Unknown error'}. Check console for details.`
-      )
+      alert(`Error loading campaigns: ${error?.message || 'Unknown error'}. Check console for details.`)
       setLoading(false)
     }
   }

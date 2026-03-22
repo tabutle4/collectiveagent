@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import CampaignForm from '@/components/campaigns/CampaignForm'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
-import { supabase } from '@/lib/supabase'
 
 function CampaignContent() {
   const params = useParams()
@@ -35,38 +34,17 @@ function CampaignContent() {
 
   const fetchCampaignAndUser = async () => {
     try {
-      // Fetch campaign by slug
-      const { data: campaignData, error: campaignError } = await supabase
-        .from('campaigns')
-        .select('*')
-        .eq('slug', slug)
-        .eq('is_active', true)
-        .single()
+      const res = await fetch(`/api/campaigns/access?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token!)}`)
+      const data = await res.json()
 
-      if (campaignError || !campaignData) {
-        setError('Campaign not found or is no longer active.')
+      if (!res.ok) {
+        setError(data.error || 'An error occurred. Please try again.')
         setLoading(false)
         return
       }
 
-      setCampaign(campaignData)
-
-      // Verify token and get user data
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('campaign_token', token)
-        .eq('is_active', true)
-        .eq('is_licensed_agent', true)
-        .single()
-
-      if (userError || !userData) {
-        setError('Invalid or expired campaign link.')
-        setLoading(false)
-        return
-      }
-
-      setUser(userData)
+      setCampaign(data.campaign)
+      setUser(data.user)
       setLoading(false)
     } catch (err) {
       setError('An error occurred. Please try again.')

@@ -87,7 +87,8 @@ export default function SalesGoalWidget({
       updated = [...localActiveGoals, metric]
     }
     setLocalActiveGoals(updated)
-    await fetch('/api/users/update-goals', {
+    
+    await fetch('/api/users/goals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, active_goals: updated }),
@@ -101,10 +102,10 @@ export default function SalesGoalWidget({
     setSaving(true)
     const goalField = METRICS.find(m => m.key === metric)?.goalField || 'sales_volume_goal'
     try {
-      await fetch('/api/users/profile', {
-        method: 'PUT',
+      await fetch('/api/users/goals', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [goalField]: parsed }),
+        body: JSON.stringify({ user_id: userId, [goalField]: parsed }),
       })
       setEditingGoal(null)
       onUpdate?.()

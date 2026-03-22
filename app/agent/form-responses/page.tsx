@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+
 import { X, MessageSquare } from 'lucide-react'
 
 interface ListingResponse {
@@ -72,16 +72,13 @@ export default function AgentFormResponsesPage() {
     setLoading(true)
     try {
       // Load listings where agent_id matches the logged-in user
-      const { data: listingsData, error: listingsError } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('agent_id', userId)
-        .order('created_at', { ascending: false })
+      const res = await fetch(`/api/form-responses?type=listings&agent_id=${userId}`)
+      const data = await res.json()
 
-      if (listingsError) {
-        console.error('Error loading listings:', listingsError)
+      if (!res.ok) {
+        console.error('Error loading listings:', data.error)
       } else {
-        setListings(listingsData || [])
+        setListings(data.listings || [])
       }
     } catch (error) {
       console.error('Error loading data:', error)

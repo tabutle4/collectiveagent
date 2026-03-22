@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+
 import { normalizeSocialUrl } from '@/lib/socialLinks'
 import { normalizeRoles } from '@/lib/nameFormatter'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
@@ -239,18 +239,20 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
 
     // Fetch all users for revenue share dropdown
     const fetchUsers = async () => {
-      const { data } = await supabase
-        .from('users')
-        .select('id, preferred_first_name, preferred_last_name')
-        .order('preferred_first_name')
+      try {
+        const res = await fetch('/api/users/list')
+        const data = await res.json()
 
-      if (data) {
-        setAllUsers(
-          data.map(u => ({
-            id: u.id,
-            name: `${u.preferred_first_name} ${u.preferred_last_name}`,
-          }))
-        )
+        if (res.ok && data.users) {
+          setAllUsers(
+            data.users.map((u: any) => ({
+              id: u.id,
+              name: `${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`,
+            }))
+          )
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error)
       }
     }
     fetchUsers()
@@ -261,19 +263,16 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
     if (user && user.id) {
       const fetchFreshUser = async () => {
         try {
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', user.id)
-            .single()
+          const res = await fetch(`/api/users/profile?id=${user.id}`)
+          const data = await res.json()
 
-          if (error) {
-            console.error('Error fetching fresh user data:', error)
+          if (!res.ok) {
+            console.error('Error fetching fresh user data:', data.error)
             // Fallback to user prop if fetch fails
             setFreshUser(user)
-          } else if (data) {
-            console.log('Fetched fresh user data:', data.is_active)
-            setFreshUser(data)
+          } else if (data.user) {
+            console.log('Fetched fresh user data:', data.user.is_active)
+            setFreshUser(data.user)
           }
         } catch (err) {
           console.error('Error in fetchFreshUser:', err)
@@ -542,12 +541,16 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         // Only update if there are additional fields
         const hasAdditionalFields = Object.values(updatePayload).some(v => v !== null && v !== '')
         if (hasAdditionalFields) {
-          const { error: updateError } = await supabase
-            .from('users')
-            .update(updatePayload)
-            .eq('id', data.user.id)
+          const updateRes = await fetch('/api/users/profile', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: data.user.id, ...updatePayload }),
+          })
 
-          if (updateError) throw updateError
+          if (!updateRes.ok) {
+            const updateErr = await updateRes.json()
+            throw new Error(updateErr.error || 'Failed to update user')
+          }
         }
 
         await fetch('/api/roster/regenerate', { method: 'POST' })
@@ -619,37 +622,35 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           payload_keys: Object.keys(payload),
         })
 
-        const { data: updateResult, error } = await supabase
-          .from('users')
-          .update(payload)
-          .eq('id', freshUser?.id || user.id)
-          .select()
-          .single()
+        const updateRes = await fetch('/api/users/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: freshUser?.id || user.id, ...payload }),
+        })
 
-        if (error) {
+        if (!updateRes.ok) {
+          const error = await updateRes.json()
           console.error('Error updating user:', error)
-          throw error
+          throw new Error(error.error || 'Failed to update user')
         }
 
+        const updateResult = await updateRes.json()
         console.log(
           'User updated successfully. Database now has is_active:',
-          updateResult?.is_active
+          updateResult?.user?.is_active
         )
 
         // Fetch the updated user from database to ensure we have the latest data
-        const { data: updatedUser, error: fetchError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', freshUser?.id || user.id)
-          .single()
+        const fetchRes = await fetch(`/api/users/profile?id=${freshUser?.id || user.id}`)
+        const fetchData = await fetchRes.json()
 
-        if (fetchError) {
-          console.error('Error fetching updated user:', fetchError)
+        if (!fetchRes.ok) {
+          console.error('Error fetching updated user:', fetchData.error)
           // Fallback to merged data if fetch fails
           onSaved({ ...user, ...payload })
         } else {
           // Use fresh data from database
-          onSaved(updatedUser)
+          onSaved(fetchData.user)
         }
 
         // Regenerate roster in background (don't wait for it)

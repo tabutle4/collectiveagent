@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import { Eye } from 'lucide-react'
 import { getWelcomeEmailHtml, getWeeklyReportEmailHtml } from '@/lib/email/templates'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
@@ -18,12 +17,12 @@ export default function EmailTemplatesPage() {
 
   const fetchTemplates = async () => {
     try {
-      const { data, error } = await supabase
-        .from('email_templates')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      setTemplates(data || [])
+      const res = await fetch('/api/email-templates')
+      const data = await res.json()
+      
+      if (!res.ok) throw new Error(data.error)
+      
+      setTemplates(data.templates || [])
     } catch (error) {
       console.error('Error fetching templates:', error)
     } finally {

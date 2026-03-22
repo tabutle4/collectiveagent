@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
 interface StepConfig {
   stepNumber: number
@@ -46,131 +45,132 @@ function CampaignBuilderContent() {
 
   const fetchCampaign = async () => {
     try {
-      const { data, error } = await supabase
-        .from('campaigns')
-        .select('*')
-        .eq('id', campaignId)
-        .single()
+      const res = await fetch(`/api/campaigns/${campaignId}`)
+      const data = await res.json()
 
-      if (error) throw error
+      if (!res.ok) throw new Error(data.error || 'Failed to load campaign')
+
+      const campaign = data.campaign
 
       setCampaignInfo({
-        name: data.name || '',
-        slug: data.slug || '',
-        year: data.year || new Date().getFullYear() + 1,
-        deadline: data.deadline ? new Date(data.deadline).toISOString().split('T')[0] : '',
-        event_staff_email: data.event_staff_email || '',
-        is_active: data.is_active ?? true,
-        email_subject: data.email_subject || '',
-        email_body: data.email_body || '',
+        name: campaign.name || '',
+        slug: campaign.slug || '',
+        year: campaign.year || new Date().getFullYear() + 1,
+        deadline: campaign.deadline ? new Date(campaign.deadline).toISOString().split('T')[0] : '',
+        event_staff_email: campaign.event_staff_email || '',
+        is_active: campaign.is_active ?? true,
+        email_subject: campaign.email_subject || '',
+        email_body: campaign.email_body || '',
       })
 
       // Load steps config or use default
-      if (data.steps_config && Array.isArray(data.steps_config) && data.steps_config.length > 0) {
-        setSteps(data.steps_config)
+      if (campaign.steps_config && Array.isArray(campaign.steps_config) && campaign.steps_config.length > 0) {
+        setSteps(campaign.steps_config)
       } else {
         // Default 4-step campaign
-        setSteps([
-          {
-            stepNumber: 1,
-            type: 'info',
-            title: 'Commission Plan Selection',
-            content: {
-              greeting: 'Hi, {first_name}',
-              sections: [
-                {
-                  heading: 'Important Information',
-                  items: [
-                    'There will be **NO fee, split, or cap increases for 2026!**',
-                    'Your Independent Contractor Agreement remains in effect for an indefinite term.',
-                    'You may change your commission plan annually when eligible.',
-                  ],
-                },
-              ],
-              buttonText: 'Next: Update My Profile →',
-            },
-          },
-          {
-            stepNumber: 2,
-            type: 'profile',
-            title: 'Update Your Profile',
-            content: {
-              fields: [
-                'first_name',
-                'last_name',
-                'preferred_first_name',
-                'preferred_last_name',
-                'personal_email',
-                'personal_phone',
-                'business_phone',
-                'date_of_birth',
-                'shirt_type',
-                'shirt_size',
-                'shipping_address_line1',
-                'shipping_address_line2',
-                'shipping_city',
-                'shipping_state',
-                'shipping_zip',
-              ],
-            },
-          },
-          {
-            stepNumber: 3,
-            type: 'rsvp',
-            title: 'Event RSVP',
-            content: {
-              eventTitle: 'Annual Award Ceremony Luncheon',
-              eventSubtitle: 'We Made It!',
-              eventDescription: "Join us to celebrate our entire firm's success this year.",
-              hostedBy: 'CJE Media',
-              when: 'Tuesday, December 16 at 12:00 PM',
-              where: "Rhay's Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077",
-              rsvpBy: 'December 9, 2025',
-              dressCode: 'Black Tie',
-              eventFlyerUrl: '',
-              commentsPrompt: 'Any dietary restrictions or special requests?',
-              closingText: "Let's Celebrate!",
-            },
-          },
-          {
-            stepNumber: 4,
-            type: 'survey',
-            title: 'Quick Feedback Survey',
-            content: {
-              questions: [
-                {
-                  id: 'q1',
-                  type: 'slider',
-                  label: 'On a scale of 1-10, how supported do you feel by Collective Realty Co.?',
-                  required: true,
-                  min: 1,
-                  max: 10,
-                  minLabel: 'Not supported',
-                  maxLabel: 'Very supported',
-                },
-                {
-                  id: 'q2',
-                  type: 'textarea',
-                  label: 'What are two specific ways we could better support you in 2026?',
-                  required: false,
-                },
-                {
-                  id: 'q3',
-                  type: 'radio',
-                  label: 'In 2026, do you see yourself working best:',
-                  required: true,
-                  options: ['On a team', 'Independently', 'Not sure yet'],
-                },
-              ],
-            },
-          },
-        ])
+        setSteps(getDefaultSteps())
       }
     } catch (err: any) {
       console.error('Error fetching campaign:', err)
       setError(err.message || 'Failed to load campaign')
     }
   }
+
+  const getDefaultSteps = (): StepConfig[] => [
+    {
+      stepNumber: 1,
+      type: 'info',
+      title: 'Commission Plan Selection',
+      content: {
+        greeting: 'Hi, {first_name}',
+        sections: [
+          {
+            heading: 'Important Information',
+            items: [
+              'There will be **NO fee, split, or cap increases for 2026!**',
+              'Your Independent Contractor Agreement remains in effect for an indefinite term.',
+              'You may change your commission plan annually when eligible.',
+            ],
+          },
+        ],
+        buttonText: 'Next: Update My Profile →',
+      },
+    },
+    {
+      stepNumber: 2,
+      type: 'profile',
+      title: 'Update Your Profile',
+      content: {
+        fields: [
+          'first_name',
+          'last_name',
+          'preferred_first_name',
+          'preferred_last_name',
+          'personal_email',
+          'personal_phone',
+          'business_phone',
+          'date_of_birth',
+          'shirt_type',
+          'shirt_size',
+          'shipping_address_line1',
+          'shipping_address_line2',
+          'shipping_city',
+          'shipping_state',
+          'shipping_zip',
+        ],
+      },
+    },
+    {
+      stepNumber: 3,
+      type: 'rsvp',
+      title: 'Event RSVP',
+      content: {
+        eventTitle: 'Annual Award Ceremony Luncheon',
+        eventSubtitle: 'We Made It!',
+        eventDescription: "Join us to celebrate our entire firm's success this year.",
+        hostedBy: 'CJE Media',
+        when: 'Tuesday, December 16 at 12:00 PM',
+        where: "Rhay's Restaurant & Lounge, 11920 Westheimer Rd #J, Houston, TX 77077",
+        rsvpBy: 'December 9, 2025',
+        dressCode: 'Black Tie',
+        eventFlyerUrl: '',
+        commentsPrompt: 'Any dietary restrictions or special requests?',
+        closingText: "Let's Celebrate!",
+      },
+    },
+    {
+      stepNumber: 4,
+      type: 'survey',
+      title: 'Quick Feedback Survey',
+      content: {
+        questions: [
+          {
+            id: 'q1',
+            type: 'slider',
+            label: 'On a scale of 1-10, how supported do you feel by Collective Realty Co.?',
+            required: true,
+            min: 1,
+            max: 10,
+            minLabel: 'Not supported',
+            maxLabel: 'Very supported',
+          },
+          {
+            id: 'q2',
+            type: 'textarea',
+            label: 'What are two specific ways we could better support you in 2026?',
+            required: false,
+          },
+          {
+            id: 'q3',
+            type: 'radio',
+            label: 'In 2026, do you see yourself working best:',
+            required: true,
+            options: ['On a team', 'Independently', 'Not sure yet'],
+          },
+        ],
+      },
+    },
+  ]
 
   const handleSave = async () => {
     setSaving(true)
@@ -211,38 +211,29 @@ function CampaignBuilderContent() {
 
       if (campaignId) {
         // Update existing campaign
-        const { error } = await supabase.from('campaigns').update(updateData).eq('id', campaignId)
+        const res = await fetch(`/api/campaigns/${campaignId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        })
 
-        if (error) throw error
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to save campaign')
+
         alert('Campaign saved successfully!')
       } else {
         // Create new campaign
-        // Check slug uniqueness
-        let uniqueSlug = updateData.slug
-        let attempt = 1
-        while (attempt <= 10) {
-          const { data: existing } = await supabase
-            .from('campaigns')
-            .select('id')
-            .eq('slug', uniqueSlug)
-            .maybeSingle()
+        const res = await fetch('/api/campaigns/list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        })
 
-          if (!existing) break
-          attempt++
-          uniqueSlug = `${updateData.slug}-${attempt}`
-        }
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to create campaign')
 
-        updateData.slug = uniqueSlug
-
-        const { data, error } = await supabase
-          .from('campaigns')
-          .insert([updateData])
-          .select()
-          .single()
-
-        if (error) throw error
         alert('Campaign created successfully!')
-        router.push(`/admin/campaigns/builder/${data.id}`)
+        router.push(`/admin/campaigns/builder?id=${data.campaign.id}`)
       }
     } catch (err: any) {
       console.error('Error saving campaign:', err)
@@ -560,17 +551,6 @@ function StepEditor({
   step: StepConfig
   onChange: (step: StepConfig) => void
 }) {
-  const updateContent = (updates: any) => {
-    onChange({
-      ...step,
-      content: { ...step.content, ...updates },
-    })
-  }
-
-  const updateTitle = (title: string) => {
-    onChange({ ...step, title })
-  }
-
   switch (step.type) {
     case 'info':
       return <InfoStepEditor step={step} onChange={onChange} />

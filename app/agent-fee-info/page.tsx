@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import PageContainer from '@/components/shared/PageContainer'
-import { supabase } from '@/lib/supabase'
 import { Edit, Copy, Mail, CheckCircle2 } from 'lucide-react'
 
 export default function AgentFeeInfoPage() {
@@ -35,15 +34,12 @@ export default function AgentFeeInfoPage() {
 
       const userData = JSON.parse(userStr)
 
-      // Fetch fresh user data from database
-      const { data: freshUserData, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userData.id)
-        .single()
+      // Fetch fresh user data from API
+      const res = await fetch(`/api/users/profile?id=${userData.id}`)
+      const data = await res.json()
 
-      if (error) throw error
-      setUser(freshUserData)
+      if (!res.ok) throw new Error(data.error)
+      setUser(data.user)
 
       // Set default join date to today if not set
       if (!joinDate) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+
 import { X, MessageSquare, FileText, ExternalLink, Copy, Check } from 'lucide-react'
 import Link from 'next/link'
 
@@ -117,13 +117,10 @@ export default function AgentFormsPage() {
 
   const loadSubmissions = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('agent_id', userId)
-        .order('created_at', { ascending: false })
-      if (error) console.error('Error loading submissions:', error)
-      else setSubmissions(data || [])
+      const res = await fetch(`/api/form-responses?type=listings&agent_id=${userId}`)
+      const data = await res.json()
+      if (!res.ok) console.error('Error loading submissions:', data.error)
+      else setSubmissions(data.listings || [])
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {

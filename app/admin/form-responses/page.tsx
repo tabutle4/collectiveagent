@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+
 import {
   X,
   Download,
@@ -368,21 +368,20 @@ export default function FormResponsesPage() {
       .catch(err => console.error('Error fetching service config:', err))
 
     // Load all agents for selector (any status)
-    supabase
-      .from('users')
-      .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .eq('is_licensed_agent', true)
-      .then(({ data, error }) => {
-        if (!error && data) {
-          const agentsList = data
-            .map(user => ({
+    fetch('/api/agents/list?licensed_only=true')
+      .then(res => res.json())
+      .then(data => {
+        if (data.agents) {
+          const agentsList = data.agents
+            .map((user: any) => ({
               id: user?.id,
               name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim(),
             }))
-            .sort((a, b) => a.name.localeCompare(b.name))
+            .sort((a: any, b: any) => a.name.localeCompare(b.name))
           setAgents(agentsList)
         }
       })
+      .catch(err => console.error('Error loading agents:', err))
 
     // Close dropdowns when clicking outside
     const handleClickOutside = (e: MouseEvent) => {
@@ -427,28 +426,23 @@ export default function FormResponsesPage() {
     setLoading(true)
     try {
       // Load prospects
-      const { data: prospectsData, error: prospectsError } = await supabase
-        .from('users')
-        .select('*')
-        .not('prospect_status', 'is', null)
-        .order('created_at', { ascending: false })
+      const prospectsRes = await fetch('/api/form-responses?type=prospects')
+      const prospectsData = await prospectsRes.json()
 
-      if (prospectsError) {
-        console.error('Error loading prospects:', prospectsError)
+      if (!prospectsRes.ok) {
+        console.error('Error loading prospects:', prospectsData.error)
       } else {
-        setProspects(prospectsData || [])
+        setProspects(prospectsData.prospects || [])
       }
 
       // Load listings
-      const { data: listingsData, error: listingsError } = await supabase
-        .from('transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const listingsRes = await fetch('/api/form-responses?type=listings')
+      const listingsData = await listingsRes.json()
 
-      if (listingsError) {
-        console.error('Error loading listings:', listingsError)
+      if (!listingsRes.ok) {
+        console.error('Error loading listings:', listingsData.error)
       } else {
-        setListings(listingsData || [])
+        setListings(listingsData.listings || [])
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -461,14 +455,11 @@ export default function FormResponsesPage() {
     // Always fetch fresh data from database to ensure sync with coordination detail page
     let freshResponse = response
     if (formType === 'pre-listing' || formType === 'just-listed') {
-      const { data: freshListing } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('id', response.id)
-        .single()
+      const listingRes = await fetch(`/api/form-responses?type=listing&id=${response.id}`)
+      const listingData = await listingRes.json()
 
-      if (freshListing) {
-        freshResponse = freshListing
+      if (listingRes.ok && listingData.listing) {
+        freshResponse = listingData.listing
       }
     }
 
@@ -477,13 +468,11 @@ export default function FormResponsesPage() {
     // Load coordination data if it exists
     let coordinationData: any = null
     if (formType === 'pre-listing' || formType === 'just-listed') {
-      const { data: coordination } = await supabase
-        .from('listing_coordination')
-        .select('*')
-        .eq('listing_id', freshResponse.id)
-        .single()
+      const coordRes = await fetch(`/api/form-responses?type=coordination&listing_id=${freshResponse.id}`)
+      const coordData = await coordRes.json()
 
-      if (coordination) {
+      if (coordRes.ok && coordData.coordination) {
+        const coordination = coordData.coordination
         coordinationData = {
           coordination_id: coordination.id,
           coordination_requested: true,

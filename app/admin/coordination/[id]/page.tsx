@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
-import { supabase } from '@/lib/supabase'
 import { Send, Mail, Trash2, Loader2, Check } from 'lucide-react'
 
 export default function CoordinationDetailPage() {
@@ -87,19 +86,21 @@ export default function CoordinationDetailPage() {
   }, [coordinationId])
 
   const loadAgents = async () => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, preferred_first_name, preferred_last_name, first_name, last_name')
-      .eq('is_licensed_agent', true)
-
-    if (!error && data) {
-      const agentsList = data
-        .map(user => ({
-          id: user?.id,
-          name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim(),
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name))
-      setAgents(agentsList)
+    try {
+      const res = await fetch('/api/agents/list?licensed_only=true')
+      const agentsData = await res.json()
+      
+      if (res.ok && agentsData.agents) {
+        const agentsList = agentsData.agents
+          .map((user: any) => ({
+            id: user?.id,
+            name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim(),
+          }))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+        setAgents(agentsList)
+      }
+    } catch (error) {
+      console.error('Error loading agents:', error)
     }
   }
 
@@ -121,16 +122,13 @@ export default function CoordinationDetailPage() {
   const loadEmailHistory = async () => {
     setLoadingHistory(true)
     try {
-      const { data, error } = await supabase
-        .from('coordination_email_history')
-        .select('*')
-        .eq('coordination_id', coordinationId)
-        .order('sent_at', { ascending: false })
+      const res = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=email_history`)
+      const historyData = await res.json()
 
-      if (!error && data) {
-        setEmailHistory(data)
+      if (res.ok && historyData.emailHistory) {
+        setEmailHistory(historyData.emailHistory)
         // Check if welcome email exists in history
-        const welcomeEmail = data.find((email: any) => email.email_type === 'welcome')
+        const welcomeEmail = historyData.emailHistory.find((email: any) => email.email_type === 'welcome')
         setHasWelcomeEmailInHistory(!!welcomeEmail)
       }
     } catch (error) {
@@ -143,14 +141,11 @@ export default function CoordinationDetailPage() {
   const loadWeeklyReports = async () => {
     setLoadingReports(true)
     try {
-      const { data, error } = await supabase
-        .from('coordination_weekly_reports')
-        .select('*')
-        .eq('coordination_id', coordinationId)
-        .order('week_start_date', { ascending: false })
+      const res = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=weekly_reports`)
+      const reportsData = await res.json()
 
-      if (!error && data) {
-        setWeeklyReports(data)
+      if (res.ok && reportsData.weeklyReports) {
+        setWeeklyReports(reportsData.weeklyReports)
       }
     } catch (error) {
       console.error('Error loading weekly reports:', error)

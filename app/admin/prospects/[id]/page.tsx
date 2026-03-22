@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 
 export default function ProspectDetailPage() {
   const params = useParams()
@@ -21,17 +20,13 @@ export default function ProspectDetailPage() {
 
   const fetchProspect = async () => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', params.id)
-        .eq('status', 'prospect')
-        .single()
+      const res = await fetch(`/api/prospects/${params.id}`)
+      const data = await res.json()
 
-      if (error) throw error
+      if (!res.ok) throw new Error(data.error)
 
-      setProspect(data)
-      setNewStatus(data.prospect_status || 'new')
+      setProspect(data.prospect)
+      setNewStatus(data.prospect.prospect_status || 'new')
       setLoading(false)
     } catch (error) {
       console.error('Error fetching prospect:', error)
@@ -44,12 +39,13 @@ export default function ProspectDetailPage() {
 
     setUpdating(true)
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ prospect_status: newStatus })
-        .eq('id', prospect.id)
+      const res = await fetch(`/api/prospects/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prospect_status: newStatus }),
+      })
 
-      if (error) throw error
+      if (!res.ok) throw new Error('Failed to update')
 
       setProspect({ ...prospect, prospect_status: newStatus })
       alert('Status updated successfully')
