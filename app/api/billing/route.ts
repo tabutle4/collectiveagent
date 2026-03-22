@@ -7,17 +7,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const agentId = searchParams.get('agent_id')
 
-    // If requesting specific agent's billing, check if user can access it
     const auth = await requireAuth(request)
     if (auth.error) return auth.error
 
-    // Agents can only view their own billing
-    if (agentId && agentId !== auth.user.id && !auth.permissions.has('can_view_agent_debts')) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-    }
+    // If no agent_id provided and user is not admin, auto-use their own ID
+    const effectiveAgentId = agentId || (!auth.permissions.has('can_view_agent_debts') ? auth.user.id : null)
 
-    // Viewing all billing data requires permission
-    if (!agentId && !auth.permissions.has('can_view_agent_debts')) {
+    // Agents can only view their own billing (not other agents')
+    if (effectiveAgentId && effectiveAgentId !== auth.user.id && !auth.permissions.has('can_view_agent_debts')) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
@@ -25,14 +22,14 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const debtType = searchParams.get('debt_type')
 
-    // Called with ?agent_id=xxx — return records for that agent
-    if (agentId) {
+    // Called with agent_id (explicit or auto-filled) — return records for that agent
+    if (effectiveAgentId) {
       let query = supabase
         .from('agent_debts')
         .select(
           'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id'
         )
-        .eq('agent_id', agentId)
+        .eq('agent_id', effectiveAgentId)
         .order('date_incurred', { ascending: false })
 
       if (status) query = query.eq('status', status)
