@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Check, Pencil, Trophy, TrendingUp, DollarSign, Hash, Settings } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 
 type GoalMetric = 'volume' | 'units' | 'agent_net'
 
@@ -88,7 +87,11 @@ export default function SalesGoalWidget({
       updated = [...localActiveGoals, metric]
     }
     setLocalActiveGoals(updated)
-    await supabase.from('users').update({ active_goals: updated }).eq('id', userId)
+    await fetch('/api/users/update-goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, active_goals: updated }),
+    })
     onUpdate?.()
   }
 
@@ -98,10 +101,11 @@ export default function SalesGoalWidget({
     setSaving(true)
     const goalField = METRICS.find(m => m.key === metric)?.goalField || 'sales_volume_goal'
     try {
-      await supabase
-        .from('users')
-        .update({ [goalField]: parsed })
-        .eq('id', userId)
+      await fetch('/api/users/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [goalField]: parsed }),
+      })
       setEditingGoal(null)
       onUpdate?.()
     } catch (error) {
