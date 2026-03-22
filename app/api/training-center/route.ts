@@ -129,6 +129,13 @@ function shouldExcludeResult(item: any): boolean {
   return false
 }
 
+// Extract URL from text (for meeting links in location field)
+function extractUrlFromText(text: string | null): string | null {
+  if (!text) return null
+  const urlMatch = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/i)
+  return urlMatch ? urlMatch[0] : null
+}
+
 // Get this week's coaching sessions from Agents group calendar
 async function getThisWeekSessions(token: string) {
   try {
@@ -153,17 +160,23 @@ async function getThisWeekSessions(token: string) {
 
     if (!calendarData?.value) return []
 
-    return calendarData.value.map((event: any) => ({
-      id: event.id,
-      title: event.subject || 'Untitled Event',
-      start: event.start?.dateTime || '',
-      end: event.end?.dateTime || '',
-      timeZone: event.start?.timeZone || 'Central Standard Time',
-      location: event.location?.displayName || null,
-      meetingUrl: event.onlineMeeting?.joinUrl || null,
-      webLink: event.webLink || '',
-      isAllDay: event.isAllDay || false,
-    }))
+    return calendarData.value.map((event: any) => {
+      const locationText = event.location?.displayName || null
+      // Use Teams meeting URL, or extract URL from location field, or null
+      const meetingUrl = event.onlineMeeting?.joinUrl || extractUrlFromText(locationText)
+      
+      return {
+        id: event.id,
+        title: event.subject || 'Untitled Event',
+        start: event.start?.dateTime || '',
+        end: event.end?.dateTime || '',
+        timeZone: event.start?.timeZone || 'Central Standard Time',
+        location: locationText,
+        meetingUrl,
+        webLink: event.webLink || '',
+        isAllDay: event.isAllDay || false,
+      }
+    })
   } catch (error) {
     console.error('Failed to fetch coaching sessions:', error)
     return []
