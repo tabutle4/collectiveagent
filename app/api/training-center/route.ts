@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
       // Build KQL query scoped to the training center site
       const kqlQuery = `${query} path:"${TRAINING_CENTER_PATH}"`
       
-      console.log('=== SEARCH API DEBUG ===')
+console.log('=== SEARCH API DEBUG v2 ===')
       console.log('Query:', query)
       console.log('KQL Query:', kqlQuery)
 
