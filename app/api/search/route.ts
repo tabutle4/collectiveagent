@@ -1,30 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireAuth } from '@/lib/api-auth'
+import { supabaseAdmin } from '@/lib/supabase'
 
 const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const auth = await requireAuth(request)
+    if (auth.error) return auth.error
 
-    // Get current user
-    const { data: session } = await supabase.auth.getSession()
-    if (!session?.session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Get user role
-    const { data: currentUser } = await supabase
-      .from('users')
-      .select('id, role')
-      .eq('auth_id', session.session.user.id)
-      .single()
-
-    if (!currentUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    const userRole = (currentUser.role || '').toLowerCase()
+    const { user } = auth
+    const userRole = (user.role || '').toLowerCase()
     const isStaff = ADMIN_ROLES.includes(userRole)
 
     const { searchParams } = new URL(request.url)
@@ -39,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Search users (staff sees all active, agents see none)
     let users: any[] = []
     if (isStaff) {
-      const { data: userResults } = await supabase
+      const { data: userResults } = await supabaseAdmin
         .from('users')
         .select('id, preferred_first_name, preferred_last_name, email, role, status, office')
         .or(`preferred_first_name.ilike.${searchPattern},preferred_last_name.ilike.${searchPattern},email.ilike.${searchPattern}`)
@@ -57,22 +43,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Search transactions (staff sees all, agents see their own)
-    let transactionQuery = supabase
+    let transactionQuery = supabaseAdmin
       .from('transactions')
-      .select(`
-        id,
-        property_address,
-        area,
-        client_name,
-        status,
-        submitted_by
-      `)
+      .select('id, property_address, area, client_name, status, submitted_by')
       .or(`property_address.ilike.${searchPattern},client_name.ilike.${searchPattern}`)
       .neq('status', 'cancelled')
       .limit(10)
 
     if (!isStaff) {
-      transactionQuery = transactionQuery.eq('submitted_by', currentUser.id)
+      transactionQuery = transactionQuery.eq('submitted_by', user.id)
     }
 
     const { data: transactionResults } = await transactionQuery
@@ -82,7 +61,7 @@ export async function GET(request: NextRequest) {
     let agentMap: Record<string, string> = {}
     
     if (agentIds.length > 0) {
-      const { data: agents } = await supabase
+      const { data: agents } = await supabaseAdmin
         .from('users')
         .select('id, preferred_first_name, preferred_last_name')
         .in('id', agentIds)
@@ -106,24 +85,16 @@ export async function GET(request: NextRequest) {
     let contacts: any[] = []
     
     // First get matching contacts
-    const { data: contactResults } = await supabase
+    const { data: contactResults } = await supabaseAdmin
       .from('transaction_contacts')
-      .select(`
-        id,
-        name,
-        email,
-        phone,
-        company,
-        contact_type,
-        transaction_id
-      `)
+      .select('id, name, email, phone, company, contact_type, transaction_id')
       .or(`name.ilike.${searchPattern},company.ilike.${searchPattern}`)
       .limit(20)
 
     if (contactResults && contactResults.length > 0) {
       // Get transaction info for these contacts
       const txnIds = [...new Set(contactResults.map((c: any) => c.transaction_id))]
-      const { data: txnData } = await supabase
+      const { data: txnData } = await supabaseAdmin
         .from('transactions')
         .select('id, property_address, submitted_by')
         .in('id', txnIds)
@@ -139,7 +110,7 @@ export async function GET(request: NextRequest) {
           const txn = txnMap[c.transaction_id]
           if (!txn) return false
           // If not staff, only show contacts on their own transactions
-          if (!isStaff && txn.submittedBy !== currentUser.id) return false
+          if (!isStaff && txn.submittedBy !== user.id) return false
           return true
         })
         .slice(0, 10)
