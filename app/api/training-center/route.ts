@@ -42,22 +42,6 @@ async function graphGet(token: string, path: string, cache = true) {
   return res.json()
 }
 
-async function graphPost(token: string, path: string, body: any) {
-  const res = await fetch(`${GRAPH_BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    console.error(`Graph POST failed: ${path}`, res.status, await res.text().catch(() => ''))
-    return null
-  }
-  return res.json()
-}
-
 // Score result by how well name matches query (higher = more relevant)
 function relevanceScore(name: string, query: string): number {
   const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
@@ -85,7 +69,8 @@ export async function GET(request: NextRequest) {
       const encoded = encodeURIComponent(query)
 
       // Search drives (videos, documents, resources) in parallel
-      const [videoResults, docResults, agentResResults] = await Promise.all([
+      // Also fetch all SitePages to filter client-side (most reliable method)
+      const [videoResults, docResults, agentResResults, sitePagesData] = await Promise.all([
         graphGet(
           token,
           `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
@@ -101,83 +86,14 @@ export async function GET(request: NextRequest) {
           `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
           false
         ),
+        // Fetch SitePages list items - filter client-side
+        getSitePages(token, query),
       ])
-
-      // Search for SitePages using Microsoft Graph Search API
-      let pageResults: any[] = []
-      
-      // Try the search API first (most reliable for SharePoint content)
-      const searchResponse = await graphPost(token, '/search/query', {
-        requests: [{
-          entityTypes: ['listItem'],
-          query: {
-            queryString: `${query} path:"${SHAREPOINT_BASE}/SitePages"`,
-          },
-          from: 0,
-          size: 25,
-        }],
-      })
-
-      if (searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits) {
-        const hits = searchResponse.value[0].hitsContainers[0].hits
-        pageResults = hits
-          .filter((hit: any) => {
-            const name = hit.resource?.name || ''
-            return name.endsWith('.aspx') && !name.startsWith('_')
-          })
-          .map((hit: any) => {
-            const resource = hit.resource || {}
-            return {
-              id: resource.id || hit.hitId,
-              name: resource.name || 'Page',
-              webUrl: resource.webUrl || `${SHAREPOINT_BASE}/SitePages/${resource.name}`,
-              lastModified: resource.lastModifiedDateTime || new Date().toISOString(),
-              lastModifiedBy: resource.lastModifiedBy?.user?.displayName || 'Office Support',
-              category: 'Page',
-              type: 'page' as const,
-              score: relevanceScore(resource.name || '', query) + 10, // Boost pages
-            }
-          })
-      }
-
-      // Fallback: If search API didn't work, try fetching all SitePages and filter client-side
-      if (pageResults.length === 0) {
-        const sitePagesListId = await getSitePagesListId(token)
-        if (sitePagesListId) {
-          const listItems = await graphGet(
-            token,
-            `/sites/${SITE_ID}/lists/${sitePagesListId}/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=100`,
-            false
-          )
-          
-          if (listItems?.value) {
-            const q = query.toLowerCase()
-            pageResults = listItems.value
-              .filter((item: any) => {
-                const title = (item.fields?.Title || '').toLowerCase()
-                const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
-                return (title.includes(q) || fileName.includes(q)) &&
-                       fileName.endsWith('.aspx') &&
-                       !fileName.startsWith('_')
-              })
-              .map((item: any) => ({
-                id: item.id,
-                name: item.fields?.Title || item.fields?.FileLeafRef?.replace('.aspx', '') || 'Page',
-                webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
-                lastModified: item.fields?.Modified || new Date().toISOString(),
-                lastModifiedBy: 'Office Support',
-                category: 'Page',
-                type: 'page' as const,
-                score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 10,
-              }))
-          }
-        }
-      }
 
       // Combine all results into one list, sorted by relevance
       const allResults = [
-        // Pages
-        ...pageResults,
+        // Pages (from SitePages list)
+        ...(sitePagesData || []),
         // Videos
         ...(videoResults?.value || [])
           .filter((item: any) => item.file)
@@ -315,29 +231,78 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper to get the SitePages list ID
-async function getSitePagesListId(token: string): Promise<string | null> {
-  // Try common list names
-  const listNames = ['SitePages', 'Site Pages', 'Site%20Pages']
+// Helper to get SitePages and filter by query
+async function getSitePages(token: string, query: string): Promise<any[]> {
+  const q = query.toLowerCase()
+  
+  // Try fetching from the SitePages list
+  const listNames = ['Site Pages', 'SitePages']
   
   for (const listName of listNames) {
-    const list = await graphGet(token, `/sites/${SITE_ID}/lists/${listName}?$select=id`, false)
-    if (list?.id) {
-      return list.id
+    try {
+      const listItems = await graphGet(
+        token,
+        `/sites/${SITE_ID}/lists/${encodeURIComponent(listName)}/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=200`,
+        false
+      )
+      
+      if (listItems?.value) {
+        return listItems.value
+          .filter((item: any) => {
+            const title = (item.fields?.Title || '').toLowerCase()
+            const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
+            // Match query and filter out system pages
+            return (title.includes(q) || fileName.includes(q)) &&
+                   fileName.endsWith('.aspx') &&
+                   !fileName.startsWith('_') &&
+                   !fileName.includes('template')
+          })
+          .map((item: any) => ({
+            id: item.id,
+            name: item.fields?.Title || item.fields?.FileLeafRef?.replace('.aspx', '') || 'Page',
+            webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
+            lastModified: item.fields?.Modified || new Date().toISOString(),
+            lastModifiedBy: 'Office Support',
+            category: 'Page',
+            type: 'page' as const,
+            score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 10,
+          }))
+      }
+    } catch (err) {
+      console.error(`Failed to fetch list "${listName}":`, err)
     }
   }
   
-  // If not found by name, search all lists
-  const allLists = await graphGet(token, `/sites/${SITE_ID}/lists?$select=id,name,displayName`, false)
-  if (allLists?.value) {
-    const sitePagesList = allLists.value.find((l: any) => 
-      l.name?.toLowerCase().includes('sitepage') || 
-      l.displayName?.toLowerCase().includes('site page')
+  // Fallback: try getting the site's default drive and look for SitePages folder
+  try {
+    const driveItems = await graphGet(
+      token,
+      `/sites/${SITE_ID}/drive/root:/SitePages:/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy&$top=200`,
+      false
     )
-    if (sitePagesList) {
-      return sitePagesList.id
+    
+    if (driveItems?.value) {
+      return driveItems.value
+        .filter((item: any) => {
+          const name = (item.name || '').toLowerCase()
+          return name.includes(q) &&
+                 name.endsWith('.aspx') &&
+                 !name.startsWith('_')
+        })
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name?.replace('.aspx', '') || 'Page',
+          webUrl: item.webUrl,
+          lastModified: item.lastModifiedDateTime || new Date().toISOString(),
+          lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+          category: 'Page',
+          type: 'page' as const,
+          score: relevanceScore(item.name || '', query) + 10,
+        }))
     }
+  } catch (err) {
+    console.error('Failed to fetch SitePages from drive:', err)
   }
   
-  return null
+  return []
 }
