@@ -22,15 +22,14 @@ export async function GET(request: NextRequest) {
 
     const searchPattern = `%${query}%`
 
-    // Search users (staff sees all active, agents see none)
+    // Search users (staff sees all users including inactive, agents see none)
     let users: any[] = []
     if (isStaff) {
       const { data: userResults } = await supabaseAdmin
         .from('users')
         .select('id, preferred_first_name, preferred_last_name, email, role, status, office')
         .or(`preferred_first_name.ilike.${searchPattern},preferred_last_name.ilike.${searchPattern},email.ilike.${searchPattern}`)
-        .eq('status', 'active')
-        .limit(10)
+        .limit(15)
 
       users = (userResults || []).map((u: any) => ({
         id: u.id,
@@ -38,6 +37,7 @@ export async function GET(request: NextRequest) {
         email: u.email,
         role: u.role,
         office: u.office,
+        status: u.status,
         type: 'user',
       }))
     }

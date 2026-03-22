@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
@@ -42,6 +42,22 @@ async function graphGet(token: string, path: string, cache = true) {
   return res.json()
 }
 
+async function graphPost(token: string, path: string, body: any) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    console.error(`Graph POST failed: ${path}`, res.status, await res.text().catch(() => ''))
+    return null
+  }
+  return res.json()
+}
+
 // Score result by how well name matches query (higher = more relevant)
 function relevanceScore(name: string, query: string): number {
   const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
@@ -56,7 +72,7 @@ function relevanceScore(name: string, query: string): number {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_view_training_center')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -68,8 +84,8 @@ export async function GET(request: NextRequest) {
     if (query) {
       const encoded = encodeURIComponent(query)
 
-      // Search drives (videos, documents, resources) + SitePages in parallel
-      const [videoResults, docResults, agentResResults, sitePagesResults] = await Promise.all([
+      // Search drives (videos, documents, resources) in parallel
+      const [videoResults, docResults, agentResResults] = await Promise.all([
         graphGet(
           token,
           `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
@@ -85,65 +101,77 @@ export async function GET(request: NextRequest) {
           `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
           false
         ),
-        // Search SitePages using the site's drive
-        graphGet(
-          token,
-          `/sites/${SITE_ID}/drive/root:/SitePages:/children?$filter=contains(name,'${encoded}')&$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy&$top=25`,
-          false
-        ),
       ])
 
-      // Also try searching the SitePages list directly as backup
-      let listPagesResults: any = null
-      if (!sitePagesResults?.value?.length) {
-        listPagesResults = await graphGet(
-          token,
-          `/sites/${SITE_ID}/lists/Site Pages/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=50`,
-          false
-        )
-      }
-
-      // Build page results from whichever source worked
+      // Search for SitePages using Microsoft Graph Search API
       let pageResults: any[] = []
       
-      if (sitePagesResults?.value?.length) {
-        // Got results from drive search
-        pageResults = sitePagesResults.value
-          .filter((item: any) => {
-            const name = (item.name || '').toLowerCase()
+      // Try the search API first (most reliable for SharePoint content)
+      const searchResponse = await graphPost(token, '/search/query', {
+        requests: [{
+          entityTypes: ['listItem'],
+          query: {
+            queryString: `${query} path:"${SHAREPOINT_BASE}/SitePages"`,
+          },
+          from: 0,
+          size: 25,
+        }],
+      })
+
+      if (searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits) {
+        const hits = searchResponse.value[0].hitsContainers[0].hits
+        pageResults = hits
+          .filter((hit: any) => {
+            const name = hit.resource?.name || ''
             return name.endsWith('.aspx') && !name.startsWith('_')
           })
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            webUrl: item.webUrl,
-            lastModified: item.lastModifiedDateTime,
-            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-            category: 'Page',
-            type: 'page' as const,
-            score: relevanceScore(item.name, query) + 5, // Slight boost for pages
-          }))
-      } else if (listPagesResults?.value?.length) {
-        // Fall back to list items - filter by query match
-        const q = query.toLowerCase()
-        pageResults = listPagesResults.value
-          .filter((item: any) => {
-            const title = (item.fields?.Title || '').toLowerCase()
-            const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
-            return (title.includes(q) || fileName.includes(q)) && 
-                   fileName.endsWith('.aspx') && 
-                   !fileName.startsWith('_')
+          .map((hit: any) => {
+            const resource = hit.resource || {}
+            return {
+              id: resource.id || hit.hitId,
+              name: resource.name || 'Page',
+              webUrl: resource.webUrl || `${SHAREPOINT_BASE}/SitePages/${resource.name}`,
+              lastModified: resource.lastModifiedDateTime || new Date().toISOString(),
+              lastModifiedBy: resource.lastModifiedBy?.user?.displayName || 'Office Support',
+              category: 'Page',
+              type: 'page' as const,
+              score: relevanceScore(resource.name || '', query) + 10, // Boost pages
+            }
           })
-          .map((item: any) => ({
-            id: item.id,
-            name: item.fields?.Title || item.fields?.FileLeafRef || 'Page',
-            webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
-            lastModified: item.fields?.Modified || new Date().toISOString(),
-            lastModifiedBy: 'Office Support',
-            category: 'Page',
-            type: 'page' as const,
-            score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 5,
-          }))
+      }
+
+      // Fallback: If search API didn't work, try fetching all SitePages and filter client-side
+      if (pageResults.length === 0) {
+        const sitePagesListId = await getSitePagesListId(token)
+        if (sitePagesListId) {
+          const listItems = await graphGet(
+            token,
+            `/sites/${SITE_ID}/lists/${sitePagesListId}/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=100`,
+            false
+          )
+          
+          if (listItems?.value) {
+            const q = query.toLowerCase()
+            pageResults = listItems.value
+              .filter((item: any) => {
+                const title = (item.fields?.Title || '').toLowerCase()
+                const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
+                return (title.includes(q) || fileName.includes(q)) &&
+                       fileName.endsWith('.aspx') &&
+                       !fileName.startsWith('_')
+              })
+              .map((item: any) => ({
+                id: item.id,
+                name: item.fields?.Title || item.fields?.FileLeafRef?.replace('.aspx', '') || 'Page',
+                webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
+                lastModified: item.fields?.Modified || new Date().toISOString(),
+                lastModifiedBy: 'Office Support',
+                category: 'Page',
+                type: 'page' as const,
+                score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 10,
+              }))
+          }
+        }
       }
 
       // Combine all results into one list, sorted by relevance
@@ -285,4 +313,31 @@ export async function GET(request: NextRequest) {
     console.error('Training center API error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+// Helper to get the SitePages list ID
+async function getSitePagesListId(token: string): Promise<string | null> {
+  // Try common list names
+  const listNames = ['SitePages', 'Site Pages', 'Site%20Pages']
+  
+  for (const listName of listNames) {
+    const list = await graphGet(token, `/sites/${SITE_ID}/lists/${listName}?$select=id`, false)
+    if (list?.id) {
+      return list.id
+    }
+  }
+  
+  // If not found by name, search all lists
+  const allLists = await graphGet(token, `/sites/${SITE_ID}/lists?$select=id,name,displayName`, false)
+  if (allLists?.value) {
+    const sitePagesList = allLists.value.find((l: any) => 
+      l.name?.toLowerCase().includes('sitepage') || 
+      l.displayName?.toLowerCase().includes('site page')
+    )
+    if (sitePagesList) {
+      return sitePagesList.id
+    }
+  }
+  
+  return null
 }

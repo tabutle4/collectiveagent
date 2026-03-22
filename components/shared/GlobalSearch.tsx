@@ -18,6 +18,7 @@ interface UserResult {
   email: string
   role: string
   office: string
+  status: string
   type: 'user'
 }
 
@@ -79,12 +80,9 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
     }
   }, [open])
 
-  // Keyboard shortcut to open (Cmd+K or Ctrl+K)
+  // Keyboard shortcut to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-      }
       if (e.key === 'Escape' && open) {
         onClose()
       }
@@ -159,7 +157,7 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
     onClose()
   }
 
-  const getStatusColor = (status: string) => {
+  const getTransactionStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       prospect: 'bg-gray-100 text-gray-600',
       active_listing: 'bg-blue-100 text-blue-600',
@@ -170,6 +168,13 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
       closed: 'bg-green-100 text-green-700',
     }
     return colors[status] || 'bg-gray-100 text-gray-600'
+  }
+
+  const getUserStatusColor = (status: string) => {
+    if (status === 'active') return 'bg-green-100 text-green-700'
+    if (status === 'inactive') return 'bg-red-100 text-red-600'
+    if (status === 'prospect') return 'bg-blue-100 text-blue-600'
+    return 'bg-gray-100 text-gray-600'
   }
 
   const formatContactType = (type: string) => {
@@ -257,6 +262,15 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
                               {user.email} {user.office && `· ${user.office}`}
                             </p>
                           </div>
+                          {user.status && user.status !== 'active' && (
+                            <span
+                              className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${getUserStatusColor(
+                                user.status
+                              )}`}
+                            >
+                              {user.status}
+                            </span>
+                          )}
                           <ArrowRight size={14} className="text-luxury-gray-3 flex-shrink-0" />
                         </button>
                       )
@@ -294,7 +308,7 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
                             </p>
                           </div>
                           <span
-                            className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${getStatusColor(
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${getTransactionStatusColor(
                               txn.status
                             )}`}
                           >
