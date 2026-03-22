@@ -142,7 +142,7 @@ console.log('=== SEARCH API DEBUG v2 ===')
       },
       from: 0,
       size: 50,
-      region: 'NAM',
+      region: 'US',
     },
   ],
 }
