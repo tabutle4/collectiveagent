@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock, Video } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock, Video, ExternalLink } from 'lucide-react'
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const MONTHS = [
@@ -125,6 +125,56 @@ const DIVISION_SESSIONS = [
     audience: 'Onboarding Agents · All Agents Welcome',
   },
 ]
+
+// Extract URL from text if present
+function extractUrl(text: string | null | undefined): string | null {
+  if (!text) return null
+  const urlMatch = text.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/i)
+  return urlMatch ? urlMatch[0] : null
+}
+
+// Render location with clickable URL if present
+function LocationDisplay({ location }: { location: string }) {
+  const url = extractUrl(location)
+  
+  if (url) {
+    // If the entire location is just a URL, show it as a link
+    if (location.trim() === url) {
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+        >
+          {url.length > 50 ? url.slice(0, 50) + '...' : url}
+          <ExternalLink size={10} className="flex-shrink-0" />
+        </a>
+      )
+    }
+    
+    // If location has both text and URL, show text with link
+    const parts = location.split(url)
+    return (
+      <span className="text-xs text-luxury-gray-2">
+        {parts[0]}
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-luxury-accent hover:underline inline-flex items-center gap-0.5"
+        >
+          {url.length > 40 ? url.slice(0, 40) + '...' : url}
+          <ExternalLink size={10} />
+        </a>
+        {parts[1]}
+      </span>
+    )
+  }
+  
+  // No URL, just display text
+  return <span className="text-xs text-luxury-gray-2">{location}</span>
+}
 
 export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [today] = useState(new Date())
@@ -498,9 +548,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                           </p>
                         )}
                         {event.location?.displayName && (
-                          <p className="text-xs text-luxury-gray-3 truncate mt-0.5">
-                            {event.location.displayName}
-                          </p>
+                          <div className="mt-0.5 truncate">
+                            <LocationDisplay location={event.location.displayName} />
+                          </div>
                         )}
                       </div>
                       <ChevronRight size={14} className="text-luxury-gray-4 flex-shrink-0 mt-0.5" />
@@ -683,9 +733,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                         <p className="text-xs text-luxury-gray-3 mt-0.5">All day</p>
                       )}
                       {event.location?.displayName && (
-                        <p className="text-xs text-luxury-gray-3 truncate mt-0.5">
-                          {event.location.displayName}
-                        </p>
+                        <div className="mt-0.5 truncate">
+                          <LocationDisplay location={event.location.displayName} />
+                        </div>
                       )}
                     </div>
                     <ChevronRight size={14} className="text-luxury-gray-4 flex-shrink-0 mt-0.5" />
@@ -738,11 +788,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                   </div>
                 )}
                 {selectedEvent.location?.displayName && (
-                  <div className="flex items-center gap-2">
-                    <MapPin size={14} className="text-luxury-gray-3 flex-shrink-0" />
-                    <p className="text-xs text-luxury-gray-2">
-                      {selectedEvent.location.displayName}
-                    </p>
+                  <div className="flex items-start gap-2">
+                    <MapPin size={14} className="text-luxury-gray-3 flex-shrink-0 mt-0.5" />
+                    <LocationDisplay location={selectedEvent.location.displayName} />
                   </div>
                 )}
                 {selectedEvent.body?.content &&
