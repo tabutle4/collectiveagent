@@ -10,6 +10,9 @@ const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4
 const AGENT_RESOURCES_DRIVE_ID =
   'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
 
+// M365 Group Calendar for coaching sessions
+const AGENTS_GROUP_ID = '48f1de3f-74e7-4c5d-b890-bc4147fe3012'
+
 // SharePoint system folders to exclude from search results
 const EXCLUDED_CATEGORIES = ['SiteAssets', 'Site Assets', 'Lists', '_catalogs', 'Style Library']
 
@@ -126,6 +129,47 @@ function shouldExcludeResult(item: any): boolean {
   return false
 }
 
+// Get this week's coaching sessions from Agents group calendar
+async function getThisWeekSessions(token: string) {
+  try {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - dayOfWeek)
+    startOfWeek.setHours(0, 0, 0, 0)
+
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 7)
+    endOfWeek.setHours(23, 59, 59, 999)
+
+    const startISO = startOfWeek.toISOString()
+    const endISO = endOfWeek.toISOString()
+
+    const calendarData = await graphGet(
+      token,
+      `/groups/${AGENTS_GROUP_ID}/calendar/calendarView?startDateTime=${startISO}&endDateTime=${endISO}&$select=id,subject,start,end,location,onlineMeeting,webLink,isAllDay&$orderby=start/dateTime asc&$top=10`,
+      false
+    )
+
+    if (!calendarData?.value) return []
+
+    return calendarData.value.map((event: any) => ({
+      id: event.id,
+      title: event.subject || 'Untitled Event',
+      start: event.start?.dateTime || '',
+      end: event.end?.dateTime || '',
+      timeZone: event.start?.timeZone || 'Central Standard Time',
+      location: event.location?.displayName || null,
+      meetingUrl: event.onlineMeeting?.joinUrl || null,
+      webLink: event.webLink || '',
+      isAllDay: event.isAllDay || false,
+    }))
+  } catch (error) {
+    console.error('Failed to fetch coaching sessions:', error)
+    return []
+  }
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -193,11 +237,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ searchResults, query })
     }
 
-    // --- DEFAULT MODE: Recent recordings, resources, and video library folders ---
-    const videoRootData = await graphGet(
-      token,
-      `/drives/${VIDEOS_DRIVE_ID}/root/children?$select=id,name,webUrl,folder&$orderby=name asc`
-    )
+    // --- DEFAULT MODE: Recent recordings, resources, video library folders, and coaching sessions ---
+    const [videoRootData, thisWeekSessions] = await Promise.all([
+      graphGet(
+        token,
+        `/drives/${VIDEOS_DRIVE_ID}/root/children?$select=id,name,webUrl,folder&$orderby=name asc`
+      ),
+      getThisWeekSessions(token),
+    ])
+
     const videoLibraryFolders = (videoRootData?.value || [])
       .filter((item: any) => item.folder)
       .map((folder: any) => ({
@@ -286,7 +334,12 @@ export async function GET(request: NextRequest) {
         category: item.parentReference?.name || 'General',
       }))
 
-    return NextResponse.json({ recentRecordings, recentResources, videoLibraryFolders })
+    return NextResponse.json({
+      recentRecordings,
+      recentResources,
+      videoLibraryFolders,
+      thisWeekSessions,
+    })
   } catch (error: any) {
     console.error('Training center API error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

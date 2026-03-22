@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import {
@@ -19,9 +20,38 @@ import {
   Menu,
   X,
   FileCode,
+  Calendar,
+  Bookmark,
+  BookmarkCheck,
+  Image,
+  Users,
+  FilePlus,
 } from 'lucide-react'
 
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
+
+// Quick Links - shown at top of nav and in mobile bar
+const QUICK_LINKS = [
+  {
+    label: 'CRC Logos',
+    shortLabel: 'Logos',
+    href: 'https://www.dropbox.com/scl/fo/a3r2ykrf1hbhgpwuz2l1u/h?rlkey=etadvog8oxd0nfpojmhnyqkgj&st=4ft5fgb5&dl=0',
+    icon: Image,
+  },
+  {
+    label: 'W-9 Form',
+    shortLabel: 'W-9',
+    href: `${SHAREPOINT_BASE}/Agent%20Resources/Forms/AllItems.aspx?id=%2Fsites%2Fagenttrainingcenter%2FAgent%20Resources%2FForms%2FW%2D9%20%28Collective%20Realty%20Co%29%2Epdf`,
+    icon: FilePlus,
+  },
+  {
+    label: 'Agent Roster',
+    shortLabel: 'Roster',
+    href: '/roster',
+    icon: Users,
+    internal: true,
+  },
+]
 
 const NAV_SECTIONS = [
   {
@@ -100,12 +130,47 @@ interface SearchResult {
   score: number
 }
 
+interface CoachingSession {
+  id: string
+  title: string
+  start: string
+  end: string
+  timeZone: string
+  location: string | null
+  meetingUrl: string | null
+  webLink: string
+  isAllDay: boolean
+}
+
+interface BookmarkItem {
+  id: string
+  resource_url: string
+  resource_name: string
+  resource_type: string
+  category: string | null
+  created_at: string
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+function formatSessionTime(startStr: string, endStr: string, isAllDay: boolean) {
+  if (isAllDay) return 'All Day'
+
+  const start = new Date(startStr)
+  const end = new Date(endStr)
+
+  const dayName = start.toLocaleDateString('en-US', { weekday: 'short' })
+  const date = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+
+  return `${dayName}, ${date} · ${startTime} - ${endTime}`
 }
 
 function formatVideoName(name: string) {
@@ -128,6 +193,9 @@ export default function TrainingCenterPage() {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [resources, setResources] = useState<Resource[]>([])
   const [videoFolders, setVideoFolders] = useState<VideoFolder[]>([])
+  const [sessions, setSessions] = useState<CoachingSession[]>([])
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
+  const [bookmarkedUrls, setBookmarkedUrls] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedNav, setExpandedNav] = useState<string | null>(null)
@@ -135,20 +203,35 @@ export default function TrainingCenterPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null)
 
-  // Track the current search to prevent stale results from being applied
   const currentSearchRef = useRef<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  // Fetch initial data
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await fetch('/api/training-center')
-        if (!res.ok) throw new Error('Failed to load training center data')
-        const data = await res.json()
-        setRecordings(data.recentRecordings || [])
-        setResources(data.recentResources || [])
-        setVideoFolders(data.videoLibraryFolders || [])
+        const [trainingRes, bookmarksRes] = await Promise.all([
+          fetch('/api/training-center'),
+          fetch('/api/training-center/bookmarks'),
+        ])
+
+        if (!trainingRes.ok) throw new Error('Failed to load training center data')
+
+        const trainingData = await trainingRes.json()
+        setRecordings(trainingData.recentRecordings || [])
+        setResources(trainingData.recentResources || [])
+        setVideoFolders(trainingData.videoLibraryFolders || [])
+        setSessions(trainingData.thisWeekSessions || [])
+
+        if (bookmarksRes.ok) {
+          const bookmarksData = await bookmarksRes.json()
+          setBookmarks(bookmarksData.bookmarks || [])
+          setBookmarkedUrls(
+            new Set((bookmarksData.bookmarks || []).map((b: BookmarkItem) => b.resource_url))
+          )
+        }
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -158,7 +241,7 @@ export default function TrainingCenterPage() {
     fetchData()
   }, [])
 
-  // Debounced search with abort controller to prevent race conditions
+  // Debounced search
   useEffect(() => {
     const trimmedQuery = searchQuery.trim()
 
@@ -169,11 +252,9 @@ export default function TrainingCenterPage() {
       return
     }
 
-    // Update the current search ref immediately
     currentSearchRef.current = trimmedQuery
 
     const timer = setTimeout(async () => {
-      // Cancel any in-flight request
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -182,38 +263,30 @@ export default function TrainingCenterPage() {
       setSearching(true)
 
       try {
-        const res = await fetch(
-          `/api/training-center?q=${encodeURIComponent(trimmedQuery)}`,
-          { signal: abortControllerRef.current.signal }
-        )
+        const res = await fetch(`/api/training-center?q=${encodeURIComponent(trimmedQuery)}`, {
+          signal: abortControllerRef.current.signal,
+        })
         const data = await res.json()
 
-        // Only apply results if this is still the current search
         if (currentSearchRef.current === trimmedQuery) {
           setSearchResults(data.searchResults || [])
         }
       } catch (err: any) {
-        // Ignore abort errors
         if (err.name !== 'AbortError') {
-          // Only clear results if this is still the current search
           if (currentSearchRef.current === trimmedQuery) {
             setSearchResults([])
           }
         }
       } finally {
-        // Only update searching state if this is still the current search
         if (currentSearchRef.current === trimmedQuery) {
           setSearching(false)
         }
       }
     }, 500)
 
-    return () => {
-      clearTimeout(timer)
-    }
+    return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Cleanup abort controller on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -222,23 +295,146 @@ export default function TrainingCenterPage() {
     }
   }, [])
 
-  // Handle link clicks explicitly for mobile Safari
   const handleResultClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
-    // Prevent any parent scroll handlers from interfering
     e.stopPropagation()
-
-    // For iOS Safari, we need to ensure the link opens
     if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       e.preventDefault()
       window.open(url, '_blank', 'noopener,noreferrer')
     }
   }, [])
 
+  // Toggle bookmark
+  const toggleBookmark = async (
+    e: React.MouseEvent,
+    url: string,
+    name: string,
+    type: string,
+    category?: string
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    setBookmarkLoading(url)
+
+    try {
+      if (bookmarkedUrls.has(url)) {
+        const res = await fetch(`/api/training-center/bookmarks?url=${encodeURIComponent(url)}`, {
+          method: 'DELETE',
+        })
+        if (res.ok) {
+          setBookmarkedUrls(prev => {
+            const next = new Set(prev)
+            next.delete(url)
+            return next
+          })
+          setBookmarks(prev => prev.filter(b => b.resource_url !== url))
+        }
+      } else {
+        const res = await fetch('/api/training-center/bookmarks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resource_url: url,
+            resource_name: name,
+            resource_type: type,
+            category,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setBookmarkedUrls(prev => new Set(prev).add(url))
+          setBookmarks(prev => [data.bookmark, ...prev])
+        }
+      }
+    } catch (err) {
+      console.error('Bookmark toggle failed:', err)
+    } finally {
+      setBookmarkLoading(null)
+    }
+  }
+
+  // Bookmark button component
+  const BookmarkButton = ({
+    url,
+    name,
+    type,
+    category,
+    className = '',
+  }: {
+    url: string
+    name: string
+    type: string
+    category?: string
+    className?: string
+  }) => {
+    const isBookmarked = bookmarkedUrls.has(url)
+    const isLoading = bookmarkLoading === url
+
+    return (
+      <button
+        onClick={e => toggleBookmark(e, url, name, type, category)}
+        className={`p-1.5 rounded transition-colors ${
+          isBookmarked
+            ? 'text-luxury-accent'
+            : 'text-luxury-gray-4 hover:text-luxury-accent'
+        } ${className}`}
+        title={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : isBookmarked ? (
+          <BookmarkCheck size={14} />
+        ) : (
+          <Bookmark size={14} />
+        )}
+      </button>
+    )
+  }
+
   const NavContent = () => (
     <>
       <div className="px-4 py-3 border-b border-luxury-gray-5">
         <p className="section-title mb-0">Site Navigation</p>
       </div>
+
+      {/* Quick Links at top of nav */}
+      <div className="py-2 border-b border-luxury-gray-5">
+        {QUICK_LINKS.map(link => {
+          const Icon = link.icon
+          if (link.internal) {
+            return (
+              <Link
+                key={link.label}
+                href={link.href}
+                className="flex items-center gap-2 px-4 py-2.5 text-xs text-luxury-gray-1 hover:bg-luxury-light transition-colors"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                <Icon size={14} className="text-luxury-accent" />
+                <span>{link.label}</span>
+              </Link>
+            )
+          }
+          return (
+            <a
+              key={link.label}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 text-xs text-luxury-gray-1 hover:bg-luxury-light transition-colors group"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              <Icon size={14} className="text-luxury-accent" />
+              <span>{link.label}</span>
+              <ExternalLink
+                size={11}
+                className="opacity-0 group-hover:opacity-100 text-luxury-gray-3 ml-auto transition-opacity"
+              />
+            </a>
+          )
+        })}
+      </div>
+
       <nav className="py-2">
         {NAV_SECTIONS.map(section => (
           <div key={section.label}>
@@ -308,29 +504,23 @@ export default function TrainingCenterPage() {
     </>
   )
 
-  // Get icon for result type
-  const getResultIcon = (result: SearchResult) => {
-    if (result.type === 'video') {
+  const getResultIcon = (result: SearchResult | BookmarkItem) => {
+    const type = 'type' in result ? result.type : result.resource_type
+    if (type === 'video') {
       return <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
     }
-    if (result.type === 'page') {
+    if (type === 'page') {
       return <FileCode size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
     }
-    return (
-      <span className="text-base flex-shrink-0 leading-none">
-        {getFileIcon(result.name)}
-      </span>
-    )
+    return <FileText size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
   }
 
-  // Get label for result type
   const getResultTypeLabel = (result: SearchResult) => {
     if (result.type === 'page') return 'Page'
     if (result.type === 'video') return 'Video'
     return 'Document'
   }
 
-  // Format result name based on type
   const formatResultName = (result: SearchResult) => {
     if (result.type === 'video') {
       return formatVideoName(result.name)
@@ -374,7 +564,7 @@ export default function TrainingCenterPage() {
               rel="noopener noreferrer"
               className="btn btn-secondary flex items-center gap-2 self-start md:self-auto"
             >
-              Open Full Training Center
+              Open Training Center in SharePoint
               <ExternalLink size={12} />
             </a>
           </div>
@@ -385,7 +575,7 @@ export default function TrainingCenterPage() {
             <AlertCircle size={14} />
             Could not load live data.{' '}
             <a href={SHAREPOINT_BASE} target="_blank" className="underline">
-              Open Training Center →
+              Open Training Center
             </a>
           </div>
         )}
@@ -411,15 +601,56 @@ export default function TrainingCenterPage() {
           )}
         </div>
 
-        {/* Mobile Nav Toggle */}
+        {/* Mobile Quick Links Bar - Always visible */}
         <div className="md:hidden mb-4">
-          <button
-            onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            className="btn btn-secondary w-full flex items-center justify-between"
-          >
-            <span>Site Navigation</span>
-            {mobileNavOpen ? <X size={14} /> : <Menu size={14} />}
-          </button>
+          <div className="container-card p-3">
+            <div className="flex justify-around">
+              {QUICK_LINKS.map(link => {
+                const Icon = link.icon
+                if (link.internal) {
+                  return (
+                    <Link
+                      key={link.label}
+                      href={link.href}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-luxury-accent/10 flex items-center justify-center">
+                        <Icon size={18} className="text-luxury-accent" />
+                      </div>
+                      <span className="text-xs text-luxury-gray-2">{link.shortLabel}</span>
+                    </Link>
+                  )
+                }
+                return (
+                  <a
+                    key={link.label}
+                    href={link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-luxury-accent/10 flex items-center justify-center">
+                      <Icon size={18} className="text-luxury-accent" />
+                    </div>
+                    <span className="text-xs text-luxury-gray-2">{link.shortLabel}</span>
+                  </a>
+                )
+              })}
+              <button
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                className="flex flex-col items-center gap-1"
+              >
+                <div className="w-10 h-10 rounded-lg bg-luxury-light border border-luxury-gray-5 flex items-center justify-center">
+                  {mobileNavOpen ? (
+                    <X size={18} className="text-luxury-gray-2" />
+                  ) : (
+                    <Menu size={18} className="text-luxury-gray-2" />
+                  )}
+                </div>
+                <span className="text-xs text-luxury-gray-2">More</span>
+              </button>
+            </div>
+          </div>
           {mobileNavOpen && (
             <div className="container-card mt-2 p-0 overflow-hidden">
               <NavContent />
@@ -427,7 +658,7 @@ export default function TrainingCenterPage() {
           )}
         </div>
 
-        {/* SEARCH RESULTS - Single flat list sorted by relevance */}
+        {/* SEARCH RESULTS */}
         {searchQuery.trim() ? (
           <div className="space-y-4">
             {searching ? (
@@ -436,7 +667,6 @@ export default function TrainingCenterPage() {
               </div>
             ) : searchResults !== null ? (
               <>
-                {/* Result count + SharePoint search link */}
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-luxury-gray-3">
                     {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "
@@ -447,7 +677,6 @@ export default function TrainingCenterPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-secondary flex items-center gap-1"
-                    onClick={e => handleResultClick(e, `${SHAREPOINT_BASE}/_layouts/15/search.aspx/siteall?q=${encodeURIComponent(searchQuery)}`)}
                   >
                     Open in Training Center Search
                     <ExternalLink size={11} />
@@ -458,32 +687,38 @@ export default function TrainingCenterPage() {
                   <div className="container-card">
                     <div className="divide-y divide-luxury-gray-5/30">
                       {searchResults.map(result => (
-                        <a
+                        <div
                           key={`${result.type}-${result.id}`}
-                          href={result.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => handleResultClick(e, result.webUrl)}
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group touch-manipulation"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
                         >
-                          {getResultIcon(result)}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
-                              {formatResultName(result)}
-                            </p>
-                            <p className="text-xs text-luxury-gray-3">
-                              {result.category}
-                              {' · '}
-                              <span>{getResultTypeLabel(result)}</span>
-                              {' · '}
-                              {formatDate(result.lastModified)}
-                            </p>
-                          </div>
-                          <ExternalLink
-                            size={11}
-                            className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity"
+                          <a
+                            href={result.webUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => handleResultClick(e, result.webUrl)}
+                            className="flex items-start gap-3 flex-1 min-w-0 touch-manipulation"
+                          >
+                            {getResultIcon(result)}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
+                                {formatResultName(result)}
+                              </p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {result.category}
+                                {' · '}
+                                <span>{getResultTypeLabel(result)}</span>
+                                {' · '}
+                                {formatDate(result.lastModified)}
+                              </p>
+                            </div>
+                          </a>
+                          <BookmarkButton
+                            url={result.webUrl}
+                            name={formatResultName(result)}
+                            type={result.type}
+                            category={result.category}
                           />
-                        </a>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -507,6 +742,79 @@ export default function TrainingCenterPage() {
 
             {/* Main Content */}
             <div className="flex-1 min-w-0 space-y-6">
+              {/* This Week's Coaching - Horizontal Scroll */}
+              {sessions.length > 0 && (
+                <div className="container-card">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Calendar size={16} className="text-luxury-accent" />
+                    <h2 className="text-sm font-semibold text-luxury-gray-1 uppercase tracking-wider">
+                      This Week's Coaching
+                    </h2>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                    {sessions.map(session => (
+                      <a
+                        key={session.id}
+                        href={session.meetingUrl || session.webLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inner-card flex items-center gap-3 p-3 min-w-[280px] flex-shrink-0 hover:bg-luxury-light transition-colors group"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-luxury-accent/10 flex items-center justify-center flex-shrink-0">
+                          <Video size={18} className="text-luxury-accent" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5 truncate">
+                            {session.title}
+                          </p>
+                          <p className="text-xs text-luxury-gray-3">
+                            {formatSessionTime(session.start, session.end, session.isAllDay)}
+                          </p>
+                        </div>
+                        {session.meetingUrl && (
+                          <span className="text-xs px-2.5 py-1 rounded bg-luxury-accent/15 text-luxury-accent font-medium flex-shrink-0">
+                            Join
+                          </span>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* My Bookmarks - Horizontal Scroll */}
+              {bookmarks.length > 0 && (
+                <div className="container-card">
+                  <div className="flex items-center gap-2 mb-4">
+                    <BookmarkCheck size={16} className="text-luxury-accent" />
+                    <h2 className="text-sm font-semibold text-luxury-gray-1 uppercase tracking-wider">
+                      My Bookmarks
+                    </h2>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                    {bookmarks.map(bookmark => (
+                      <a
+                        key={bookmark.id}
+                        href={bookmark.resource_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inner-card flex items-start gap-3 p-3 min-w-[220px] flex-shrink-0 hover:bg-luxury-light transition-colors group"
+                      >
+                        {getResultIcon(bookmark)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
+                            {bookmark.resource_name}
+                          </p>
+                          <p className="text-xs text-luxury-gray-3">
+                            {bookmark.category || bookmark.resource_type}
+                          </p>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Recent Recordings */}
               <div className="container-card">
                 <div className="flex items-center justify-between mb-4">
@@ -535,44 +843,56 @@ export default function TrainingCenterPage() {
                 ) : recordings.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                     {recordings.map(rec => (
-                      <a
-                        key={rec.id}
-                        href={rec.webUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => handleResultClick(e, rec.webUrl)}
-                        className="card-luxury rounded-lg overflow-hidden hover:shadow-md transition-shadow group touch-manipulation"
-                      >
-                        <div className="relative bg-luxury-dark-3" style={{ paddingTop: '56.25%' }}>
-                          {rec.thumbnail ? (
-                            <img
-                              src={rec.thumbnail}
-                              alt={rec.name}
-                              className="absolute inset-0 w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <Play size={28} className="text-luxury-accent" />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity" />
-                          <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded bg-luxury-accent text-white font-medium">
-                            {rec.folder}
-                          </span>
-                        </div>
-                        <div className="p-3">
-                          <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-1">
-                            {formatVideoName(rec.name)}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-luxury-gray-3">
-                            <User size={10} />
-                            <span>{rec.lastModifiedBy}</span>
-                            <span className="mx-1">·</span>
-                            <Clock size={10} />
-                            <span>{formatDate(rec.lastModified)}</span>
+                      <div key={rec.id} className="relative group">
+                        <a
+                          href={rec.webUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => handleResultClick(e, rec.webUrl)}
+                          className="card-luxury rounded-lg overflow-hidden hover:shadow-md transition-shadow block touch-manipulation"
+                        >
+                          <div
+                            className="relative bg-luxury-dark-3"
+                            style={{ paddingTop: '56.25%' }}
+                          >
+                            {rec.thumbnail ? (
+                              <img
+                                src={rec.thumbnail}
+                                alt={rec.name}
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <Play size={28} className="text-luxury-accent" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity" />
+                            <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded bg-luxury-accent text-white font-medium">
+                              {rec.folder}
+                            </span>
                           </div>
+                          <div className="p-3">
+                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-1">
+                              {formatVideoName(rec.name)}
+                            </p>
+                            <div className="flex items-center gap-1 text-xs text-luxury-gray-3">
+                              <User size={10} />
+                              <span>{rec.lastModifiedBy}</span>
+                              <span className="mx-1">·</span>
+                              <Clock size={10} />
+                              <span>{formatDate(rec.lastModified)}</span>
+                            </div>
+                          </div>
+                        </a>
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded">
+                          <BookmarkButton
+                            url={rec.webUrl}
+                            name={formatVideoName(rec.name)}
+                            type="video"
+                            category={rec.folder}
+                          />
                         </div>
-                      </a>
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -583,7 +903,7 @@ export default function TrainingCenterPage() {
                       target="_blank"
                       className="text-luxury-accent hover:underline"
                     >
-                      Browse SharePoint →
+                      Browse SharePoint
                     </a>
                   </div>
                 )}
@@ -619,28 +939,37 @@ export default function TrainingCenterPage() {
                   ) : resources.length > 0 ? (
                     <div className="divide-y divide-luxury-gray-5/30">
                       {resources.map(res => (
-                        <a
+                        <div
                           key={res.id}
-                          href={res.webUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => handleResultClick(e, res.webUrl)}
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group touch-manipulation"
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
                         >
-                          <span className="text-base flex-shrink-0">{getFileIcon(res.name)}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
-                              {formatFileName(res.name)}
-                            </p>
-                            <p className="text-xs text-luxury-gray-3">
-                              {res.category} · {formatDate(res.lastModified)}
-                            </p>
-                          </div>
-                          <ExternalLink
-                            size={11}
-                            className="opacity-0 group-hover:opacity-100 text-luxury-accent flex-shrink-0 mt-0.5 transition-opacity"
+                          <a
+                            href={res.webUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => handleResultClick(e, res.webUrl)}
+                            className="flex items-start gap-3 flex-1 min-w-0 touch-manipulation"
+                          >
+                            <FileText
+                              size={14}
+                              className="text-luxury-accent flex-shrink-0 mt-0.5"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
+                                {formatFileName(res.name)}
+                              </p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {res.category} · {formatDate(res.lastModified)}
+                              </p>
+                            </div>
+                          </a>
+                          <BookmarkButton
+                            url={res.webUrl}
+                            name={formatFileName(res.name)}
+                            type="document"
+                            category={res.category}
                           />
-                        </a>
+                        </div>
                       ))}
                     </div>
                   ) : (
