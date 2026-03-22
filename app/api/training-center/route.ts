@@ -52,12 +52,19 @@ async function graphPost(token: string, path: string, body: object) {
     },
     body: JSON.stringify(body),
   })
+  
+  const responseText = await res.text()
+  
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '')
-    console.error(`Graph POST failed: ${path}`, res.status, errorText)
-    return null
+    console.error(`Graph POST failed: ${path}`, res.status, responseText)
+    return { error: true, status: res.status, message: responseText }
   }
-  return res.json()
+  
+  try {
+    return JSON.parse(responseText)
+  } catch {
+    return { error: true, message: 'Failed to parse response' }
+  }
 }
 
 // Determine result type from URL and file extension
@@ -85,7 +92,6 @@ function getResultType(webUrl: string, name: string): 'video' | 'document' | 'pa
 
 // Extract category from the parent reference or URL
 function extractCategory(hit: any): string {
-  // Try to get from parentReference
   const parentPath = hit.resource?.parentReference?.path || ''
   const parentName = hit.resource?.parentReference?.name || ''
 
@@ -93,7 +99,6 @@ function extractCategory(hit: any): string {
     return parentName
   }
 
-  // Extract from URL path
   const webUrl = hit.resource?.webUrl || ''
   const urlMatch = webUrl.match(/\/sites\/[^/]+\/([^/]+)/)
   if (urlMatch) {
@@ -122,10 +127,13 @@ export async function GET(request: NextRequest) {
     // --- SEARCH MODE: Use Microsoft Search API ---
     if (query) {
       // Build KQL query scoped to the training center site
-      // This searches files, folders, pages, and list items
       const kqlQuery = `${query} path:"${TRAINING_CENTER_PATH}"`
+      
+      console.log('=== SEARCH API DEBUG ===')
+      console.log('Query:', query)
+      console.log('KQL Query:', kqlQuery)
 
-      const searchResponse = await graphPost(token, '/search/query', {
+      const searchBody = {
         requests: [
           {
             entityTypes: ['driveItem', 'listItem'],
@@ -134,22 +142,43 @@ export async function GET(request: NextRequest) {
             },
             from: 0,
             size: 50,
-            // For application permissions, you may need to add region
-            // region: 'NAM', // Uncomment if you get errors about region
+            // Uncomment if you get region errors:
+            // region: 'NAM',
           },
         ],
-      })
+      }
+      
+      console.log('Search request body:', JSON.stringify(searchBody, null, 2))
+
+      const searchResponse = await graphPost(token, '/search/query', searchBody)
+      
+      console.log('Search API response:', JSON.stringify(searchResponse, null, 2).slice(0, 2000))
+
+      // Check if Search API failed
+      if (searchResponse?.error) {
+        console.error('Search API error:', searchResponse)
+        console.log('Falling back to drive search...')
+        return await fallbackDriveSearch(token, query)
+      }
 
       if (!searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits) {
-        // If Search API fails, fall back to drive search
-        console.warn('Search API returned no results, falling back to drive search')
+        console.warn('Search API returned no hits, falling back to drive search')
+        console.log('Full response:', JSON.stringify(searchResponse, null, 2))
         return await fallbackDriveSearch(token, query)
       }
 
       const hits = searchResponse.value[0].hitsContainers[0].hits
+      console.log(`Search API returned ${hits.length} hits`)
+      
+      // Log the types of results we got
+      const typeBreakdown: Record<string, number> = {}
+      hits.forEach((hit: any) => {
+        const odataType = hit.resource?.['@odata.type'] || 'unknown'
+        typeBreakdown[odataType] = (typeBreakdown[odataType] || 0) + 1
+      })
+      console.log('Result types breakdown:', typeBreakdown)
 
       // Map hits to unified result format
-      // Results are already sorted by relevance (rank) from the Search API
       const searchResults = hits
         .map((hit: any) => {
           const resource = hit.resource
@@ -173,19 +202,31 @@ export async function GET(request: NextRequest) {
             type,
             category,
             folder: category,
-            // rank from Search API - lower is better, but we'll reverse for display
             score: 100 - (hit.rank || 0),
           }
         })
-        .filter(Boolean) // Remove nulls from filtered items
+        .filter(Boolean)
 
-      return NextResponse.json({ searchResults, query })
+      // Log final results by type
+      const finalTypeBreakdown: Record<string, number> = {}
+      searchResults.forEach((r: any) => {
+        finalTypeBreakdown[r.type] = (finalTypeBreakdown[r.type] || 0) + 1
+      })
+      console.log('Final results by type:', finalTypeBreakdown)
+
+      return NextResponse.json({ 
+        searchResults, 
+        query,
+        _debug: {
+          usedSearchAPI: true,
+          totalHits: hits.length,
+          typeBreakdown,
+          finalTypeBreakdown
+        }
+      })
     }
 
-    // --- DEFAULT MODE: Recent content ---
-    // (Keep existing logic for non-search mode)
-
-    // Video library folders
+    // --- DEFAULT MODE (unchanged) ---
     const videoRootData = await graphGet(
       token,
       `/drives/${VIDEOS_DRIVE_ID}/root/children?$select=id,name,webUrl,folder&$orderby=name asc`
@@ -199,7 +240,6 @@ export async function GET(request: NextRequest) {
         childCount: folder.folder?.childCount || 0,
       }))
 
-    // Recent recordings
     const recentVideos: any[] = []
     for (const folder of videoLibraryFolders.slice(0, 12)) {
       const folderContents = await graphGet(
@@ -241,7 +281,6 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    // Recent resources
     const agentResFoldersData = await graphGet(
       token,
       `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/children?$select=id,name,folder&$top=50`
@@ -288,8 +327,8 @@ export async function GET(request: NextRequest) {
 }
 
 // Fallback to drive-based search if Search API fails
-// This is the original approach but combined into a single sorted list
 async function fallbackDriveSearch(token: string, query: string) {
+  console.log('=== FALLBACK DRIVE SEARCH ===')
   const encoded = encodeURIComponent(query)
 
   const [videoResults, docResults, agentResResults] = await Promise.all([
@@ -310,7 +349,6 @@ async function fallbackDriveSearch(token: string, query: string) {
     ),
   ])
 
-  // Simple relevance scoring for fallback
   const scoreResult = (name: string, q: string): number => {
     const n = name.toLowerCase().replace(/\.[^.]+$/, '')
     const ql = q.toLowerCase()
@@ -364,5 +402,12 @@ async function fallbackDriveSearch(token: string, query: string) {
       })),
   ].sort((a, b) => b.score - a.score)
 
-  return NextResponse.json({ searchResults: allResults, query })
+  return NextResponse.json({ 
+    searchResults: allResults, 
+    query,
+    _debug: {
+      usedSearchAPI: false,
+      fallbackReason: 'Search API failed or returned no results'
+    }
+  })
 }
