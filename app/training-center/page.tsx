@@ -559,27 +559,18 @@ export default function TrainingCenterPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-luxury-light">
-      <LuxuryHeader />
+      <LuxuryHeader homeHref={isAdmin ? '/admin/dashboard' : '/agent/profile'} />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-6 pt-20 md:pt-24">
-        {/* Back link - use history.back() unless we came from login */}
+        {/* Back link */}
         <div className="mb-4">
-          <button
-            onClick={() => {
-              const referrer = document.referrer
-              // If came from login or no referrer, go to appropriate home page
-              if (!referrer || referrer.includes('/auth/')) {
-                window.location.href = isAdmin ? '/admin/dashboard' : '/agent/profile'
-              } else {
-                window.history.back()
-              }
-            }}
-            type="button"
-            className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors touch-manipulation"
+          <Link
+            href={isAdmin ? '/admin/dashboard' : '/agent/profile'}
+            className="inline-flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors touch-manipulation"
           >
             <ChevronRight size={12} className="rotate-180" />
             Back to Collective Agent
-          </button>
+          </Link>
         </div>
 
         {/* Header Banner */}
