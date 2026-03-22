@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import {
@@ -18,6 +18,7 @@ import {
   Loader2,
   Menu,
   X,
+  FileCode,
 } from 'lucide-react'
 
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
@@ -93,7 +94,7 @@ interface SearchResult {
   webUrl: string
   lastModified: string
   lastModifiedBy: string
-  type: 'video' | 'document'
+  type: 'video' | 'document' | 'page'
   folder?: string
   category?: string
   score: number
@@ -112,7 +113,7 @@ function formatVideoName(name: string) {
 }
 
 function formatFileName(name: string) {
-  return name.replace(/\.(pdf|docx|xlsx|pptx|doc|xls)$/i, '').replace(/[_-]/g, ' ')
+  return name.replace(/\.(pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '').replace(/[_-]/g, ' ')
 }
 
 function getFileIcon(name: string) {
@@ -135,6 +136,10 @@ export default function TrainingCenterPage() {
   const [searching, setSearching] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
+  // Track the current search to prevent stale results from being applied
+  const currentSearchRef = useRef<string>('')
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -153,25 +158,83 @@ export default function TrainingCenterPage() {
     fetchData()
   }, [])
 
+  // Debounced search with abort controller to prevent race conditions
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    const trimmedQuery = searchQuery.trim()
+
+    if (!trimmedQuery) {
+      currentSearchRef.current = ''
       setSearchResults(null)
+      setSearching(false)
       return
     }
+
+    // Update the current search ref immediately
+    currentSearchRef.current = trimmedQuery
+
     const timer = setTimeout(async () => {
+      // Cancel any in-flight request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      abortControllerRef.current = new AbortController()
+
       setSearching(true)
+
       try {
-        const res = await fetch(`/api/training-center?q=${encodeURIComponent(searchQuery)}`)
+        const res = await fetch(
+          `/api/training-center?q=${encodeURIComponent(trimmedQuery)}`,
+          { signal: abortControllerRef.current.signal }
+        )
         const data = await res.json()
-        setSearchResults(data.searchResults || null)
-      } catch {
-        setSearchResults(null)
+
+        // Only apply results if this is still the current search
+        if (currentSearchRef.current === trimmedQuery) {
+          setSearchResults(data.searchResults || [])
+        }
+      } catch (err: any) {
+        // Ignore abort errors
+        if (err.name !== 'AbortError') {
+          // Only clear results if this is still the current search
+          if (currentSearchRef.current === trimmedQuery) {
+            setSearchResults([])
+          }
+        }
       } finally {
-        setSearching(false)
+        // Only update searching state if this is still the current search
+        if (currentSearchRef.current === trimmedQuery) {
+          setSearching(false)
+        }
       }
     }, 500)
-    return () => clearTimeout(timer)
+
+    return () => {
+      clearTimeout(timer)
+    }
   }, [searchQuery])
+
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [])
+
+  // Handle link clicks explicitly for mobile Safari
+  const handleResultClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+    // Prevent any parent scroll handlers from interfering
+    e.stopPropagation()
+
+    // For iOS Safari, we need to ensure the link opens
+    // Using window.open as a fallback if the default behavior fails
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      e.preventDefault()
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+    // Otherwise let the default anchor behavior handle it
+  }, [])
 
   const NavContent = () => (
     <>
@@ -247,6 +310,28 @@ export default function TrainingCenterPage() {
     </>
   )
 
+  // Get icon for result type
+  const getResultIcon = (result: SearchResult) => {
+    if (result.type === 'video') {
+      return <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
+    }
+    if (result.type === 'page') {
+      return <FileCode size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
+    }
+    return (
+      <span className="text-base flex-shrink-0 leading-none">
+        {getFileIcon(result.name)}
+      </span>
+    )
+  }
+
+  // Get label for result type
+  const getResultLabel = (result: SearchResult) => {
+    if (result.type === 'page') return 'Page'
+    if (result.type === 'video') return 'Video'
+    return 'Document'
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-luxury-light">
       <LuxuryHeader />
@@ -255,7 +340,8 @@ export default function TrainingCenterPage() {
         {/* Back link */}
         <div className="mb-4">
           <button
-            onClick={() => window.history.back()} type="button"
+            onClick={() => window.history.back()}
+            type="button"
             className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
           >
             <ChevronRight size={12} className="rotate-180" />
@@ -306,7 +392,7 @@ export default function TrainingCenterPage() {
           />
           <input
             type="text"
-            placeholder="Search recordings, guides, forms, resources..."
+            placeholder="Search recordings, guides, forms, pages, resources..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="input-luxury pl-8 w-full"
@@ -342,7 +428,7 @@ export default function TrainingCenterPage() {
               <div className="container-card text-center py-12 text-xs text-luxury-gray-3">
                 Searching...
               </div>
-            ) : searchResults ? (
+            ) : searchResults !== null ? (
               <>
                 {/* Result count + SharePoint search link */}
                 <div className="flex items-center justify-between">
@@ -355,6 +441,7 @@ export default function TrainingCenterPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-secondary flex items-center gap-1"
+                    onClick={e => handleResultClick(e, `${SHAREPOINT_BASE}/_layouts/15/search.aspx/siteall?q=${encodeURIComponent(searchQuery)}`)}
                   >
                     Open in Training Center Search
                     <ExternalLink size={11} />
@@ -370,15 +457,10 @@ export default function TrainingCenterPage() {
                           href={result.webUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                          onClick={e => handleResultClick(e, result.webUrl)}
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group touch-manipulation"
                         >
-                          {result.type === 'video' ? (
-                            <Play size={14} className="text-luxury-accent flex-shrink-0 mt-0.5" />
-                          ) : (
-                            <span className="text-base flex-shrink-0 leading-none">
-                              {getFileIcon(result.name)}
-                            </span>
-                          )}
+                          {getResultIcon(result)}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
                               {result.type === 'video'
@@ -388,7 +470,7 @@ export default function TrainingCenterPage() {
                             <p className="text-xs text-luxury-gray-3">
                               {result.type === 'video' ? result.folder : result.category}
                               {' · '}
-                              <span className="capitalize">{result.type}</span>
+                              <span>{getResultLabel(result)}</span>
                               {' · '}
                               {formatDate(result.lastModified)}
                             </p>
@@ -454,7 +536,8 @@ export default function TrainingCenterPage() {
                         href={rec.webUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="card-luxury rounded-lg overflow-hidden hover:shadow-md transition-shadow group"
+                        onClick={e => handleResultClick(e, rec.webUrl)}
+                        className="card-luxury rounded-lg overflow-hidden hover:shadow-md transition-shadow group touch-manipulation"
                       >
                         <div className="relative bg-luxury-dark-3" style={{ paddingTop: '56.25%' }}>
                           {rec.thumbnail ? (
@@ -537,7 +620,8 @@ export default function TrainingCenterPage() {
                           href={res.webUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                          onClick={e => handleResultClick(e, res.webUrl)}
+                          className="flex items-start gap-3 py-3 px-2 hover:bg-luxury-light rounded transition-colors group touch-manipulation"
                         >
                           <span className="text-base flex-shrink-0">{getFileIcon(res.name)}</span>
                           <div className="min-w-0 flex-1">
@@ -585,7 +669,8 @@ export default function TrainingCenterPage() {
                           href={folder.webUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group"
+                          onClick={e => handleResultClick(e, folder.webUrl)}
+                          className="flex items-center justify-between py-3 px-2 hover:bg-luxury-light rounded transition-colors group touch-manipulation"
                         >
                           <div className="flex items-center gap-2">
                             <Folder size={14} className="text-luxury-accent" />

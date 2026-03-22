@@ -8,6 +8,9 @@ const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4
 const AGENT_RESOURCES_DRIVE_ID =
   'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
 
+// SharePoint site ID for searching pages
+const SITE_ID = 'collectiverealtyco.sharepoint.com,893f5771-473e-4e65-a787-6a2b6e69775d,4351b2fa-6143-497c-89c5-c62185e28791'
+
 async function getAccessToken(): Promise<string> {
   const res = await fetch(
     `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
@@ -35,9 +38,22 @@ async function graphGet(token: string, path: string, cache = true) {
   return res.json()
 }
 
+async function graphPost(token: string, path: string, body: any) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) return null
+  return res.json()
+}
+
 // Score result by how well name matches query (higher = more relevant)
 function relevanceScore(name: string, query: string): number {
-  const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls)$/i, '')
+  const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
   const q = query.toLowerCase()
   if (n === q) return 100
   if (n.startsWith(q)) return 80
@@ -60,6 +76,8 @@ export async function GET(request: NextRequest) {
     // --- SEARCH MODE ---
     if (query) {
       const encoded = encodeURIComponent(query)
+
+      // Search drives (videos, documents, resources)
       const [videoResults, docResults, agentResResults] = await Promise.all([
         graphGet(
           token,
@@ -78,8 +96,69 @@ export async function GET(request: NextRequest) {
         ),
       ])
 
+      // Search SharePoint pages using Microsoft Search API
+      let pageResults: any[] = []
+      try {
+        const searchResponse = await graphPost(token, '/search/query', {
+          requests: [
+            {
+              entityTypes: ['listItem'],
+              query: { queryString: `${query} path:collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages` },
+              from: 0,
+              size: 25,
+              fields: ['id', 'name', 'webUrl', 'lastModifiedDateTime', 'createdBy'],
+            },
+          ],
+        })
+
+        const hits = searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits || []
+        pageResults = hits
+          .filter((hit: any) => {
+            const name = hit.resource?.name || ''
+            // Filter out system pages and templates
+            return name.endsWith('.aspx') && 
+                   !name.startsWith('_') && 
+                   !name.includes('Template')
+          })
+          .map((hit: any) => ({
+            id: hit.resource?.id || hit.hitId,
+            name: hit.resource?.name || 'Page',
+            webUrl: hit.resource?.webUrl || '',
+            lastModified: hit.resource?.lastModifiedDateTime || new Date().toISOString(),
+            lastModifiedBy: hit.resource?.createdBy?.user?.displayName || 'Office Support',
+            category: 'SharePoint Page',
+            type: 'page' as const,
+            score: relevanceScore(hit.resource?.name || '', query),
+          }))
+      } catch (searchError) {
+        // If Microsoft Search fails, try searching the SitePages library directly
+        try {
+          const sitePagesSearch = await graphGet(
+            token,
+            `/sites/${SITE_ID}/lists/SitePages/items?$filter=contains(fields/Title,'${encoded}')&$expand=fields($select=Title,FileLeafRef)&$top=25`,
+            false
+          )
+          
+          pageResults = (sitePagesSearch?.value || []).map((item: any) => ({
+            id: item.id,
+            name: item.fields?.FileLeafRef || item.fields?.Title || 'Page',
+            webUrl: `https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/${item.fields?.FileLeafRef || ''}`,
+            lastModified: item.lastModifiedDateTime || new Date().toISOString(),
+            lastModifiedBy: 'Office Support',
+            category: 'SharePoint Page',
+            type: 'page' as const,
+            score: relevanceScore(item.fields?.Title || '', query),
+          }))
+        } catch {
+          // Silently fail - pages just won't be in results
+        }
+      }
+
       // Combine all results into one list with type tag, sort by relevance
       const allResults = [
+        // Pages (boost their scores slightly since they're often more relevant)
+        ...pageResults.map(p => ({ ...p, score: p.score + 10 })),
+        // Videos
         ...(videoResults?.value || [])
           .filter((item: any) => item.file)
           .map((item: any) => ({
@@ -92,6 +171,7 @@ export async function GET(request: NextRequest) {
             type: 'video' as const,
             score: relevanceScore(item.name, query),
           })),
+        // Documents
         ...[...(docResults?.value || []), ...(agentResResults?.value || [])]
           .filter((item: any) => item.file && !item.name?.startsWith('~'))
           .map((item: any) => ({
