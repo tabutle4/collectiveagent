@@ -22,8 +22,6 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createClient()
-    const { searchParams } = new URL(request.url)
-    const agentId = searchParams.get('agent_id')
     const status = searchParams.get('status')
     const debtType = searchParams.get('debt_type')
 
