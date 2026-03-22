@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
+const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 const VIDEOS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5HhDhOCHtNrRZpFFzbL3M8m'
 const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4Y7SqWCeUeROfqY'
 const AGENT_RESOURCES_DRIVE_ID =
   'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
 
-// SharePoint site ID for searching pages
+// Site ID for the Training Center
 const SITE_ID = 'collectiverealtyco.sharepoint.com,893f5771-473e-4e65-a787-6a2b6e69775d,4351b2fa-6143-497c-89c5-c62185e28791'
 
 async function getAccessToken(): Promise<string> {
@@ -34,20 +35,10 @@ async function graphGet(token: string, path: string, cache = true) {
     headers: { Authorization: `Bearer ${token}` },
     next: cache ? { revalidate: 300 } : { revalidate: 0 },
   })
-  if (!res.ok) return null
-  return res.json()
-}
-
-async function graphPost(token: string, path: string, body: any) {
-  const res = await fetch(`${GRAPH_BASE}${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) return null
+  if (!res.ok) {
+    console.error(`Graph GET failed: ${path}`, res.status, await res.text().catch(() => ''))
+    return null
+  }
   return res.json()
 }
 
@@ -77,8 +68,8 @@ export async function GET(request: NextRequest) {
     if (query) {
       const encoded = encodeURIComponent(query)
 
-      // Search drives (videos, documents, resources)
-      const [videoResults, docResults, agentResResults] = await Promise.all([
+      // Search drives (videos, documents, resources) + SitePages in parallel
+      const [videoResults, docResults, agentResResults, sitePagesResults] = await Promise.all([
         graphGet(
           token,
           `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
@@ -94,70 +85,71 @@ export async function GET(request: NextRequest) {
           `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
           false
         ),
+        // Search SitePages using the site's drive
+        graphGet(
+          token,
+          `/sites/${SITE_ID}/drive/root:/SitePages:/children?$filter=contains(name,'${encoded}')&$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy&$top=25`,
+          false
+        ),
       ])
 
-      // Search SharePoint pages using Microsoft Search API
-      let pageResults: any[] = []
-      try {
-        const searchResponse = await graphPost(token, '/search/query', {
-          requests: [
-            {
-              entityTypes: ['listItem'],
-              query: { queryString: `${query} path:collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages` },
-              from: 0,
-              size: 25,
-              fields: ['id', 'name', 'webUrl', 'lastModifiedDateTime', 'createdBy'],
-            },
-          ],
-        })
-
-        const hits = searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits || []
-        pageResults = hits
-          .filter((hit: any) => {
-            const name = hit.resource?.name || ''
-            // Filter out system pages and templates
-            return name.endsWith('.aspx') && 
-                   !name.startsWith('_') && 
-                   !name.includes('Template')
-          })
-          .map((hit: any) => ({
-            id: hit.resource?.id || hit.hitId,
-            name: hit.resource?.name || 'Page',
-            webUrl: hit.resource?.webUrl || '',
-            lastModified: hit.resource?.lastModifiedDateTime || new Date().toISOString(),
-            lastModifiedBy: hit.resource?.createdBy?.user?.displayName || 'Office Support',
-            category: 'SharePoint Page',
-            type: 'page' as const,
-            score: relevanceScore(hit.resource?.name || '', query),
-          }))
-      } catch (searchError) {
-        // If Microsoft Search fails, try searching the SitePages library directly
-        try {
-          const sitePagesSearch = await graphGet(
-            token,
-            `/sites/${SITE_ID}/lists/SitePages/items?$filter=contains(fields/Title,'${encoded}')&$expand=fields($select=Title,FileLeafRef)&$top=25`,
-            false
-          )
-          
-          pageResults = (sitePagesSearch?.value || []).map((item: any) => ({
-            id: item.id,
-            name: item.fields?.FileLeafRef || item.fields?.Title || 'Page',
-            webUrl: `https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/${item.fields?.FileLeafRef || ''}`,
-            lastModified: item.lastModifiedDateTime || new Date().toISOString(),
-            lastModifiedBy: 'Office Support',
-            category: 'SharePoint Page',
-            type: 'page' as const,
-            score: relevanceScore(item.fields?.Title || '', query),
-          }))
-        } catch {
-          // Silently fail - pages just won't be in results
-        }
+      // Also try searching the SitePages list directly as backup
+      let listPagesResults: any = null
+      if (!sitePagesResults?.value?.length) {
+        listPagesResults = await graphGet(
+          token,
+          `/sites/${SITE_ID}/lists/Site Pages/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=50`,
+          false
+        )
       }
 
-      // Combine all results into one list with type tag, sort by relevance
+      // Build page results from whichever source worked
+      let pageResults: any[] = []
+      
+      if (sitePagesResults?.value?.length) {
+        // Got results from drive search
+        pageResults = sitePagesResults.value
+          .filter((item: any) => {
+            const name = (item.name || '').toLowerCase()
+            return name.endsWith('.aspx') && !name.startsWith('_')
+          })
+          .map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            webUrl: item.webUrl,
+            lastModified: item.lastModifiedDateTime,
+            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+            category: 'Page',
+            type: 'page' as const,
+            score: relevanceScore(item.name, query) + 5, // Slight boost for pages
+          }))
+      } else if (listPagesResults?.value?.length) {
+        // Fall back to list items - filter by query match
+        const q = query.toLowerCase()
+        pageResults = listPagesResults.value
+          .filter((item: any) => {
+            const title = (item.fields?.Title || '').toLowerCase()
+            const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
+            return (title.includes(q) || fileName.includes(q)) && 
+                   fileName.endsWith('.aspx') && 
+                   !fileName.startsWith('_')
+          })
+          .map((item: any) => ({
+            id: item.id,
+            name: item.fields?.Title || item.fields?.FileLeafRef || 'Page',
+            webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
+            lastModified: item.fields?.Modified || new Date().toISOString(),
+            lastModifiedBy: 'Office Support',
+            category: 'Page',
+            type: 'page' as const,
+            score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 5,
+          }))
+      }
+
+      // Combine all results into one list, sorted by relevance
       const allResults = [
-        // Pages (boost their scores slightly since they're often more relevant)
-        ...pageResults.map(p => ({ ...p, score: p.score + 10 })),
+        // Pages
+        ...pageResults,
         // Videos
         ...(videoResults?.value || [])
           .filter((item: any) => item.file)
@@ -168,6 +160,7 @@ export async function GET(request: NextRequest) {
             lastModified: item.lastModifiedDateTime,
             lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
             folder: item.parentReference?.name || 'Video',
+            category: item.parentReference?.name || 'Video',
             type: 'video' as const,
             score: relevanceScore(item.name, query),
           })),
@@ -180,6 +173,7 @@ export async function GET(request: NextRequest) {
             webUrl: item.webUrl,
             lastModified: item.lastModifiedDateTime,
             lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+            folder: item.parentReference?.name || 'General',
             category: item.parentReference?.name || 'General',
             type: 'document' as const,
             score: relevanceScore(item.name, query),

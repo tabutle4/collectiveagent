@@ -228,12 +228,10 @@ export default function TrainingCenterPage() {
     e.stopPropagation()
 
     // For iOS Safari, we need to ensure the link opens
-    // Using window.open as a fallback if the default behavior fails
     if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
       e.preventDefault()
       window.open(url, '_blank', 'noopener,noreferrer')
     }
-    // Otherwise let the default anchor behavior handle it
   }, [])
 
   const NavContent = () => (
@@ -326,10 +324,18 @@ export default function TrainingCenterPage() {
   }
 
   // Get label for result type
-  const getResultLabel = (result: SearchResult) => {
+  const getResultTypeLabel = (result: SearchResult) => {
     if (result.type === 'page') return 'Page'
     if (result.type === 'video') return 'Video'
     return 'Document'
+  }
+
+  // Format result name based on type
+  const formatResultName = (result: SearchResult) => {
+    if (result.type === 'video') {
+      return formatVideoName(result.name)
+    }
+    return formatFileName(result.name)
   }
 
   return (
@@ -421,7 +427,7 @@ export default function TrainingCenterPage() {
           )}
         </div>
 
-        {/* SEARCH RESULTS */}
+        {/* SEARCH RESULTS - Single flat list sorted by relevance */}
         {searchQuery.trim() ? (
           <div className="space-y-4">
             {searching ? (
@@ -453,7 +459,7 @@ export default function TrainingCenterPage() {
                     <div className="divide-y divide-luxury-gray-5/30">
                       {searchResults.map(result => (
                         <a
-                          key={result.id}
+                          key={`${result.type}-${result.id}`}
                           href={result.webUrl}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -463,14 +469,12 @@ export default function TrainingCenterPage() {
                           {getResultIcon(result)}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-luxury-gray-1 leading-tight mb-0.5">
-                              {result.type === 'video'
-                                ? formatVideoName(result.name)
-                                : formatFileName(result.name)}
+                              {formatResultName(result)}
                             </p>
                             <p className="text-xs text-luxury-gray-3">
-                              {result.type === 'video' ? result.folder : result.category}
+                              {result.category}
                               {' · '}
-                              <span>{getResultLabel(result)}</span>
+                              <span>{getResultTypeLabel(result)}</span>
                               {' · '}
                               {formatDate(result.lastModified)}
                             </p>
