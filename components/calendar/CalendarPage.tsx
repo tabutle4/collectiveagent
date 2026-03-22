@@ -393,17 +393,39 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
       {/* ─── CALENDAR TAB ─── */}
       {activeTab === 'calendar' && (
         <>
-          {/* Outlook tip */}
+          {/* Outlook tip + Attendance info */}
           <div className="container-card border-l-2 border-luxury-accent mb-4">
             <p className="text-xs font-semibold text-luxury-gray-1 mb-1">
               See these events in Outlook?
             </p>
-            <p className="text-xs text-luxury-gray-2 leading-relaxed">
+            <p className="text-xs text-luxury-gray-2 leading-relaxed mb-3">
               In Outlook (web or mobile), go to Calendar and look for{' '}
               <span className="font-semibold">Agents</span> under{' '}
               <span className="font-semibold">Groups</span> in the sidebar. Check the box and all
               events show alongside your personal calendar automatically.
             </p>
+            <p className="text-xs text-luxury-gray-2 leading-relaxed">
+              In-person attendance is strongly encouraged. Come with questions, laptops, phones,
+              wins, and challenges to share. Sessions start promptly.
+            </p>
+            <div className="flex flex-wrap gap-3 mt-2">
+              <a
+                href="https://visit.collectiverealtyco.com/training"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-luxury-accent font-semibold hover:underline"
+              >
+                Zoom Link
+              </a>
+              <a
+                href="https://agent.collectiverealtyco.com/training-center"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-luxury-accent font-semibold hover:underline"
+              >
+                Session Recordings
+              </a>
+            </div>
           </div>
 
           {/* Month navigation */}
