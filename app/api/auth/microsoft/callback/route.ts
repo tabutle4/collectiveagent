@@ -13,6 +13,25 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const error = searchParams.get('error')
+  const state = searchParams.get('state')
+
+  // Parse redirect from state if present
+  let customRedirect: string | null = null
+  if (state) {
+    try {
+      const decoded = Buffer.from(state, 'base64url').toString()
+      const colonIndex = decoded.indexOf(':')
+      if (colonIndex > 0) {
+        customRedirect = decoded.substring(colonIndex + 1)
+        // Validate it's a safe internal path
+        if (!customRedirect.startsWith('/') || customRedirect.includes('//')) {
+          customRedirect = null
+        }
+      }
+    } catch {
+      // Invalid state, ignore
+    }
+  }
 
   if (error || !code) {
     return NextResponse.redirect(
@@ -99,13 +118,15 @@ export async function GET(request: NextRequest) {
       sessionId
     )
 
-    // Set cookie and redirect
-    const { name, options } = getSessionCookieOptions()
+    // Determine redirect: use custom redirect if provided, otherwise role-based default
     const userRole = (user.role || '').toLowerCase()
-    const redirectTo = ADMIN_ROLES.includes(userRole as any)
+    const defaultRedirect = ADMIN_ROLES.includes(userRole as any)
       ? '/admin/dashboard'
       : '/agent/profile'
+    const redirectTo = customRedirect || defaultRedirect
 
+    // Set cookie and redirect
+    const { name, options } = getSessionCookieOptions()
     const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}${redirectTo}`)
     response.cookies.set(name, sessionToken, options)
     return response

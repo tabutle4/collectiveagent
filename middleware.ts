@@ -17,7 +17,7 @@ const PUBLIC_PATHS = [
   '/roster',
   '/agent-roster.html',
   '/seller',
-  '/campaign',
+  '/campaign', 
   '/api/seller',
   '/api/campaign',
   '/api/training-center',

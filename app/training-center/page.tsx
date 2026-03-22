@@ -211,17 +211,23 @@ export default function TrainingCenterPage() {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Build quick links with role-based calendar URL
+  // Only include calendar link once we know the user's role to prevent wrong redirects
   const isAdmin = userRole && ['operations', 'broker', 'tc'].includes(userRole)
   const calendarHref = isAdmin ? '/admin/calendar' : '/agent/calendar'
   
   const quickLinks = [
-    {
-      label: 'Calendar',
-      shortLabel: 'Calendar',
-      href: calendarHref,
-      icon: CalendarDays,
-      internal: true,
-    },
+    // Calendar only appears once role is loaded to prevent middleware redirect issues
+    ...(userRole
+      ? [
+          {
+            label: 'Calendar',
+            shortLabel: 'Calendar',
+            href: calendarHref,
+            icon: CalendarDays,
+            internal: true,
+          },
+        ]
+      : []),
     ...QUICK_LINKS,
   ]
 

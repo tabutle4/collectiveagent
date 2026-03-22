@@ -55,7 +55,9 @@ function LoginForm() {
     setMicrosoftLoading(true)
     // Clear existing auth state before Microsoft redirect
     clearAuth()
-    window.location.href = '/api/auth/microsoft'
+    // Pass redirect param so callback knows where to send user after auth
+    const redirectParam = redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''
+    window.location.href = `/api/auth/microsoft${redirectParam}`
   }
 
   return (

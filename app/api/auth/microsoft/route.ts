@@ -6,13 +6,20 @@ const TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER?.split('/')[3]
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/microsoft/callback`
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const redirectTo = searchParams.get('redirect')
+
+  // Encode redirect in state (format: "uuid:redirect" or just "uuid")
+  const stateData = redirectTo ? `${randomUUID()}:${redirectTo}` : randomUUID()
+  const state = Buffer.from(stateData).toString('base64url')
+
   const params = new URLSearchParams({
     client_id: CLIENT_ID!,
     response_type: 'code',
     redirect_uri: REDIRECT_URI,
     response_mode: 'query',
     scope: 'openid profile email',
-    state: randomUUID(),
+    state,
   })
 
   return NextResponse.redirect(
