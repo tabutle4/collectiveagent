@@ -10,50 +10,29 @@ type ProfilePageProps = {
   isAdmin?: boolean
 }
 
-const officeOptions = [
-  { value: '', label: 'Select office...' },
-  { value: 'Houston', label: 'Houston' },
-  { value: 'DFW', label: 'DFW' },
-]
-
-const associationOptions = [
-  { value: '', label: 'Select association...' },
-  { value: 'HAR', label: 'HAR' },
-  { value: 'MetroTex', label: 'MetroTex' },
-  { value: 'CCAR', label: 'CCAR' },
-  { value: 'TAR', label: 'TAR' },
-]
-
-const commissionPlanOptions = [
-  { value: '', label: 'Select plan...' },
-  { value: 'new_agent', label: 'New Agent 70/30' },
-  { value: 'no_cap', label: 'No Cap 85/15' },
-  { value: 'cap', label: 'Cap 70/30' },
-]
-
 export default function ProfilePage({
   userId: adminUserId,
   isAdmin = false,
 }: ProfilePageProps = {}) {
   const router = useRouter()
-  const { user: authUser, hasPermission } = useAuth()
+  const { hasPermission } = useAuth()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [headshotUrl, setHeadshotUrl] = useState<string | null>(null)
-  
-  // Saving states for each section
+
+  // Saving states
   const [savingPersonal, setSavingPersonal] = useState(false)
   const [savingRealEstate, setSavingRealEstate] = useState(false)
   const [savingLicense, setSavingLicense] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
-  
+
   // Success/error states
-  const [personalSuccess, setPersonalSuccess] = useState<string | null>(null)
   const [personalError, setPersonalError] = useState<string | null>(null)
-  const [realEstateSuccess, setRealEstateSuccess] = useState<string | null>(null)
+  const [personalSuccess, setPersonalSuccess] = useState<string | null>(null)
   const [realEstateError, setRealEstateError] = useState<string | null>(null)
-  const [licenseSuccess, setLicenseSuccess] = useState<string | null>(null)
+  const [realEstateSuccess, setRealEstateSuccess] = useState<string | null>(null)
   const [licenseError, setLicenseError] = useState<string | null>(null)
+  const [licenseSuccess, setLicenseSuccess] = useState<string | null>(null)
   const [billingSuccess, setBillingSuccess] = useState<string | null>(null)
 
   // Form states
@@ -87,7 +66,6 @@ export default function ProfilePage({
     division: '',
     join_date: '',
     commission_plan: '',
-    commission_plan_other: '',
     role: '',
   })
 
@@ -105,23 +83,19 @@ export default function ProfilePage({
     waive_processing_fees: false,
   })
 
-  // Permission checks using DB permissions
-  const canManageBilling = hasPermission('can_manage_billing') || hasPermission('can_manage_agent_billing')
+  // Permission checks from DB
   const canManageAgents = hasPermission('can_manage_agents')
-  
-  // Define who can edit what
-  // Personal info: everyone can edit their own EXCEPT phone/email (admin only)
-  // Real estate, license, billing: admin only
-  const canEditPersonalBasic = true // Name, social, address, shirt - everyone can edit their own
-  const canEditPersonalContact = canManageAgents && isAdmin // Phone/email - admin only
+  const canManageBilling = hasPermission('can_manage_billing') || hasPermission('can_manage_agent_billing')
+
+  // Edit permissions - require both DB permission AND isAdmin flag
+  const canEditPersonalContact = canManageAgents && isAdmin
   const canEditRealEstate = canManageAgents && isAdmin
   const canEditLicense = canManageAgents && isAdmin
   const canEditBilling = canManageBilling && isAdmin
 
-  // Check if this user is a licensed agent - determines which sections to show
+  // Check if user is a licensed agent
   const isLicensedAgent = user?.is_licensed_agent === true
 
-  // Format date for input field (YYYY-MM-DD)
   const formatDateForInput = (dateStr: string | null | undefined): string => {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -129,11 +103,10 @@ export default function ProfilePage({
     return date.toISOString().split('T')[0]
   }
 
-  // Format date for display
-  const formatDateForDisplay = (dateStr: string | null | undefined): string => {
-    if (!dateStr) return ''
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return ''
+  const formatDateForDisplay = (value: string | null) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
@@ -143,9 +116,8 @@ export default function ProfilePage({
 
   const loadProfile = async () => {
     try {
-      let userIdToLoad = adminUserId
+      let userIdToLoad = adminUserId || null
 
-      // If no adminUserId provided, load the current user's profile
       if (!userIdToLoad) {
         const meRes = await fetch('/api/auth/me')
         if (!meRes.ok) {
@@ -170,8 +142,7 @@ export default function ProfilePage({
 
       setUser(freshUserData)
       setHeadshotUrl(freshUserData.headshot_url || null)
-      
-      // Populate personal form
+
       setPersonalForm({
         preferred_first_name: freshUserData.preferred_first_name || '',
         preferred_last_name: freshUserData.preferred_last_name || '',
@@ -194,7 +165,6 @@ export default function ProfilePage({
         shirt_size: freshUserData.shirt_size || '',
       })
 
-      // Populate real estate form
       setRealEstateForm({
         office: freshUserData.office || '',
         status: freshUserData.status || '',
@@ -203,11 +173,9 @@ export default function ProfilePage({
         division: freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
         commission_plan: freshUserData.commission_plan || '',
-        commission_plan_other: freshUserData.commission_plan_other || '',
         role: freshUserData.role || '',
       })
 
-      // Populate license form
       setLicenseForm({
         license_number: freshUserData.license_number || '',
         license_expiration: formatDateForInput(freshUserData.license_expiration),
@@ -217,7 +185,6 @@ export default function ProfilePage({
         association_status_on_join: freshUserData.association_status_on_join || '',
       })
 
-      // Populate billing form
       setBillingForm({
         monthly_fee_waived: freshUserData.monthly_fee_waived || false,
         waive_processing_fees: freshUserData.waive_processing_fees || false,
@@ -255,47 +222,45 @@ export default function ProfilePage({
     setPersonalSuccess(null)
 
     try {
-      // Build payload - exclude phone/email if user doesn't have permission
-      const payload: Record<string, any> = {
-        preferred_first_name: personalForm.preferred_first_name,
-        preferred_last_name: personalForm.preferred_last_name,
-        instagram_handle: personalForm.instagram_handle,
-        tiktok_handle: personalForm.tiktok_handle,
-        threads_handle: personalForm.threads_handle,
-        youtube_url: personalForm.youtube_url,
-        linkedin_url: personalForm.linkedin_url,
-        facebook_url: personalForm.facebook_url,
-        shipping_address_line1: personalForm.shipping_address_line1,
-        shipping_address_line2: personalForm.shipping_address_line2,
-        shipping_city: personalForm.shipping_city,
-        shipping_state: personalForm.shipping_state,
-        shipping_zip: personalForm.shipping_zip,
-        birth_month: personalForm.birth_month,
-        date_of_birth: personalForm.date_of_birth,
-        shirt_type: personalForm.shirt_type,
-        shirt_size: personalForm.shirt_size,
+      const updates: Record<string, any> = {
+        preferred_first_name: personalForm.preferred_first_name.trim() || user.preferred_first_name,
+        preferred_last_name: personalForm.preferred_last_name.trim() || user.preferred_last_name,
+        instagram_handle: personalForm.instagram_handle.trim() || null,
+        tiktok_handle: personalForm.tiktok_handle.trim() || null,
+        threads_handle: personalForm.threads_handle.trim() || null,
+        youtube_url: personalForm.youtube_url.trim() || null,
+        linkedin_url: personalForm.linkedin_url.trim() || null,
+        facebook_url: personalForm.facebook_url.trim() || null,
+        shipping_address_line1: personalForm.shipping_address_line1.trim() || null,
+        shipping_address_line2: personalForm.shipping_address_line2.trim() || null,
+        shipping_city: personalForm.shipping_city.trim() || null,
+        shipping_state: personalForm.shipping_state.trim() || null,
+        shipping_zip: personalForm.shipping_zip.trim() || null,
+        birth_month: personalForm.birth_month.trim() || null,
+        date_of_birth: personalForm.date_of_birth || null,
+        shirt_type: personalForm.shirt_type.trim() || null,
+        shirt_size: personalForm.shirt_size.trim() || null,
       }
 
-      // Only include phone/email if admin
+      // Only include phone/email if admin with permission
       if (canEditPersonalContact) {
-        payload.personal_email = personalForm.personal_email
-        payload.personal_phone = personalForm.personal_phone
+        updates.personal_email = personalForm.personal_email.trim() || null
+        updates.personal_phone = personalForm.personal_phone.trim() || null
       }
 
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: payload }),
+        body: JSON.stringify({ id: user.id, updates }),
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        setPersonalError(data.error || 'Failed to save changes.')
+        setPersonalError('Failed to save changes. Please try again.')
       } else {
         setPersonalSuccess('Personal information updated.')
         await loadProfile()
       }
-    } catch (error) {
+    } catch (e) {
       setPersonalError('Failed to save changes. Please try again.')
     } finally {
       setSavingPersonal(false)
@@ -309,21 +274,19 @@ export default function ProfilePage({
     setRealEstateSuccess(null)
 
     try {
-      const payload = { ...realEstateForm }
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: payload }),
+        body: JSON.stringify({ id: user.id, updates: realEstateForm }),
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        setRealEstateError(data.error || 'Failed to save changes.')
+        setRealEstateError('Failed to save changes. Please try again.')
       } else {
         setRealEstateSuccess('Real estate information updated.')
         await loadProfile()
       }
-    } catch (error) {
+    } catch (e) {
       setRealEstateError('Failed to save changes. Please try again.')
     } finally {
       setSavingRealEstate(false)
@@ -337,21 +300,19 @@ export default function ProfilePage({
     setLicenseSuccess(null)
 
     try {
-      const payload = { ...licenseForm }
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: payload }),
+        body: JSON.stringify({ id: user.id, updates: licenseForm }),
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        setLicenseError(data.error || 'Failed to save changes.')
+        setLicenseError('Failed to save changes. Please try again.')
       } else {
         setLicenseSuccess('License information updated.')
         await loadProfile()
       }
-    } catch (error) {
+    } catch (e) {
       setLicenseError('Failed to save changes. Please try again.')
     } finally {
       setSavingLicense(false)
@@ -364,739 +325,729 @@ export default function ProfilePage({
     setBillingSuccess(null)
 
     try {
-      const payload = { ...billingForm }
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: payload }),
+        body: JSON.stringify({
+          id: user.id,
+          updates: {
+            monthly_fee_waived: billingForm.monthly_fee_waived,
+            waive_processing_fees: billingForm.waive_processing_fees,
+          },
+        }),
       })
 
-      if (res.ok) {
-        setBillingSuccess('Billing settings updated.')
-        await loadProfile()
-      } else {
-        setBillingSuccess('Failed to save billing settings.')
-      }
-    } catch (error) {
+      if (!res.ok) throw new Error('Failed to save')
+      setBillingSuccess('Billing settings updated.')
+      await loadProfile()
+    } catch (e) {
       setBillingSuccess('Failed to save billing settings.')
     } finally {
       setSavingBilling(false)
     }
   }
 
-  // HeadshotUpload handlers - must match component props
-  const handleHeadshotUploadComplete = (url: string) => {
-    setHeadshotUrl(url)
-    if (user) {
-      setUser({ ...user, headshot_url: url })
-    }
-  }
-
-  const handleHeadshotRemove = () => {
-    setHeadshotUrl(null)
-    if (user) {
-      setUser({ ...user, headshot_url: null })
-    }
-  }
-
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-luxury-gray-2">Loading...</p>
-      </div>
-    )
+    return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading profile...</div>
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-luxury-gray-2">User not found</p>
+      <div className="container-card text-center py-12">
+        <p className="text-red-600">Failed to load profile. Please try again.</p>
+        <button
+          onClick={() => router.push('/auth/login')}
+          className="mt-4 btn btn-secondary text-sm"
+        >
+          Go to Login
+        </button>
       </div>
     )
   }
 
-  const displayName = user.preferred_first_name && user.preferred_last_name
-    ? `${user.preferred_first_name} ${user.preferred_last_name}`
-    : user.first_name && user.last_name
-      ? `${user.first_name} ${user.last_name}`
-      : user.email
-
   return (
-    <div className="min-h-screen bg-luxury-light p-6">
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
+    <div>
+      <h1 className="page-title mb-6">
+        {isAdmin
+          ? `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
+          : 'MY PROFILE'}
+      </h1>
+
+      {/* Non-licensed user notice */}
+      {!isLicensedAgent && (
         <div className="container-card mb-5">
-          <div className="flex items-center gap-6">
-            <HeadshotUpload
-              userId={user.id}
-              currentHeadshotUrl={headshotUrl}
-              onUploadComplete={handleHeadshotUploadComplete}
-              onRemove={handleHeadshotRemove}
-              size="large"
-              firstName={user.preferred_first_name || user.first_name || ''}
-              lastName={user.preferred_last_name || user.last_name || ''}
-              initialCrop={user.headshot_crop || null}
-            />
-            <div>
-              <h1 className="text-xl font-semibold text-luxury-gray-1">{displayName}</h1>
-              <p className="text-sm text-luxury-gray-2">{user.email}</p>
-              {user.role && (
-                <p className="text-xs text-luxury-gray-3 mt-1 capitalize">{user.role}</p>
-              )}
-              {!isLicensedAgent && (
-                <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
-                  Staff
-                </span>
-              )}
-            </div>
+          <div className="inner-card bg-gray-50">
+            <p className="text-sm text-luxury-gray-2 text-center">
+              <span className="inline-block px-2 py-0.5 bg-gray-200 text-gray-600 text-xs rounded mr-2">
+                Staff
+              </span>
+              Staff accounts only have access to personal profile settings.
+            </p>
           </div>
         </div>
+      )}
 
-        {/* Personal Information - Shown for ALL users */}
-        <div className="container-card mb-5">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-            Personal Information
-          </h2>
-          {canEditPersonalBasic ? (
-            <>
-              <div className="inner-card mb-4">
+      {/* Profile Photo */}
+      <div className="container-card mb-5">
+        <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+          Profile Photo
+        </h2>
+        <div className="inner-card">
+          <HeadshotUpload
+            currentHeadshotUrl={headshotUrl}
+            userId={user.id}
+            firstName={user.preferred_first_name || user.first_name || ''}
+            lastName={user.preferred_last_name || user.last_name || ''}
+            initialCrop={user.headshot_crop || null}
+            onUploadComplete={url => {
+              setHeadshotUrl(url)
+              loadProfile()
+            }}
+            onRemove={() => {
+              setHeadshotUrl(null)
+              loadProfile()
+            }}
+            size="large"
+          />
+          <p className="text-xs text-luxury-gray-3 mt-4">
+            Upload a professional headshot. Accepted formats: .jpg, .jpeg, .png (max 5MB)
+          </p>
+        </div>
+      </div>
+
+      {/* Personal Information */}
+      <div className="container-card mb-5">
+        <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+          Personal Information
+        </h2>
+        <div className="inner-card">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Preferred First Name</label>
+              <input
+                className="input-luxury"
+                value={personalForm.preferred_first_name}
+                onChange={e => handlePersonalChange('preferred_first_name', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Preferred Last Name</label>
+              <input
+                className="input-luxury"
+                value={personalForm.preferred_last_name}
+                onChange={e => handlePersonalChange('preferred_last_name', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Primary Login Email</label>
+              <input
+                className="input-luxury bg-luxury-gray-5/30"
+                value={user.email || ''}
+                readOnly
+                disabled
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">
+                Personal Email
+                {!canEditPersonalContact && <span className="text-luxury-gray-4 ml-1">(view only)</span>}
+              </label>
+              {canEditPersonalContact ? (
+                <input
+                  className="input-luxury"
+                  value={personalForm.personal_email}
+                  onChange={e => handlePersonalChange('personal_email', e.target.value)}
+                />
+              ) : (
+                <input
+                  className="input-luxury bg-luxury-gray-5/30"
+                  value={user.personal_email || ''}
+                  readOnly
+                  disabled
+                />
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">
+                Personal Phone
+                {!canEditPersonalContact && <span className="text-luxury-gray-4 ml-1">(view only)</span>}
+              </label>
+              {canEditPersonalContact ? (
+                <input
+                  className="input-luxury"
+                  value={personalForm.personal_phone}
+                  onChange={e => handlePersonalChange('personal_phone', e.target.value)}
+                />
+              ) : (
+                <input
+                  className="input-luxury bg-luxury-gray-5/30"
+                  value={user.personal_phone || ''}
+                  readOnly
+                  disabled
+                />
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Date of Birth</label>
+              <input
+                type="date"
+                className="input-luxury"
+                value={personalForm.date_of_birth ? personalForm.date_of_birth.substring(0, 10) : ''}
+                onChange={e => handlePersonalChange('date_of_birth', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <h3 className="text-sm font-medium text-luxury-gray-1 mt-6 mb-3">Social Media</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Instagram</label>
+              <input
+                className="input-luxury"
+                value={personalForm.instagram_handle}
+                onChange={e => handlePersonalChange('instagram_handle', e.target.value)}
+                placeholder="@username"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">TikTok</label>
+              <input
+                className="input-luxury"
+                value={personalForm.tiktok_handle}
+                onChange={e => handlePersonalChange('tiktok_handle', e.target.value)}
+                placeholder="@username"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Threads</label>
+              <input
+                className="input-luxury"
+                value={personalForm.threads_handle}
+                onChange={e => handlePersonalChange('threads_handle', e.target.value)}
+                placeholder="@username"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">YouTube URL</label>
+              <input
+                className="input-luxury"
+                value={personalForm.youtube_url}
+                onChange={e => handlePersonalChange('youtube_url', e.target.value)}
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">LinkedIn URL</label>
+              <input
+                className="input-luxury"
+                value={personalForm.linkedin_url}
+                onChange={e => handlePersonalChange('linkedin_url', e.target.value)}
+                placeholder="https://"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Facebook URL</label>
+              <input
+                className="input-luxury"
+                value={personalForm.facebook_url}
+                onChange={e => handlePersonalChange('facebook_url', e.target.value)}
+                placeholder="https://"
+              />
+            </div>
+          </div>
+
+          <h3 className="text-sm font-medium text-luxury-gray-1 mt-6 mb-3">Mailing Address</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Address Line 1</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shipping_address_line1}
+                onChange={e => handlePersonalChange('shipping_address_line1', e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Address Line 2</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shipping_address_line2}
+                onChange={e => handlePersonalChange('shipping_address_line2', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">City</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shipping_city}
+                onChange={e => handlePersonalChange('shipping_city', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">State</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shipping_state}
+                onChange={e => handlePersonalChange('shipping_state', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">ZIP</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shipping_zip}
+                onChange={e => handlePersonalChange('shipping_zip', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <h3 className="text-sm font-medium text-luxury-gray-1 mt-6 mb-3">Swag Preferences</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Shirt Type</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shirt_type}
+                onChange={e => handlePersonalChange('shirt_type', e.target.value)}
+                placeholder="Men's / Women's"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Shirt Size</label>
+              <input
+                className="input-luxury"
+                value={personalForm.shirt_size}
+                onChange={e => handlePersonalChange('shirt_size', e.target.value)}
+                placeholder="S, M, L, XL, etc."
+              />
+            </div>
+          </div>
+
+          {personalError && <p className="text-xs text-red-600 mt-4">{personalError}</p>}
+          {personalSuccess && <p className="text-xs text-green-700 mt-4">{personalSuccess}</p>}
+
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={handleSavePersonal}
+              disabled={savingPersonal}
+              className="btn btn-primary text-sm"
+            >
+              {savingPersonal ? 'Saving...' : 'Save Personal Info'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ========== LICENSED AGENT SECTIONS ONLY ========== */}
+      {isLicensedAgent && (
+        <>
+          {/* Real Estate Information */}
+          <div className="container-card mb-5">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+              Real Estate Information
+            </h2>
+            {canEditRealEstate ? (
+              <div className="inner-card">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Preferred First Name</label>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Office</label>
+                    <select
+                      className="select-luxury"
+                      value={realEstateForm.office}
+                      onChange={e => handleRealEstateChange('office', e.target.value)}
+                    >
+                      <option value="">Select office...</option>
+                      <option value="Houston">Houston</option>
+                      <option value="DFW">DFW</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Status</label>
+                    <div className="flex items-center gap-4 h-[42px]">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="is_active"
+                          checked={realEstateForm.is_active === true}
+                          onChange={() => handleRealEstateChange('is_active', true)}
+                        />
+                        <span className="text-sm">Active</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="is_active"
+                          checked={realEstateForm.is_active === false}
+                          onChange={() => handleRealEstateChange('is_active', false)}
+                        />
+                        <span className="text-sm">Inactive</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Team</label>
                     <input
                       className="input-luxury"
-                      value={personalForm.preferred_first_name}
-                      onChange={e => handlePersonalChange('preferred_first_name', e.target.value)}
+                      value={realEstateForm.team_name}
+                      onChange={e => handleRealEstateChange('team_name', e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Preferred Last Name</label>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Division(s)</label>
                     <input
                       className="input-luxury"
-                      value={personalForm.preferred_last_name}
-                      onChange={e => handlePersonalChange('preferred_last_name', e.target.value)}
-                    />
-                  </div>
-                  {/* Personal Email - Admin only can edit */}
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">
-                      Personal Email
-                      {!canEditPersonalContact && <span className="text-luxury-gray-4 ml-1">(view only)</span>}
-                    </label>
-                    {canEditPersonalContact ? (
-                      <input
-                        className="input-luxury"
-                        value={personalForm.personal_email}
-                        onChange={e => handlePersonalChange('personal_email', e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-sm text-luxury-gray-1 py-2">{user.personal_email || 'N/A'}</p>
-                    )}
-                  </div>
-                  {/* Personal Phone - Admin only can edit */}
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">
-                      Personal Phone
-                      {!canEditPersonalContact && <span className="text-luxury-gray-4 ml-1">(view only)</span>}
-                    </label>
-                    {canEditPersonalContact ? (
-                      <input
-                        className="input-luxury"
-                        value={personalForm.personal_phone}
-                        onChange={e => handlePersonalChange('personal_phone', e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-sm text-luxury-gray-1 py-2">{user.personal_phone || 'N/A'}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="inner-card mb-4">
-                <h3 className="text-xs font-medium text-luxury-gray-2 mb-3">Social Media</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Instagram Handle</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="@username"
-                      value={personalForm.instagram_handle}
-                      onChange={e => handlePersonalChange('instagram_handle', e.target.value)}
+                      value={realEstateForm.division}
+                      onChange={e => handleRealEstateChange('division', e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">TikTok Handle</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="@username"
-                      value={personalForm.tiktok_handle}
-                      onChange={e => handlePersonalChange('tiktok_handle', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Threads Handle</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="@username"
-                      value={personalForm.threads_handle}
-                      onChange={e => handlePersonalChange('threads_handle', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">YouTube URL</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="https://youtube.com/..."
-                      value={personalForm.youtube_url}
-                      onChange={e => handlePersonalChange('youtube_url', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">LinkedIn URL</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="https://linkedin.com/in/..."
-                      value={personalForm.linkedin_url}
-                      onChange={e => handlePersonalChange('linkedin_url', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Facebook URL</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="https://facebook.com/..."
-                      value={personalForm.facebook_url}
-                      onChange={e => handlePersonalChange('facebook_url', e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="inner-card mb-4">
-                <h3 className="text-xs font-medium text-luxury-gray-2 mb-3">Shipping Address</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Address Line 1</label>
-                    <input
-                      className="input-luxury"
-                      value={personalForm.shipping_address_line1}
-                      onChange={e => handlePersonalChange('shipping_address_line1', e.target.value)}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Address Line 2</label>
-                    <input
-                      className="input-luxury"
-                      value={personalForm.shipping_address_line2}
-                      onChange={e => handlePersonalChange('shipping_address_line2', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">City</label>
-                    <input
-                      className="input-luxury"
-                      value={personalForm.shipping_city}
-                      onChange={e => handlePersonalChange('shipping_city', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">State</label>
-                    <input
-                      className="input-luxury"
-                      value={personalForm.shipping_state}
-                      onChange={e => handlePersonalChange('shipping_state', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">ZIP</label>
-                    <input
-                      className="input-luxury"
-                      value={personalForm.shipping_zip}
-                      onChange={e => handlePersonalChange('shipping_zip', e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="inner-card mb-4">
-                <h3 className="text-xs font-medium text-luxury-gray-2 mb-3">Other Details</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Date of Birth</label>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Join Date</label>
                     <input
                       type="date"
                       className="input-luxury"
-                      value={personalForm.date_of_birth}
-                      onChange={e => handlePersonalChange('date_of_birth', e.target.value)}
+                      value={realEstateForm.join_date}
+                      onChange={e => handleRealEstateChange('join_date', e.target.value)}
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Birth Month</label>
-                    <input
-                      className="input-luxury"
-                      placeholder="e.g. January"
-                      value={personalForm.birth_month}
-                      onChange={e => handlePersonalChange('birth_month', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Shirt Type</label>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Commission Plan</label>
                     <select
                       className="select-luxury"
-                      value={personalForm.shirt_type}
-                      onChange={e => handlePersonalChange('shirt_type', e.target.value)}
+                      value={realEstateForm.commission_plan}
+                      onChange={e => handleRealEstateChange('commission_plan', e.target.value)}
                     >
-                      <option value="">Select...</option>
-                      <option value="mens">Men&apos;s</option>
-                      <option value="womens">Women&apos;s</option>
-                      <option value="unisex">Unisex</option>
+                      <option value="">Select plan...</option>
+                      <option value="new_agent">New Agent 70/30</option>
+                      <option value="no_cap">No Cap 85/15</option>
+                      <option value="cap">Cap 70/30</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-luxury-gray-3 mb-1 block">Shirt Size</label>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Role</label>
                     <select
                       className="select-luxury"
-                      value={personalForm.shirt_size}
-                      onChange={e => handlePersonalChange('shirt_size', e.target.value)}
+                      value={realEstateForm.role}
+                      onChange={e => handleRealEstateChange('role', e.target.value)}
                     >
-                      <option value="">Select...</option>
-                      <option value="XS">XS</option>
-                      <option value="S">S</option>
-                      <option value="M">M</option>
-                      <option value="L">L</option>
-                      <option value="XL">XL</option>
-                      <option value="2XL">2XL</option>
-                      <option value="3XL">3XL</option>
+                      <option value="">Select role...</option>
+                      <option value="agent">Agent</option>
+                      <option value="tc">TC</option>
+                      <option value="operations">Operations</option>
+                      <option value="broker">Broker</option>
+                      <option value="support">Support</option>
                     </select>
                   </div>
                 </div>
-              </div>
 
-              {personalError && <p className="text-xs text-red-600 mt-4">{personalError}</p>}
-              {personalSuccess && <p className="text-xs text-green-700 mt-4">{personalSuccess}</p>}
+                {realEstateError && <p className="text-xs text-red-600 mt-4">{realEstateError}</p>}
+                {realEstateSuccess && <p className="text-xs text-green-700 mt-4">{realEstateSuccess}</p>}
 
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={handleSavePersonal}
-                  disabled={savingPersonal}
-                  className="btn btn-primary text-sm"
-                >
-                  {savingPersonal ? 'Saving...' : 'Save Personal Info'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-luxury-gray-2">Contact support to update personal information.</p>
-          )}
-        </div>
-
-        {/* ========== LICENSED AGENT SECTIONS ONLY ========== */}
-        {isLicensedAgent && (
-          <>
-            {/* Real Estate Information */}
-            <div className="container-card mb-5">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                Real Estate Information
-              </h2>
-              {canEditRealEstate ? (
-                <div className="inner-card">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Office</label>
-                      <select
-                        className="select-luxury"
-                        value={realEstateForm.office}
-                        onChange={e => handleRealEstateChange('office', e.target.value)}
-                      >
-                        {officeOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Status</label>
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="is_active"
-                            checked={realEstateForm.is_active === true}
-                            onChange={() => handleRealEstateChange('is_active', true)}
-                          />
-                          <span className="text-sm">Active</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="is_active"
-                            checked={realEstateForm.is_active === false}
-                            onChange={() => handleRealEstateChange('is_active', false)}
-                          />
-                          <span className="text-sm">Inactive</span>
-                        </label>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Team</label>
-                      <input
-                        className="input-luxury"
-                        value={realEstateForm.team_name}
-                        onChange={e => handleRealEstateChange('team_name', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Division(s)</label>
-                      <input
-                        className="input-luxury"
-                        value={realEstateForm.division}
-                        onChange={e => handleRealEstateChange('division', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Join Date</label>
-                      <input
-                        type="date"
-                        className="input-luxury"
-                        value={realEstateForm.join_date}
-                        onChange={e => handleRealEstateChange('join_date', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Commission Plan</label>
-                      <select
-                        className="select-luxury"
-                        value={realEstateForm.commission_plan}
-                        onChange={e => handleRealEstateChange('commission_plan', e.target.value)}
-                      >
-                        {commissionPlanOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Role</label>
-                      <select
-                        className="select-luxury"
-                        value={realEstateForm.role}
-                        onChange={e => handleRealEstateChange('role', e.target.value)}
-                      >
-                        <option value="">Select role...</option>
-                        <option value="agent">Agent</option>
-                        <option value="tc">TC</option>
-                        <option value="operations">Operations</option>
-                        <option value="broker">Broker</option>
-                        <option value="support">Support</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {realEstateError && <p className="text-xs text-red-600 mt-4">{realEstateError}</p>}
-                  {realEstateSuccess && <p className="text-xs text-green-700 mt-4">{realEstateSuccess}</p>}
-
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      onClick={handleSaveRealEstate}
-                      disabled={savingRealEstate}
-                      className="btn btn-primary text-sm"
-                    >
-                      {savingRealEstate ? 'Saving...' : 'Save Real Estate Info'}
-                    </button>
-                  </div>
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={handleSaveRealEstate}
+                    disabled={savingRealEstate}
+                    className="btn btn-primary text-sm"
+                  >
+                    {savingRealEstate ? 'Saving...' : 'Save Real Estate Info'}
+                  </button>
                 </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Office</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">{user.office || 'N/A'}</p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Status</p>
-                      <p className="text-sm font-medium text-luxury-gray-1 capitalize">
-                        {user.status || (user.is_active ? 'Active' : 'Inactive')}
-                      </p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Team</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">{user.team_name || 'N/A'}</p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Team Lead</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">{user.team_lead || 'N/A'}</p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">{user.division || 'N/A'}</p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Join Date</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">
-                        {formatDateForDisplay(user.join_date) || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Commission Plan</p>
-                      <p className="text-sm font-medium text-luxury-gray-1">
-                        {user.commission_plan || user.commission_plan_other || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="inner-card">
-                      <p className="text-xs text-luxury-gray-3 mb-1">Role</p>
-                      <p className="text-sm font-medium text-luxury-gray-1 capitalize">
-                        {user.role || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-luxury-gray-3 mt-4">
-                    Real estate information is managed by the office. Contact an administrator if something
-                    looks incorrect.
-                  </p>
-                </>
-              )}
-            </div>
-
-            {/* License Information */}
-            <div className="container-card mb-5">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                License & Association
-              </h2>
-              {canEditLicense ? (
-                <div className="inner-card">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">License Number</label>
-                      <input
-                        className="input-luxury"
-                        value={licenseForm.license_number}
-                        onChange={e => handleLicenseChange('license_number', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">License Expiration</label>
-                      <input
-                        type="date"
-                        className="input-luxury"
-                        value={licenseForm.license_expiration}
-                        onChange={e => handleLicenseChange('license_expiration', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">MLS ID</label>
-                      <input
-                        className="input-luxury"
-                        value={licenseForm.mls_id}
-                        onChange={e => handleLicenseChange('mls_id', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">NRDS ID</label>
-                      <input
-                        className="input-luxury"
-                        value={licenseForm.nrds_id}
-                        onChange={e => handleLicenseChange('nrds_id', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Association</label>
-                      <select
-                        className="select-luxury"
-                        value={licenseForm.association}
-                        onChange={e => handleLicenseChange('association', e.target.value)}
-                      >
-                        {associationOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-luxury-gray-3 mb-1 block">Association Status (on join)</label>
-                      <input
-                        className="input-luxury"
-                        value={licenseForm.association_status_on_join}
-                        onChange={e => handleLicenseChange('association_status_on_join', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {licenseError && <p className="text-xs text-red-600 mt-4">{licenseError}</p>}
-                  {licenseSuccess && <p className="text-xs text-green-700 mt-4">{licenseSuccess}</p>}
-
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      onClick={handleSaveLicense}
-                      disabled={savingLicense}
-                      className="btn btn-primary text-sm"
-                    >
-                      {savingLicense ? 'Saving...' : 'Save License Info'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              </div>
+            ) : (
+              <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">License Number</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.license_number || 'N/A'}</p>
+                    <p className="text-xs text-luxury-gray-3 mb-1">Office</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.office || 'N/A'}</p>
                   </div>
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">License Expiration</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {formatDateForDisplay(user.license_expiration) || 'N/A'}
+                    <p className="text-xs text-luxury-gray-3 mb-1">Status</p>
+                    <p className="text-sm font-medium text-luxury-gray-1 capitalize">
+                      {user.status || (user.is_active ? 'Active' : 'Inactive')}
                     </p>
                   </div>
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">MLS ID</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.mls_id || 'N/A'}</p>
+                    <p className="text-xs text-luxury-gray-3 mb-1">Team</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.team_name || 'N/A'}</p>
                   </div>
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">NRDS ID</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.nrds_id || 'N/A'}</p>
+                    <p className="text-xs text-luxury-gray-3 mb-1">Team Lead</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.team_lead || 'N/A'}</p>
                   </div>
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Association</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.association || 'N/A'}</p>
+                    <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.division || 'N/A'}</p>
                   </div>
                   <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Association Status (on join)</p>
+                    <p className="text-xs text-luxury-gray-3 mb-1">Join Date</p>
                     <p className="text-sm font-medium text-luxury-gray-1">
-                      {user.association_status_on_join || 'N/A'}
+                      {formatDateForDisplay(user.join_date) || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="inner-card">
+                    <p className="text-xs text-luxury-gray-3 mb-1">Commission Plan</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">
+                      {user.commission_plan || user.commission_plan_other || 'N/A'}
+                    </p>
+                  </div>
+                  <div className="inner-card">
+                    <p className="text-xs text-luxury-gray-3 mb-1">Role</p>
+                    <p className="text-sm font-medium text-luxury-gray-1 capitalize">
+                      {user.role || 'N/A'}
                     </p>
                   </div>
                 </div>
-              )}
-            </div>
+                <p className="text-xs text-luxury-gray-3 mt-4">
+                  Real estate information is managed by the office. Contact an administrator if something
+                  looks incorrect.
+                </p>
+              </>
+            )}
+          </div>
 
-            {/* Performance Stats - Only show if agent has data */}
-            {(user.total_sales_volume || user.total_units_closed || user.cap_progress > 0) && (
-              <div className="container-card mb-5">
-                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                  Performance
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Total Sales Volume</p>
-                    <p className="text-lg font-semibold text-luxury-accent">
-                      {user.total_sales_volume
-                        ? `$${Number(user.total_sales_volume).toLocaleString()}`
-                        : '$0'}
-                    </p>
+          {/* License Information */}
+          <div className="container-card mb-5">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+              License & Association
+            </h2>
+            {canEditLicense ? (
+              <div className="inner-card">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">License Number</label>
+                    <input
+                      className="input-luxury"
+                      value={licenseForm.license_number}
+                      onChange={e => handleLicenseChange('license_number', e.target.value)}
+                    />
                   </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Units Closed</p>
-                    <p className="text-lg font-semibold text-luxury-accent">
-                      {user.total_units_closed || 0}
-                    </p>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">License Expiration</label>
+                    <input
+                      type="date"
+                      className="input-luxury"
+                      value={licenseForm.license_expiration}
+                      onChange={e => handleLicenseChange('license_expiration', e.target.value)}
+                    />
                   </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
-                    <p className="text-lg font-semibold text-luxury-accent">
-                      {user.cap_progress ? `$${Number(user.cap_progress).toLocaleString()}` : '$0'}
-                    </p>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">MLS ID</label>
+                    <input
+                      className="input-luxury"
+                      value={licenseForm.mls_id}
+                      onChange={e => handleLicenseChange('mls_id', e.target.value)}
+                    />
                   </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">NRDS ID</label>
+                    <input
+                      className="input-luxury"
+                      value={licenseForm.nrds_id}
+                      onChange={e => handleLicenseChange('nrds_id', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Association</label>
+                    <select
+                      className="select-luxury"
+                      value={licenseForm.association}
+                      onChange={e => handleLicenseChange('association', e.target.value)}
+                    >
+                      <option value="">Select association...</option>
+                      <option value="HAR">HAR</option>
+                      <option value="MetroTex">MetroTex</option>
+                      <option value="CCAR">CCAR</option>
+                      <option value="TAR">TAR</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Association Status (on join)</label>
+                    <input
+                      className="input-luxury"
+                      value={licenseForm.association_status_on_join}
+                      onChange={e => handleLicenseChange('association_status_on_join', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {licenseError && <p className="text-xs text-red-600 mt-4">{licenseError}</p>}
+                {licenseSuccess && <p className="text-xs text-green-700 mt-4">{licenseSuccess}</p>}
+
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={handleSaveLicense}
+                    disabled={savingLicense}
+                    className="btn btn-primary text-sm"
+                  >
+                    {savingLicense ? 'Saving...' : 'Save License Info'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">License Number</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">{user.license_number || 'N/A'}</p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">License Expiration</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {formatDateForDisplay(user.license_expiration) || 'N/A'}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">MLS ID</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">{user.mls_id || 'N/A'}</p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">NRDS ID</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">{user.nrds_id || 'N/A'}</p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Association</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">{user.association || 'N/A'}</p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Association Status (on join)</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {user.association_status_on_join || 'N/A'}
+                  </p>
                 </div>
               </div>
             )}
+          </div>
 
-            {/* Billing */}
+          {/* Performance Stats */}
+          {(user.total_sales_volume || user.total_units_closed || user.cap_progress > 0) && (
             <div className="container-card mb-5">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                Billing
+                Performance
               </h2>
-
-              {canEditBilling ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="inner-card">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-luxury-gray-1">Monthly Fee Waived</p>
-                        <p className="text-xs text-luxury-gray-3">
-                          Agent will not be invoiced for the $50 monthly fee
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={billingForm.monthly_fee_waived}
-                          onChange={e =>
-                            setBillingForm(prev => ({
-                              ...prev,
-                              monthly_fee_waived: e.target.checked,
-                            }))
-                          }
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-luxury-gold"></div>
-                      </label>
+                  <p className="text-xs text-luxury-gray-3 mb-1">Total Sales Volume</p>
+                  <p className="text-lg font-semibold text-luxury-accent">
+                    {user.total_sales_volume
+                      ? `$${Number(user.total_sales_volume).toLocaleString()}`
+                      : '$0'}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Units Closed</p>
+                  <p className="text-lg font-semibold text-luxury-accent">
+                    {user.total_units_closed || 0}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
+                  <p className="text-lg font-semibold text-luxury-accent">
+                    {user.cap_progress ? `$${Number(user.cap_progress).toLocaleString()}` : '$0'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Billing */}
+          <div className="container-card mb-5">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+              Billing
+            </h2>
+
+            {canEditBilling ? (
+              <div className="inner-card">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Monthly Fee Waived</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Agent will not be invoiced for the $50 monthly fee
+                      </p>
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-luxury-gray-1">Waive Processing Fees</p>
-                        <p className="text-xs text-luxury-gray-3">
-                          Transaction processing fees will be waived for this agent
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={billingForm.waive_processing_fees}
-                          onChange={e =>
-                            setBillingForm(prev => ({
-                              ...prev,
-                              waive_processing_fees: e.target.checked,
-                            }))
-                          }
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-luxury-gold"></div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {billingSuccess && (
-                    <p className="text-xs text-green-700 mt-4">{billingSuccess}</p>
-                  )}
-
-                  <div className="mt-6 flex justify-end">
                     <button
-                      onClick={handleSaveBilling}
-                      disabled={savingBilling}
-                      className="btn btn-primary text-sm"
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          monthly_fee_waived: !prev.monthly_fee_waived,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.monthly_fee_waived ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                     >
-                      {savingBilling ? 'Saving...' : 'Save Billing Settings'}
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.monthly_fee_waived ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Processing Fees Waived</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Transaction processing fees will not be deducted from commissions
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          waive_processing_fees: !prev.waive_processing_fees,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.waive_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Waived</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {user.monthly_fee_waived ? 'Yes' : 'No'}
-                    </p>
-                  </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Waive Processing Fees</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {user.waive_processing_fees ? 'Yes' : 'No'}
-                    </p>
-                  </div>
+                {billingSuccess && (
+                  <p
+                    className={`text-xs mt-4 ${billingSuccess.includes('Failed') ? 'text-red-600' : 'text-green-700'}`}
+                  >
+                    {billingSuccess}
+                  </p>
+                )}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={handleSaveBilling}
+                    disabled={savingBilling}
+                    className="btn btn-primary text-sm"
+                  >
+                    {savingBilling ? 'Saving...' : 'Save Billing Settings'}
+                  </button>
                 </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* Non-licensed user message */}
-        {!isLicensedAgent && (
-          <div className="container-card mb-5">
-            <div className="text-center py-4">
-              <p className="text-sm text-luxury-gray-2">
-                Staff accounts only have access to personal profile settings.
-              </p>
-            </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {user.monthly_fee_waived ? 'Waived' : '$50/month'}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Processing Fees</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {user.waive_processing_fees ? 'Waived' : 'Standard'}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Paid Through</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {formatDateForDisplay(user.monthly_fee_paid_through) || 'N/A'}
+                  </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Onboarding Fee</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {user.onboarding_fee_paid
+                      ? `Paid ${formatDateForDisplay(user.onboarding_fee_paid_date)}`
+                      : 'Not Paid'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   )
 }
