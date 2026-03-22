@@ -29,6 +29,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
+import GlobalSearch from './GlobalSearch'
 import { useAuth } from '@/lib/context/AuthContext'
 
 interface NavItem {
@@ -140,6 +141,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [contactOpen, setContactOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
@@ -182,6 +184,18 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       window.addEventListener('resize', checkMobile)
       return () => window.removeEventListener('resize', checkMobile)
     }
+  }, [])
+
+  // Global keyboard shortcut for search (Cmd+K or Ctrl+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   useEffect(() => {
@@ -281,9 +295,17 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       </nav>
 
       <div className="px-3 py-2 flex-shrink-0">
-        <button className="flex items-center gap-3 px-3 py-2 rounded-md text-luxury-gray-3 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1 transition-colors w-full">
-          <Search size={18} className="flex-shrink-0" strokeWidth={1.5} />
-          <span className="text-[13px] font-medium">Search</span>
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="flex items-center justify-between gap-3 px-3 py-2 rounded-md text-luxury-gray-3 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1 transition-colors w-full"
+        >
+          <div className="flex items-center gap-3">
+            <Search size={18} className="flex-shrink-0" strokeWidth={1.5} />
+            <span className="text-[13px] font-medium">Search</span>
+          </div>
+          <kbd className="hidden md:inline-flex text-[10px] px-1.5 py-0.5 rounded bg-luxury-gray-5/50 text-luxury-gray-3 font-mono">
+            ⌘K
+          </kbd>
         </button>
       </div>
 
@@ -499,6 +521,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       </div>
 
       <ContactDrawer open={contactOpen} onClose={() => setContactOpen(false)} />
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} isStaff={isStaff} />
     </div>
   )
 }
