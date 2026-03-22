@@ -41,6 +41,7 @@ export default function ProfilePage({
     preferred_last_name: '',
     personal_email: '',
     personal_phone: '',
+    business_phone: '',
     instagram_handle: '',
     tiktok_handle: '',
     threads_handle: '',
@@ -148,6 +149,7 @@ export default function ProfilePage({
         preferred_last_name: freshUserData.preferred_last_name || '',
         personal_email: freshUserData.personal_email || '',
         personal_phone: freshUserData.personal_phone || '',
+        business_phone: freshUserData.business_phone || freshUserData.phone || '',
         instagram_handle: freshUserData.instagram_handle || '',
         tiktok_handle: freshUserData.tiktok_handle || '',
         threads_handle: freshUserData.threads_handle || '',
@@ -225,6 +227,7 @@ export default function ProfilePage({
       const updates: Record<string, any> = {
         preferred_first_name: personalForm.preferred_first_name.trim() || user.preferred_first_name,
         preferred_last_name: personalForm.preferred_last_name.trim() || user.preferred_last_name,
+        business_phone: personalForm.business_phone.trim() || null,
         instagram_handle: personalForm.instagram_handle.trim() || null,
         tiktok_handle: personalForm.tiktok_handle.trim() || null,
         threads_handle: personalForm.threads_handle.trim() || null,
@@ -242,7 +245,7 @@ export default function ProfilePage({
         shirt_size: personalForm.shirt_size.trim() || null,
       }
 
-      // Only include phone/email if admin with permission
+      // Only include personal phone/email if admin with permission
       if (canEditPersonalContact) {
         updates.personal_email = personalForm.personal_email.trim() || null
         updates.personal_phone = personalForm.personal_phone.trim() || null
@@ -466,6 +469,14 @@ export default function ProfilePage({
                   disabled
                 />
               )}
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Business Phone</label>
+              <input
+                className="input-luxury"
+                value={personalForm.business_phone}
+                onChange={e => handlePersonalChange('business_phone', e.target.value)}
+              />
             </div>
             <div>
               <label className="text-xs text-luxury-gray-3 mb-1 block">
