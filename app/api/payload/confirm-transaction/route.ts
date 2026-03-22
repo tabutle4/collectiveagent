@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -6,6 +7,9 @@ const authHeader = () =>
 // After the embedded checkout fires its success event, the client sends
 // pl_transaction_id here. We confirm it by updating status to 'processed'.
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const { transaction_id }: { transaction_id: string } = await request.json()
 

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const userId = request.nextUrl.searchParams.get('user_id')
     if (!userId) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })

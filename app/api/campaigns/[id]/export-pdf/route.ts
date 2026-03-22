@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { requirePermission } from '@/lib/api-auth'
 
 const normalizeUuidInput = (value: string | null | undefined): string | null => {
   if (
@@ -61,6 +62,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const auth = await requirePermission(request, 'can_manage_campaigns')
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params

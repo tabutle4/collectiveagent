@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -62,6 +63,9 @@ function parseCSV(csvContent: string): CSVRow[] {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agents')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json()
     let csvContent: string | undefined = body.csvContent

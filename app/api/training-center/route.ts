@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 
@@ -48,6 +49,9 @@ function relevanceScore(name: string, query: string): number {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_view_training_center')
+  if (auth.error) return auth.error
+
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')?.trim()

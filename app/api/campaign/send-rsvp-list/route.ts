@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 
@@ -9,6 +10,9 @@ if (!process.env.RESEND_API_KEY) {
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_send_campaign_emails')
+  if (auth.error) return auth.error
+
   try {
     const { campaign_id, event_staff_email } = await request.json()
 

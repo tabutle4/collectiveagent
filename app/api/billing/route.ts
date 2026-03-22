@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { verifySessionToken } from '@/lib/session'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionToken = request.cookies.get('ca_session')?.value
-    if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    const session = await verifySessionToken(sessionToken)
-    if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    const { searchParams } = new URL(request.url)
+    const agentId = searchParams.get('agent_id')
+
+    // If requesting specific agent's billing, check if user can access it
+    const auth = await requireAuth(request)
+    if (auth.error) return auth.error
+
+    // Agents can only view their own billing
+    if (agentId && agentId !== auth.user.id && !auth.permissions.has('can_view_agent_debts')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    // Viewing all billing data requires permission
+    if (!agentId && !auth.permissions.has('can_view_agent_debts')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
 
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
@@ -74,12 +86,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const sessionToken = request.cookies.get('ca_session')?.value
-    if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    const session = await verifySessionToken(sessionToken)
-    if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+  // Require can_manage_agent_debts permission for write operations
+  const auth = await requirePermission(request, 'can_manage_agent_debts')
+  if (auth.error) return auth.error
 
+  try {
     const supabase = createClient()
     const body = await request.json()
     const { action } = body

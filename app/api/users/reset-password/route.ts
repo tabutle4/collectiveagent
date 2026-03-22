@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { hashPassword } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_reset_passwords')
+  if (auth.error) return auth.error
+
   try {
     const { userId, newPassword } = await request.json()
 

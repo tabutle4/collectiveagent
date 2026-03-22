@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_onboarding')
+  if (auth.error) return auth.error
+
   try {
     const { token, step } = await request.json()
     if (!token || !step) {

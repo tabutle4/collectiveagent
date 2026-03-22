@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 const TENANT_ID = process.env.MICROSOFT_TENANT_ID!
@@ -27,6 +28,10 @@ async function getToken() {
 }
 
 export async function GET(request: NextRequest) {
+  // Any authenticated user can view calendar
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     console.log('Calendar GET - GROUP_ID:', GROUP_ID)
     console.log('Calendar GET - TENANT_ID:', TENANT_ID ? 'set' : 'missing')
@@ -62,6 +67,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Only admins can create events
+  const auth = await requirePermission(request, 'can_manage_calendar')
+  if (auth.error) return auth.error
+
   try {
     const token = await getToken()
     const body = await request.json()
@@ -94,6 +103,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  // Only admins can update events
+  const auth = await requirePermission(request, 'can_manage_calendar')
+  if (auth.error) return auth.error
+
   try {
     const token = await getToken()
     const body = await request.json()
@@ -130,6 +143,10 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  // Only admins can delete events
+  const auth = await requirePermission(request, 'can_manage_calendar')
+  if (auth.error) return auth.error
+
   try {
     const token = await getToken()
     const { searchParams } = new URL(request.url)

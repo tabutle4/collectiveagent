@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
@@ -8,6 +9,9 @@ const authHeader = () =>
 // Only needed if NOT using the auto_billing_toggle in checkout.
 // If the agent enabled autopay at checkout, Payload handles this automatically.
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const { user_id } = await request.json()
     if (!user_id) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })

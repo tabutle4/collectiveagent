@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 interface Split {
@@ -7,8 +8,11 @@ interface Split {
   firm: number
 }
 
-// GET - Get single team agreement
+// GET - Get single team agreement (any authenticated user can view)
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const { id } = await params
@@ -80,6 +84,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 // PUT - Update team agreement
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission(request, 'can_manage_team_agreements')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const { id } = await params
@@ -330,6 +337,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(request, 'can_manage_team_agreements')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const { id } = await params

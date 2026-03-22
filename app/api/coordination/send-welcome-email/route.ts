@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 import { getListingById } from '@/lib/db/listings'
 import { getCoordinationById, updateCoordination } from '@/lib/db/coordination'
 import { sendWelcomeEmail } from '@/lib/email/send'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const { coordination_id } = await request.json()

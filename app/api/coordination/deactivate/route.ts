@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { deactivateCoordination } from '@/lib/db/coordination'
 import { archiveListingFolder } from '@/lib/microsoft-graph'
 import { getListingById } from '@/lib/db/listings'
+import { requirePermission } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json()
     const { coordination_id, listing_id } = body

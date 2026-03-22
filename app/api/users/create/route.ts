@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hashPassword } from '@/lib/auth'
+import { requirePermission } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
+  // Require can_manage_agents permission to create users
+  const auth = await requirePermission(request, 'can_manage_agents')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
 

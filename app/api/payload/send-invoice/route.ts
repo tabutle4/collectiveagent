@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
@@ -7,6 +8,9 @@ const authHeader = () =>
 // Creates a payment link tied to an invoice and emails it to the agent via Payload.
 // Passing customer_id triggers Payload to send the email automatically.
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const { invoice_id, user_id } = await request.json()
 

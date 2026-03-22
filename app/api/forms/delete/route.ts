@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_forms')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const searchParams = request.nextUrl.searchParams

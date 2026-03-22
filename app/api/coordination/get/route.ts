@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { getCoordinationById } from '@/lib/db/coordination'
 import { getListingById } from '@/lib/db/listings'
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
   try {
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')

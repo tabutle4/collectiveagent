@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { sendProspectWelcomeEmail } from '@/lib/email'
+import { requirePermission } from '@/lib/api-auth'
 import crypto from 'crypto'
 
+// POST is intentionally public - this is the prospective agent form
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.json()
@@ -119,6 +121,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  // Require permission to view all agents (which includes prospects)
+  const auth = await requirePermission(request, 'can_view_all_agents')
+  if (auth.error) return auth.error
+
   try {
     const { data: prospects, error } = await supabase
       .from('users')
@@ -128,7 +134,12 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ prospects })
+    // Strip sensitive fields
+    const safeProspects = (prospects || []).map(
+      ({ password_hash, reset_token, reset_token_expires, ...p }: any) => p
+    )
+
+    return NextResponse.json({ prospects: safeProspects })
   } catch (error) {
     console.error('Get prospects error:', error)
     return NextResponse.json(

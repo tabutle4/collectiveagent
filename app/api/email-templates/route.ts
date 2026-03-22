@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 
 // GET - List all email templates
 export async function GET(request: NextRequest) {
+  // Any authenticated user can view templates
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
@@ -30,6 +35,10 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new email template
 export async function POST(request: NextRequest) {
+  // Require permission to manage email templates
+  const auth = await requirePermission(request, 'can_manage_email_templates')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json()
     const {

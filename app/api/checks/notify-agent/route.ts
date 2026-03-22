@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
@@ -10,6 +11,9 @@ const supabase = createClient(
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_checks')
+  if (auth.error) return auth.error
+
   try {
     const { check_id } = await request.json()
 

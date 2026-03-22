@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAllActiveCoordinations } from '@/lib/db/coordination'
 import { getListingById } from '@/lib/db/listings'
 import { createClient } from '@/lib/supabase/server'
+import { requirePermission } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
+  // Coordination is admin-only
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
 

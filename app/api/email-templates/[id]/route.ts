@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 
 const normalizeUuidInput = (value: string | null | undefined): string | null => {
@@ -14,11 +15,14 @@ const normalizeUuidInput = (value: string | null | undefined): string | null => 
   return value
 }
 
-// GET - Get single email template
+// GET - Get single email template (any authenticated user can view)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params
@@ -52,6 +56,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const auth = await requirePermission(request, 'can_manage_email_templates')
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params
@@ -169,6 +176,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const auth = await requirePermission(request, 'can_manage_email_templates')
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params

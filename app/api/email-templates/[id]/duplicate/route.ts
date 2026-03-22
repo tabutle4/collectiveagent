@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 
 const normalizeUuidInput = (value: string | null | undefined): string | null => {
@@ -19,6 +20,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const auth = await requirePermission(request, 'can_manage_email_templates')
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params

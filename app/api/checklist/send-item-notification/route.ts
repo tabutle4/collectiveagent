@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection } from '@/lib/email/layout'
@@ -6,6 +7,9 @@ import { getEmailLayout, emailSection } from '@/lib/email/layout'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_complete_checklist_items')
+  if (auth.error) return auth.error
+
   try {
     const { agent_id, item_name } = await request.json()
 

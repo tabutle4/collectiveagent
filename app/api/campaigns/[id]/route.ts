@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { requirePermission } from '@/lib/api-auth'
 
 // DELETE - Delete campaign (permanent delete)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } | Promise<{ id: string }> }
 ) {
+  const auth = await requirePermission(request, 'can_manage_campaigns')
+  if (auth.error) return auth.error
+
   try {
     // Handle both async and sync params (Next.js 15+)
     const resolvedParams = params instanceof Promise ? await params : params

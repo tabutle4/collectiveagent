@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 
@@ -22,6 +23,9 @@ const normalizeUuidInput = (value: string | null | undefined) => {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_send_campaign_emails')
+  if (auth.error) return auth.error
+
   try {
     const {
       campaign_id,

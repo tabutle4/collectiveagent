@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { generateFormToken, getFormLinkUrl } from '@/lib/magic-links'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_forms')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json()
     const { form_type } = body

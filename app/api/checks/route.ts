@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requirePermission } from '@/lib/api-auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +8,10 @@ const supabase = createClient(
 )
 
 export async function GET(request: NextRequest) {
+  // Require can_view_checks permission
+  const auth = await requirePermission(request, 'can_view_checks')
+  if (auth.error) return auth.error
+
   try {
     const { searchParams } = new URL(request.url)
     const section = searchParams.get('section') // 'on_hold' | 'active' | 'history' | 'dashboard'
@@ -161,6 +166,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // Require can_manage_checks permission for write operations
+  const auth = await requirePermission(request, 'can_manage_checks')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json()
     const { action } = body
@@ -241,6 +250,14 @@ export async function POST(request: NextRequest) {
 
     // Add a payout
     if (action === 'add_payout') {
+      // Payouts require can_process_payouts permission
+      if (!auth.permissions.has('can_process_payouts')) {
+        return NextResponse.json(
+          { error: 'Access denied. Required permission: can_process_payouts' },
+          { status: 403 }
+        )
+      }
+
       const { payout } = body
       const { data, error } = await supabase
         .from('check_payouts')
@@ -264,6 +281,14 @@ export async function POST(request: NextRequest) {
 
     // Update a payout
     if (action === 'update_payout') {
+      // Payouts require can_process_payouts permission
+      if (!auth.permissions.has('can_process_payouts')) {
+        return NextResponse.json(
+          { error: 'Access denied. Required permission: can_process_payouts' },
+          { status: 403 }
+        )
+      }
+
       const { payout_id, updates } = body
       const { data, error } = await supabase
         .from('check_payouts')
@@ -278,6 +303,14 @@ export async function POST(request: NextRequest) {
 
     // Delete a payout
     if (action === 'delete_payout') {
+      // Payouts require can_process_payouts permission
+      if (!auth.permissions.has('can_process_payouts')) {
+        return NextResponse.json(
+          { error: 'Access denied. Required permission: can_process_payouts' },
+          { status: 403 }
+        )
+      }
+
       const { payout_id } = body
       const { error } = await supabase.from('check_payouts').delete().eq('id', payout_id)
 

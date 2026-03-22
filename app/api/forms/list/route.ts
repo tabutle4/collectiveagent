@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
+// GET - List forms (all authenticated users can view)
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const searchParams = request.nextUrl.searchParams

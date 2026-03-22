@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
@@ -7,6 +8,9 @@ const authHeader = () =>
 type InvoiceType = 'onboarding' | 'monthly' | 'custom'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const {
       user_id,

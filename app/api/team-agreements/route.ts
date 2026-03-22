@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 
 interface Split {
   agent: number
@@ -9,6 +10,10 @@ interface Split {
 
 // GET - List all team agreements
 export async function GET(request: NextRequest) {
+  // Require authentication - any authenticated user can view team agreements
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
@@ -79,6 +84,10 @@ export async function GET(request: NextRequest) {
 
 // POST - Create new team agreement
 export async function POST(request: NextRequest) {
+  // Only admins can create team agreements
+  const auth = await requirePermission(request, 'can_manage_team_agreements')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const body = await request.json()

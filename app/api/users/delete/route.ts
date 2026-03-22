@@ -1,35 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requirePermission } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
+  // Require can_manage_agents permission to delete users
+  const auth = await requirePermission(request, 'can_manage_agents')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const body = await request.json()
-    const { userId: targetUserId, requestingUserId } = body
+    const { userId: targetUserId } = body
 
-    if (!targetUserId || !requestingUserId) {
+    if (!targetUserId) {
       return NextResponse.json(
-        { error: 'User ID and requesting user ID are required' },
+        { error: 'User ID is required' },
         { status: 400 }
       )
-    }
-
-    // Verify requesting user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', requestingUserId)
-      .single()
-
-    // Check role (simple string, not array)
-    if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Check if user is a prospect (has prospect_status)
     const { data: targetUser, error: targetError } = await supabase
       .from('users')
-      .select('prospect_status, role')
+      .select('prospect_status, role, status')
       .eq('id', targetUserId)
       .single()
 
@@ -37,11 +30,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Only allow deleting prospects (users with prospect_status)
+    // Only allow deleting prospects or inactive users
     // Don't allow deleting active agents or admins
-    if (!targetUser.prospect_status && targetUser.role) {
+    if (targetUser.status === 'active' && !targetUser.prospect_status) {
       return NextResponse.json(
-        { error: 'Cannot delete active users. Only prospective agents can be deleted.' },
+        { error: 'Cannot delete active users. Only prospective agents or inactive users can be deleted.' },
         { status: 400 }
       )
     }

@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/server'
 
 // Permission codes as defined in the database
 export type PermissionCode =
+  // Transactions
   | 'can_create_transactions'
   | 'can_edit_transactions'
   | 'can_delete_transactions'
@@ -23,25 +24,35 @@ export type PermissionCode =
   | 'can_view_all_transactions'
   | 'can_close_transactions'
   | 'can_reopen_transactions'
+  // Compliance
   | 'can_submit_for_compliance'
   | 'can_review_compliance'
   | 'can_approve_compliance'
   | 'can_complete_checklist_items'
+  // Commissions & CDA
   | 'can_edit_commission_details'
   | 'can_generate_cda'
   | 'can_finalize_commissions'
   | 'can_approve_cda'
+  // Checks & Payouts
   | 'can_view_checks'
   | 'can_manage_checks'
   | 'can_process_payouts'
+  // 1099
   | 'can_view_1099_data'
   | 'can_generate_1099_reports'
+  // Agents
   | 'can_view_all_agents'
   | 'can_manage_agents'
   | 'can_reset_passwords'
+  // Billing (existing in DB)
+  | 'can_view_billing'
+  | 'can_create_invoices'
+  | 'can_manage_billing'
   | 'can_manage_agent_billing'
   | 'can_view_agent_debts'
   | 'can_manage_agent_debts'
+  // Settings & Config
   | 'can_manage_company_settings'
   | 'can_manage_transaction_types'
   | 'can_manage_commission_plans'
@@ -51,15 +62,53 @@ export type PermissionCode =
   | 'can_manage_workflow_steps'
   | 'can_manage_payee_types'
   | 'can_manage_roles'
+  | 'can_manage_service_config'
+  // Activity & Reports
   | 'can_view_activity_log'
   | 'can_view_own_reports'
   | 'can_view_all_reports'
-  | 'can_manage_contact_submissions'
-  | 'can_manage_email_templates'
+  | 'can_view_dashboard_financials'
+  // Contacts (existing in DB)
   | 'can_view_all_contacts'
+  | 'can_manage_contacts'
+  | 'can_manage_contact_submissions'
+  // Email & Campaigns (existing in DB)
+  | 'can_view_campaigns'
+  | 'can_manage_campaigns'
+  | 'can_send_campaign_emails'
+  | 'can_manage_email_templates'
+  // Coordination & Listings (existing in DB)
+  | 'can_view_listings'
+  | 'can_manage_listings'
+  | 'can_manage_coordination'
+  // Documents (existing in DB)
+  | 'can_view_documents'
+  | 'can_manage_documents'
+  // Forms (existing in DB)
+  | 'can_view_forms'
+  | 'can_manage_forms'
+  // Onboarding (existing in DB)
+  | 'can_view_onboarding'
+  | 'can_manage_onboarding'
+  // Teams (existing in DB)
+  | 'can_view_teams'
+  | 'can_manage_teams'
+  | 'can_manage_team_agreements'
+  // Prospects (existing in DB)
+  | 'can_view_prospects'
+  | 'can_manage_prospects'
+  // Revenue Share (existing in DB)
+  | 'can_view_revenue_share'
+  // Roster
+  | 'can_regenerate_roster'
+  // Calendar (existing in DB)
+  | 'can_view_calendar'
+  | 'can_manage_calendar'
+  // Training Center
+  | 'can_view_training_center'
 
 // Role names as defined in the database
-export type RoleName = 'agent' | 'tc' | 'operations' | 'broker'
+export type RoleName = 'agent' | 'tc' | 'operations' | 'broker' | 'support'
 
 /**
  * Get all permissions for a user by their ID
@@ -195,6 +244,7 @@ export async function getPermissionsObject(
 
   // All possible permissions
   const allPermissions: PermissionCode[] = [
+    // Transactions
     'can_create_transactions',
     'can_edit_transactions',
     'can_delete_transactions',
@@ -202,25 +252,32 @@ export async function getPermissionsObject(
     'can_view_all_transactions',
     'can_close_transactions',
     'can_reopen_transactions',
+    // Compliance
     'can_submit_for_compliance',
     'can_review_compliance',
     'can_approve_compliance',
     'can_complete_checklist_items',
+    // Commissions & CDA
     'can_edit_commission_details',
     'can_generate_cda',
     'can_finalize_commissions',
     'can_approve_cda',
+    // Checks & Payouts
     'can_view_checks',
     'can_manage_checks',
     'can_process_payouts',
+    // 1099
     'can_view_1099_data',
     'can_generate_1099_reports',
+    // Agents
     'can_view_all_agents',
     'can_manage_agents',
     'can_reset_passwords',
+    // Billing
     'can_manage_agent_billing',
     'can_view_agent_debts',
     'can_manage_agent_debts',
+    // Settings & Config
     'can_manage_company_settings',
     'can_manage_transaction_types',
     'can_manage_commission_plans',
@@ -230,12 +287,33 @@ export async function getPermissionsObject(
     'can_manage_workflow_steps',
     'can_manage_payee_types',
     'can_manage_roles',
+    'can_manage_service_config',
+    // Activity & Reports
     'can_view_activity_log',
     'can_view_own_reports',
     'can_view_all_reports',
+    // Contacts
     'can_manage_contact_submissions',
-    'can_manage_email_templates',
     'can_view_all_contacts',
+    // Email & Campaigns
+    'can_manage_email_templates',
+    'can_manage_campaigns',
+    'can_send_campaign_emails',
+    // Coordination & Listings
+    'can_manage_coordination',
+    'can_manage_listings',
+    // Forms
+    'can_manage_forms',
+    // Onboarding
+    'can_manage_onboarding',
+    // Teams
+    'can_manage_team_agreements',
+    // Roster
+    'can_regenerate_roster',
+    // Calendar
+    'can_manage_calendar',
+    // Training Center
+    'can_view_training_center',
   ]
 
   for (const perm of allPermissions) {
@@ -264,7 +342,7 @@ export async function getUserRole(userId: string): Promise<RoleName> {
   const role = (user.role || 'agent').toLowerCase()
 
   // Validate it's a known role
-  if (['agent', 'tc', 'operations', 'broker'].includes(role)) {
+  if (['agent', 'tc', 'operations', 'broker', 'support'].includes(role)) {
     return role as RoleName
   }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 import { normalizeSocialUrl } from '@/lib/socialLinks'
 
@@ -7,6 +8,9 @@ import { normalizeSocialUrl } from '@/lib/socialLinks'
  * This fixes cases where the users table update failed but profile_updates was saved
  */
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_campaigns')
+  if (auth.error) return auth.error
+
   try {
     const body = await request.json().catch(() => ({}))
     const campaign_id = body.campaign_id

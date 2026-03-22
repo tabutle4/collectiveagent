@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_campaigns')
+  if (auth.error) return auth.error
+
   try {
     const { searchParams } = new URL(request.url)
     const token = searchParams.get('token')

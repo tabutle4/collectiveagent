@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { getServiceConfig } from '@/lib/db/service-config'
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_service_config')
+  if (auth.error) return auth.error
+
   try {
     const searchParams = request.nextUrl.searchParams
     const serviceType = searchParams.get('type')

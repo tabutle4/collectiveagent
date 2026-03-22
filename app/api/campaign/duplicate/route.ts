@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { supabase } from '@/lib/supabase'
 
 // Helper function to convert hardcoded campaign to editable steps_config
@@ -122,6 +123,9 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_campaigns')
+  if (auth.error) return auth.error
+
   try {
     const { campaign_id } = await request.json()
 

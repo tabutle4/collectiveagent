@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 
 // POST - Preview email template with sample data
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_email_templates')
+  if (auth.error) return auth.error
+
   try {
     const { html_content, variables } = await request.json()
 

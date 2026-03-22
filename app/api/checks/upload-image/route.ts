@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -66,6 +67,9 @@ async function uploadToOneDrive(
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_checks')
+  if (auth.error) return auth.error
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
@@ -7,6 +8,9 @@ const authHeader = () =>
 // Creates a Payload client token for the embedded checkout plugin.
 // Call this after creating an invoice, pass the invoice_id.
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  if (auth.error) return auth.error
+
   try {
     const { invoice_id, description }: { invoice_id: string; description: string } =
       await request.json()

@@ -5,8 +5,13 @@ import { getServiceConfig } from '@/lib/db/service-config'
 import { createListingFolder } from '@/lib/microsoft-graph'
 import { sendWelcomeEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
+import { requirePermission } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
+  // Coordination is admin-only
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
 

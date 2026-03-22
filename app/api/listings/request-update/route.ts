@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/send'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_listings')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const body = await request.json()

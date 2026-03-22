@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createListing, updateListing } from '@/lib/db/listings'
 import { createCoordination } from '@/lib/db/coordination'
 import { getServiceConfig } from '@/lib/db/service-config'
@@ -43,6 +44,9 @@ async function findExistingTransaction(
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_listings')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const body = await request.json()
