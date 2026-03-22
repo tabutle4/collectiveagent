@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
-const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
-
-// Training center site path for KQL scoping
 const TRAINING_CENTER_PATH = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
 // Drive IDs for default view (non-search mode)
@@ -37,7 +34,7 @@ async function graphGet(token: string, path: string, cache = true) {
     next: cache ? { revalidate: 300 } : { revalidate: 0 },
   })
   if (!res.ok) {
-    console.error(`Graph GET failed: ${path}`, res.status, await res.text().catch(() => ''))
+    console.error(`Graph GET failed: ${path}`, res.status)
     return null
   }
   return res.json()
@@ -52,19 +49,29 @@ async function graphPost(token: string, path: string, body: object) {
     },
     body: JSON.stringify(body),
   })
-  
-  const responseText = await res.text()
-  
+
   if (!res.ok) {
-    console.error(`Graph POST failed: ${path}`, res.status, responseText)
-    return { error: true, status: res.status, message: responseText }
+    const errorText = await res.text().catch(() => '')
+    console.error(`Graph POST failed: ${path}`, res.status)
+    return { error: true, status: res.status, message: errorText }
   }
-  
-  try {
-    return JSON.parse(responseText)
-  } catch {
-    return { error: true, message: 'Failed to parse response' }
+
+  return res.json()
+}
+
+// Extract name from resource, handling pages that only have webUrl
+function getResourceName(resource: any): string {
+  // driveItems have a name field
+  if (resource.name) return resource.name
+
+  // listItems (pages) - extract from webUrl
+  if (resource.webUrl) {
+    const lastSegment = resource.webUrl.split('/').pop() || ''
+    const pageName = lastSegment.replace(/\.aspx$/i, '').replace(/-/g, ' ')
+    if (pageName && pageName !== 'Untitled') return pageName
   }
+
+  return 'Untitled'
 }
 
 // Determine result type from URL and file extension
@@ -72,7 +79,6 @@ function getResultType(webUrl: string, name: string): 'video' | 'document' | 'pa
   const lowerName = name.toLowerCase()
   const lowerUrl = webUrl.toLowerCase()
 
-  // Check for video files
   if (
     lowerName.endsWith('.mp4') ||
     lowerName.endsWith('.mov') ||
@@ -82,7 +88,6 @@ function getResultType(webUrl: string, name: string): 'video' | 'document' | 'pa
     return 'video'
   }
 
-  // Check for SharePoint pages
   if (lowerName.endsWith('.aspx') || lowerUrl.includes('/sitepages/')) {
     return 'page'
   }
@@ -92,12 +97,8 @@ function getResultType(webUrl: string, name: string): 'video' | 'document' | 'pa
 
 // Extract category from the parent reference or URL
 function extractCategory(hit: any): string {
-  const parentPath = hit.resource?.parentReference?.path || ''
   const parentName = hit.resource?.parentReference?.name || ''
-
-  if (parentName) {
-    return parentName
-  }
+  if (parentName) return parentName
 
   const webUrl = hit.resource?.webUrl || ''
   const urlMatch = webUrl.match(/\/sites\/[^/]+\/([^/]+)/)
@@ -108,7 +109,7 @@ function extractCategory(hit: any): string {
   return 'General'
 }
 
-// Format video/document names for display
+// Format names for display
 function formatDisplayName(name: string): string {
   return name
     .replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
@@ -126,62 +127,38 @@ export async function GET(request: NextRequest) {
 
     // --- SEARCH MODE: Use Microsoft Search API ---
     if (query) {
-      // Build KQL query scoped to the training center site
       const kqlQuery = `${query} path:"${TRAINING_CENTER_PATH}"`
-      
-console.log('=== SEARCH API DEBUG v2 ===')
-      console.log('Query:', query)
-      console.log('KQL Query:', kqlQuery)
 
       const searchBody = {
-  requests: [
-    {
-      entityTypes: ['driveItem', 'listItem'],
-      query: {
-        queryString: kqlQuery,
-      },
-      from: 0,
-      size: 50,
-      region: 'US',
-    },
-  ],
-}
-      
-      console.log('Search request body:', JSON.stringify(searchBody, null, 2))
+        requests: [
+          {
+            entityTypes: ['driveItem', 'listItem'],
+            query: { queryString: kqlQuery },
+            from: 0,
+            size: 50,
+            region: 'US',
+          },
+        ],
+      }
 
       const searchResponse = await graphPost(token, '/search/query', searchBody)
-      
-      console.log('Search API response:', JSON.stringify(searchResponse, null, 2).slice(0, 2000))
 
-      // Check if Search API failed
+      // Check if Search API failed - fall back to drive search
       if (searchResponse?.error) {
-        console.error('Search API error:', searchResponse)
-        console.log('Falling back to drive search...')
         return await fallbackDriveSearch(token, query)
       }
 
       if (!searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits) {
-        console.warn('Search API returned no hits, falling back to drive search')
-        console.log('Full response:', JSON.stringify(searchResponse, null, 2))
         return await fallbackDriveSearch(token, query)
       }
 
       const hits = searchResponse.value[0].hitsContainers[0].hits
-      console.log(`Search API returned ${hits.length} hits`)
-      
-      // Log the types of results we got
-      const typeBreakdown: Record<string, number> = {}
-      hits.forEach((hit: any) => {
-        const odataType = hit.resource?.['@odata.type'] || 'unknown'
-        typeBreakdown[odataType] = (typeBreakdown[odataType] || 0) + 1
-      })
-      console.log('Result types breakdown:', typeBreakdown)
 
-      // Map hits to unified result format
+      // Map hits to unified result format - already sorted by relevance (rank)
       const searchResults = hits
         .map((hit: any) => {
           const resource = hit.resource
-          const name = resource.name || resource.title || 'Untitled'
+          const name = getResourceName(resource)
           const webUrl = resource.webUrl || ''
 
           // Skip temp files and system files
@@ -206,26 +183,10 @@ console.log('=== SEARCH API DEBUG v2 ===')
         })
         .filter(Boolean)
 
-      // Log final results by type
-      const finalTypeBreakdown: Record<string, number> = {}
-      searchResults.forEach((r: any) => {
-        finalTypeBreakdown[r.type] = (finalTypeBreakdown[r.type] || 0) + 1
-      })
-      console.log('Final results by type:', finalTypeBreakdown)
-
-      return NextResponse.json({ 
-        searchResults, 
-        query,
-        _debug: {
-          usedSearchAPI: true,
-          totalHits: hits.length,
-          typeBreakdown,
-          finalTypeBreakdown
-        }
-      })
+      return NextResponse.json({ searchResults, query })
     }
 
-    // --- DEFAULT MODE (unchanged) ---
+    // --- DEFAULT MODE: Recent recordings, resources, and video library folders ---
     const videoRootData = await graphGet(
       token,
       `/drives/${VIDEOS_DRIVE_ID}/root/children?$select=id,name,webUrl,folder&$orderby=name asc`
@@ -327,7 +288,6 @@ console.log('=== SEARCH API DEBUG v2 ===')
 
 // Fallback to drive-based search if Search API fails
 async function fallbackDriveSearch(token: string, query: string) {
-  console.log('=== FALLBACK DRIVE SEARCH ===')
   const encoded = encodeURIComponent(query)
 
   const [videoResults, docResults, agentResResults] = await Promise.all([
@@ -401,12 +361,5 @@ async function fallbackDriveSearch(token: string, query: string) {
       })),
   ].sort((a, b) => b.score - a.score)
 
-  return NextResponse.json({ 
-    searchResults: allResults, 
-    query,
-    _debug: {
-      usedSearchAPI: false,
-      fallbackReason: 'Search API failed or returned no results'
-    }
-  })
+  return NextResponse.json({ searchResults: allResults, query })
 }
