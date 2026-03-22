@@ -4,13 +4,14 @@ import { requireAuth } from '@/lib/api-auth'
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
 
+// Training center site path for KQL scoping
+const TRAINING_CENTER_PATH = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
+
+// Drive IDs for default view (non-search mode)
 const VIDEOS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5HhDhOCHtNrRZpFFzbL3M8m'
 const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4Y7SqWCeUeROfqY'
 const AGENT_RESOURCES_DRIVE_ID =
   'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
-
-// Site ID for the Training Center
-const SITE_ID = 'collectiverealtyco.sharepoint.com,893f5771-473e-4e65-a787-6a2b6e69775d,4351b2fa-6143-497c-89c5-c62185e28791'
 
 async function getAccessToken(): Promise<string> {
   const res = await fetch(
@@ -42,17 +43,71 @@ async function graphGet(token: string, path: string, cache = true) {
   return res.json()
 }
 
-// Score result by how well name matches query (higher = more relevant)
-function relevanceScore(name: string, query: string): number {
-  const n = name.toLowerCase().replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
-  const q = query.toLowerCase()
-  if (n === q) return 100
-  if (n.startsWith(q)) return 80
-  if (n.includes(q)) return 60
-  // Check individual words
-  const words = q.split(/\s+/)
-  const matchedWords = words.filter(w => n.includes(w))
-  return (matchedWords.length / words.length) * 40
+async function graphPost(token: string, path: string, body: object) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '')
+    console.error(`Graph POST failed: ${path}`, res.status, errorText)
+    return null
+  }
+  return res.json()
+}
+
+// Determine result type from URL and file extension
+function getResultType(webUrl: string, name: string): 'video' | 'document' | 'page' {
+  const lowerName = name.toLowerCase()
+  const lowerUrl = webUrl.toLowerCase()
+
+  // Check for video files
+  if (
+    lowerName.endsWith('.mp4') ||
+    lowerName.endsWith('.mov') ||
+    lowerName.endsWith('.avi') ||
+    lowerName.endsWith('.webm')
+  ) {
+    return 'video'
+  }
+
+  // Check for SharePoint pages
+  if (lowerName.endsWith('.aspx') || lowerUrl.includes('/sitepages/')) {
+    return 'page'
+  }
+
+  return 'document'
+}
+
+// Extract category from the parent reference or URL
+function extractCategory(hit: any): string {
+  // Try to get from parentReference
+  const parentPath = hit.resource?.parentReference?.path || ''
+  const parentName = hit.resource?.parentReference?.name || ''
+
+  if (parentName) {
+    return parentName
+  }
+
+  // Extract from URL path
+  const webUrl = hit.resource?.webUrl || ''
+  const urlMatch = webUrl.match(/\/sites\/[^/]+\/([^/]+)/)
+  if (urlMatch) {
+    return urlMatch[1].replace(/%20/g, ' ')
+  }
+
+  return 'General'
+}
+
+// Format video/document names for display
+function formatDisplayName(name: string): string {
+  return name
+    .replace(/\.(mp4|mov|avi|webm|pdf|docx|xlsx|pptx|doc|xls|aspx)$/i, '')
+    .replace(/[_-]/g, ' ')
 }
 
 export async function GET(request: NextRequest) {
@@ -64,70 +119,71 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('q')?.trim()
     const token = await getAccessToken()
 
-    // --- SEARCH MODE ---
+    // --- SEARCH MODE: Use Microsoft Search API ---
     if (query) {
-      const encoded = encodeURIComponent(query)
+      // Build KQL query scoped to the training center site
+      // This searches files, folders, pages, and list items
+      const kqlQuery = `${query} path:"${TRAINING_CENTER_PATH}"`
 
-      // Search drives (videos, documents, resources) in parallel
-      // Also fetch all SitePages to filter client-side (most reliable method)
-      const [videoResults, docResults, agentResResults, sitePagesData] = await Promise.all([
-        graphGet(
-          token,
-          `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
-          false
-        ),
-        graphGet(
-          token,
-          `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
-          false
-        ),
-        graphGet(
-          token,
-          `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
-          false
-        ),
-        // Fetch SitePages list items - filter client-side
-        getSitePages(token, query),
-      ])
+      const searchResponse = await graphPost(token, '/search/query', {
+        requests: [
+          {
+            entityTypes: ['driveItem', 'listItem'],
+            query: {
+              queryString: kqlQuery,
+            },
+            from: 0,
+            size: 50,
+            // For application permissions, you may need to add region
+            // region: 'NAM', // Uncomment if you get errors about region
+          },
+        ],
+      })
 
-      // Combine all results into one list, sorted by relevance
-      const allResults = [
-        // Pages (from SitePages list)
-        ...(sitePagesData || []),
-        // Videos
-        ...(videoResults?.value || [])
-          .filter((item: any) => item.file)
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            webUrl: item.webUrl,
-            lastModified: item.lastModifiedDateTime,
-            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-            folder: item.parentReference?.name || 'Video',
-            category: item.parentReference?.name || 'Video',
-            type: 'video' as const,
-            score: relevanceScore(item.name, query),
-          })),
-        // Documents
-        ...[...(docResults?.value || []), ...(agentResResults?.value || [])]
-          .filter((item: any) => item.file && !item.name?.startsWith('~'))
-          .map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            webUrl: item.webUrl,
-            lastModified: item.lastModifiedDateTime,
-            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-            folder: item.parentReference?.name || 'General',
-            category: item.parentReference?.name || 'General',
-            type: 'document' as const,
-            score: relevanceScore(item.name, query),
-          })),
-      ].sort((a, b) => b.score - a.score)
+      if (!searchResponse?.value?.[0]?.hitsContainers?.[0]?.hits) {
+        // If Search API fails, fall back to drive search
+        console.warn('Search API returned no results, falling back to drive search')
+        return await fallbackDriveSearch(token, query)
+      }
 
-      return NextResponse.json({ searchResults: allResults, query })
+      const hits = searchResponse.value[0].hitsContainers[0].hits
+
+      // Map hits to unified result format
+      // Results are already sorted by relevance (rank) from the Search API
+      const searchResults = hits
+        .map((hit: any) => {
+          const resource = hit.resource
+          const name = resource.name || resource.title || 'Untitled'
+          const webUrl = resource.webUrl || ''
+
+          // Skip temp files and system files
+          if (name.startsWith('~') || name.startsWith('_')) {
+            return null
+          }
+
+          const type = getResultType(webUrl, name)
+          const category = extractCategory(hit)
+
+          return {
+            id: hit.hitId,
+            name: formatDisplayName(name),
+            webUrl,
+            lastModified: resource.lastModifiedDateTime || new Date().toISOString(),
+            lastModifiedBy: resource.lastModifiedBy?.user?.displayName || 'Office Support',
+            type,
+            category,
+            folder: category,
+            // rank from Search API - lower is better, but we'll reverse for display
+            score: 100 - (hit.rank || 0),
+          }
+        })
+        .filter(Boolean) // Remove nulls from filtered items
+
+      return NextResponse.json({ searchResults, query })
     }
 
-    // --- DEFAULT MODE ---
+    // --- DEFAULT MODE: Recent content ---
+    // (Keep existing logic for non-search mode)
 
     // Video library folders
     const videoRootData = await graphGet(
@@ -231,78 +287,82 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper to get SitePages and filter by query
-async function getSitePages(token: string, query: string): Promise<any[]> {
-  const q = query.toLowerCase()
-  
-  // Try fetching from the SitePages list
-  const listNames = ['Site Pages', 'SitePages']
-  
-  for (const listName of listNames) {
-    try {
-      const listItems = await graphGet(
-        token,
-        `/sites/${SITE_ID}/lists/${encodeURIComponent(listName)}/items?$expand=fields($select=Title,FileLeafRef,Modified)&$top=200`,
-        false
-      )
-      
-      if (listItems?.value) {
-        return listItems.value
-          .filter((item: any) => {
-            const title = (item.fields?.Title || '').toLowerCase()
-            const fileName = (item.fields?.FileLeafRef || '').toLowerCase()
-            // Match query and filter out system pages
-            return (title.includes(q) || fileName.includes(q)) &&
-                   fileName.endsWith('.aspx') &&
-                   !fileName.startsWith('_') &&
-                   !fileName.includes('template')
-          })
-          .map((item: any) => ({
-            id: item.id,
-            name: item.fields?.Title || item.fields?.FileLeafRef?.replace('.aspx', '') || 'Page',
-            webUrl: `${SHAREPOINT_BASE}/SitePages/${item.fields?.FileLeafRef}`,
-            lastModified: item.fields?.Modified || new Date().toISOString(),
-            lastModifiedBy: 'Office Support',
-            category: 'Page',
-            type: 'page' as const,
-            score: relevanceScore(item.fields?.Title || item.fields?.FileLeafRef || '', query) + 10,
-          }))
-      }
-    } catch (err) {
-      console.error(`Failed to fetch list "${listName}":`, err)
-    }
-  }
-  
-  // Fallback: try getting the site's default drive and look for SitePages folder
-  try {
-    const driveItems = await graphGet(
+// Fallback to drive-based search if Search API fails
+// This is the original approach but combined into a single sorted list
+async function fallbackDriveSearch(token: string, query: string) {
+  const encoded = encodeURIComponent(query)
+
+  const [videoResults, docResults, agentResResults] = await Promise.all([
+    graphGet(
       token,
-      `/sites/${SITE_ID}/drive/root:/SitePages:/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy&$top=200`,
+      `/drives/${VIDEOS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
       false
-    )
-    
-    if (driveItems?.value) {
-      return driveItems.value
-        .filter((item: any) => {
-          const name = (item.name || '').toLowerCase()
-          return name.includes(q) &&
-                 name.endsWith('.aspx') &&
-                 !name.startsWith('_')
-        })
-        .map((item: any) => ({
-          id: item.id,
-          name: item.name?.replace('.aspx', '') || 'Page',
-          webUrl: item.webUrl,
-          lastModified: item.lastModifiedDateTime || new Date().toISOString(),
-          lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-          category: 'Page',
-          type: 'page' as const,
-          score: relevanceScore(item.name || '', query) + 10,
-        }))
-    }
-  } catch (err) {
-    console.error('Failed to fetch SitePages from drive:', err)
+    ),
+    graphGet(
+      token,
+      `/drives/${DOCUMENTS_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
+      false
+    ),
+    graphGet(
+      token,
+      `/drives/${AGENT_RESOURCES_DRIVE_ID}/root/search(q='${encoded}')?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,parentReference&$top=25`,
+      false
+    ),
+  ])
+
+  // Simple relevance scoring for fallback
+  const scoreResult = (name: string, q: string): number => {
+    const n = name.toLowerCase().replace(/\.[^.]+$/, '')
+    const ql = q.toLowerCase()
+    if (n === ql) return 100
+    if (n.startsWith(ql)) return 80
+    if (n.includes(ql)) return 60
+    const words = ql.split(/\s+/)
+    const matched = words.filter(w => n.includes(w))
+    return (matched.length / words.length) * 40
   }
-  
-  return []
+
+  const allResults = [
+    ...(videoResults?.value || [])
+      .filter((item: any) => item.file && !item.name?.startsWith('~'))
+      .map((item: any) => ({
+        id: item.id,
+        name: formatDisplayName(item.name),
+        webUrl: item.webUrl,
+        lastModified: item.lastModifiedDateTime,
+        lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+        folder: item.parentReference?.name || 'Video',
+        category: item.parentReference?.name || 'Video',
+        type: 'video' as const,
+        score: scoreResult(item.name, query),
+      })),
+    ...(docResults?.value || [])
+      .filter((item: any) => item.file && !item.name?.startsWith('~'))
+      .map((item: any) => ({
+        id: item.id,
+        name: formatDisplayName(item.name),
+        webUrl: item.webUrl,
+        lastModified: item.lastModifiedDateTime,
+        lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+        folder: item.parentReference?.name || 'General',
+        category: item.parentReference?.name || 'General',
+        type: getResultType(item.webUrl, item.name),
+        score: scoreResult(item.name, query),
+      })),
+    ...(agentResResults?.value || [])
+      .filter((item: any) => item.file && !item.name?.startsWith('~'))
+      .map((item: any) => ({
+        id: item.id,
+        name: formatDisplayName(item.name),
+        webUrl: item.webUrl,
+        lastModified: item.lastModifiedDateTime,
+        lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+        folder: item.parentReference?.name || 'General',
+        category: item.parentReference?.name || 'General',
+        type: getResultType(item.webUrl, item.name),
+        score: scoreResult(item.name, query),
+      })),
+  ].sort((a, b) => b.score - a.score)
+
+  return NextResponse.json({ searchResults: allResults, query })
 }
