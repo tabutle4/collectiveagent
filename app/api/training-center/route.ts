@@ -259,20 +259,25 @@ export async function GET(request: NextRequest) {
     for (const folder of videoLibraryFolders.slice(0, 12)) {
       const folderContents = await graphGet(
         token,
-        `/drives/${VIDEOS_DRIVE_ID}/items/${folder.id}/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,size&$orderby=lastModifiedDateTime desc&$top=3`
+        `/drives/${VIDEOS_DRIVE_ID}/items/${folder.id}/children?$select=id,name,webUrl,lastModifiedDateTime,lastModifiedBy,file,size&$expand=thumbnails&$orderby=lastModifiedDateTime desc&$top=3`,
+        false // Don't cache - thumbnails expire
       )
       const videos = (folderContents?.value || [])
         .filter((item: any) => item.file)
-        .map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          webUrl: item.webUrl,
-          lastModified: item.lastModifiedDateTime,
-          lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
-          thumbnail: null,
-          folder: folder.name,
-          size: item.size,
-        }))
+        .map((item: any) => {
+          const thumbSet = item.thumbnails?.[0]
+          const thumbnail = thumbSet?.large?.url || thumbSet?.medium?.url || thumbSet?.small?.url || null
+          return {
+            id: item.id,
+            name: item.name,
+            webUrl: item.webUrl,
+            lastModified: item.lastModifiedDateTime,
+            lastModifiedBy: item.lastModifiedBy?.user?.displayName || 'Office Support',
+            thumbnail,
+            folder: folder.name,
+            size: item.size,
+          }
+        })
       recentVideos.push(...videos)
     }
 
@@ -280,21 +285,8 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
       .slice(0, 6)
 
-    const recentRecordings = await Promise.all(
-      top6.map(async video => {
-        try {
-          const thumbData = await graphGet(
-            token,
-            `/drives/${VIDEOS_DRIVE_ID}/items/${video.id}/thumbnails`
-          )
-          const thumbnail =
-            thumbData?.value?.[0]?.medium?.url || thumbData?.value?.[0]?.large?.url || null
-          return { ...video, thumbnail }
-        } catch {
-          return video
-        }
-      })
-    )
+    // Thumbnails already fetched above with $expand
+    const recentRecordings = top6
 
     const agentResFoldersData = await graphGet(
       token,
@@ -324,7 +316,7 @@ export async function GET(request: NextRequest) {
         (a: any, b: any) =>
           new Date(b.lastModifiedDateTime).getTime() - new Date(a.lastModifiedDateTime).getTime()
       )
-      .slice(0, 8)
+      .slice(0, 15)
       .map((item: any) => ({
         id: item.id,
         name: item.name,
