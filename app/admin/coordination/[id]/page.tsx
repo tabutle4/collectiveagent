@@ -91,10 +91,11 @@ export default function CoordinationDetailPage() {
       const agentsData = await res.json()
       
       if (res.ok && agentsData.agents) {
+        // API already returns { id, name, displayName } - just sort
         const agentsList = agentsData.agents
-          .map((user: any) => ({
-            id: user?.id,
-            name: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`.trim(),
+          .map((agent: any) => ({
+            id: agent.id,
+            name: agent.name || agent.displayName || 'Unknown',
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name))
         setAgents(agentsList)

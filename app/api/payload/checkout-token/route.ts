@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
@@ -8,7 +8,7 @@ const authHeader = () =>
 // Creates a Payload client token for the embedded checkout plugin.
 // Call this after creating an invoice, pass the invoice_id.
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -20,6 +20,33 @@ export async function POST(request: NextRequest) {
         { error: 'invoice_id and description are required' },
         { status: 400 }
       )
+    }
+
+    // Verify the invoice belongs to the requesting user OR user has admin permissions
+    if (!auth.permissions.has('can_manage_agent_billing')) {
+      // Fetch invoice from Payload to get customer_id
+      const invoiceRes = await fetch(`https://api.payload.com/invoices/${invoice_id}`, {
+        headers: { Authorization: authHeader() },
+      })
+
+      if (!invoiceRes.ok) {
+        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      }
+
+      const invoice = await invoiceRes.json()
+      const customerId = invoice.customer_id
+
+      // Look up which user owns this Payload customer
+      const supabase = createClient()
+      const { data: invoiceOwner } = await supabase
+        .from('users')
+        .select('id')
+        .eq('payload_payee_id', customerId)
+        .single()
+
+      if (!invoiceOwner || invoiceOwner.id !== auth.user.id) {
+        return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+      }
     }
 
     const res = await fetch('https://api.payload.com/access_tokens', {
