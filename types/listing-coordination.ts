@@ -111,6 +111,7 @@ export interface ListingFormData {
   mls_link?: string
   mls_login_info?: string
   estimated_launch_date?: string
+  actual_launch_date?: string   // ← Add this line
   dotloop_file_created: boolean
   listing_input_requested: boolean
   coordination_requested: boolean
