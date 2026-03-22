@@ -10,6 +10,9 @@ const DOCUMENTS_DRIVE_ID = 'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5EPy6Dyk4
 const AGENT_RESOURCES_DRIVE_ID =
   'b!cVfAiT5HZU6nh1orbml3XfqyUUNDYXxJicXGIYXih5FQj3gFKBeBS5JwuInEa4jG'
 
+// SharePoint system folders to exclude from search results
+const EXCLUDED_CATEGORIES = ['SiteAssets', 'Site Assets', 'Lists', '_catalogs', 'Style Library']
+
 async function getAccessToken(): Promise<string> {
   const res = await fetch(
     `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
@@ -61,10 +64,8 @@ async function graphPost(token: string, path: string, body: object) {
 
 // Extract name from resource, handling pages that only have webUrl
 function getResourceName(resource: any): string {
-  // driveItems have a name field
   if (resource.name) return resource.name
 
-  // listItems (pages) - extract from webUrl
   if (resource.webUrl) {
     const lastSegment = resource.webUrl.split('/').pop() || ''
     const pageName = lastSegment.replace(/\.aspx$/i, '').replace(/-/g, ' ')
@@ -116,6 +117,15 @@ function formatDisplayName(name: string): string {
     .replace(/[_-]/g, ' ')
 }
 
+// Check if result should be excluded (system folders, list forms, etc.)
+function shouldExcludeResult(item: any): boolean {
+  if (!item) return true
+  if (EXCLUDED_CATEGORIES.includes(item.category)) return true
+  if (item.webUrl?.includes('DispForm.aspx')) return true
+  if (item.webUrl?.includes('/Lists/')) return true
+  return false
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -143,7 +153,6 @@ export async function GET(request: NextRequest) {
 
       const searchResponse = await graphPost(token, '/search/query', searchBody)
 
-      // Check if Search API failed - fall back to drive search
       if (searchResponse?.error) {
         return await fallbackDriveSearch(token, query)
       }
@@ -154,14 +163,12 @@ export async function GET(request: NextRequest) {
 
       const hits = searchResponse.value[0].hitsContainers[0].hits
 
-      // Map hits to unified result format - already sorted by relevance (rank)
       const searchResults = hits
         .map((hit: any) => {
           const resource = hit.resource
           const name = getResourceName(resource)
           const webUrl = resource.webUrl || ''
 
-          // Skip temp files and system files
           if (name.startsWith('~') || name.startsWith('_')) {
             return null
           }
@@ -181,7 +188,7 @@ export async function GET(request: NextRequest) {
             score: 100 - (hit.rank || 0),
           }
         })
-        .filter(Boolean)
+        .filter((item: any) => !shouldExcludeResult(item))
 
       return NextResponse.json({ searchResults, query })
     }
@@ -359,7 +366,9 @@ async function fallbackDriveSearch(token: string, query: string) {
         type: getResultType(item.webUrl, item.name),
         score: scoreResult(item.name, query),
       })),
-  ].sort((a, b) => b.score - a.score)
+  ]
+    .filter((item: any) => !shouldExcludeResult(item))
+    .sort((a, b) => b.score - a.score)
 
   return NextResponse.json({ searchResults: allResults, query })
 }
