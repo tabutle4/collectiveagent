@@ -49,7 +49,12 @@ export async function GET(request: NextRequest) {
     const url = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`
     console.log('Calendar GET - fetching:', url)
 
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch(url, { 
+  headers: { 
+    Authorization: `Bearer ${token}`,
+    Prefer: 'outlook.timezone="America/Chicago"',
+  } 
+})
     const data = await res.json()
     console.log('Calendar GET - response status:', res.status)
     if (!res.ok) {

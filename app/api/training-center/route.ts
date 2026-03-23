@@ -165,11 +165,16 @@ async function getThisWeekSessions(token: string) {
     const startISO = startOfWeek.toISOString()
     const endISO = endOfWeek.toISOString()
 
-    const calendarData = await graphGet(
-      token,
-      `/groups/${AGENTS_GROUP_ID}/calendar/calendarView?startDateTime=${startISO}&endDateTime=${endISO}&$select=id,subject,start,end,location,onlineMeeting,webLink,isAllDay&$orderby=start/dateTime asc&$top=10`,
-      false
-    )
+    const calendarRes = await fetch(
+  `${GRAPH_BASE}/groups/${AGENTS_GROUP_ID}/calendar/calendarView?startDateTime=${startISO}&endDateTime=${endISO}&$select=id,subject,start,end,location,onlineMeeting,webLink,isAllDay&$orderby=start/dateTime asc&$top=10`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Prefer: 'outlook.timezone="America/Chicago"',
+    },
+  }
+)
+const calendarData = calendarRes.ok ? await calendarRes.json() : null
 
     if (!calendarData?.value) return []
 
