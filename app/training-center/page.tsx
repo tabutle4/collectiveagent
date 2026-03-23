@@ -27,6 +27,9 @@ import {
   Image,
   Users,
   FilePlus,
+  Megaphone,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 
 const SHAREPOINT_BASE = 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter'
@@ -152,6 +155,13 @@ interface BookmarkItem {
   created_at: string
 }
 
+interface Announcement {
+  id: string
+  content: string
+  created_at: string
+  created_by_name: string
+}
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short',
@@ -206,13 +216,17 @@ export default function TrainingCenterPage() {
   const [searching, setSearching] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [bookmarkLoading, setBookmarkLoading] = useState<string | null>(null)
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+  const [editingAnnouncement, setEditingAnnouncement] = useState(false)
+  const [announcementDraft, setAnnouncementDraft] = useState('')
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false)
 
   const currentSearchRef = useRef<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Build quick links with role-based calendar URL
   // Only include calendar link once we know the user's role to prevent wrong redirects
-  const isAdmin = userRole && ['operations', 'broker', 'tc'].includes(userRole)
+  const isAdmin = userRole && ['operations', 'broker', 'tc', 'support'].includes(userRole)
   const calendarHref = isAdmin ? '/admin/calendar' : '/agent/calendar'
   
   const quickLinks = [
@@ -235,10 +249,11 @@ export default function TrainingCenterPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [trainingRes, bookmarksRes, userRes] = await Promise.all([
+        const [trainingRes, bookmarksRes, userRes, announcementRes] = await Promise.all([
           fetch('/api/training-center'),
           fetch('/api/training-center/bookmarks'),
           fetch('/api/auth/me'),
+          fetch('/api/training-center/announcement'),
         ])
 
         if (!trainingRes.ok) throw new Error('Failed to load training center data')
@@ -260,6 +275,11 @@ export default function TrainingCenterPage() {
         if (userRes.ok) {
           const userData = await userRes.json()
           setUserRole(userData.user?.role || null)
+        }
+
+        if (announcementRes.ok) {
+          const announcementData = await announcementRes.json()
+          setAnnouncement(announcementData.announcement || null)
         }
       } catch (err: any) {
         setError(err.message)
@@ -379,6 +399,40 @@ export default function TrainingCenterPage() {
       console.error('Bookmark toggle failed:', err)
     } finally {
       setBookmarkLoading(null)
+    }
+  }
+
+  // Announcement functions
+  const saveAnnouncement = async () => {
+    setSavingAnnouncement(true)
+    try {
+      const res = await fetch('/api/training-center/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: announcementDraft.trim() }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAnnouncement(data.announcement)
+        setEditingAnnouncement(false)
+        setAnnouncementDraft('')
+      }
+    } catch (err) {
+      console.error('Failed to save announcement:', err)
+    } finally {
+      setSavingAnnouncement(false)
+    }
+  }
+
+  const deleteAnnouncement = async () => {
+    if (!confirm('Delete this announcement?')) return
+    try {
+      const res = await fetch('/api/training-center/announcement', { method: 'DELETE' })
+      if (res.ok) {
+        setAnnouncement(null)
+      }
+    } catch (err) {
+      console.error('Failed to delete announcement:', err)
     }
   }
 
@@ -597,6 +651,87 @@ export default function TrainingCenterPage() {
             </a>
           </div>
         </div>
+
+        {/* Announcement Banner */}
+        {(announcement || (isAdmin && editingAnnouncement)) && (
+          <div className="container-card border-l-2 border-luxury-accent mb-6">
+            <div className="flex items-start gap-3">
+              <Megaphone size={16} className="text-luxury-accent flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                {editingAnnouncement ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={announcementDraft}
+                      onChange={e => setAnnouncementDraft(e.target.value)}
+                      placeholder="Write an announcement for all agents..."
+                      className="input-luxury w-full resize-none"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveAnnouncement}
+                        disabled={!announcementDraft.trim() || savingAnnouncement}
+                        className="btn btn-primary text-xs disabled:opacity-50"
+                      >
+                        {savingAnnouncement ? 'Saving...' : 'Post'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingAnnouncement(false)
+                          setAnnouncementDraft('')
+                        }}
+                        className="btn btn-secondary text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : announcement ? (
+                  <>
+                    <p className="text-xs text-luxury-gray-1 whitespace-pre-wrap">{announcement.content}</p>
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      — {announcement.created_by_name} · {formatDate(announcement.created_at)}
+                    </p>
+                  </>
+                ) : null}
+              </div>
+              {isAdmin && !editingAnnouncement && (
+                <div className="flex gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      setAnnouncementDraft(announcement?.content || '')
+                      setEditingAnnouncement(true)
+                    }}
+                    className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                    title="Edit announcement"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  {announcement && (
+                    <button
+                      onClick={deleteAnnouncement}
+                      className="p-1.5 text-luxury-gray-3 hover:text-red-500 transition-colors"
+                      title="Delete announcement"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Add Announcement Button (admin only, when no announcement exists) */}
+        {isAdmin && !announcement && !editingAnnouncement && (
+          <button
+            onClick={() => setEditingAnnouncement(true)}
+            className="container-card mb-6 w-full text-left flex items-center gap-3 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+          >
+            <Megaphone size={16} className="text-luxury-accent" />
+            <span className="text-xs">Add an announcement for all agents...</span>
+          </button>
+        )}
 
         {error && (
           <div className="alert-warning flex items-center gap-2 mb-4">
