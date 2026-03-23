@@ -106,6 +106,15 @@ export type PermissionCode =
   | 'can_manage_calendar'
   // Training Center
   | 'can_view_training_center'
+  // Property Management
+  | 'can_view_pm'
+  | 'can_manage_pm'
+  | 'can_manage_pm_landlords'
+  | 'can_manage_pm_tenants'
+  | 'can_manage_pm_properties'
+  | 'can_manage_pm_leases'
+  | 'can_manage_pm_invoices'
+  | 'can_process_pm_disbursements'
 
 // Role names as defined in the database
 export type RoleName = 'agent' | 'tc' | 'operations' | 'broker' | 'support'
@@ -314,6 +323,15 @@ export async function getPermissionsObject(
     'can_manage_calendar',
     // Training Center
     'can_view_training_center',
+    // Property Management
+    'can_view_pm',
+    'can_manage_pm',
+    'can_manage_pm_landlords',
+    'can_manage_pm_tenants',
+    'can_manage_pm_properties',
+    'can_manage_pm_leases',
+    'can_manage_pm_invoices',
+    'can_process_pm_disbursements',
   ]
 
   for (const perm of allPermissions) {
