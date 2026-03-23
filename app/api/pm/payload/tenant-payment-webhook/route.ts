@@ -49,11 +49,12 @@ export async function POST(request: NextRequest) {
 
       // Get PM agreement to calculate management fee
       let managementFeePct = 10 // Default
-      if (invoice.managed_properties?.pm_agreement_id) {
+      const property = invoice.managed_properties as any
+      if (property?.pm_agreement_id) {
         const { data: agreement } = await supabase
           .from('pm_agreements')
           .select('management_fee_pct')
-          .eq('id', invoice.managed_properties.pm_agreement_id)
+          .eq('id', property.pm_agreement_id)
           .single()
 
         if (agreement) {
