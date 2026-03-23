@@ -27,6 +27,7 @@ import {
   ClipboardList,
   BarChart3,
   BookOpen,
+  Building2,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -60,6 +61,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
+  { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },

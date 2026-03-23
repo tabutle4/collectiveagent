@@ -1,73 +1,115 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-// GET - Landlord dashboard data by token (no auth required - magic link)
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const token = searchParams.get('token')
-
-    if (!token) {
-      return NextResponse.json({ error: 'Token is required' }, { status: 400 })
+    const supabase = createClient()
+    
+    // Support both token-based (legacy) and user_id-based (session) lookups
+    const token = request.nextUrl.searchParams.get('token')
+    const userId = request.nextUrl.searchParams.get('user_id')
+    
+    let landlordId: string | null = null
+    
+    if (userId) {
+      // Session-based: user_id is the landlord id
+      landlordId = userId
+    } else if (token) {
+      // Token-based: look up by dashboard_token
+      const { data: landlord } = await supabase
+        .from('landlords')
+        .select('id')
+        .eq('dashboard_token', token)
+        .single()
+      
+      if (!landlord) {
+        return NextResponse.json({ error: 'Invalid or expired link' }, { status: 401 })
+      }
+      landlordId = landlord.id
+    } else {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    const supabase = createClient()
-
-    // Fetch landlord by dashboard token
-    const { data: landlord, error } = await supabase
+    // Fetch landlord with all related data
+    const { data: landlord, error: landlordError } = await supabase
       .from('landlords')
-      .select(`
-        id, first_name, last_name, email, phone,
-        mailing_address, mailing_city, mailing_state, mailing_zip,
-        w9_status, bank_status, status,
-        managed_properties(
-          id, property_address, unit, city, state, zip, status,
-          pm_leases(
-            id, lease_start, lease_end, monthly_rent, status,
-            tenants(id, first_name, last_name, email)
-          )
-        ),
-        pm_agreements(
-          id, management_fee_pct, commencement_date, expiration_date, status
-        )
-      `)
-      .eq('dashboard_token', token)
+      .select('*')
+      .eq('id', landlordId)
       .single()
 
-    if (error || !landlord) {
-      return NextResponse.json({ error: 'Invalid or expired link' }, { status: 404 })
+    if (landlordError || !landlord) {
+      return NextResponse.json({ error: 'Landlord not found' }, { status: 404 })
     }
 
-    // Get pending disbursements
+    // Fetch properties with active leases
+    const { data: properties } = await supabase
+      .from('managed_properties')
+      .select(`
+        *,
+        pm_leases (
+          id,
+          lease_start,
+          lease_end,
+          monthly_rent,
+          status,
+          tenants (
+            id,
+            first_name,
+            last_name,
+            email
+          )
+        )
+      `)
+      .eq('landlord_id', landlordId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    // Fetch agreements
+    const { data: agreements } = await supabase
+      .from('pm_agreements')
+      .select('*')
+      .eq('landlord_id', landlordId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+
+    // Fetch pending disbursements
     const { data: pendingDisbursements } = await supabase
       .from('landlord_disbursements')
       .select(`
-        id, gross_rent, management_fee, net_amount, period_month, period_year, payment_status,
-        managed_properties(id, property_address, city)
+        *,
+        managed_properties (
+          id,
+          property_address,
+          city
+        )
       `)
-      .eq('landlord_id', landlord.id)
+      .eq('landlord_id', landlordId)
       .eq('payment_status', 'pending')
       .order('created_at', { ascending: false })
 
-    // Get recent activity (last 10 disbursements)
-    const { data: recentActivity } = await supabase
+    // Build recent activity from disbursements
+    const { data: recentDisbursements } = await supabase
       .from('landlord_disbursements')
-      .select(`
-        id, net_amount, payment_status, payment_date, period_month, period_year,
-        managed_properties(id, property_address)
-      `)
-      .eq('landlord_id', landlord.id)
+      .select('*')
+      .eq('landlord_id', landlordId)
       .order('created_at', { ascending: false })
       .limit(10)
 
-    // Calculate setup status
+    const recentActivity = (recentDisbursements || []).map(d => ({
+      type: 'disbursement',
+      description: `${d.payment_status === 'completed' ? 'Received' : 'Pending'} disbursement for ${new Date(2000, (d.period_month || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${d.period_year}`,
+      date: d.payment_date || d.created_at,
+      amount: d.net_amount,
+      status: d.payment_status === 'completed' ? 'completed' : 'pending'
+    }))
+
+    // Determine setup status
     const setupStatus = {
       w9Complete: landlord.w9_status === 'completed',
-      bankConnected: landlord.bank_status === 'connected',
+      bankConnected: landlord.bank_status === 'connected'
     }
 
     return NextResponse.json({
-      success: true,
       landlord: {
         id: landlord.id,
         first_name: landlord.first_name,
@@ -79,21 +121,17 @@ export async function GET(request: NextRequest) {
         mailing_state: landlord.mailing_state,
         mailing_zip: landlord.mailing_zip,
         status: landlord.status,
+        w9_status: landlord.w9_status,
+        bank_status: landlord.bank_status
       },
-      properties: landlord.managed_properties || [],
-      agreements: landlord.pm_agreements || [],
+      properties: properties || [],
+      agreements: agreements || [],
       pendingDisbursements: pendingDisbursements || [],
-      recentActivity: (recentActivity || []).map((d: any) => ({
-        type: 'disbursement',
-        description: `${d.payment_status === 'completed' ? 'Paid' : 'Pending'}: $${d.net_amount} for ${d.managed_properties?.property_address || 'Property'} (${d.period_month}/${d.period_year})`,
-        date: d.payment_date,
-        amount: d.net_amount,
-        status: d.payment_status,
-      })),
-      setupStatus,
+      recentActivity,
+      setupStatus
     })
   } catch (error: any) {
-    console.error('Error fetching landlord dashboard:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in PM landlord dashboard:', error)
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }
