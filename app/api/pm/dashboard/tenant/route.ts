@@ -56,14 +56,15 @@ export async function GET(request: NextRequest) {
       .reduce((sum: number, inv: any) => sum + (inv.total_amount || 0), 0)
 
     // Format lease for response
+    const property = activeLease?.managed_properties as any
     const leaseInfo = activeLease
       ? {
           id: activeLease.id,
-          property_address: activeLease.managed_properties?.property_address || '',
-          unit: activeLease.managed_properties?.unit || '',
-          city: activeLease.managed_properties?.city || '',
-          state: activeLease.managed_properties?.state || '',
-          zip: activeLease.managed_properties?.zip || '',
+          property_address: property?.property_address || '',
+          unit: property?.unit || '',
+          city: property?.city || '',
+          state: property?.state || '',
+          zip: property?.zip || '',
           monthly_rent: activeLease.monthly_rent,
           rent_due_day: activeLease.rent_due_day,
           lease_start: activeLease.lease_start,
