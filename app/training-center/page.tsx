@@ -176,10 +176,10 @@ function formatSessionTime(startStr: string, endStr: string, isAllDay: boolean) 
   const start = new Date(startStr)
   const end = new Date(endStr)
 
-  const dayName = start.toLocaleDateString('en-US', { weekday: 'short' })
-  const date = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const dayName = start.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Chicago' })
+  const date = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Chicago' })
+  const startTime = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' })
+  const endTime = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' })
 
   return `${dayName}, ${date} · ${startTime} - ${endTime}`
 }

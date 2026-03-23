@@ -273,14 +273,15 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   }
 
   const formatEventDate = (event: any) => {
-    const start = new Date(event.start.dateTime || event.start.date)
-    return start.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
+  const start = new Date(event.start.dateTime || event.start.date)
+  return start.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'America/Chicago',
+  })
+}
 
   const prevMonth = () =>
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
