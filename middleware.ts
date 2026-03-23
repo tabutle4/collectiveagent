@@ -21,6 +21,8 @@ const PUBLIC_PATHS = [
   '/api/seller',
   '/api/campaign',
   '/api/training-center',
+  '/api/pm',
+  '/pm',
   '/manifest.json',
   '/_next',
   '/favicon.ico',
