@@ -108,7 +108,7 @@ export default function CoordinationDetailPage() {
   const loadEmailHistory = async () => {
     setLoadingHistory(true)
     try {
-      const response = await fetch(`/api/coordination/history?coordinationId=${coordinationId}`)
+      const response = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=email_history`)
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.emailHistory) {
@@ -127,7 +127,8 @@ export default function CoordinationDetailPage() {
   const loadWeeklyReports = async () => {
     setLoadingReports(true)
     try {
-      const response = await fetch(`/api/coordination/history?coordinationId=${coordinationId}`)
+      const response = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=weekly_reports`)
+
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.weeklyReports) {
