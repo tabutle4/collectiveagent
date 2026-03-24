@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     // Check role (simple string, not array)
-    if (userError || userData?.role !== 'Admin') {
+    const adminRoles = ['operations', 'broker']
+    if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
       return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
