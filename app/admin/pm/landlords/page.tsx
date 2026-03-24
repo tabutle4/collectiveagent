@@ -2,18 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import {
-  Search,
-  Plus,
-  ChevronRight,
-  CheckCircle,
-  AlertCircle,
-  Clock,
-  ExternalLink,
-  Mail,
-  Phone,
-} from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 
 interface Landlord {
   id: string
@@ -21,20 +10,17 @@ interface Landlord {
   last_name: string
   email: string
   phone: string | null
-  status: 'onboarding' | 'active' | 'inactive'
-  w9_status: 'not_started' | 'pending' | 'completed' | 'failed'
-  bank_status: 'not_started' | 'pending' | 'connected' | 'failed'
-  dashboard_token: string
+  status: string
+  w9_status: string
+  bank_status: string
   created_at: string
-  properties_count?: number
 }
 
 export default function LandlordsListPage() {
   const router = useRouter()
   const [landlords, setLandlords] = useState<Landlord[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [filter, setFilter] = useState<'all' | 'active' | 'onboarding'>('all')
 
   useEffect(() => {
     loadLandlords()
@@ -45,7 +31,9 @@ export default function LandlordsListPage() {
     try {
       const res = await fetch('/api/pm/landlords')
       const data = await res.json()
-      setLandlords(data.landlords || [])
+      if (data.landlords) {
+        setLandlords(data.landlords)
+      }
     } catch (err) {
       console.error('Error loading landlords:', err)
     } finally {
@@ -53,197 +41,153 @@ export default function LandlordsListPage() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
-            <CheckCircle size={12} /> Active
-          </span>
-        )
-      case 'onboarding':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
-            <Clock size={12} /> Onboarding
-          </span>
-        )
-      case 'inactive':
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
-            Inactive
-          </span>
-        )
-      default:
-        return null
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm('Are you sure you want to delete this landlord? This will also delete all their properties, leases, and invoices.')) {
+      return
+    }
+    try {
+      const res = await fetch(`/api/pm/landlords/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        loadLandlords()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete landlord')
+      }
+    } catch (err) {
+      alert('Failed to delete landlord')
     }
   }
 
-  const getSetupStatus = (landlord: Landlord) => {
-    const w9Done = landlord.w9_status === 'completed'
-    const bankDone = landlord.bank_status === 'connected'
-
-    if (w9Done && bankDone) {
-      return (
-        <span className="text-xs text-green-600 flex items-center gap-1">
-          <CheckCircle size={12} /> Setup complete
-        </span>
-      )
-    }
-
-    const missing = []
-    if (!w9Done) missing.push('W9')
-    if (!bankDone) missing.push('Bank')
-
-    return (
-      <span className="text-xs text-yellow-600 flex items-center gap-1">
-        <AlertCircle size={12} /> Missing: {missing.join(', ')}
-      </span>
-    )
-  }
-
-  const filtered = landlords.filter((l) => {
-    const matchesSearch =
-      search === '' ||
-      `${l.first_name} ${l.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-      l.email.toLowerCase().includes(search.toLowerCase())
-
-    const matchesStatus = statusFilter === 'all' || l.status === statusFilter
-
-    return matchesSearch && matchesStatus
-  })
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
     })
   }
 
-  const getDashboardUrl = (token: string) => {
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-    return `${baseUrl}/pm/landlord/${token}`
-  }
+  const filteredLandlords = landlords.filter(l => {
+    if (filter === 'active') return l.status === 'active'
+    if (filter === 'onboarding') return l.status === 'onboarding'
+    return true
+  })
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
         <h1 className="page-title">Landlords</h1>
-        <Link href="/admin/pm/landlords/new" className="btn btn-primary flex items-center gap-2">
-          <Plus size={14} />
-          Add Landlord
-        </Link>
+        <button
+          onClick={() => router.push('/admin/pm/landlords/new')}
+          className="btn btn-primary flex items-center gap-2"
+        >
+          <Plus size={14} /> Add Landlord
+        </button>
       </div>
 
-      {/* Filters */}
       <div className="container-card">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or email..."
-              className="input-luxury pl-9"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="select-luxury md:w-48"
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="onboarding">Onboarding</option>
-            <option value="inactive">Inactive</option>
-          </select>
+        {/* Filter Tabs */}
+        <div className="flex gap-2 mb-4">
+          {(['all', 'active', 'onboarding'] as const).map(status => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`btn text-sm capitalize ${filter === status ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              {status} (
+              {status === 'all'
+                ? landlords.length
+                : status === 'active'
+                  ? landlords.filter(l => l.status === 'active').length
+                  : landlords.filter(l => l.status === 'onboarding').length}
+              )
+            </button>
+          ))}
         </div>
-      </div>
 
-      {/* Landlords List */}
-      <div className="container-card">
+        {/* Content */}
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-sm text-luxury-gray-3">Loading landlords...</p>
+            <p className="text-sm text-luxury-gray-3">Loading...</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filteredLandlords.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-sm text-luxury-gray-3">
-              {landlords.length === 0 ? 'No landlords yet' : 'No landlords match your filters'}
-            </p>
+            <p className="text-sm text-luxury-gray-3 mb-4">No landlords found</p>
+            <button
+              onClick={() => router.push('/admin/pm/landlords/new')}
+              className="btn btn-primary"
+            >
+              Add First Landlord
+            </button>
           </div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((landlord) => (
-              <div
-                key={landlord.id}
-                className="flex items-center justify-between p-4 rounded-lg hover:bg-luxury-light transition-colors cursor-pointer border border-transparent hover:border-luxury-gray-5"
-                onClick={() => router.push(`/admin/pm/landlords/${landlord.id}`)}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <p className="text-sm font-semibold text-luxury-gray-1">
+          <div className="space-y-3">
+            {filteredLandlords.map(landlord => (
+              <div key={landlord.id} className="inner-card">
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-luxury-gray-1 mb-1">
                       {landlord.first_name} {landlord.last_name}
-                    </p>
-                    {getStatusBadge(landlord.status)}
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-luxury-gray-3">
-                    <span className="flex items-center gap-1">
-                      <Mail size={12} />
+                    </h3>
+                    <p className="text-xs text-luxury-gray-3 mb-3">
                       {landlord.email}
-                    </span>
-                    {landlord.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone size={12} />
-                        {landlord.phone}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1">{getSetupStatus(landlord)}</div>
-                </div>
+                      {landlord.phone && ` · ${landlord.phone}`}
+                    </p>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right hidden md:block">
-                    <p className="text-xs text-luxury-gray-3">Added</p>
-                    <p className="text-sm text-luxury-gray-1">{formatDate(landlord.created_at)}</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <p className="text-xs text-luxury-gray-3">Status</p>
+                        <p className="text-xs font-medium">
+                          <span className={landlord.status === 'active' ? 'text-green-700' : 'text-amber-600'}>
+                            {landlord.status === 'active' ? 'Active' : 'Onboarding'}
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-luxury-gray-3">W9</p>
+                        <p className="text-xs font-medium">
+                          <span className={landlord.w9_status === 'completed' ? 'text-green-700' : 'text-amber-600'}>
+                            {landlord.w9_status === 'completed' ? 'Complete' : 'Pending'}
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-luxury-gray-3">Bank</p>
+                        <p className="text-xs font-medium">
+                          <span className={landlord.bank_status === 'connected' ? 'text-green-700' : 'text-amber-600'}>
+                            {landlord.bank_status === 'connected' ? 'Connected' : 'Not Connected'}
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-luxury-gray-3">Added</p>
+                        <p className="text-xs font-medium text-luxury-gray-1">
+                          {formatDate(landlord.created_at)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <a
-                    href={getDashboardUrl(landlord.dashboard_token)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-2 text-luxury-gray-3 hover:text-luxury-accent transition-colors"
-                    title="Open landlord dashboard"
-                  >
-                    <ExternalLink size={16} />
-                  </a>
-                  <ChevronRight size={16} className="text-luxury-gray-3" />
+
+                  <div className="flex md:flex-col gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => router.push(`/admin/pm/landlords/${landlord.id}`)}
+                      className="btn btn-primary text-xs"
+                    >
+                      Manage
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(landlord.id, e)}
+                      className="btn text-xs bg-white border border-red-600 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
-
-      {/* Summary */}
-      <div className="flex items-center justify-between text-xs text-luxury-gray-3">
-        <p>
-          Showing {filtered.length} of {landlords.length} landlords
-        </p>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500"></span>
-            {landlords.filter((l) => l.status === 'active').length} active
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-            {landlords.filter((l) => l.status === 'onboarding').length} onboarding
-          </span>
-        </div>
       </div>
     </div>
   )
