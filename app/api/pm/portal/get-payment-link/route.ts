@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
       },
       body: new URLSearchParams({
         type: 'bill',
+        due_date: invoice.due_date,
         processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
         customer_id: customerId,
         description,
