@@ -6,6 +6,7 @@ import { createListingFolder } from '@/lib/microsoft-graph'
 import { sendWelcomeEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
+import { getCentralTime, getCentralDateString, getCentralISOString } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   // Coordination is admin-only
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     let paymentDueDate = null
     // Only set payment due date for agent_pays (not broker_listing)
     if (payment_method === 'agent_pays') {
-      const dueDate = new Date()
+      const dueDate = getCentralTime()
       dueDate.setDate(dueDate.getDate() + 60)
       paymentDueDate = dueDate.toISOString().split('T')[0]
     }
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
       seller_name,
       seller_email,
       service_fee: serviceFee,
-      start_date: new Date().toISOString().split('T')[0],
+      start_date: getCentralDateString(),
       payment_method,
       payment_due_date: paymentDueDate,
     })
@@ -131,8 +132,8 @@ export async function POST(request: NextRequest) {
           .from('listing_coordination')
           .update({
             welcome_email_sent: true,
-            welcome_email_sent_at: new Date().toISOString(),
-            last_email_sent_at: new Date().toISOString(),
+            welcome_email_sent_at: getCentralISOString(),
+            last_email_sent_at: getCentralISOString(),
             total_emails_sent: 1,
           })
           .eq('id', coordination.id)
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
           subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
           resend_email_id: result.emailId || null,
           status: 'sent',
-          sent_at: new Date().toISOString(),
+          sent_at: getCentralISOString(),
         })
       } else {
         // Log failed email
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
           subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
           status: 'failed',
           error_message: result.error || 'Unknown error',
-          sent_at: new Date().toISOString(),
+          sent_at: getCentralISOString(),
         })
       }
     }

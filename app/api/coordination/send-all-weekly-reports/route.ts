@@ -5,6 +5,7 @@ import { getAllActiveCoordinations } from '@/lib/db/coordination'
 import { getListingById } from '@/lib/db/listings'
 import { sendWeeklyReportEmail } from '@/lib/email/send'
 import { updateCoordination } from '@/lib/db/coordination'
+import { getCentralTime, formatCentralDate, getCentralISOString } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_coordination')
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
       errors: [] as string[],
     }
 
-    const now = new Date()
+    const now = getCentralTime()
     let scheduleDate: Date | undefined
 
     if (!sendNow) {
@@ -47,12 +48,7 @@ export async function POST(request: NextRequest) {
       scheduleDate.setHours(18, 0, 0, 0)
     }
 
-    const dateSentStr = now.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    const dateSentStr = formatCentralDate()
 
     for (const coordination of coordinations) {
       try {
@@ -108,14 +104,14 @@ export async function POST(request: NextRequest) {
             .update({
               email_id: emailResult.emailId,
               email_sent: sendNow ? true : false,
-              email_sent_at: sendNow ? now.toISOString() : null,
+              email_sent_at: sendNow ? getCentralISOString() : null,
               email_scheduled_for: scheduleDate ? scheduleDate.toISOString() : null,
             })
             .eq('id', latestReport.id)
 
           if (sendNow) {
             await updateCoordination(coordination.id, {
-              last_email_sent_at: now.toISOString(),
+              last_email_sent_at: getCentralISOString(),
               total_emails_sent: coordination.total_emails_sent + 1,
             })
 
@@ -128,7 +124,7 @@ export async function POST(request: NextRequest) {
               subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
               resend_email_id: emailResult.emailId,
               status: 'sent',
-              sent_at: now.toISOString(),
+              sent_at: getCentralISOString(),
               weekly_report_id: latestReport.id,
             })
 

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getListingById } from '@/lib/db/listings'
 import { getCoordinationById, updateCoordination } from '@/lib/db/coordination'
 import { sendWeeklyReportEmail } from '@/lib/email/send'
+import { formatCentralDate, getCentralISOString } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_coordination')
@@ -59,12 +60,7 @@ export async function POST(request: NextRequest) {
       reportFile2Url = latestReport.report_file_url_2 || undefined
     }
 
-    const dateSentStr = new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    const dateSentStr = formatCentralDate()
 
     const emailResult = await sendWeeklyReportEmail(
       coordination,
@@ -84,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // Update coordination and mark report as sent
     await updateCoordination(coordination_id, {
-      last_email_sent_at: new Date().toISOString(),
+      last_email_sent_at: getCentralISOString(),
       total_emails_sent: (coordination.total_emails_sent || 0) + 1,
     })
 
@@ -94,7 +90,7 @@ export async function POST(request: NextRequest) {
         .from('coordination_weekly_reports')
         .update({
           email_sent: true,
-          email_sent_at: new Date().toISOString(),
+          email_sent_at: getCentralISOString(),
           email_id: emailResult.emailId,
         })
         .eq('id', latestReport.id)
@@ -109,7 +105,7 @@ export async function POST(request: NextRequest) {
       subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSentStr}`,
       resend_email_id: emailResult.emailId || null,
       status: 'sent',
-      sent_at: new Date().toISOString(),
+      sent_at: getCentralISOString(),
       weekly_report_id: latestReport?.id || null,
     })
 

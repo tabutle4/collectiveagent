@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getListingById } from '@/lib/db/listings'
 import { getCoordinationById, updateCoordination } from '@/lib/db/coordination'
 import { sendWelcomeEmail } from '@/lib/email/send'
+import { getCentralISOString } from '@/lib/timezone'
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_coordination')
@@ -110,8 +111,8 @@ export async function POST(request: NextRequest) {
     // Update coordination to mark welcome email as sent
     await updateCoordination(coordination_id, {
       welcome_email_sent: true,
-      welcome_email_sent_at: new Date().toISOString(),
-      last_email_sent_at: new Date().toISOString(),
+      welcome_email_sent_at: getCentralISOString(),
+      last_email_sent_at: getCentralISOString(),
       total_emails_sent: (coordination.total_emails_sent || 0) + 1,
     })
 
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
       subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
       resend_email_id: emailResult.emailId || null,
       status: 'sent',
-      sent_at: new Date().toISOString(),
+      sent_at: getCentralISOString(),
     })
 
     return NextResponse.json({

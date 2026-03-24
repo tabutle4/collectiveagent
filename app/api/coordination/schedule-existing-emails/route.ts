@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getAllActiveCoordinations } from '@/lib/db/coordination'
 import { getListingById } from '@/lib/db/listings'
 import { sendWeeklyReportEmail } from '@/lib/email/send'
+import { getCentralTime, formatCentralDate } from '@/lib/timezone'
 
 /**
  * Schedule emails for existing weekly reports that haven't been sent yet
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate next Monday at 6pm
-    const now = new Date()
+    const now = getCentralTime()
     const dayOfWeek = now.getDay()
     let daysUntilMonday = (8 - dayOfWeek) % 7
 
@@ -48,12 +49,7 @@ export async function POST(request: NextRequest) {
     nextMonday.setDate(now.getDate() + daysUntilMonday)
     nextMonday.setHours(18, 0, 0, 0) // 6:00 PM
 
-    const dateSentStr = nextMonday.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
+    const dateSentStr = formatCentralDate(nextMonday)
 
     for (const coordination of coordinations) {
       try {
