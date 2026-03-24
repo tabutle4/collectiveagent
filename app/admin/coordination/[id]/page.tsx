@@ -111,7 +111,7 @@ export default function CoordinationDetailPage() {
       const response = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=email_history`)
       if (response.ok) {
         const data = await response.json()
-        if (data.success && data.emailHistory) {
+        if (data.emailHistory) {
           setEmailHistory(data.emailHistory)
           const welcomeEmail = data.emailHistory.find((email: any) => email.email_type === 'welcome')
           setHasWelcomeEmailInHistory(!!welcomeEmail)
@@ -129,9 +129,10 @@ export default function CoordinationDetailPage() {
     try {
       const response = await fetch(`/api/coordination/history?coordination_id=${coordinationId}&type=weekly_reports`)
 
+
       if (response.ok) {
         const data = await response.json()
-        if (data.success && data.weeklyReports) {
+        if (data.weeklyReports) {
           setWeeklyReports(data.weeklyReports)
         }
       }
