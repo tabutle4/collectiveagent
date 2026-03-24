@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -83,7 +83,7 @@ interface DashboardData {
   currentBalance: number
 }
 
-export default function TenantDashboardPage() {
+function TenantDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const previewId = searchParams.get('preview')
@@ -113,7 +113,6 @@ export default function TenantDashboardPage() {
 
   const checkAdminAndLoad = async (tenantId: string) => {
     try {
-      // Verify admin access via main app auth
       const adminRes = await fetch('/api/pm/admin-check')
       const adminData = await adminRes.json()
       
@@ -125,7 +124,6 @@ export default function TenantDashboardPage() {
 
       setIsAdminPreview(true)
 
-      // Load dashboard data for the specified tenant
       const dashboardRes = await fetch(`/api/pm/dashboard/tenant?user_id=${tenantId}`)
       if (!dashboardRes.ok) {
         throw new Error('Tenant not found')
@@ -142,7 +140,6 @@ export default function TenantDashboardPage() {
 
   const checkSessionAndLoad = async () => {
     try {
-      // Check PM session
       const sessionRes = await fetch('/api/pm/auth/session')
       if (!sessionRes.ok) {
         router.push('/pm/login')
@@ -155,7 +152,6 @@ export default function TenantDashboardPage() {
         return
       }
 
-      // Load dashboard data
       const dashboardRes = await fetch(`/api/pm/dashboard/tenant?user_id=${session.user_id}`)
       if (!dashboardRes.ok) {
         throw new Error('Failed to load dashboard')
@@ -220,9 +216,6 @@ export default function TenantDashboardPage() {
     
     setSubmittingRepair(true)
     try {
-      // Note: This creates a repair request that admins will see
-      // Since the API requires can_manage_pm, we need a tenant-accessible endpoint
-      // For now, we'll show a message to contact property management
       alert('Repair request noted! Please contact pm@collectiverealtyco.com or call (281) 638-9407 to report your repair.')
       setShowRepairModal(false)
       setRepairForm({ category: '', urgency: 'routine', title: '', description: '' })
@@ -267,7 +260,7 @@ export default function TenantDashboardPage() {
     return (
       <div className="min-h-screen bg-luxury-light flex items-center justify-center p-6">
         <div className="container-card max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <AlertCircle size={64} className="text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Error</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Failed to load dashboard'}</p>
           {isAdminPreview ? (
@@ -293,7 +286,7 @@ export default function TenantDashboardPage() {
         <div className="bg-amber-500 text-white px-6 py-2">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4" />
+              <Eye size={16} />
               <span className="text-sm font-medium">
                 Admin Preview — Viewing as {tenant.first_name} {tenant.last_name}
               </span>
@@ -302,7 +295,7 @@ export default function TenantDashboardPage() {
               href={`/admin/pm/tenants/${tenant.id}`}
               className="flex items-center gap-1 text-sm hover:underline"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft size={16} />
               Back to Admin
             </Link>
           </div>
@@ -334,7 +327,7 @@ export default function TenantDashboardPage() {
               className="p-2 rounded-lg hover:bg-luxury-light transition-colors text-luxury-gray-3 hover:text-luxury-gray-1"
               title={isAdminPreview ? 'Exit Preview' : 'Sign Out'}
             >
-              {isAdminPreview ? <ArrowLeft className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
+              {isAdminPreview ? <ArrowLeft size={20} /> : <LogOut size={20} />}
             </button>
           </div>
         </div>
@@ -357,7 +350,7 @@ export default function TenantDashboardPage() {
             )}
             {currentBalance === 0 && (
               <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle size={16} />
                 All paid up!
               </p>
             )}
@@ -367,7 +360,7 @@ export default function TenantDashboardPage() {
           {lease && (
             <div className="container-card">
               <h2 className="field-label mb-2 flex items-center gap-2">
-                <Home className="w-4 h-4" />
+                <Home size={16} />
                 Your Rental
               </h2>
               <p className="font-semibold text-luxury-gray-1">
@@ -398,7 +391,7 @@ export default function TenantDashboardPage() {
           <div className="container-card mb-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="field-label flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
+                <DollarSign size={16} />
                 Invoices Due
               </h2>
               {unpaidInvoices.length > 1 && (
@@ -432,7 +425,7 @@ export default function TenantDashboardPage() {
                             : 'border-luxury-gray-4'
                         }`}>
                           {selectedInvoices.includes(invoice.id) && (
-                            <CheckCircle className="w-4 h-4 text-white" />
+                            <CheckCircle size={16} className="text-white" />
                           )}
                         </div>
                         <div>
@@ -444,7 +437,7 @@ export default function TenantDashboardPage() {
                           </p>
                           {overdue && (
                             <p className="text-sm text-red-600 flex items-center gap-1 mt-1">
-                              <AlertTriangle className="w-4 h-4" />
+                              <AlertTriangle size={16} />
                               Overdue
                             </p>
                           )}
@@ -460,8 +453,8 @@ export default function TenantDashboardPage() {
                           </p>
                         )}
                         {invoice.status === 'sent' && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded-full">
+                            <Clock size={12} />
                             Sent
                           </span>
                         )}
@@ -533,7 +526,7 @@ export default function TenantDashboardPage() {
         {paidInvoices.length > 0 && (
           <div className="container-card">
             <h2 className="field-label mb-4 flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
+              <Calendar size={16} />
               Payment History
             </h2>
             <div className="overflow-x-auto">
@@ -559,8 +552,8 @@ export default function TenantDashboardPage() {
                         {invoice.paid_at ? formatDate(invoice.paid_at) : '—'}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
-                          <CheckCircle className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-50 text-green-700 rounded-full">
+                          <CheckCircle size={12} />
                           Paid
                         </span>
                       </td>
@@ -767,5 +760,24 @@ export default function TenantDashboardPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-luxury-light flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-luxury-accent mx-auto mb-4"></div>
+        <p className="text-luxury-gray-3">Loading dashboard...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function TenantDashboardPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <TenantDashboardContent />
+    </Suspense>
   )
 }

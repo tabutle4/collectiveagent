@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -20,7 +20,6 @@ import {
   ArrowLeft,
   Eye,
   Wrench,
-  BarChart3,
   Loader2
 } from 'lucide-react'
 
@@ -119,7 +118,7 @@ interface DashboardData {
   }
 }
 
-export default function LandlordDashboardPage() {
+function LandlordDashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const previewId = searchParams.get('preview')
@@ -142,7 +141,6 @@ export default function LandlordDashboardPage() {
 
   const checkAdminAndLoad = async (landlordId: string) => {
     try {
-      // Verify admin access via main app auth
       const adminRes = await fetch('/api/pm/admin-check')
       const adminData = await adminRes.json()
       
@@ -154,7 +152,6 @@ export default function LandlordDashboardPage() {
 
       setIsAdminPreview(true)
 
-      // Load dashboard data for the specified landlord
       const dashboardRes = await fetch(`/api/pm/dashboard/landlord?user_id=${landlordId}`)
       if (!dashboardRes.ok) {
         throw new Error('Landlord not found')
@@ -171,7 +168,6 @@ export default function LandlordDashboardPage() {
 
   const checkSessionAndLoad = async () => {
     try {
-      // Check PM session
       const sessionRes = await fetch('/api/pm/auth/session')
       if (!sessionRes.ok) {
         router.push('/pm/login')
@@ -184,7 +180,6 @@ export default function LandlordDashboardPage() {
         return
       }
 
-      // Load dashboard data
       const dashboardRes = await fetch(`/api/pm/dashboard/landlord?user_id=${session.user_id}`)
       if (!dashboardRes.ok) {
         throw new Error('Failed to load dashboard')
@@ -286,7 +281,7 @@ export default function LandlordDashboardPage() {
     return (
       <div className="min-h-screen bg-luxury-light flex items-center justify-center p-6">
         <div className="container-card max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <AlertCircle size={64} className="text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Error</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Failed to load dashboard'}</p>
           {isAdminPreview ? (
@@ -312,7 +307,7 @@ export default function LandlordDashboardPage() {
         <div className="bg-amber-500 text-white px-6 py-2">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4" />
+              <Eye size={16} />
               <span className="text-sm font-medium">
                 Admin Preview — Viewing as {landlord.first_name} {landlord.last_name}
               </span>
@@ -321,7 +316,7 @@ export default function LandlordDashboardPage() {
               href={`/admin/pm/landlords/${landlord.id}`}
               className="flex items-center gap-1 text-sm hover:underline"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft size={16} />
               Back to Admin
             </Link>
           </div>
@@ -353,7 +348,7 @@ export default function LandlordDashboardPage() {
               className="p-2 rounded-lg hover:bg-luxury-light transition-colors text-luxury-gray-3 hover:text-luxury-gray-1"
               title={isAdminPreview ? 'Exit Preview' : 'Sign Out'}
             >
-              {isAdminPreview ? <ArrowLeft className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
+              {isAdminPreview ? <ArrowLeft size={20} /> : <LogOut size={20} />}
             </button>
           </div>
         </div>
@@ -365,7 +360,7 @@ export default function LandlordDashboardPage() {
         {(!setupStatus.w9Complete || !setupStatus.bankConnected) && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <AlertCircle size={20} className="text-amber-600 mt-0.5" />
               <div>
                 <h3 className="font-medium text-amber-800">Complete Your Account Setup</h3>
                 <p className="text-sm text-amber-700 mt-1">
@@ -374,13 +369,13 @@ export default function LandlordDashboardPage() {
                 <ul className="text-sm text-amber-700 mt-2 space-y-1">
                   {!setupStatus.w9Complete && (
                     <li className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle size={16} />
                       Submit your W9 form
                     </li>
                   )}
                   {!setupStatus.bankConnected && (
                     <li className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle size={16} />
                       Connect your bank account for ACH deposits
                     </li>
                   )}
@@ -395,13 +390,13 @@ export default function LandlordDashboardPage() {
           <div className="lg:col-span-2">
             <div className="container-card">
               <h2 className="field-label mb-4 flex items-center gap-2">
-                <Home className="w-4 h-4" />
+                <Home size={16} />
                 Your Properties
               </h2>
 
               {properties.length === 0 ? (
                 <div className="text-center py-8">
-                  <Building2 className="w-12 h-12 text-luxury-gray-4 mx-auto mb-3" />
+                  <Building2 size={48} className="text-luxury-gray-4 mx-auto mb-3" />
                   <p className="text-luxury-gray-3">No properties yet</p>
                 </div>
               ) : (
@@ -422,8 +417,8 @@ export default function LandlordDashboardPage() {
                           </div>
                           <span className={`px-2 py-0.5 text-xs rounded-full ${
                             property.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-600'
+                              ? 'bg-green-50 text-green-700' 
+                              : 'bg-gray-50 text-gray-600'
                           }`}>
                             {property.status}
                           </span>
@@ -446,7 +441,7 @@ export default function LandlordDashboardPage() {
                           </div>
                         ) : (
                           <div className="bg-amber-50 text-amber-800 rounded-lg p-3 text-sm">
-                            <Clock className="w-4 h-4 inline mr-1" />
+                            <Clock size={16} className="inline mr-1" />
                             No active lease — property is vacant
                           </div>
                         )}
@@ -513,7 +508,7 @@ export default function LandlordDashboardPage() {
             {pendingDisbursements.length > 0 && (
               <div className="container-card">
                 <h2 className="field-label mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" />
+                  <DollarSign size={16} />
                   Pending Disbursements
                 </h2>
                 <div className="space-y-3">
@@ -543,7 +538,7 @@ export default function LandlordDashboardPage() {
             {agreements.length > 0 && (
               <div className="container-card">
                 <h2 className="field-label mb-4 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar size={16} />
                   Agreement
                 </h2>
                 {agreements.map((a) => (
@@ -572,18 +567,18 @@ export default function LandlordDashboardPage() {
               <h2 className="field-label mb-4">Your Contact Info</h2>
               <div className="text-sm space-y-2">
                 <div className="flex items-center gap-2 text-luxury-gray-1">
-                  <Mail className="w-4 h-4 text-luxury-gray-3" />
+                  <Mail size={16} className="text-luxury-gray-3" />
                   {landlord.email}
                 </div>
                 {landlord.phone && (
                   <div className="flex items-center gap-2 text-luxury-gray-1">
-                    <Phone className="w-4 h-4 text-luxury-gray-3" />
+                    <Phone size={16} className="text-luxury-gray-3" />
                     {landlord.phone}
                   </div>
                 )}
                 {landlord.mailing_address && (
                   <div className="flex items-start gap-2 text-luxury-gray-1">
-                    <MapPin className="w-4 h-4 text-luxury-gray-3 mt-0.5" />
+                    <MapPin size={16} className="text-luxury-gray-3 mt-0.5" />
                     <div>
                       {landlord.mailing_address}<br />
                       {landlord.mailing_city}, {landlord.mailing_state} {landlord.mailing_zip}
@@ -647,9 +642,9 @@ export default function LandlordDashboardPage() {
                 <div key={i} className="flex items-center justify-between py-2 border-b border-luxury-gray-5 last:border-0">
                   <div className="flex items-center gap-3">
                     {activity.status === 'completed' ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <CheckCircle size={20} className="text-green-600" />
                     ) : (
-                      <Clock className="w-5 h-5 text-amber-500" />
+                      <Clock size={20} className="text-amber-500" />
                     )}
                     <span className="text-sm text-luxury-gray-1">{activity.description}</span>
                   </div>
@@ -680,5 +675,24 @@ export default function LandlordDashboardPage() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-luxury-light flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-luxury-accent mx-auto mb-4"></div>
+        <p className="text-luxury-gray-3">Loading dashboard...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function LandlordDashboardPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <LandlordDashboardContent />
+    </Suspense>
   )
 }

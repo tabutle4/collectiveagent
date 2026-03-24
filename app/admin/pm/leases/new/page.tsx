@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { FileText, ArrowLeft, Save, AlertCircle } from 'lucide-react'
@@ -27,7 +27,7 @@ interface Tenant {
   email: string
 }
 
-export default function NewLeasePage() {
+function NewLeaseContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedPropertyId = searchParams.get('property')
@@ -193,9 +193,9 @@ export default function NewLeasePage() {
     <div className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm/leases" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <FileText className="w-6 h-6 text-luxury-accent" />
+        <FileText size={24} className="text-luxury-accent" />
         <h1 className="page-title">Create Lease</h1>
       </div>
 
@@ -305,7 +305,7 @@ export default function NewLeasePage() {
             </div>
             {invoiceCount > 0 && (
               <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
                 <div className="text-sm text-blue-800">
                   <p className="font-medium">{invoiceCount} invoices will be auto-generated</p>
                   <p className="text-xs text-blue-600 mt-1">
@@ -463,12 +463,34 @@ export default function NewLeasePage() {
               Cancel
             </Link>
             <button type="submit" disabled={loading} className="btn btn-primary flex items-center gap-2">
-              <Save className="w-4 h-4" />
+              <Save size={16} />
               {loading ? 'Creating...' : 'Create Lease'}
             </button>
           </div>
         </div>
       </form>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <div className="animate-pulse">
+        <div className="h-8 bg-luxury-gray-5 rounded w-48 mb-6"></div>
+        <div className="container-card space-y-4">
+          <div className="h-4 bg-luxury-gray-5 rounded w-full"></div>
+          <div className="h-4 bg-luxury-gray-5 rounded w-3/4"></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function NewLeasePage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <NewLeaseContent />
+    </Suspense>
   )
 }
