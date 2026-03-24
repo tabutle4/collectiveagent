@@ -29,10 +29,11 @@ export async function POST(request: NextRequest) {
       .eq('id', user_id)
       .single()
 
-    // Check role (simple string, not array)
-    if (userData?.role !== 'Admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
+    // Check role - allow operations and broker
+const adminRoles = ['operations', 'broker']
+if (!userData?.role || !adminRoles.includes(userData.role)) {
+  return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
+}
 
     const report_date = formData.get('report_date') as string
 
