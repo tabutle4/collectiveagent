@@ -114,11 +114,38 @@ export async function POST(request: NextRequest) {
         .eq('id', tenant.id)
     }
 
-    // Create payment link
+    // First create a Payload invoice
     const description = property
       ? `Rent - ${property.property_address}, ${property.city} - ${invoice.period_month}/${invoice.period_year}`
       : `Rent Payment - ${invoice.period_month}/${invoice.period_year}`
 
+    const invoiceRes = await fetch('https://api.payload.com/invoices/', {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader(),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        type: 'bill',
+        processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
+        customer_id: customerId,
+        description,
+        'items[0][description]': description,
+        'items[0][amount]': invoice.total_amount.toString(),
+        'items[0][entry_type]': 'charge',
+      }),
+    })
+
+    const invoiceData = await invoiceRes.json()
+    if (!invoiceRes.ok) {
+      console.error('Failed to create Payload invoice:', JSON.stringify(invoiceData))
+      return NextResponse.json(
+        { error: invoiceData.message || 'Failed to create invoice. Please try again or contact support.' },
+        { status: 500 }
+      )
+    }
+
+    // Now create payment link with the invoice ID
     const paymentLinkRes = await fetch('https://api.payload.com/payment_links/', {
       method: 'POST',
       headers: {
@@ -126,19 +153,16 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        type: 'payment_link',
-        amount: invoice.total_amount.toString(),
+        invoice_id: invoiceData.id,
         customer_id: customerId,
-        description,
-        processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
       }),
     })
 
     const paymentLinkData = await paymentLinkRes.json()
     if (!paymentLinkRes.ok) {
-      console.error('Failed to create Payload payment link:', paymentLinkData)
+      console.error('Failed to create Payload payment link:', JSON.stringify(paymentLinkData))
       return NextResponse.json(
-        { error: 'Failed to create payment link. Please try again or contact support.' },
+        { error: paymentLinkData.message || 'Failed to create payment link. Please try again or contact support.' },
         { status: 500 }
       )
     }
@@ -147,6 +171,7 @@ export async function POST(request: NextRequest) {
     await supabase
       .from('tenant_invoices')
       .update({
+        payload_invoice_id: invoiceData.id,
         payload_payment_link_id: paymentLinkData.id,
         payload_payment_link_url: paymentLinkData.url,
         status: invoice.status === 'pending' ? 'sent' : invoice.status,
