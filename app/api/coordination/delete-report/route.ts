@@ -24,10 +24,11 @@ export async function POST(request: NextRequest) {
       .eq('id', userId)
       .single()
 
-    // Check role (simple string, not array)
-    if (userError || userData?.role !== 'Admin') {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
+    // Check role - allow operations and broker
+const adminRoles = ['operations', 'broker']
+if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
+  return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
+}
 
     // First, get the report to find the file names
     const { data: report, error: reportFetchError } = await supabase
