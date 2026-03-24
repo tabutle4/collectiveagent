@@ -231,13 +231,13 @@ function TenantDashboardContent() {
   const handlePayment = async () => {
     if (selectedInvoices.length === 0) return
     
-    // Find first selected invoice
-    const firstSelected = unpaidInvoices.find(inv => selectedInvoices.includes(inv.id))
-    if (!firstSelected) return
+    // Get all selected invoices
+    const selected = unpaidInvoices.filter(inv => selectedInvoices.includes(inv.id))
+    if (selected.length === 0) return
 
-    // If payment URL exists, open it
-    if (firstSelected.payment_url) {
-      window.open(firstSelected.payment_url, '_blank')
+    // If single invoice with existing URL, use it
+    if (selected.length === 1 && selected[0].payment_url) {
+      window.open(selected[0].payment_url, '_blank')
       return
     }
 
@@ -247,20 +247,11 @@ function TenantDashboardContent() {
       const res = await fetch('/api/pm/portal/get-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoice_id: firstSelected.id })
+        body: JSON.stringify({ invoice_ids: selectedInvoices })
       })
       const result = await res.json()
       
       if (res.ok && result.payment_url) {
-        // Update local state with payment URL
-        if (data) {
-          const updatedInvoices = data.invoices.map(inv => 
-            inv.id === firstSelected.id 
-              ? { ...inv, payment_url: result.payment_url }
-              : inv
-          )
-          setData({ ...data, invoices: updatedInvoices })
-        }
         window.open(result.payment_url, '_blank')
       } else if (result.fallback) {
         alert('Online payment is temporarily unavailable. Please pay via Zelle to info@collectiverealtyco.com')
@@ -281,6 +272,13 @@ function TenantDashboardContent() {
 
   const unpaidInvoices = data?.invoices.filter(inv => !['paid', 'cancelled'].includes(inv.status)) || []
   const paidInvoices = data?.invoices.filter(inv => inv.status === 'paid') || []
+  
+  // Total due = only invoices where due_date is today or past
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const totalDue = unpaidInvoices
+    .filter(inv => new Date(inv.due_date) <= today)
+    .reduce((sum, inv) => sum + inv.total_amount, 0)
 
   const isOverdue = (dueDate: string, status: string) => {
     if (['paid', 'cancelled'].includes(status)) return false
@@ -368,6 +366,9 @@ function TenantDashboardContent() {
             <div className="text-right hidden sm:block">
               <p className="font-medium text-luxury-gray-1">{tenant.first_name} {tenant.last_name}</p>
               <p className="text-sm text-luxury-gray-3">{tenant.email}</p>
+              {tenant.phone && (
+                <p className="text-sm text-luxury-gray-3">{tenant.phone}</p>
+              )}
             </div>
             <button
               onClick={handleLogout}
@@ -383,20 +384,57 @@ function TenantDashboardContent() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Balance and Lease Info */}
-        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
-          {/* Current Balance */}
-          <div className="container-card">
-            <h2 className="field-label mb-2">Current Balance</h2>
-            <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {formatMoney(currentBalance)}
+        {/* Pay Selected - At Top */}
+        {selectedInvoices.length > 0 && (
+          <div className="mb-6 p-4 bg-luxury-accent/10 rounded-lg border border-luxury-accent/30">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-luxury-gray-3">
+                  {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} selected
+                </p>
+                <p className="text-2xl font-bold text-luxury-accent">
+                  {formatMoney(selectedTotal)}
+                </p>
+              </div>
+              <button 
+                onClick={handlePayment}
+                disabled={processingPayment}
+                className="btn btn-primary flex items-center justify-center gap-2"
+              >
+                {processingPayment ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard size={16} />
+                    Pay Now
+                    <ExternalLink size={16} />
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-xs text-luxury-gray-3 mt-2">
+              You will be redirected to our secure payment portal
             </p>
-            {currentBalance > 0 && (
+          </div>
+        )}
+
+        {/* Total Due and Lease Info */}
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
+          {/* Total Due */}
+          <div className="container-card">
+            <h2 className="field-label mb-2">Total Due</h2>
+            <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {formatMoney(totalDue)}
+            </p>
+            {totalDue > 0 && (
               <p className="text-sm text-luxury-gray-3 mt-1">
-                Amount due across all unpaid invoices
+                Amount currently due
               </p>
             )}
-            {currentBalance === 0 && (
+            {totalDue === 0 && (
               <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
                 <CheckCircle size={16} />
                 All paid up!
@@ -512,43 +550,6 @@ function TenantDashboardContent() {
                 )
               })}
             </div>
-
-            {/* Pay Selected */}
-            {selectedInvoices.length > 0 && (
-              <div className="mt-6 p-4 bg-luxury-accent/10 rounded-lg border border-luxury-accent/30">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-luxury-gray-3">
-                      {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} selected
-                    </p>
-                    <p className="text-2xl font-bold text-luxury-accent">
-                      {formatMoney(selectedTotal)}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={handlePayment}
-                    disabled={processingPayment}
-                    className="btn btn-primary flex items-center justify-center gap-2"
-                  >
-                    {processingPayment ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard size={16} />
-                        Pay Now
-                        <ExternalLink size={16} />
-                      </>
-                    )}
-                  </button>
-                </div>
-                <p className="text-xs text-luxury-gray-3 mt-2">
-                  You will be redirected to our secure payment portal
-                </p>
-              </div>
-            )}
 
             {/* Zelle Payment Option */}
             <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">

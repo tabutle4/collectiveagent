@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
-// POST - Generate payment link for invoice (portal-accessible)
+// POST - Generate payment link for one or more invoices (portal-accessible)
 // Validates via PM session cookie - tenant can only pay their own invoices
 export async function POST(request: NextRequest) {
   try {
@@ -35,39 +35,39 @@ export async function POST(request: NextRequest) {
     }
 
     const tenantId = session.user_id
-    const { invoice_id } = await request.json()
+    const body = await request.json()
+    
+    // Support both single invoice_id and array of invoice_ids
+    const invoiceIds: string[] = body.invoice_ids || (body.invoice_id ? [body.invoice_id] : [])
 
-    if (!invoice_id) {
-      return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
+    if (invoiceIds.length === 0) {
+      return NextResponse.json({ error: 'Invoice ID(s) required' }, { status: 400 })
     }
 
-    // Fetch invoice - verify it belongs to this tenant
-    const { data: invoice, error: fetchError } = await supabase
+    // Fetch all invoices - verify they belong to this tenant
+    const { data: invoices, error: fetchError } = await supabase
       .from('tenant_invoices')
       .select(`
         *,
         tenants(id, first_name, last_name, email, payload_customer_id),
         managed_properties(id, property_address, city)
       `)
-      .eq('id', invoice_id)
+      .in('id', invoiceIds)
       .eq('tenant_id', tenantId)
-      .single()
 
-    if (fetchError || !invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    if (fetchError || !invoices || invoices.length === 0) {
+      return NextResponse.json({ error: 'Invoice(s) not found' }, { status: 404 })
     }
 
-    if (invoice.status === 'paid') {
-      return NextResponse.json({ error: 'Invoice already paid' }, { status: 400 })
+    // Verify all requested invoices were found
+    if (invoices.length !== invoiceIds.length) {
+      return NextResponse.json({ error: 'Some invoices not found or not authorized' }, { status: 404 })
     }
 
-    // If payment link already exists, return it
-    if (invoice.payload_payment_link_url) {
-      return NextResponse.json({
-        success: true,
-        payment_url: invoice.payload_payment_link_url,
-        existing: true
-      })
+    // Check none are paid
+    const paidInvoices = invoices.filter(inv => inv.status === 'paid')
+    if (paidInvoices.length > 0) {
+      return NextResponse.json({ error: 'One or more invoices already paid' }, { status: 400 })
     }
 
     // Check if Payload is configured
@@ -78,9 +78,9 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    const tenant = invoice.tenants
-    const property = invoice.managed_properties
-
+    // Use first invoice's tenant info (they should all be same tenant)
+    const tenant = invoices[0].tenants
+    
     // Create Payload customer if needed
     let customerId = tenant.payload_customer_id
     if (!customerId) {
@@ -114,27 +114,47 @@ export async function POST(request: NextRequest) {
         .eq('id', tenant.id)
     }
 
-    // First create a Payload invoice
-    const description = property
-      ? `Rent - ${property.property_address}, ${property.city} - ${invoice.period_month}/${invoice.period_year}`
-      : `Rent Payment - ${invoice.period_month}/${invoice.period_year}`
+    // Calculate total and earliest due date
+    const totalAmount = invoices.reduce((sum, inv) => sum + inv.total_amount, 0)
+    const earliestDueDate = invoices.reduce((earliest, inv) => 
+      inv.due_date < earliest ? inv.due_date : earliest, 
+      invoices[0].due_date
+    )
 
+    // Build description
+    const description = invoices.length === 1
+      ? `Rent - ${invoices[0].managed_properties?.property_address || 'Property'} - ${invoices[0].period_month}/${invoices[0].period_year}`
+      : `Rent Payment - ${invoices.length} invoices`
+
+    // Build line items for Payload invoice
+    const invoiceParams = new URLSearchParams({
+      type: 'bill',
+      due_date: earliestDueDate,
+      processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
+      customer_id: customerId,
+      description,
+    })
+
+    // Add each invoice as a line item
+    invoices.forEach((inv, index) => {
+      const property = inv.managed_properties
+      const itemDesc = property
+        ? `${property.property_address} - ${inv.period_month}/${inv.period_year}`
+        : `Rent - ${inv.period_month}/${inv.period_year}`
+      
+      invoiceParams.append(`items[${index}][description]`, itemDesc)
+      invoiceParams.append(`items[${index}][amount]`, inv.total_amount.toString())
+      invoiceParams.append(`items[${index}][entry_type]`, 'charge')
+    })
+
+    // Create Payload invoice
     const invoiceRes = await fetch('https://api.payload.com/invoices/', {
       method: 'POST',
       headers: {
         Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        type: 'bill',
-        due_date: invoice.due_date,
-        processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
-        customer_id: customerId,
-        description,
-        'items[0][description]': description,
-        'items[0][amount]': invoice.total_amount.toString(),
-        'items[0][entry_type]': 'charge',
-      }),
+      body: invoiceParams,
     })
 
     const invoiceData = await invoiceRes.json()
@@ -146,7 +166,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Now create payment link with the invoice ID
+    // Create payment link with the invoice ID
     const paymentLinkRes = await fetch('https://api.payload.com/payment_links/', {
       method: 'POST',
       headers: {
@@ -168,23 +188,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update invoice with Payload info
+    // Update all invoices with Payload info
+    // For multi-invoice payments, we store the combined Payload invoice ID on all
     await supabase
       .from('tenant_invoices')
       .update({
         payload_invoice_id: invoiceData.id,
         payload_payment_link_id: paymentLinkData.id,
         payload_payment_link_url: paymentLinkData.url,
-        status: invoice.status === 'pending' ? 'sent' : invoice.status,
+        status: 'sent',
         updated_at: new Date().toISOString(),
       })
-      .eq('id', invoice_id)
+      .in('id', invoiceIds)
 
-    console.log(`Payment link created for tenant ${tenant.email}: ${paymentLinkData.url}`)
+    console.log(`Payment link created for tenant ${tenant.email} (${invoices.length} invoices, $${totalAmount}): ${paymentLinkData.url}`)
 
     return NextResponse.json({
       success: true,
       payment_url: paymentLinkData.url,
+      invoice_count: invoices.length,
+      total_amount: totalAmount,
     })
   } catch (error: any) {
     console.error('Error creating payment link:', error)
