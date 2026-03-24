@@ -52,7 +52,7 @@ export async function createListing(
 export async function getListingById(id: string): Promise<Listing | null> {
   const supabase = createClient()
 
-  const { data, error } = await supabase.from('listings').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('transactions').select('*').eq('id', id).single()
 
   if (error) {
     console.error('Error fetching listing:', error)
