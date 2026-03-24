@@ -43,7 +43,7 @@ export default function LandlordsListPage() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm('Are you sure you want to delete this landlord? This will also delete all their properties, leases, and invoices.')) {
+    if (!confirm('Are you sure you want to delete this landlord? Note: Landlords with active properties cannot be deleted.')) {
       return
     }
     try {

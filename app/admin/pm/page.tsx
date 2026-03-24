@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 
-export default function PMDashboard() {
+export default function PMDashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({

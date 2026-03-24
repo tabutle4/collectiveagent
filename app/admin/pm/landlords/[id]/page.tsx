@@ -120,10 +120,12 @@ export default function LandlordDetailPage() {
       const data = await res.json()
       if (data.landlord) {
         setLandlord(data.landlord)
-        setProperties(data.properties || [])
-        setDisbursements(data.disbursements || [])
+        // Data is nested in landlord object from API
+        setProperties(data.landlord.managed_properties || [])
+        setDisbursements(data.landlord.landlord_disbursements || [])
       }
 
+      // Fetch leases separately to get tenant info
       const leasesRes = await fetch(`/api/pm/leases?landlord_id=${landlordId}`)
       const leasesData = await leasesRes.json()
       setLeases(leasesData.leases || [])
@@ -520,7 +522,6 @@ export default function LandlordDetailPage() {
                             {getMonthName(disb.period_month)} {disb.period_year}
                           </p>
                           <p className="text-xs text-luxury-gray-3">
-                            {disb.managed_properties?.property_address || 'Property'} ·
                             Gross: {formatCurrency(disb.gross_rent)} · 
                             Fee: {formatCurrency(disb.management_fee)}
                           </p>
