@@ -188,18 +188,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update all invoices with Payload info
-    // For multi-invoice payments, we store the combined Payload invoice ID on all
-    await supabase
-      .from('tenant_invoices')
-      .update({
-        payload_invoice_id: invoiceData.id,
-        payload_payment_link_id: paymentLinkData.id,
-        payload_payment_link_url: paymentLinkData.url,
-        status: 'sent',
-        updated_at: new Date().toISOString(),
-      })
-      .in('id', invoiceIds)
+    // Update invoices with Payload info
+    // Only store payment link on individual invoices if single payment
+    // For multi-invoice, we don't store to avoid URL confusion
+    if (invoices.length === 1) {
+      await supabase
+        .from('tenant_invoices')
+        .update({
+          payload_invoice_id: invoiceData.id,
+          payload_payment_link_id: paymentLinkData.id,
+          payload_payment_link_url: paymentLinkData.url,
+          status: 'sent',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceIds[0])
+    }
+    // For multi-invoice payments, just update status but not the URL
+    // This way each invoice can still get its own individual link later
+    else {
+      await supabase
+        .from('tenant_invoices')
+        .update({
+          status: 'sent',
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', invoiceIds)
+    }
 
     console.log(`Payment link created for tenant ${tenant.email} (${invoices.length} invoices, $${totalAmount}): ${paymentLinkData.url}`)
 
