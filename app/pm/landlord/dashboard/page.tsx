@@ -214,20 +214,21 @@ function LandlordDashboardContent() {
     if (!data?.landlord.id) return
     setRequestingW9(true)
     try {
-      const res = await fetch('/api/pm/track1099/create-form-request', {
+      const res = await fetch('/api/pm/portal/request-w9', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ landlord_id: data.landlord.id })
+        headers: { 'Content-Type': 'application/json' }
       })
       const result = await res.json()
       if (res.ok && result.form_url) {
         window.open(result.form_url, '_blank')
+      } else if (result.fallback) {
+        alert('Please contact pm@collectiverealtyco.com to complete your W9.')
       } else {
         alert(result.error || 'Failed to create W9 request')
       }
     } catch (err) {
       console.error('W9 request error:', err)
-      alert('Failed to request W9 form')
+      alert('Failed to request W9 form. Please contact pm@collectiverealtyco.com')
     } finally {
       setRequestingW9(false)
     }
@@ -237,18 +238,21 @@ function LandlordDashboardContent() {
     if (!data?.landlord.id) return
     setRequestingBank(true)
     try {
-      const res = await fetch(`/api/pm/landlords/${data.landlord.id}/send-bank-activation`, {
-        method: 'POST'
+      const res = await fetch('/api/pm/portal/connect-bank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
       })
       const result = await res.json()
-      if (res.ok) {
-        alert('Bank activation link has been sent to your email!')
+      if (res.ok && result.activation_url) {
+        window.open(result.activation_url, '_blank')
+      } else if (result.fallback) {
+        alert('Please contact pm@collectiverealtyco.com to connect your bank account.')
       } else {
-        alert(result.error || 'Failed to send bank activation')
+        alert(result.error || 'Failed to create bank activation')
       }
     } catch (err) {
       console.error('Bank activation error:', err)
-      alert('Failed to request bank activation')
+      alert('Failed to request bank activation. Please contact pm@collectiverealtyco.com')
     } finally {
       setRequestingBank(false)
     }
@@ -324,21 +328,21 @@ function LandlordDashboardContent() {
       )}
 
       {/* Header */}
-      <header className="bg-white border-b border-luxury-gray-5 py-4 px-6">
+      <header className="bg-white border-b border-luxury-gray-5 py-4 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/CRC-Luxury-Logo.png"
-              alt="Collective Realty Co."
-              className="h-10 object-contain"
+              src="/logo.png"
+              alt="CRC Property Management"
+              className="h-12 sm:h-14 w-auto object-contain"
             />
-            <div>
-              <h1 className="font-semibold text-luxury-gray-1">Landlord Portal</h1>
-              <p className="text-sm text-luxury-gray-3">Collective Realty Co.</p>
+            <div className="hidden sm:block">
+              <h1 className="font-semibold text-luxury-gray-1">Property Management</h1>
+              <p className="text-sm text-luxury-gray-3">Landlord Portal</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="text-right hidden sm:block">
               <p className="font-medium text-luxury-gray-1">{landlord.first_name} {landlord.last_name}</p>
               <p className="text-sm text-luxury-gray-3">{landlord.email}</p>
             </div>
@@ -355,7 +359,7 @@ function LandlordDashboardContent() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Setup Warning Banner */}
         {(!setupStatus.w9Complete || !setupStatus.bankConnected) && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -385,9 +389,9 @@ function LandlordDashboardContent() {
           </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column - Properties */}
-          <div className="lg:col-span-2">
+          <div className="md:col-span-2 lg:col-span-2">
             <div className="container-card">
               <h2 className="field-label mb-4 flex items-center gap-2">
                 <Home size={16} />
@@ -659,7 +663,7 @@ function LandlordDashboardContent() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-luxury-gray-5 mt-12 py-6 px-6 bg-white">
+      <footer className="border-t border-luxury-gray-5 mt-8 sm:mt-12 py-6 px-4 sm:px-6 bg-white">
         <div className="max-w-5xl mx-auto text-center text-sm text-luxury-gray-3">
           <p className="mb-2">
             Questions? Contact us at{' '}
@@ -671,7 +675,7 @@ function LandlordDashboardContent() {
               (281) 638-9407
             </a>
           </p>
-          <p>© {new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CRC Property Management. All rights reserved.</p>
         </div>
       </footer>
     </div>

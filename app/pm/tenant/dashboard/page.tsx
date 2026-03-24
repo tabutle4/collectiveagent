@@ -96,6 +96,7 @@ function TenantDashboardContent() {
   const [isAdminPreview, setIsAdminPreview] = useState(false)
   const [showRepairModal, setShowRepairModal] = useState(false)
   const [submittingRepair, setSubmittingRepair] = useState(false)
+  const [processingPayment, setProcessingPayment] = useState(false)
   const [repairForm, setRepairForm] = useState({
     category: '',
     urgency: 'routine',
@@ -227,6 +228,53 @@ function TenantDashboardContent() {
     }
   }
 
+  const handlePayment = async () => {
+    if (selectedInvoices.length === 0) return
+    
+    // Find first selected invoice
+    const firstSelected = unpaidInvoices.find(inv => selectedInvoices.includes(inv.id))
+    if (!firstSelected) return
+
+    // If payment URL exists, open it
+    if (firstSelected.payment_url) {
+      window.open(firstSelected.payment_url, '_blank')
+      return
+    }
+
+    // Otherwise, generate payment link via portal API
+    setProcessingPayment(true)
+    try {
+      const res = await fetch('/api/pm/portal/get-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: firstSelected.id })
+      })
+      const result = await res.json()
+      
+      if (res.ok && result.payment_url) {
+        // Update local state with payment URL
+        if (data) {
+          const updatedInvoices = data.invoices.map(inv => 
+            inv.id === firstSelected.id 
+              ? { ...inv, payment_url: result.payment_url }
+              : inv
+          )
+          setData({ ...data, invoices: updatedInvoices })
+        }
+        window.open(result.payment_url, '_blank')
+      } else if (result.fallback) {
+        alert('Online payment is temporarily unavailable. Please pay via Zelle to info@collectiverealtyco.com')
+      } else {
+        alert(result.error || 'Failed to create payment link. Please try again or pay via Zelle.')
+      }
+    } catch (err) {
+      console.error('Payment error:', err)
+      alert('Failed to process payment. Please pay via Zelle to info@collectiverealtyco.com')
+    } finally {
+      setProcessingPayment(false)
+    }
+  }
+
   const selectedTotal = data?.invoices
     .filter(inv => selectedInvoices.includes(inv.id))
     .reduce((sum, inv) => sum + inv.total_amount, 0) || 0
@@ -303,21 +351,21 @@ function TenantDashboardContent() {
       )}
 
       {/* Header */}
-      <header className="bg-white border-b border-luxury-gray-5 py-4 px-6">
+      <header className="bg-white border-b border-luxury-gray-5 py-4 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/CRC-Luxury-Logo.png"
-              alt="Collective Realty Co."
-              className="h-10 object-contain"
+              src="/logo.png"
+              alt="CRC Property Management"
+              className="h-12 sm:h-14 w-auto object-contain"
             />
-            <div>
-              <h1 className="font-semibold text-luxury-gray-1">Tenant Portal</h1>
-              <p className="text-sm text-luxury-gray-3">Collective Realty Co.</p>
+            <div className="hidden sm:block">
+              <h1 className="font-semibold text-luxury-gray-1">Property Management</h1>
+              <p className="text-sm text-luxury-gray-3">Tenant Portal</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="text-right hidden sm:block">
               <p className="font-medium text-luxury-gray-1">{tenant.first_name} {tenant.last_name}</p>
               <p className="text-sm text-luxury-gray-3">{tenant.email}</p>
             </div>
@@ -334,9 +382,9 @@ function TenantDashboardContent() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-6 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Balance and Lease Info */}
-        <div className="grid md:grid-cols-2 gap-6 mb-6">
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
           {/* Current Balance */}
           <div className="container-card">
             <h2 className="field-label mb-2">Current Balance</h2>
@@ -468,7 +516,7 @@ function TenantDashboardContent() {
             {/* Pay Selected */}
             {selectedInvoices.length > 0 && (
               <div className="mt-6 p-4 bg-luxury-accent/10 rounded-lg border border-luxury-accent/30">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <p className="text-sm text-luxury-gray-3">
                       {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} selected
@@ -478,19 +526,22 @@ function TenantDashboardContent() {
                     </p>
                   </div>
                   <button 
-                    onClick={() => {
-                      const firstSelected = unpaidInvoices.find(inv => selectedInvoices.includes(inv.id))
-                      if (firstSelected?.payment_url) {
-                        window.open(firstSelected.payment_url, '_blank')
-                      } else {
-                        alert('Payment link not available. Please contact your property manager.')
-                      }
-                    }}
-                    className="btn btn-primary flex items-center gap-2"
+                    onClick={handlePayment}
+                    disabled={processingPayment}
+                    className="btn btn-primary flex items-center justify-center gap-2"
                   >
-                    <CreditCard size={16} />
-                    Pay Now
-                    <ExternalLink size={16} />
+                    {processingPayment ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={16} />
+                        Pay Now
+                        <ExternalLink size={16} />
+                      </>
+                    )}
                   </button>
                 </div>
                 <p className="text-xs text-luxury-gray-3 mt-2">
@@ -744,7 +795,7 @@ function TenantDashboardContent() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-luxury-gray-5 mt-12 py-6 px-6 bg-white">
+      <footer className="border-t border-luxury-gray-5 mt-8 sm:mt-12 py-6 px-4 sm:px-6 bg-white">
         <div className="max-w-4xl mx-auto text-center text-sm text-luxury-gray-3">
           <p className="mb-2">
             Questions about your lease or payment? Contact us at{' '}
@@ -756,7 +807,7 @@ function TenantDashboardContent() {
               (281) 638-9407
             </a>
           </p>
-          <p>© {new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CRC Property Management. All rights reserved.</p>
         </div>
       </footer>
     </div>

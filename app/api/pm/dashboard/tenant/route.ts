@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       security_deposit: activeLease.security_deposit || 0
     } : null
 
-    // Fetch all invoices for this tenant
+    // Fetch all invoices for this tenant (oldest/current first)
     const { data: invoices } = await supabase
       .from('tenant_invoices')
       .select(`
@@ -88,8 +88,8 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('tenant_id', tenantId)
-      .order('period_year', { ascending: false })
-      .order('period_month', { ascending: false })
+      .order('period_year', { ascending: true })
+      .order('period_month', { ascending: true })
 
     // Format invoices
     const formattedInvoices = (invoices || []).map(inv => ({

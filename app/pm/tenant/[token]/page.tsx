@@ -164,27 +164,27 @@ export default function TenantDashboardPage() {
   return (
     <div className="min-h-screen bg-luxury-light">
       {/* Header */}
-      <header className="bg-white border-b border-luxury-gray-5 py-4 px-6">
+      <header className="bg-white border-b border-luxury-gray-5 py-4 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
               src="/logo.png"
-              alt="Collective Realty Co."
-              className="w-12 h-12 object-contain"
+              alt="CRC Property Management"
+              className="h-12 sm:h-14 w-auto object-contain"
             />
-            <div>
-              <h1 className="font-semibold text-luxury-gray-1">Tenant Portal</h1>
-              <p className="text-sm text-luxury-gray-3">Collective Realty Co.</p>
+            <div className="hidden sm:block">
+              <h1 className="font-semibold text-luxury-gray-1">Property Management</h1>
+              <p className="text-sm text-luxury-gray-3">Tenant Portal</p>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right hidden sm:block">
             <p className="font-medium text-luxury-gray-1">{tenant.first_name} {tenant.last_name}</p>
             <p className="text-sm text-luxury-gray-3">{tenant.email}</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-6">
+      <main className="max-w-4xl mx-auto p-4 sm:p-6">
         {/* Balance Card */}
         <div className={`container-card mb-6 ${currentBalance > 0 ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
           <div className="flex items-center justify-between">

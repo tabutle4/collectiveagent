@@ -142,15 +142,15 @@ function LoadingCard() {
 
 export default function PMLoginPage() {
   return (
-    <div className="min-h-screen bg-luxury-light flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-luxury-light flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <Image
-            src="/CRC-Luxury-Logo.png"
-            alt="Collective Realty Co."
-            width={200}
-            height={60}
+            src="/logo.png"
+            alt="CRC Property Management"
+            width={180}
+            height={180}
             className="mx-auto mb-4"
             priority
           />
@@ -166,6 +166,10 @@ export default function PMLoginPage() {
           Questions? Contact{' '}
           <a href="mailto:pm@collectiverealtyco.com" className="text-luxury-accent hover:underline">
             pm@collectiverealtyco.com
+          </a>
+          {' '}or call{' '}
+          <a href="tel:+12816389407" className="text-luxury-accent hover:underline">
+            (281) 638-9407
           </a>
         </p>
       </div>
