@@ -95,6 +95,21 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(10)
 
+    // Fetch repair requests
+    const { data: repairs } = await supabase
+      .from('repair_requests')
+      .select(`
+        *,
+        managed_properties (
+          id,
+          property_address,
+          city
+        )
+      `)
+      .eq('landlord_id', landlordId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
     const recentActivity = (recentDisbursements || []).map(d => ({
       type: 'disbursement',
       description: `${d.payment_status === 'completed' ? 'Received' : 'Pending'} disbursement for ${new Date(2000, (d.period_month || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${d.period_year}`,
@@ -127,6 +142,7 @@ export async function GET(request: NextRequest) {
       properties: properties || [],
       agreements: agreements || [],
       pendingDisbursements: pendingDisbursements || [],
+      repairs: repairs || [],
       recentActivity,
       setupStatus
     })

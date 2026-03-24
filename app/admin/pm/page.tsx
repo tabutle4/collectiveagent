@@ -3,7 +3,17 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Users, Building2, Key, FileText, Banknote, Wrench } from 'lucide-react'
+
+const pmNavItems = [
+  { href: '/admin/pm/landlords', label: 'Landlords', icon: Users },
+  { href: '/admin/pm/properties', label: 'Properties', icon: Building2 },
+  { href: '/admin/pm/tenants', label: 'Tenants', icon: Users },
+  { href: '/admin/pm/leases', label: 'Leases', icon: Key },
+  { href: '/admin/pm/invoices', label: 'Invoices', icon: FileText },
+  { href: '/admin/pm/disbursements', label: 'Disbursements', icon: Banknote },
+  { href: '/admin/pm/repairs', label: 'Repairs', icon: Wrench },
+]
 
 export default function PMDashboardPage() {
   const router = useRouter()
@@ -95,6 +105,20 @@ export default function PMDashboardPage() {
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
+      </div>
+
+      {/* PM Navigation */}
+      <div className="flex flex-wrap gap-2">
+        {pmNavItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="btn btn-secondary flex items-center gap-2 text-sm"
+          >
+            <item.icon size={14} />
+            {item.label}
+          </Link>
+        ))}
       </div>
 
       {/* Two Column Layout */}

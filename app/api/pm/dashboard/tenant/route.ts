@@ -113,6 +113,20 @@ export async function GET(request: NextRequest) {
       .filter(inv => !['paid', 'cancelled'].includes(inv.status))
       .reduce((sum, inv) => sum + inv.total_amount, 0)
 
+    // Fetch repair requests for this tenant
+    const { data: repairs } = await supabase
+      .from('repair_requests')
+      .select(`
+        *,
+        managed_properties (
+          id,
+          property_address
+        )
+      `)
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+
     return NextResponse.json({
       tenant: {
         id: tenant.id,
@@ -123,6 +137,7 @@ export async function GET(request: NextRequest) {
       },
       lease,
       invoices: formattedInvoices,
+      repairs: repairs || [],
       currentBalance
     })
   } catch (error: any) {

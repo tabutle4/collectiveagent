@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign } from 'lucide-react'
 
@@ -48,12 +47,12 @@ interface Stats {
 }
 
 export default function InvoicesPage() {
-  const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [sendingId, setSendingId] = useState<string | null>(null)
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
   const [stats, setStats] = useState<Stats>({
     pending: 0,
     sent: 0,
@@ -63,17 +62,8 @@ export default function InvoicesPage() {
   })
 
   useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const checkAuth = async () => {
-    const res = await fetch('/api/auth/me')
-    if (!res.ok) {
-      router.push('/auth/login')
-      return
-    }
     loadInvoices()
-  }
+  }, [])
 
   const loadInvoices = async () => {
     setLoading(true)
@@ -139,11 +129,11 @@ export default function InvoicesPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; icon: React.ReactNode }> = {
-      pending: { bg: 'bg-gray-100 text-gray-600', icon: <Clock className="w-3 h-3" /> },
-      sent: { bg: 'bg-blue-100 text-blue-800', icon: <Send className="w-3 h-3" /> },
-      overdue: { bg: 'bg-red-100 text-red-800', icon: <AlertTriangle className="w-3 h-3" /> },
-      paid: { bg: 'bg-green-100 text-green-800', icon: <CheckCircle className="w-3 h-3" /> },
-      partial: { bg: 'bg-amber-100 text-amber-800', icon: <DollarSign className="w-3 h-3" /> },
+      pending: { bg: 'bg-gray-100 text-gray-600', icon: <Clock size={12} /> },
+      sent: { bg: 'bg-blue-50 text-blue-700', icon: <Send size={12} /> },
+      overdue: { bg: 'bg-red-50 text-red-700', icon: <AlertTriangle size={12} /> },
+      paid: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
+      partial: { bg: 'bg-amber-50 text-amber-700', icon: <DollarSign size={12} /> },
       cancelled: { bg: 'bg-gray-100 text-gray-400', icon: null },
     }
     const style = styles[status] || styles.pending
@@ -180,6 +170,39 @@ export default function InvoicesPage() {
     }
   }
 
+  const markAsPaid = async (invoice: Invoice) => {
+    if (!confirm(`Mark invoice for ${invoice.tenants?.first_name} ${invoice.tenants?.last_name} (${formatMoney(invoice.total_amount)}) as paid via Zelle?`)) {
+      return
+    }
+    
+    setMarkingPaidId(invoice.id)
+    
+    try {
+      const res = await fetch(`/api/pm/invoices/${invoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'paid',
+          paid_at: new Date().toISOString(),
+          paid_amount: invoice.total_amount,
+          payment_method: 'zelle'
+        })
+      })
+      
+      if (res.ok) {
+        loadInvoices()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to mark as paid')
+      }
+    } catch (err) {
+      console.error('Failed to mark as paid:', err)
+      alert('Failed to mark as paid')
+    } finally {
+      setMarkingPaidId(null)
+    }
+  }
+
   const isOverdue = (invoice: Invoice) => {
     if (['paid', 'cancelled'].includes(invoice.status)) return false
     const dueDate = new Date(invoice.due_date)
@@ -187,12 +210,12 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <Receipt className="w-6 h-6 text-luxury-accent" />
+        <Receipt size={24} className="text-luxury-accent" />
         <h1 className="page-title">Invoices</h1>
       </div>
 
@@ -254,7 +277,7 @@ export default function InvoicesPage() {
           <div className="text-center py-12 text-luxury-gray-3">Loading invoices...</div>
         ) : invoices.length === 0 ? (
           <div className="text-center py-12">
-            <Receipt className="w-12 h-12 mx-auto text-luxury-gray-4 mb-4" />
+            <Receipt size={48} className="mx-auto text-luxury-gray-4 mb-4" />
             <p className="text-luxury-gray-3">No invoices found</p>
             <p className="text-sm text-luxury-gray-3 mt-1">
               Invoices are auto-generated when leases are created
@@ -264,21 +287,21 @@ export default function InvoicesPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="th-luxury">
-                  <th className="text-left py-3 px-4">Period</th>
-                  <th className="text-left py-3 px-4">Tenant</th>
-                  <th className="text-left py-3 px-4">Property</th>
-                  <th className="text-right py-3 px-4">Amount</th>
-                  <th className="text-left py-3 px-4">Due Date</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-right py-3 px-4">Actions</th>
+                <tr className="border-b border-luxury-gray-5/50">
+                  <th className="th-luxury">Period</th>
+                  <th className="th-luxury">Tenant</th>
+                  <th className="th-luxury">Property</th>
+                  <th className="th-luxury">Amount</th>
+                  <th className="th-luxury">Due Date</th>
+                  <th className="th-luxury">Status</th>
+                  <th className="th-luxury">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {invoices.map((invoice) => (
                   <tr
                     key={invoice.id}
-                    className="tr-luxury border-b border-luxury-gray-5 hover:bg-luxury-light/50"
+                    className="tr-luxury"
                   >
                     <td className="py-3 px-4">
                       <div className="font-medium text-luxury-gray-1">
@@ -325,31 +348,45 @@ export default function InvoicesPage() {
                       {getStatusBadge(invoice.status)}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {invoice.status === 'pending' && (
-                        <button
-                          onClick={() => sendInvoice(invoice.id)}
-                          disabled={sendingId === invoice.id}
-                          className="btn btn-secondary text-xs py-1 px-3 inline-flex items-center gap-1"
-                        >
-                          <Send className="w-3 h-3" />
-                          {sendingId === invoice.id ? 'Sending...' : 'Send'}
-                        </button>
-                      )}
-                      {invoice.status === 'sent' && invoice.payload_payment_link_url && (
-                        <a
-                          href={invoice.payload_payment_link_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-luxury-accent hover:underline"
-                        >
-                          View Payment Link
-                        </a>
-                      )}
-                      {invoice.status === 'paid' && invoice.paid_at && (
-                        <span className="text-xs text-green-600">
-                          Paid {formatDate(invoice.paid_at)}
-                        </span>
-                      )}
+                      <div className="flex items-center justify-end gap-2">
+                        {invoice.status === 'pending' && (
+                          <button
+                            onClick={() => sendInvoice(invoice.id)}
+                            disabled={sendingId === invoice.id}
+                            className="btn btn-secondary text-xs py-1 px-3 flex items-center gap-1"
+                          >
+                            <Send size={12} />
+                            {sendingId === invoice.id ? 'Sending...' : 'Send'}
+                          </button>
+                        )}
+                        {['sent', 'overdue'].includes(invoice.status) && (
+                          <>
+                            <button
+                              onClick={() => markAsPaid(invoice)}
+                              disabled={markingPaidId === invoice.id}
+                              className="btn btn-primary text-xs py-1 px-3 flex items-center gap-1"
+                            >
+                              <CheckCircle size={12} />
+                              {markingPaidId === invoice.id ? 'Saving...' : 'Mark Paid'}
+                            </button>
+                            {invoice.payload_payment_link_url && (
+                              <a
+                                href={invoice.payload_payment_link_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-luxury-accent hover:underline"
+                              >
+                                Link
+                              </a>
+                            )}
+                          </>
+                        )}
+                        {invoice.status === 'paid' && invoice.paid_at && (
+                          <span className="text-xs text-green-600">
+                            Paid {formatDate(invoice.paid_at)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

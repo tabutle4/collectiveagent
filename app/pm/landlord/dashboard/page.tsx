@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { 
   Building2, 
   CheckCircle, 
@@ -15,7 +16,12 @@ import {
   Mail,
   Phone,
   MapPin,
-  LogOut
+  LogOut,
+  ArrowLeft,
+  Eye,
+  Wrench,
+  BarChart3,
+  Loader2
 } from 'lucide-react'
 
 interface Property {
@@ -72,6 +78,19 @@ interface Activity {
   status: string
 }
 
+interface Repair {
+  id: string
+  title: string
+  category: string
+  urgency: string
+  status: string
+  created_at: string
+  actual_cost: number | null
+  managed_properties?: {
+    property_address: string
+  }
+}
+
 interface Landlord {
   id: string
   first_name: string
@@ -92,6 +111,7 @@ interface DashboardData {
   properties: Property[]
   agreements: Agreement[]
   pendingDisbursements: Disbursement[]
+  repairs: Repair[]
   recentActivity: Activity[]
   setupStatus: {
     w9Complete: boolean
@@ -101,18 +121,57 @@ interface DashboardData {
 
 export default function LandlordDashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const previewId = searchParams.get('preview')
+  
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [isAdminPreview, setIsAdminPreview] = useState(false)
+  const [requestingW9, setRequestingW9] = useState(false)
+  const [requestingBank, setRequestingBank] = useState(false)
 
   useEffect(() => {
-    checkSessionAndLoad()
-  }, [])
+    if (previewId) {
+      checkAdminAndLoad(previewId)
+    } else {
+      checkSessionAndLoad()
+    }
+  }, [previewId])
+
+  const checkAdminAndLoad = async (landlordId: string) => {
+    try {
+      // Verify admin access via main app auth
+      const adminRes = await fetch('/api/pm/admin-check')
+      const adminData = await adminRes.json()
+      
+      if (!adminData.isAdmin) {
+        setError('Admin access required for preview mode')
+        setLoading(false)
+        return
+      }
+
+      setIsAdminPreview(true)
+
+      // Load dashboard data for the specified landlord
+      const dashboardRes = await fetch(`/api/pm/dashboard/landlord?user_id=${landlordId}`)
+      if (!dashboardRes.ok) {
+        throw new Error('Landlord not found')
+      }
+
+      const dashboardData = await dashboardRes.json()
+      setData(dashboardData)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const checkSessionAndLoad = async () => {
     try {
-      // Check session
+      // Check PM session
       const sessionRes = await fetch('/api/pm/auth/session')
       if (!sessionRes.ok) {
         router.push('/pm/login')
@@ -141,6 +200,11 @@ export default function LandlordDashboardPage() {
   }
 
   const handleLogout = async () => {
+    if (isAdminPreview) {
+      router.push('/admin/pm/landlords')
+      return
+    }
+    
     setLoggingOut(true)
     try {
       await fetch('/api/pm/auth/logout', { method: 'POST' })
@@ -148,6 +212,50 @@ export default function LandlordDashboardPage() {
     } catch (err) {
       console.error('Logout error:', err)
       router.push('/pm/login')
+    }
+  }
+
+  const requestW9Form = async () => {
+    if (!data?.landlord.id) return
+    setRequestingW9(true)
+    try {
+      const res = await fetch('/api/pm/track1099/create-form-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ landlord_id: data.landlord.id })
+      })
+      const result = await res.json()
+      if (res.ok && result.form_url) {
+        window.open(result.form_url, '_blank')
+      } else {
+        alert(result.error || 'Failed to create W9 request')
+      }
+    } catch (err) {
+      console.error('W9 request error:', err)
+      alert('Failed to request W9 form')
+    } finally {
+      setRequestingW9(false)
+    }
+  }
+
+  const requestBankActivation = async () => {
+    if (!data?.landlord.id) return
+    setRequestingBank(true)
+    try {
+      const res = await fetch(`/api/pm/landlords/${data.landlord.id}/send-bank-activation`, {
+        method: 'POST'
+      })
+      const result = await res.json()
+      if (res.ok) {
+        alert('Bank activation link has been sent to your email!')
+      } else {
+        alert(result.error || 'Failed to send bank activation')
+      }
+    } catch (err) {
+      console.error('Bank activation error:', err)
+      alert('Failed to request bank activation')
+    } finally {
+      setRequestingBank(false)
     }
   }
 
@@ -168,7 +276,7 @@ export default function LandlordDashboardPage() {
       <div className="min-h-screen bg-luxury-light flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-luxury-accent mx-auto mb-4"></div>
-          <p className="text-luxury-gray-3">Loading your dashboard...</p>
+          <p className="text-luxury-gray-3">Loading dashboard...</p>
         </div>
       </div>
     )
@@ -181,18 +289,45 @@ export default function LandlordDashboardPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Error</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Failed to load dashboard'}</p>
-          <button onClick={() => router.push('/pm/login')} className="btn btn-primary">
-            Return to Login
-          </button>
+          {isAdminPreview ? (
+            <Link href="/admin/pm/landlords" className="btn btn-primary">
+              Back to Admin
+            </Link>
+          ) : (
+            <button onClick={() => router.push('/pm/login')} className="btn btn-primary">
+              Return to Login
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
-  const { landlord, properties, agreements, pendingDisbursements, recentActivity, setupStatus } = data
+  const { landlord, properties, agreements, pendingDisbursements, repairs, recentActivity, setupStatus } = data
 
   return (
     <div className="min-h-screen bg-luxury-light">
+      {/* Admin Preview Banner */}
+      {isAdminPreview && (
+        <div className="bg-amber-500 text-white px-6 py-2">
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                Admin Preview — Viewing as {landlord.first_name} {landlord.last_name}
+              </span>
+            </div>
+            <Link 
+              href={`/admin/pm/landlords/${landlord.id}`}
+              className="flex items-center gap-1 text-sm hover:underline"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Admin
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-luxury-gray-5 py-4 px-6">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -216,82 +351,59 @@ export default function LandlordDashboardPage() {
               onClick={handleLogout}
               disabled={loggingOut}
               className="p-2 rounded-lg hover:bg-luxury-light transition-colors text-luxury-gray-3 hover:text-luxury-gray-1"
-              title="Sign out"
+              title={isAdminPreview ? 'Exit Preview' : 'Sign Out'}
             >
-              <LogOut size={20} />
+              {isAdminPreview ? <ArrowLeft className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-6">
-        {/* Setup Alert */}
+      {/* Main Content */}
+      <main className="max-w-5xl mx-auto px-6 py-8">
+        {/* Setup Warning Banner */}
         {(!setupStatus.w9Complete || !setupStatus.bankConnected) && (
-          <div className="alert-warning mb-6 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Complete Your Setup</p>
-              <p className="text-sm mt-1">
-                To receive rent disbursements, please complete the following. 
-                Check your email for setup links or contact your property manager.
-              </p>
-              <ul className="text-sm mt-2 space-y-1">
-                {!setupStatus.w9Complete && (
-                  <li className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full bg-amber-200 flex items-center justify-center text-xs">1</span>
-                    <FileText className="w-4 h-4" />
-                    Submit your W9 form
-                  </li>
-                )}
-                {!setupStatus.bankConnected && (
-                  <li className="flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full bg-amber-200 flex items-center justify-center text-xs">
-                      {setupStatus.w9Complete ? '1' : '2'}
-                    </span>
-                    <CreditCard className="w-4 h-4" />
-                    Connect your bank account
-                  </li>
-                )}
-              </ul>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              <div>
+                <h3 className="font-medium text-amber-800">Complete Your Account Setup</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  To receive disbursements, please complete the following:
+                </p>
+                <ul className="text-sm text-amber-700 mt-2 space-y-1">
+                  {!setupStatus.w9Complete && (
+                    <li className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Submit your W9 form
+                    </li>
+                  )}
+                  {!setupStatus.bankConnected && (
+                    <li className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Connect your bank account for ACH deposits
+                    </li>
+                  )}
+                </ul>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="container-card">
-            <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-1">Properties</p>
-            <p className="text-2xl font-semibold text-luxury-gray-1">{properties.length}</p>
-          </div>
-          <div className="container-card">
-            <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-1">Active Leases</p>
-            <p className="text-2xl font-semibold text-luxury-gray-1">
-              {properties.filter(p => p.pm_leases?.some(l => l.status === 'active')).length}
-            </p>
-          </div>
-          <div className="container-card">
-            <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-1">Pending Disbursements</p>
-            <p className="text-2xl font-semibold text-green-600">
-              {formatMoney(pendingDisbursements.reduce((sum, d) => sum + d.net_amount, 0))}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Properties */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2">
             <div className="container-card">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="field-label flex items-center gap-2">
-                  <Home className="w-4 h-4" />
-                  Your Properties
-                </h2>
-              </div>
+              <h2 className="field-label mb-4 flex items-center gap-2">
+                <Home className="w-4 h-4" />
+                Your Properties
+              </h2>
 
               {properties.length === 0 ? (
-                <p className="text-sm text-luxury-gray-3 text-center py-8">
-                  No properties yet. Contact your property manager.
-                </p>
+                <div className="text-center py-8">
+                  <Building2 className="w-12 h-12 text-luxury-gray-4 mx-auto mb-3" />
+                  <p className="text-luxury-gray-3">No properties yet</p>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {properties.map((property) => {
@@ -354,36 +466,44 @@ export default function LandlordDashboardPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-luxury-gray-1 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
+                    <FileText size={16} />
                     W9 Form
                   </span>
                   {setupStatus.w9Complete ? (
                     <span className="flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle size={16} />
                       Complete
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-amber-600 text-sm">
-                      <AlertCircle className="w-4 h-4" />
-                      Pending
-                    </span>
+                    <button
+                      onClick={requestW9Form}
+                      disabled={requestingW9}
+                      className="btn btn-primary text-xs py-1 px-3 flex items-center gap-1"
+                    >
+                      {requestingW9 ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+                      {requestingW9 ? 'Loading...' : 'Submit W9'}
+                    </button>
                   )}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-luxury-gray-1 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={16} />
                     Bank Account
                   </span>
                   {setupStatus.bankConnected ? (
                     <span className="flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle size={16} />
                       Connected
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-amber-600 text-sm">
-                      <AlertCircle className="w-4 h-4" />
-                      Not Connected
-                    </span>
+                    <button
+                      onClick={requestBankActivation}
+                      disabled={requestingBank}
+                      className="btn btn-secondary text-xs py-1 px-3 flex items-center gap-1"
+                    >
+                      {requestingBank ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                      {requestingBank ? 'Sending...' : 'Connect Bank'}
+                    </button>
                   )}
                 </div>
               </div>
@@ -475,6 +595,49 @@ export default function LandlordDashboardPage() {
           </div>
         </div>
 
+        {/* Repairs Section */}
+        <div className="container-card mt-6">
+          <h2 className="field-label mb-4 flex items-center gap-2">
+            <Wrench size={16} />
+            Repair Requests
+          </h2>
+          {repairs.length === 0 ? (
+            <div className="text-center py-6">
+              <Wrench size={32} className="mx-auto text-luxury-gray-4 mb-2" />
+              <p className="text-sm text-luxury-gray-3">No repair requests</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {repairs.slice(0, 5).map((repair) => (
+                <div key={repair.id} className="inner-card">
+                  <div className="flex items-start justify-between mb-1">
+                    <div>
+                      <p className="font-medium text-luxury-gray-1">{repair.title}</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {repair.managed_properties?.property_address} • {repair.category}
+                      </p>
+                    </div>
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                      repair.status === 'completed' ? 'bg-green-50 text-green-700' :
+                      repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                      repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
+                      'bg-amber-50 text-amber-700'
+                    }`}>
+                      {repair.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-luxury-gray-3">
+                    <span>{formatDate(repair.created_at)}</span>
+                    {repair.actual_cost && (
+                      <span className="font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Recent Activity */}
         {recentActivity && recentActivity.length > 0 && (
           <div className="container-card mt-6">
@@ -507,6 +670,10 @@ export default function LandlordDashboardPage() {
             Questions? Contact us at{' '}
             <a href="mailto:pm@collectiverealtyco.com" className="text-luxury-accent hover:underline">
               pm@collectiverealtyco.com
+            </a>
+            {' '}or call{' '}
+            <a href="tel:+12816389407" className="text-luxury-accent hover:underline">
+              (281) 638-9407
             </a>
           </p>
           <p>© {new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>

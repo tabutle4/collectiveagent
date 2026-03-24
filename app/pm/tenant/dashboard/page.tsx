@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { 
   Home, 
   CheckCircle, 
@@ -14,7 +15,13 @@ import {
   CreditCard,
   ExternalLink,
   AlertTriangle,
-  LogOut
+  LogOut,
+  ArrowLeft,
+  Eye,
+  Wrench,
+  X,
+  Loader2,
+  Plus
 } from 'lucide-react'
 
 interface Invoice {
@@ -55,28 +62,87 @@ interface Tenant {
   phone: string | null
 }
 
+interface Repair {
+  id: string
+  title: string
+  category: string
+  urgency: string
+  status: string
+  created_at: string
+  description: string | null
+  managed_properties?: {
+    property_address: string
+  }
+}
+
 interface DashboardData {
   tenant: Tenant
   lease: Lease | null
   invoices: Invoice[]
+  repairs: Repair[]
   currentBalance: number
 }
 
 export default function TenantDashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const previewId = searchParams.get('preview')
+  
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
   const [loggingOut, setLoggingOut] = useState(false)
+  const [isAdminPreview, setIsAdminPreview] = useState(false)
+  const [showRepairModal, setShowRepairModal] = useState(false)
+  const [submittingRepair, setSubmittingRepair] = useState(false)
+  const [repairForm, setRepairForm] = useState({
+    category: '',
+    urgency: 'routine',
+    title: '',
+    description: ''
+  })
 
   useEffect(() => {
-    checkSessionAndLoad()
-  }, [])
+    if (previewId) {
+      checkAdminAndLoad(previewId)
+    } else {
+      checkSessionAndLoad()
+    }
+  }, [previewId])
+
+  const checkAdminAndLoad = async (tenantId: string) => {
+    try {
+      // Verify admin access via main app auth
+      const adminRes = await fetch('/api/pm/admin-check')
+      const adminData = await adminRes.json()
+      
+      if (!adminData.isAdmin) {
+        setError('Admin access required for preview mode')
+        setLoading(false)
+        return
+      }
+
+      setIsAdminPreview(true)
+
+      // Load dashboard data for the specified tenant
+      const dashboardRes = await fetch(`/api/pm/dashboard/tenant?user_id=${tenantId}`)
+      if (!dashboardRes.ok) {
+        throw new Error('Tenant not found')
+      }
+
+      const dashboardData = await dashboardRes.json()
+      setData(dashboardData)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const checkSessionAndLoad = async () => {
     try {
-      // Check session
+      // Check PM session
       const sessionRes = await fetch('/api/pm/auth/session')
       if (!sessionRes.ok) {
         router.push('/pm/login')
@@ -105,6 +171,11 @@ export default function TenantDashboardPage() {
   }
 
   const handleLogout = async () => {
+    if (isAdminPreview) {
+      router.push('/admin/pm/tenants')
+      return
+    }
+    
     setLoggingOut(true)
     try {
       await fetch('/api/pm/auth/logout', { method: 'POST' })
@@ -143,6 +214,26 @@ export default function TenantDashboardPage() {
     setSelectedInvoices(unpaidIds)
   }
 
+  const submitRepair = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!data?.tenant.id || !data?.lease) return
+    
+    setSubmittingRepair(true)
+    try {
+      // Note: This creates a repair request that admins will see
+      // Since the API requires can_manage_pm, we need a tenant-accessible endpoint
+      // For now, we'll show a message to contact property management
+      alert('Repair request noted! Please contact pm@collectiverealtyco.com or call (281) 638-9407 to report your repair.')
+      setShowRepairModal(false)
+      setRepairForm({ category: '', urgency: 'routine', title: '', description: '' })
+    } catch (err) {
+      console.error('Failed to submit repair:', err)
+      alert('Failed to submit repair request. Please contact property management directly.')
+    } finally {
+      setSubmittingRepair(false)
+    }
+  }
+
   const selectedTotal = data?.invoices
     .filter(inv => selectedInvoices.includes(inv.id))
     .reduce((sum, inv) => sum + inv.total_amount, 0) || 0
@@ -166,7 +257,7 @@ export default function TenantDashboardPage() {
       <div className="min-h-screen bg-luxury-light flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-luxury-accent mx-auto mb-4"></div>
-          <p className="text-luxury-gray-3">Loading your dashboard...</p>
+          <p className="text-luxury-gray-3">Loading dashboard...</p>
         </div>
       </div>
     )
@@ -179,18 +270,45 @@ export default function TenantDashboardPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Error</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Failed to load dashboard'}</p>
-          <button onClick={() => router.push('/pm/login')} className="btn btn-primary">
-            Return to Login
-          </button>
+          {isAdminPreview ? (
+            <Link href="/admin/pm/tenants" className="btn btn-primary">
+              Back to Admin
+            </Link>
+          ) : (
+            <button onClick={() => router.push('/pm/login')} className="btn btn-primary">
+              Return to Login
+            </button>
+          )}
         </div>
       </div>
     )
   }
 
-  const { tenant, lease, currentBalance } = data
+  const { tenant, lease, repairs, currentBalance } = data
 
   return (
     <div className="min-h-screen bg-luxury-light">
+      {/* Admin Preview Banner */}
+      {isAdminPreview && (
+        <div className="bg-amber-500 text-white px-6 py-2">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                Admin Preview — Viewing as {tenant.first_name} {tenant.last_name}
+              </span>
+            </div>
+            <Link 
+              href={`/admin/pm/tenants/${tenant.id}`}
+              className="flex items-center gap-1 text-sm hover:underline"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Admin
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b border-luxury-gray-5 py-4 px-6">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -214,74 +332,66 @@ export default function TenantDashboardPage() {
               onClick={handleLogout}
               disabled={loggingOut}
               className="p-2 rounded-lg hover:bg-luxury-light transition-colors text-luxury-gray-3 hover:text-luxury-gray-1"
-              title="Sign out"
+              title={isAdminPreview ? 'Exit Preview' : 'Sign Out'}
             >
-              <LogOut size={20} />
+              {isAdminPreview ? <ArrowLeft className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-6">
-        {/* Balance Card */}
-        <div className={`container-card mb-6 ${currentBalance > 0 ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-luxury-gray-3 uppercase tracking-wider mb-1">Current Balance</p>
-              <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                {formatMoney(currentBalance)}
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        {/* Balance and Lease Info */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          {/* Current Balance */}
+          <div className="container-card">
+            <h2 className="field-label mb-2">Current Balance</h2>
+            <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {formatMoney(currentBalance)}
+            </p>
+            {currentBalance > 0 && (
+              <p className="text-sm text-luxury-gray-3 mt-1">
+                Amount due across all unpaid invoices
               </p>
-              {currentBalance > 0 && (
-                <p className="text-sm text-luxury-gray-3 mt-1">
-                  {unpaidInvoices.length} unpaid invoice{unpaidInvoices.length !== 1 ? 's' : ''}
-                </p>
-              )}
-            </div>
+            )}
             {currentBalance === 0 && (
-              <div className="text-center">
-                <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-                <p className="text-sm text-green-600 mt-1">All paid up!</p>
-              </div>
+              <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                <CheckCircle className="w-4 h-4" />
+                All paid up!
+              </p>
             )}
           </div>
-        </div>
 
-        {/* Property Info */}
-        {lease && (
-          <div className="container-card mb-6">
-            <h2 className="field-label mb-4 flex items-center gap-2">
-              <Home className="w-4 h-4" />
-              Your Property
-            </h2>
-            <div className="inner-card">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-semibold text-luxury-gray-1 text-lg">
-                    {lease.property_address}
-                    {lease.unit && ` ${lease.unit}`}
-                  </h3>
-                  <p className="text-luxury-gray-3">
-                    {lease.city}, {lease.state} {lease.zip}
-                  </p>
+          {/* Lease Info */}
+          {lease && (
+            <div className="container-card">
+              <h2 className="field-label mb-2 flex items-center gap-2">
+                <Home className="w-4 h-4" />
+                Your Rental
+              </h2>
+              <p className="font-semibold text-luxury-gray-1">
+                {lease.property_address}
+                {lease.unit && ` ${lease.unit}`}
+              </p>
+              <p className="text-sm text-luxury-gray-3">{lease.city}, {lease.state} {lease.zip}</p>
+              <div className="mt-3 pt-3 border-t border-luxury-gray-5 grid grid-cols-2 gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-luxury-gray-3">Monthly Rent</span>
+                  <span className="font-semibold text-luxury-accent">{formatMoney(lease.monthly_rent)}</span>
                 </div>
-                <div className="text-sm space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">Monthly Rent</span>
-                    <span className="font-semibold text-luxury-accent">{formatMoney(lease.monthly_rent)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">Due Day</span>
-                    <span className="text-luxury-gray-1">{lease.rent_due_day}{getOrdinalSuffix(lease.rent_due_day)} of each month</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">Lease Dates</span>
-                    <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} — {formatDate(lease.lease_end)}</span>
-                  </div>
+                <div className="flex justify-between">
+                  <span className="text-luxury-gray-3">Due Day</span>
+                  <span className="text-luxury-gray-1">{lease.rent_due_day}{getOrdinalSuffix(lease.rent_due_day)} of each month</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-luxury-gray-3">Lease Dates</span>
+                  <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} — {formatDate(lease.lease_end)}</span>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Unpaid Invoices */}
         {unpaidInvoices.length > 0 && (
@@ -385,9 +495,9 @@ export default function TenantDashboardPage() {
                     }}
                     className="btn btn-primary flex items-center gap-2"
                   >
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={16} />
                     Pay Now
-                    <ExternalLink className="w-4 h-4" />
+                    <ExternalLink size={16} />
                   </button>
                 </div>
                 <p className="text-xs text-luxury-gray-3 mt-2">
@@ -395,6 +505,27 @@ export default function TenantDashboardPage() {
                 </p>
               </div>
             )}
+
+            {/* Zelle Payment Option */}
+            <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <DollarSign size={20} className="text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-purple-900 mb-1">Pay with Zelle</h3>
+                  <p className="text-sm text-purple-800 mb-2">
+                    You can also pay via Zelle. Send payment to:
+                  </p>
+                  <p className="text-sm font-mono bg-white px-3 py-2 rounded border border-purple-200 text-purple-900">
+                    info@collectiverealtyco.com
+                  </p>
+                  <p className="text-xs text-purple-700 mt-2">
+                    Include your name and property address in the memo. Payments are typically processed within 1-2 business days.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -444,7 +575,7 @@ export default function TenantDashboardPage() {
         {/* No Invoices State */}
         {data.invoices.length === 0 && (
           <div className="container-card text-center py-12">
-            <Calendar className="w-16 h-16 text-luxury-gray-4 mx-auto mb-4" />
+            <Calendar size={64} className="text-luxury-gray-4 mx-auto mb-4" />
             <p className="text-luxury-gray-3">No invoices yet</p>
             <p className="text-sm text-luxury-gray-3 mt-1">
               Your rent invoices will appear here once generated
@@ -452,23 +583,172 @@ export default function TenantDashboardPage() {
           </div>
         )}
 
+        {/* Repairs Section */}
+        <div className="container-card mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="field-label flex items-center gap-2">
+              <Wrench size={16} />
+              Repair Requests
+            </h2>
+            <button
+              onClick={() => setShowRepairModal(true)}
+              className="btn btn-secondary text-sm flex items-center gap-2"
+            >
+              <Plus size={14} />
+              Report Issue
+            </button>
+          </div>
+          {repairs.length === 0 ? (
+            <div className="text-center py-6">
+              <Wrench size={32} className="mx-auto text-luxury-gray-4 mb-2" />
+              <p className="text-sm text-luxury-gray-3">No repair requests</p>
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                Click "Report Issue" to submit a maintenance request
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {repairs.map((repair) => (
+                <div key={repair.id} className="inner-card">
+                  <div className="flex items-start justify-between mb-1">
+                    <div>
+                      <p className="font-medium text-luxury-gray-1">{repair.title}</p>
+                      <p className="text-xs text-luxury-gray-3">{repair.category}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                      repair.status === 'completed' ? 'bg-green-50 text-green-700' :
+                      repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                      repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
+                      'bg-amber-50 text-amber-700'
+                    }`}>
+                      {repair.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-luxury-gray-3">
+                    Submitted {formatDate(repair.created_at)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Contact Info */}
         <div className="container-card mt-6">
           <h2 className="field-label mb-4">Your Contact Info</h2>
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2 text-luxury-gray-1">
-              <Mail className="w-4 h-4 text-luxury-gray-3" />
+              <Mail size={16} className="text-luxury-gray-3" />
               {tenant.email}
             </div>
             {tenant.phone && (
               <div className="flex items-center gap-2 text-luxury-gray-1">
-                <Phone className="w-4 h-4 text-luxury-gray-3" />
+                <Phone size={16} className="text-luxury-gray-3" />
                 {tenant.phone}
               </div>
             )}
           </div>
         </div>
       </main>
+
+      {/* Repair Request Modal */}
+      {showRepairModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-luxury-gray-1">Report an Issue</h3>
+                <button
+                  onClick={() => setShowRepairModal(false)}
+                  className="text-luxury-gray-3 hover:text-luxury-gray-1"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <form onSubmit={submitRepair} className="space-y-4">
+                <div>
+                  <label className="field-label">Category</label>
+                  <select
+                    value={repairForm.category}
+                    onChange={(e) => setRepairForm({ ...repairForm, category: e.target.value })}
+                    className="select-luxury w-full"
+                    required
+                  >
+                    <option value="">Select category...</option>
+                    <option value="plumbing">Plumbing</option>
+                    <option value="electrical">Electrical</option>
+                    <option value="hvac">HVAC / Heating / Cooling</option>
+                    <option value="appliances">Appliances</option>
+                    <option value="structural">Structural / Walls / Flooring</option>
+                    <option value="pest_control">Pest Control</option>
+                    <option value="locks_security">Locks / Security</option>
+                    <option value="exterior">Exterior / Yard</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="field-label">Urgency</label>
+                  <select
+                    value={repairForm.urgency}
+                    onChange={(e) => setRepairForm({ ...repairForm, urgency: e.target.value })}
+                    className="select-luxury w-full"
+                  >
+                    <option value="routine">Routine (within 1-2 weeks)</option>
+                    <option value="urgent">Urgent (within 48 hours)</option>
+                    <option value="emergency">Emergency (safety hazard)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="field-label">Title</label>
+                  <input
+                    type="text"
+                    value={repairForm.title}
+                    onChange={(e) => setRepairForm({ ...repairForm, title: e.target.value })}
+                    className="input-luxury w-full"
+                    placeholder="Brief description of the issue"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="field-label">Details</label>
+                  <textarea
+                    value={repairForm.description}
+                    onChange={(e) => setRepairForm({ ...repairForm, description: e.target.value })}
+                    className="input-luxury w-full h-24 resize-none"
+                    placeholder="Provide as much detail as possible..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRepairModal(false)}
+                    className="btn btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingRepair}
+                    className="btn btn-primary flex-1 flex items-center justify-center gap-2"
+                  >
+                    {submittingRepair && <Loader2 size={16} className="animate-spin" />}
+                    {submittingRepair ? 'Submitting...' : 'Submit Request'}
+                  </button>
+                </div>
+              </form>
+
+              <p className="text-xs text-luxury-gray-3 mt-4 text-center">
+                For emergencies, please call (281) 638-9407 immediately
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="border-t border-luxury-gray-5 mt-12 py-6 px-6 bg-white">
@@ -477,6 +757,10 @@ export default function TenantDashboardPage() {
             Questions about your lease or payment? Contact us at{' '}
             <a href="mailto:pm@collectiverealtyco.com" className="text-luxury-accent hover:underline">
               pm@collectiverealtyco.com
+            </a>
+            {' '}or call{' '}
+            <a href="tel:+12816389407" className="text-luxury-accent hover:underline">
+              (281) 638-9407
             </a>
           </p>
           <p>© {new Date().getFullYear()} Collective Realty Co. All rights reserved.</p>

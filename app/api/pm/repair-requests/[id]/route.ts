@@ -5,13 +5,13 @@ import { requirePermission } from '@/lib/api-auth'
 // GET - Single repair request
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   const supabase = createClient()
-  const { id } = params
+  const { id } = await params
 
   const { data: repair, error } = await supabase
     .from('repair_requests')
@@ -64,14 +64,14 @@ export async function GET(
 // PATCH - Update repair request
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
     const supabase = createClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     const allowedFields = [
@@ -173,13 +173,13 @@ export async function PATCH(
 // DELETE - Delete repair request
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   const supabase = createClient()
-  const { id } = params
+  const { id } = await params
 
   const { error } = await supabase
     .from('repair_requests')
