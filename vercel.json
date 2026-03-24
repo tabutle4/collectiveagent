@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/pm/apply-rent-late-fees",
       "schedule": "0 11 * * *"
-    },
-    {
-  "path": "/api/cron/pm/apply-rent-late-fees",
-  "schedule": "0 11 * * *"
-  }
+    }
   ]
 }
