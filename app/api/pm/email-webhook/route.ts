@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Remove lines starting with >
-    cleanText = cleanText.split('\n').filter(line => !line.trim().startsWith('>')).join('\n')
+    cleanText = cleanText.split('\n').filter((line: string) => !line.trim().startsWith('>')).join('\n')
     cleanText = cleanText.trim()
 
     if (!cleanText) {
