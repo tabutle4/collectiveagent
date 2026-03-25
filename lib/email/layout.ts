@@ -4,7 +4,7 @@
 
 export const EMAIL_COLORS = {
   accent: '#C5A278', // luxury-accent (tan/gold)
-  headerBg: '#1A1A1A', // luxury-black
+  headerBg: '#FFFFFF', // white header
   bodyText: '#555555', // luxury-gray-2
   headingText: '#1A1A1A', // luxury-gray-1
   lightText: '#888888', // luxury-gray-3
@@ -46,21 +46,23 @@ export function getEmailLayout(
     }
     .email-header {
       background-color: ${EMAIL_COLORS.headerBg};
-      color: ${EMAIL_COLORS.white};
-      padding: 30px 20px;
+      padding: 24px 20px;
       text-align: center;
       border-radius: 8px 8px 0 0;
+      border: 1px solid ${EMAIL_COLORS.border};
+      border-bottom: 3px solid ${EMAIL_COLORS.accent};
     }
     .email-header h1 {
       margin: 0;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 600;
-      letter-spacing: 0.05em;
-      color: ${EMAIL_COLORS.white};
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: ${EMAIL_COLORS.headingText};
     }
     .email-header p {
-      margin: 8px 0 0 0;
-      font-size: 13px;
+      margin: 6px 0 0 0;
+      font-size: 12px;
       color: ${EMAIL_COLORS.lightText};
     }
     .email-content {
@@ -111,7 +113,7 @@ export function getEmailLayout(
     .email-btn-dark {
       display: inline-block;
       padding: 12px 28px;
-      background-color: ${EMAIL_COLORS.headerBg};
+      background-color: ${EMAIL_COLORS.headingText};
       color: ${EMAIL_COLORS.buttonText} !important;
       text-decoration: none;
       border-radius: 4px;
