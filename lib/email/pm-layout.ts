@@ -3,7 +3,7 @@
 
 export const PM_EMAIL_COLORS = {
   accent: '#C5A278', // luxury-accent (tan/gold) - matches app
-  headerBg: '#1A1A1A', // dark header for white logo visibility
+  headerBg: '#FFFFFF', // white header
   bodyText: '#555555', // luxury-gray-2
   headingText: '#1A1A1A', // luxury-gray-1
   lightText: '#888888', // luxury-gray-3
@@ -45,11 +45,11 @@ export function getPMEmailLayout(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: ${PM_EMAIL_COLORS.bodyText}; margin: 0; padding: 0; background-color: ${PM_EMAIL_COLORS.lightBg};">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     
-    <!-- Header with dark background for white logo -->
-    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 28px 20px; text-align: center; border-radius: 8px 8px 0 0;">
-      <img src="${BASE_URL}/logo-white.png" alt="Collective Realty Co." style="height: 80px; margin-bottom: 12px;">
-      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.white};">${title}</h1>` : ''}
-      ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.accent};">${subtitle}</p>` : ''}
+    <!-- Header with white background -->
+    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 28px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${PM_EMAIL_COLORS.border}; border-bottom: none;">
+      <img src="${BASE_URL}/logo.png" alt="Collective Realty Co." style="height: 80px; margin-bottom: 12px;">
+      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.headingText};">${title}</h1>` : ''}
+      ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
     </div>
     
     <!-- Content -->
@@ -86,7 +86,7 @@ export function pmEmailButton(text: string, url: string): string {
  */
 export function pmEmailButtonDark(text: string, url: string): string {
   return `<p style="text-align: center; margin: 24px 0;">
-    <a href="${url}" style="display: inline-block; padding: 12px 28px; background-color: ${PM_EMAIL_COLORS.headerBg}; color: ${PM_EMAIL_COLORS.buttonText}; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">
+    <a href="${url}" style="display: inline-block; padding: 12px 28px; background-color: #1A1A1A; color: ${PM_EMAIL_COLORS.buttonText}; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">
       ${text}
     </a>
   </p>`
@@ -213,11 +213,13 @@ export function pmAdminMessageEmail(
   propertyAddress: string,
   message: string
 ): string {
+  const portalUrl = `${BASE_URL}/pm/tenant/login`
+  
   return getPMEmailLayout(
     `${pmEmailGreeting(tenantFirstName)}
      ${pmEmailText(`You have a new message regarding your repair request at <strong>${propertyAddress}</strong>:`)}
      ${pmEmailBox(message)}
-     ${pmEmailSmall('Log in to your tenant portal to view details or respond.')}`,
+     ${pmEmailButton('View in Tenant Portal', portalUrl)}`,
     { title: 'Repair Request Update', preheader: `Update on your repair at ${propertyAddress}` }
   )
 }
@@ -255,6 +257,7 @@ export function pmRepairStatusEmail(
   newStatus: string,
   notes?: string
 ): string {
+  const portalUrl = `${BASE_URL}/pm/tenant/login`
   const statusLabels: Record<string, string> = {
     submitted: 'Submitted',
     in_progress: 'In Progress',
@@ -269,7 +272,7 @@ export function pmRepairStatusEmail(
      ${pmEmailDetail('Issue', repairTitle)}
      ${pmEmailDetail('Status', statusLabels[newStatus] || newStatus)}
      ${notes ? pmEmailBox(notes, 'Notes') : ''}
-     ${pmEmailSmall('Log in to your tenant portal to view more details.')}`,
+     ${pmEmailButton('View in Tenant Portal', portalUrl)}`,
     { title: 'Repair Status Update', preheader: `${repairTitle} - ${statusLabels[newStatus] || newStatus}` }
   )
 }
