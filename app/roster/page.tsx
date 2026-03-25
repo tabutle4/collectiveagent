@@ -426,6 +426,8 @@ export default function PublicRosterPage() {
         {!loading && (
           <div 
             style={{ 
+              position: 'relative',
+              zIndex: 20,
               backgroundColor: '#F9F9F9',
               borderBottom: '1px solid #E5E5E5',
               padding: '10px 24px',
