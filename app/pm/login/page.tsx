@@ -51,8 +51,8 @@ function LoginForm() {
       {sent ? (
         /* Success state */
         <div className="text-center py-4">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+          <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle size={32} className="text-green-600" />
           </div>
           <h2 className="text-lg font-semibold text-luxury-gray-1 mb-2">Check Your Email</h2>
           <p className="text-sm text-luxury-gray-3 mb-4">

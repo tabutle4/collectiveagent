@@ -80,7 +80,15 @@ export default function LeasesPage() {
   }, [search, statusFilter])
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Append T12:00:00 to date-only strings to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  // Helper to parse date-only strings correctly
+  const parseDate = (date: string) => {
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr)
   }
 
   const formatMoney = (amount: number) => {
@@ -89,9 +97,9 @@ export default function LeasesPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      active: 'bg-green-100 text-green-800',
-      expired: 'bg-gray-100 text-gray-600',
-      terminated: 'bg-red-100 text-red-800',
+      active: 'bg-green-50 text-green-700',
+      expired: 'bg-gray-50 text-gray-600',
+      terminated: 'bg-red-50 text-red-700',
     }
     return (
       <span className={`px-2 py-0.5 text-xs rounded-full ${styles[status] || styles.expired}`}>
@@ -101,8 +109,9 @@ export default function LeasesPage() {
   }
 
   const isExpiringSoon = (lease: Lease) => {
-    const endDate = new Date(lease.lease_end)
+    const endDate = parseDate(lease.lease_end)
     const today = new Date()
+    today.setHours(12, 0, 0, 0)
     const daysUntilEnd = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     return lease.status === 'active' && daysUntilEnd <= 60 && daysUntilEnd > 0
   }
@@ -111,16 +120,16 @@ export default function LeasesPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <FileText className="w-6 h-6 text-luxury-accent" />
+        <FileText size={24} className="text-luxury-accent" />
         <h1 className="page-title">Leases</h1>
       </div>
 
       <div className="container-card mb-6">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-gray-3" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
             <input
               type="text"
               placeholder="Search by property or tenant..."
@@ -140,7 +149,7 @@ export default function LeasesPage() {
             <option value="terminated">Terminated</option>
           </select>
           <Link href="/admin/pm/leases/new" className="btn btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" />
+            <Plus size={16} />
             Create Lease
           </Link>
         </div>
@@ -151,10 +160,10 @@ export default function LeasesPage() {
           <div className="text-center py-12 text-luxury-gray-3">Loading leases...</div>
         ) : leases.length === 0 ? (
           <div className="text-center py-12">
-            <FileText className="w-12 h-12 mx-auto text-luxury-gray-4 mb-4" />
+            <FileText size={48} className="mx-auto text-luxury-gray-4 mb-4" />
             <p className="text-luxury-gray-3">No leases found</p>
             <Link href="/admin/pm/leases/new" className="btn btn-primary mt-4 inline-flex items-center gap-2">
-              <Plus className="w-4 h-4" />
+              <Plus size={16} />
               Create First Lease
             </Link>
           </div>
@@ -203,7 +212,7 @@ export default function LeasesPage() {
                     </div>
                     {isExpiringSoon(lease) && (
                       <div className="flex items-center gap-1 mt-1">
-                        <Calendar className="w-3 h-3 text-amber-600" />
+                        <Calendar size={12} className="text-amber-600" />
                         <span className="text-xs text-amber-600">Expiring soon</span>
                       </div>
                     )}

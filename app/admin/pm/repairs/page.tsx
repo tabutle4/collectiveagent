@@ -143,7 +143,8 @@ export default function RepairsPage() {
   }, [search, statusFilter, categoryFilter])
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const formatMoney = (amount: number) => {
@@ -156,7 +157,7 @@ export default function RepairsPage() {
       approved: { bg: 'bg-purple-50 text-purple-700', icon: <CheckCircle size={12} /> },
       in_progress: { bg: 'bg-amber-50 text-amber-700', icon: <Loader2 size={12} /> },
       completed: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
-      cancelled: { bg: 'bg-gray-100 text-gray-500', icon: <XCircle size={12} /> },
+      cancelled: { bg: 'bg-gray-50 text-gray-500', icon: <XCircle size={12} /> },
     }
     const style = styles[status] || styles.submitted
     return (
@@ -171,7 +172,7 @@ export default function RepairsPage() {
     const styles: Record<string, string> = {
       emergency: 'bg-red-50 text-red-700',
       urgent: 'bg-amber-50 text-amber-700',
-      routine: 'bg-gray-100 text-gray-600',
+      routine: 'bg-gray-50 text-gray-600',
     }
     return (
       <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full ${styles[urgency] || styles.routine}`}>

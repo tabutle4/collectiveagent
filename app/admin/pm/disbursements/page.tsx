@@ -125,7 +125,8 @@ export default function DisbursementsPage() {
   }, [search, statusFilter])
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const formatMoney = (amount: number) => {
@@ -138,10 +139,10 @@ export default function DisbursementsPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; icon: React.ReactNode }> = {
-      pending: { bg: 'bg-amber-100 text-amber-800', icon: <Clock className="w-3 h-3" /> },
-      processing: { bg: 'bg-blue-100 text-blue-800', icon: <Send className="w-3 h-3" /> },
-      completed: { bg: 'bg-green-100 text-green-800', icon: <CheckCircle className="w-3 h-3" /> },
-      failed: { bg: 'bg-red-100 text-red-800', icon: <AlertCircle className="w-3 h-3" /> },
+      pending: { bg: 'bg-amber-50 text-amber-700', icon: <Clock size={12} /> },
+      processing: { bg: 'bg-blue-50 text-blue-700', icon: <Send size={12} /> },
+      completed: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
+      failed: { bg: 'bg-red-50 text-red-700', icon: <AlertCircle size={12} /> },
     }
     const style = styles[status] || styles.pending
     return (
@@ -203,9 +204,9 @@ export default function DisbursementsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <Banknote className="w-6 h-6 text-luxury-accent" />
+        <Banknote size={24} className="text-luxury-accent" />
         <h1 className="page-title">Disbursements</h1>
       </div>
 
@@ -266,7 +267,7 @@ export default function DisbursementsPage() {
           <div className="text-center py-12 text-luxury-gray-3">Loading disbursements...</div>
         ) : disbursements.length === 0 ? (
           <div className="text-center py-12">
-            <Banknote className="w-12 h-12 mx-auto text-luxury-gray-4 mb-4" />
+            <Banknote size={48} className="mx-auto text-luxury-gray-4 mb-4" />
             <p className="text-luxury-gray-3">No disbursements found</p>
             <p className="text-sm text-luxury-gray-3 mt-1">
               Disbursements are created automatically when tenants pay rent
@@ -307,12 +308,12 @@ export default function DisbursementsPage() {
                           <div className="flex items-center gap-1 mt-0.5">
                             {disbursement.landlords.bank_status === 'connected' ? (
                               <span className="text-xs text-green-600 flex items-center gap-1">
-                                <CheckCircle className="w-3 h-3" />
+                                <CheckCircle size={12} />
                                 Bank connected
                               </span>
                             ) : (
                               <span className="text-xs text-amber-600 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
+                                <AlertCircle size={12} />
                                 Bank not connected
                               </span>
                             )}
@@ -363,7 +364,7 @@ export default function DisbursementsPage() {
                               disabled={processingId === disbursement.id}
                               className="btn btn-primary text-xs py-1 px-3 inline-flex items-center gap-1"
                             >
-                              <Send className="w-3 h-3" />
+                              <Send size={12} />
                               {processingId === disbursement.id ? 'Processing...' : 'Process ACH'}
                             </button>
                           ) : (
@@ -403,7 +404,7 @@ export default function DisbursementsPage() {
       <div className="container-card mt-6">
         <div className="inner-card">
           <div className="flex items-start gap-3">
-            <Building2 className="w-5 h-5 text-luxury-accent mt-0.5" />
+            <Building2 size={20} className="text-luxury-accent mt-0.5" />
             <div>
               <h3 className="font-semibold text-luxury-gray-1 mb-1">How Disbursements Work</h3>
               <ul className="text-sm text-luxury-gray-3 space-y-1">

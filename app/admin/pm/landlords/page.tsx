@@ -61,7 +61,8 @@ export default function LandlordsListPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const ds = dateString.includes('T') ? dateString : `${dateString}T12:00:00`
+    return new Date(ds).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

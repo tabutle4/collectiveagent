@@ -105,9 +105,9 @@ export default function NewPropertyPage() {
     <div className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm/properties" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <Home className="w-6 h-6 text-luxury-accent" />
+        <Home size={24} className="text-luxury-accent" />
         <h1 className="page-title">Add Property</h1>
       </div>
 
@@ -358,7 +358,7 @@ export default function NewPropertyPage() {
               Cancel
             </Link>
             <button type="submit" disabled={loading} className="btn btn-primary flex items-center gap-2">
-              <Save className="w-4 h-4" />
+              <Save size={16} />
               {loading ? 'Creating...' : 'Create Property'}
             </button>
           </div>

@@ -123,8 +123,9 @@ function NewLeaseContent() {
       return
     }
 
-    const start = new Date(form.lease_start)
-    const end = new Date(form.lease_end)
+    // Append T12:00:00 to prevent timezone shift
+    const start = new Date(`${form.lease_start}T12:00:00`)
+    const end = new Date(`${form.lease_end}T12:00:00`)
     
     if (end <= start) {
       setInvoiceCount(0)

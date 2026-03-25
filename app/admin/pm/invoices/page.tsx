@@ -116,7 +116,9 @@ export default function InvoicesPage() {
   }, [search, statusFilter])
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Append T12:00:00 to date-only strings to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const formatMoney = (amount: number) => {
@@ -127,14 +129,20 @@ export default function InvoicesPage() {
     return new Date(2000, month - 1, 1).toLocaleDateString('en-US', { month: 'short' })
   }
 
+  // Helper to parse date-only strings correctly
+  const parseDate = (date: string) => {
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr)
+  }
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; icon: React.ReactNode }> = {
-      pending: { bg: 'bg-gray-100 text-gray-600', icon: <Clock size={12} /> },
+      pending: { bg: 'bg-gray-50 text-gray-600', icon: <Clock size={12} /> },
       sent: { bg: 'bg-blue-50 text-blue-700', icon: <Send size={12} /> },
       overdue: { bg: 'bg-red-50 text-red-700', icon: <AlertTriangle size={12} /> },
       paid: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
       partial: { bg: 'bg-amber-50 text-amber-700', icon: <DollarSign size={12} /> },
-      cancelled: { bg: 'bg-gray-100 text-gray-400', icon: null },
+      cancelled: { bg: 'bg-gray-50 text-gray-400', icon: null },
     }
     const style = styles[status] || styles.pending
     return (
@@ -205,8 +213,9 @@ export default function InvoicesPage() {
 
   const isOverdue = (invoice: Invoice) => {
     if (['paid', 'cancelled'].includes(invoice.status)) return false
-    const dueDate = new Date(invoice.due_date)
-    return dueDate < new Date()
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    return parseDate(invoice.due_date) < now
   }
 
   return (

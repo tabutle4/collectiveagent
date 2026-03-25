@@ -82,8 +82,8 @@ export default function PropertiesPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      active: 'bg-green-100 text-green-800',
-      inactive: 'bg-gray-100 text-gray-600',
+      active: 'bg-green-50 text-green-700',
+      inactive: 'bg-gray-50 text-gray-600',
     }
     return (
       <span className={`px-2 py-0.5 text-xs rounded-full ${styles[status] || styles.inactive}`}>
@@ -96,16 +96,16 @@ export default function PropertiesPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <Home className="w-6 h-6 text-luxury-accent" />
+        <Home size={24} className="text-luxury-accent" />
         <h1 className="page-title">Managed Properties</h1>
       </div>
 
       <div className="container-card mb-6">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-gray-3" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
             <input
               type="text"
               placeholder="Search by address..."
@@ -124,7 +124,7 @@ export default function PropertiesPage() {
             <option value="inactive">Inactive</option>
           </select>
           <Link href="/admin/pm/properties/new" className="btn btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" />
+            <Plus size={16} />
             Add Property
           </Link>
         </div>
@@ -135,10 +135,10 @@ export default function PropertiesPage() {
           <div className="text-center py-12 text-luxury-gray-3">Loading properties...</div>
         ) : properties.length === 0 ? (
           <div className="text-center py-12">
-            <Home className="w-12 h-12 mx-auto text-luxury-gray-4 mb-4" />
+            <Home size={48} className="mx-auto text-luxury-gray-4 mb-4" />
             <p className="text-luxury-gray-3">No properties found</p>
             <Link href="/admin/pm/properties/new" className="btn btn-primary mt-4 inline-flex items-center gap-2">
-              <Plus className="w-4 h-4" />
+              <Plus size={16} />
               Add First Property
             </Link>
           </div>

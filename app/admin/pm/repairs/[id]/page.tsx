@@ -197,7 +197,9 @@ export default function RepairDetailPage() {
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { 
+    // For date-only strings, append T12:00:00 to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { 
       month: 'short', day: 'numeric', year: 'numeric', 
       hour: 'numeric', minute: '2-digit'
     })

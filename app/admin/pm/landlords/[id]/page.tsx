@@ -259,7 +259,8 @@ export default function LandlordDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A'
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const ds = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`
+    return new Date(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const getMonthName = (month: number) =>

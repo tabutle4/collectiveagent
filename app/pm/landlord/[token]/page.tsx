@@ -136,7 +136,9 @@ export default function LandlordDashboardPage() {
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Append T12:00:00 to date-only strings to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const getMonthName = (month: number) => {
@@ -160,7 +162,7 @@ export default function LandlordDashboardPage() {
     return (
       <div className="min-h-screen bg-luxury-light flex items-center justify-center p-6">
         <div className="container-card max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <AlertCircle size={64} className="text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Access Denied</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Invalid or expired link'}</p>
           <p className="text-sm text-luxury-gray-3">
@@ -200,7 +202,7 @@ export default function LandlordDashboardPage() {
         {/* Setup Alert */}
         {(!setupStatus.w9Complete || !setupStatus.bankConnected) && (
           <div className="alert-warning mb-6 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold">Complete Your Setup</p>
               <p className="text-sm mt-1">
@@ -210,14 +212,14 @@ export default function LandlordDashboardPage() {
                 {!setupStatus.w9Complete && (
                   <li className="flex items-center gap-2">
                     <span className="w-4 h-4 rounded-full bg-amber-200 flex items-center justify-center text-xs">1</span>
-                    <FileText className="w-4 h-4" />
+                    <FileText size={16} />
                     Submit your W9 form
                   </li>
                 )}
                 {!setupStatus.bankConnected && (
                   <li className="flex items-center gap-2">
                     <span className="w-4 h-4 rounded-full bg-amber-200 flex items-center justify-center text-xs">{setupStatus.w9Complete ? '1' : '2'}</span>
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={16} />
                     Connect your bank account for ACH deposits
                   </li>
                 )}
@@ -232,24 +234,24 @@ export default function LandlordDashboardPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="container-card text-center">
-            <Building2 className="w-6 h-6 text-luxury-accent mx-auto mb-2" />
+            <Building2 size={24} className="text-luxury-accent mx-auto mb-2" />
             <div className="text-2xl font-bold text-luxury-gray-1">{properties.length}</div>
             <div className="text-xs text-luxury-gray-3 uppercase tracking-wider">Properties</div>
           </div>
           <div className="container-card text-center">
-            <User className="w-6 h-6 text-luxury-accent mx-auto mb-2" />
+            <User size={24} className="text-luxury-accent mx-auto mb-2" />
             <div className="text-2xl font-bold text-luxury-gray-1">
               {properties.reduce((sum, p) => sum + (p.pm_leases?.filter(l => l.status === 'active')?.length || 0), 0)}
             </div>
             <div className="text-xs text-luxury-gray-3 uppercase tracking-wider">Active Tenants</div>
           </div>
           <div className="container-card text-center">
-            <Clock className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+            <Clock size={24} className="text-amber-500 mx-auto mb-2" />
             <div className="text-2xl font-bold text-amber-600">{pendingDisbursements.length}</div>
             <div className="text-xs text-luxury-gray-3 uppercase tracking-wider">Pending Payouts</div>
           </div>
           <div className="container-card text-center">
-            <DollarSign className="w-6 h-6 text-green-600 mx-auto mb-2" />
+            <DollarSign size={24} className="text-green-600 mx-auto mb-2" />
             <div className="text-2xl font-bold text-green-600">{formatMoney(totalPending)}</div>
             <div className="text-xs text-luxury-gray-3 uppercase tracking-wider">To Be Paid</div>
           </div>
@@ -261,13 +263,13 @@ export default function LandlordDashboardPage() {
           <div className="md:col-span-2">
             <div className="container-card">
               <h2 className="field-label mb-4 flex items-center gap-2">
-                <Home className="w-4 h-4" />
+                <Home size={16} />
                 Your Properties
               </h2>
               
               {properties.length === 0 ? (
                 <div className="text-center py-8 text-luxury-gray-3">
-                  <Building2 className="w-12 h-12 mx-auto mb-3 text-luxury-gray-4" />
+                  <Building2 size={48} className="mx-auto mb-3 text-luxury-gray-4" />
                   <p>No properties on file yet</p>
                 </div>
               ) : (
@@ -288,8 +290,8 @@ export default function LandlordDashboardPage() {
                           </div>
                           <span className={`px-2 py-0.5 text-xs rounded-full ${
                             property.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-600'
+                              ? 'bg-green-50 text-green-700' 
+                              : 'bg-gray-50 text-gray-600'
                           }`}>
                             {property.status}
                           </span>
@@ -312,7 +314,7 @@ export default function LandlordDashboardPage() {
                           </div>
                         ) : (
                           <div className="bg-amber-50 text-amber-800 rounded-lg p-3 text-sm">
-                            <Clock className="w-4 h-4 inline mr-1" />
+                            <Clock size={16} className="inline mr-1" />
                             No active lease — property is vacant
                           </div>
                         )}
@@ -332,34 +334,34 @@ export default function LandlordDashboardPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-luxury-gray-1 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />
+                    <FileText size={16} />
                     W9 Form
                   </span>
                   {setupStatus.w9Complete ? (
                     <span className="flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle size={16} />
                       Complete
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-amber-600 text-sm">
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle size={16} />
                       Pending
                     </span>
                   )}
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-luxury-gray-1 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={16} />
                     Bank Account
                   </span>
                   {setupStatus.bankConnected ? (
                     <span className="flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle className="w-4 h-4" />
+                      <CheckCircle size={16} />
                       Connected
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-amber-600 text-sm">
-                      <AlertCircle className="w-4 h-4" />
+                      <AlertCircle size={16} />
                       Not Connected
                     </span>
                   )}
@@ -371,7 +373,7 @@ export default function LandlordDashboardPage() {
             {pendingDisbursements.length > 0 && (
               <div className="container-card">
                 <h2 className="field-label mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" />
+                  <DollarSign size={16} />
                   Pending Disbursements
                 </h2>
                 <div className="space-y-3">
@@ -401,7 +403,7 @@ export default function LandlordDashboardPage() {
             {agreements.length > 0 && (
               <div className="container-card">
                 <h2 className="field-label mb-4 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar size={16} />
                   Agreement
                 </h2>
                 {agreements.map((a) => (
@@ -430,18 +432,18 @@ export default function LandlordDashboardPage() {
               <h2 className="field-label mb-4">Your Contact Info</h2>
               <div className="text-sm space-y-2">
                 <div className="flex items-center gap-2 text-luxury-gray-1">
-                  <Mail className="w-4 h-4 text-luxury-gray-3" />
+                  <Mail size={16} className="text-luxury-gray-3" />
                   {landlord.email}
                 </div>
                 {landlord.phone && (
                   <div className="flex items-center gap-2 text-luxury-gray-1">
-                    <Phone className="w-4 h-4 text-luxury-gray-3" />
+                    <Phone size={16} className="text-luxury-gray-3" />
                     {landlord.phone}
                   </div>
                 )}
                 {landlord.mailing_address && (
                   <div className="flex items-start gap-2 text-luxury-gray-1">
-                    <MapPin className="w-4 h-4 text-luxury-gray-3 mt-0.5" />
+                    <MapPin size={16} className="text-luxury-gray-3 mt-0.5" />
                     <div>
                       {landlord.mailing_address}<br />
                       {landlord.mailing_city}, {landlord.mailing_state} {landlord.mailing_zip}
@@ -462,9 +464,9 @@ export default function LandlordDashboardPage() {
                 <div key={i} className="flex items-center justify-between py-2 border-b border-luxury-gray-5 last:border-0">
                   <div className="flex items-center gap-3">
                     {activity.status === 'completed' ? (
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <CheckCircle size={20} className="text-green-600" />
                     ) : (
-                      <Clock className="w-5 h-5 text-amber-500" />
+                      <Clock size={20} className="text-amber-500" />
                     )}
                     <span className="text-sm text-luxury-gray-1">{activity.description}</span>
                   </div>

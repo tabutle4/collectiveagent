@@ -98,11 +98,19 @@ export default function TenantDashboardPage() {
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Append T12:00:00 to date-only strings to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const getMonthName = (month: number) => {
     return new Date(2000, month - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+  }
+
+  // Helper to parse date-only strings correctly
+  const parseDate = (date: string) => {
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr)
   }
 
   const toggleInvoice = (invoiceId: string) => {
@@ -130,7 +138,9 @@ export default function TenantDashboardPage() {
 
   const isOverdue = (dueDate: string, status: string) => {
     if (['paid', 'cancelled'].includes(status)) return false
-    return new Date(dueDate) < new Date()
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    return parseDate(dueDate) < now
   }
 
   if (loading) {
@@ -148,7 +158,7 @@ export default function TenantDashboardPage() {
     return (
       <div className="min-h-screen bg-luxury-light flex items-center justify-center p-6">
         <div className="container-card max-w-md text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <AlertCircle size={64} className="text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Access Denied</h1>
           <p className="text-luxury-gray-3 mb-4">{error || 'Invalid or expired link'}</p>
           <p className="text-sm text-luxury-gray-3">
@@ -186,11 +196,11 @@ export default function TenantDashboardPage() {
 
       <main className="max-w-4xl mx-auto p-4 sm:p-6">
         {/* Balance Card */}
-        <div className={`container-card mb-6 ${currentBalance > 0 ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
+        <div className="container-card mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-luxury-gray-3 uppercase tracking-wider mb-1">Current Balance</p>
-              <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Current Balance</p>
+              <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
                 {formatMoney(currentBalance)}
               </p>
               {currentBalance > 0 && (
@@ -201,7 +211,7 @@ export default function TenantDashboardPage() {
             </div>
             {currentBalance === 0 && (
               <div className="text-center">
-                <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
+                <CheckCircle size={48} className="text-green-500 mx-auto" />
                 <p className="text-sm text-green-600 mt-1">All paid up!</p>
               </div>
             )}
@@ -212,7 +222,7 @@ export default function TenantDashboardPage() {
         {lease && (
           <div className="container-card mb-6">
             <h2 className="field-label mb-4 flex items-center gap-2">
-              <Home className="w-4 h-4" />
+              <Home size={16} />
               Your Property
             </h2>
             <div className="inner-card">
@@ -250,7 +260,7 @@ export default function TenantDashboardPage() {
           <div className="container-card mb-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="field-label flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
+                <DollarSign size={16} />
                 Invoices Due
               </h2>
               {unpaidInvoices.length > 1 && (
@@ -273,7 +283,7 @@ export default function TenantDashboardPage() {
                       selectedInvoices.includes(invoice.id) 
                         ? 'ring-2 ring-luxury-accent bg-luxury-accent/5' 
                         : ''
-                    } ${overdue ? 'border-l-4 border-l-red-500' : ''}`}
+                    }`}
                     onClick={() => toggleInvoice(invoice.id)}
                   >
                     <div className="flex items-start justify-between">
@@ -284,7 +294,7 @@ export default function TenantDashboardPage() {
                             : 'border-luxury-gray-4'
                         }`}>
                           {selectedInvoices.includes(invoice.id) && (
-                            <CheckCircle className="w-4 h-4 text-white" />
+                            <CheckCircle size={16} className="text-white" />
                           )}
                         </div>
                         <div>
@@ -296,7 +306,7 @@ export default function TenantDashboardPage() {
                           </p>
                           {overdue && (
                             <p className="text-sm text-red-600 flex items-center gap-1 mt-1">
-                              <AlertTriangle className="w-4 h-4" />
+                              <AlertTriangle size={16} />
                               Overdue
                             </p>
                           )}
@@ -312,8 +322,8 @@ export default function TenantDashboardPage() {
                           </p>
                         )}
                         {invoice.status === 'sent' && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
-                            <Clock className="w-3 h-3" />
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded-full">
+                            <Clock size={12} />
                             Sent
                           </span>
                         )}
@@ -349,9 +359,9 @@ export default function TenantDashboardPage() {
                     }}
                     className="btn btn-primary flex items-center gap-2"
                   >
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={16} />
                     Pay Now
-                    <ExternalLink className="w-4 h-4" />
+                    <ExternalLink size={16} />
                   </button>
                 </div>
                 <p className="text-xs text-luxury-gray-3 mt-2">
@@ -366,7 +376,7 @@ export default function TenantDashboardPage() {
         {paidInvoices.length > 0 && (
           <div className="container-card">
             <h2 className="field-label mb-4 flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
+              <Calendar size={16} />
               Payment History
             </h2>
             <div className="overflow-x-auto">
@@ -392,8 +402,8 @@ export default function TenantDashboardPage() {
                         {invoice.paid_at ? formatDate(invoice.paid_at) : '—'}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full">
-                          <CheckCircle className="w-3 h-3" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-50 text-green-700 rounded-full">
+                          <CheckCircle size={12} />
                           Paid
                         </span>
                       </td>
@@ -408,7 +418,7 @@ export default function TenantDashboardPage() {
         {/* No Invoices State */}
         {data.invoices.length === 0 && (
           <div className="container-card text-center py-12">
-            <Calendar className="w-16 h-16 text-luxury-gray-4 mx-auto mb-4" />
+            <Calendar size={64} className="text-luxury-gray-4 mx-auto mb-4" />
             <p className="text-luxury-gray-3">No invoices yet</p>
             <p className="text-sm text-luxury-gray-3 mt-1">
               Your rent invoices will appear here once generated
@@ -421,12 +431,12 @@ export default function TenantDashboardPage() {
           <h2 className="field-label mb-4">Your Contact Info</h2>
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2 text-luxury-gray-1">
-              <Mail className="w-4 h-4 text-luxury-gray-3" />
+              <Mail size={16} className="text-luxury-gray-3" />
               {tenant.email}
             </div>
             {tenant.phone && (
               <div className="flex items-center gap-2 text-luxury-gray-1">
-                <Phone className="w-4 h-4 text-luxury-gray-3" />
+                <Phone size={16} className="text-luxury-gray-3" />
                 {tenant.phone}
               </div>
             )}

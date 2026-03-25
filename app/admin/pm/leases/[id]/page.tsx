@@ -199,7 +199,8 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const formatMoney = (amount: number) => {
@@ -212,12 +213,12 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      pending: 'bg-gray-100 text-gray-600',
-      sent: 'bg-blue-100 text-blue-800',
-      paid: 'bg-green-100 text-green-800',
-      partial: 'bg-yellow-100 text-yellow-800',
-      overdue: 'bg-red-100 text-red-800',
-      cancelled: 'bg-gray-100 text-gray-500',
+      pending: 'bg-gray-50 text-gray-600',
+      sent: 'bg-blue-50 text-blue-700',
+      paid: 'bg-green-50 text-green-700',
+      partial: 'bg-yellow-50 text-yellow-700',
+      overdue: 'bg-red-50 text-red-700',
+      cancelled: 'bg-gray-50 text-gray-500',
     }
     return (
       <span className={`px-2 py-0.5 text-xs rounded-full ${styles[status] || styles.pending}`}>
@@ -249,9 +250,9 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm/leases" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <FileText className="w-6 h-6 text-luxury-accent" />
+        <FileText size={24} className="text-luxury-accent" />
         <div>
           <h1 className="page-title">
             {lease.managed_properties?.property_address}
@@ -274,7 +275,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
             <div className="flex justify-between items-center mb-4">
               <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Lease Details</p>
               <button onClick={handleSave} disabled={saving} className="btn btn-primary text-sm flex items-center gap-2">
-                <Save className="w-4 h-4" />
+                <Save size={16} />
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
@@ -418,7 +419,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                               onClick={() => handleSendInvoice(inv.id)}
                               className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
                             >
-                              <Send className="w-3 h-3" />
+                              <Send size={12} />
                               Send
                             </button>
                           )}
@@ -460,7 +461,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                     rel="noopener noreferrer"
                     className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
                   >
-                    Dashboard <ExternalLink className="w-3 h-3" />
+                    Dashboard <ExternalLink size={12} />
                   </a>
                 </div>
               </div>

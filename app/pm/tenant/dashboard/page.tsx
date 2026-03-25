@@ -207,7 +207,9 @@ function TenantDashboardContent() {
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    // Append T12:00:00 to date-only strings to prevent timezone shift
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const getMonthName = (month: number) => {
@@ -366,16 +368,24 @@ function TenantDashboardContent() {
   const unpaidInvoices = data?.invoices.filter(inv => !['paid', 'cancelled'].includes(inv.status)) || []
   const paidInvoices = data?.invoices.filter(inv => inv.status === 'paid') || []
   
+  // Helper to parse date-only strings correctly (avoid timezone shift)
+  const parseDate = (date: string) => {
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr)
+  }
+
   // Total due = only invoices where due_date is today or past
   const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  today.setHours(12, 0, 0, 0) // Use noon to match parseDate
   const totalDue = unpaidInvoices
-    .filter(inv => new Date(inv.due_date) <= today)
+    .filter(inv => parseDate(inv.due_date) <= today)
     .reduce((sum, inv) => sum + inv.total_amount, 0)
 
   const isOverdue = (dueDate: string, status: string) => {
     if (['paid', 'cancelled'].includes(status)) return false
-    return new Date(dueDate) < new Date()
+    const now = new Date()
+    now.setHours(12, 0, 0, 0)
+    return parseDate(dueDate) < now
   }
 
   const getOrdinalSuffix = (n: number): string => {
@@ -519,7 +529,7 @@ function TenantDashboardContent() {
           {/* Total Due */}
           <div className="container-card">
             <h2 className="field-label mb-2">Total Due</h2>
-            <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+            <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
               {formatMoney(totalDue)}
             </p>
             {totalDue > 0 && (
@@ -593,7 +603,7 @@ function TenantDashboardContent() {
                       selectedInvoices.includes(invoice.id) 
                         ? 'ring-2 ring-luxury-accent bg-luxury-accent/5' 
                         : ''
-                    } ${overdue ? 'border-l-4 border-l-red-500' : ''}`}
+                    }`}
                     onClick={() => toggleInvoice(invoice.id)}
                   >
                     <div className="flex items-start justify-between">
@@ -647,7 +657,7 @@ function TenantDashboardContent() {
             {/* Zelle Payment Option */}
             <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
+                <div className="p-2 bg-purple-50 rounded-lg">
                   <DollarSign size={20} className="text-purple-600" />
                 </div>
                 <div>

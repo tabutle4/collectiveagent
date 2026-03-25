@@ -50,13 +50,13 @@ export default function TenantsListPage() {
   const getStatusBadge = (status: string) => {
     if (status === 'active') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700">
           <CheckCircle size={12} /> Active
         </span>
       )
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-600">
         Inactive
       </span>
     )
@@ -74,7 +74,8 @@ export default function TenantsListPage() {
   })
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    const ds = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`
+    return new Date(ds).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

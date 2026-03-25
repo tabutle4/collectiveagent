@@ -131,26 +131,26 @@ export default function TenantDetailPage() {
       case 'active':
       case 'paid':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700">
             <CheckCircle size={12} /> {status === 'paid' ? 'Paid' : 'Active'}
           </span>
         )
       case 'pending':
       case 'sent':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-700">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-50 text-yellow-700">
             <Clock size={12} /> Pending
           </span>
         )
       case 'overdue':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-700">
             Overdue
           </span>
         )
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-600">
             {status}
           </span>
         )
@@ -159,7 +159,8 @@ export default function TenantDetailPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    const ds = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00`
+    return new Date(ds).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

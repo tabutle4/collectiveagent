@@ -171,7 +171,8 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   }
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const dateStr = date.includes('T') ? date : `${date}T12:00:00`
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   const formatMoney = (amount: number) => {
@@ -180,9 +181,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      active: 'bg-green-100 text-green-800',
-      expired: 'bg-gray-100 text-gray-600',
-      terminated: 'bg-red-100 text-red-800',
+      active: 'bg-green-50 text-green-700',
+      expired: 'bg-gray-50 text-gray-600',
+      terminated: 'bg-red-50 text-red-700',
     }
     return (
       <span className={`px-2 py-0.5 text-xs rounded-full ${styles[status] || styles.expired}`}>
@@ -211,9 +212,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm/properties" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft size={20} />
         </Link>
-        <Home className="w-6 h-6 text-luxury-accent" />
+        <Home size={24} className="text-luxury-accent" />
         <h1 className="page-title">{property.property_address}</h1>
       </div>
 
@@ -227,7 +228,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             <div className="flex justify-between items-center mb-4">
               <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Property Details</p>
               <button onClick={handleSave} disabled={saving} className="btn btn-primary text-sm flex items-center gap-2">
-                <Save className="w-4 h-4" />
+                <Save size={16} />
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
@@ -446,7 +447,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             <div className="flex justify-between items-center mb-4">
               <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Leases</p>
               <Link href={`/admin/pm/leases/new?property=${id}`} className="btn btn-secondary text-sm flex items-center gap-2">
-                <Plus className="w-4 h-4" />
+                <Plus size={16} />
                 Add Lease
               </Link>
             </div>

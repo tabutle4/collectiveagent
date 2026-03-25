@@ -145,7 +145,7 @@ export default function PMDashboardPage() {
               <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Overdue Invoices</p>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded ${stats.overdueInvoices > 0 ? 'bg-red-100 text-red-700' : 'bg-luxury-accent/10 text-luxury-accent'}`}>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded ${stats.overdueInvoices > 0 ? 'bg-red-50 text-red-700' : 'bg-luxury-accent/10 text-luxury-accent'}`}>
                     {stats.overdueInvoices}
                   </span>
                 </div>
@@ -171,7 +171,7 @@ export default function PMDashboardPage() {
               <div className="inner-card">
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Incomplete Setup</p>
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded ${stats.incompleteSetup > 0 ? 'bg-amber-100 text-amber-700' : 'bg-luxury-accent/10 text-luxury-accent'}`}>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded ${stats.incompleteSetup > 0 ? 'bg-amber-50 text-amber-700' : 'bg-luxury-accent/10 text-luxury-accent'}`}>
                     {stats.incompleteSetup}
                   </span>
                 </div>

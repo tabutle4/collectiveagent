@@ -141,8 +141,9 @@ export async function POST(request: NextRequest) {
 
     // Generate all invoices for the lease term
     const invoices: any[] = []
-    const startDate = new Date(lease_start)
-    const endDate = new Date(lease_end)
+    // Use T12:00:00 to prevent timezone shift when parsing date strings
+    const startDate = new Date(`${lease_start}T12:00:00`)
+    const endDate = new Date(`${lease_end}T12:00:00`)
     const dueDayNum = rent_due_day || 1
 
     let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
