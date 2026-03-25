@@ -421,59 +421,59 @@ export default function PublicRosterPage() {
       {/* Header - sticky so it stays on top while scrolling */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F9F9F9' }}>
         <LuxuryHeader showTrainingCenter={false} />
-        
-        {/* Export buttons - inside header area */}
-        {!loading && (
-          <div 
-            style={{ 
-              position: 'relative',
-              zIndex: 20,
-              backgroundColor: '#F9F9F9',
-              borderBottom: '1px solid #E5E5E5',
-              padding: '10px 24px',
-            }}
-          >
-            <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button 
-                onClick={exportExcel}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  backgroundColor: '#fff',
-                  border: '1px solid #D4D4D4',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: '#1A1A1A',
-                  cursor: 'pointer',
-                }}
-              >
-                <FileSpreadsheet size={14} /> Excel
-              </button>
-              <button 
-                onClick={exportPDF}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  backgroundColor: '#fff',
-                  border: '1px solid #D4D4D4',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: '#1A1A1A',
-                  cursor: 'pointer',
-                }}
-              >
-                <Download size={14} /> PDF
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Export buttons - below header, not inside sticky */}
+      {!loading && (
+        <div 
+          style={{ 
+            position: 'relative',
+            zIndex: 5,
+            backgroundColor: '#F9F9F9',
+            borderBottom: '1px solid #E5E5E5',
+            padding: '10px 24px',
+          }}
+        >
+          <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button 
+              onClick={exportExcel}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#fff',
+                border: '1px solid #D4D4D4',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: '#1A1A1A',
+                cursor: 'pointer',
+              }}
+            >
+              <FileSpreadsheet size={14} /> Excel
+            </button>
+            <button 
+              onClick={exportPDF}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                backgroundColor: '#fff',
+                border: '1px solid #D4D4D4',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: '#1A1A1A',
+                cursor: 'pointer',
+              }}
+            >
+              <Download size={14} /> PDF
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Roster Content */}
       <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
