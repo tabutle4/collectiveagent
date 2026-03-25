@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { Resend } from 'resend'
+import { pmTenantReplyEmail } from '@/lib/email/pm-layout'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Validate PM session
 async function validatePMSession(request: NextRequest) {
@@ -152,6 +156,39 @@ export async function POST(
     if (updateError) {
       console.error('Error adding message:', updateError)
       return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // Send email notification to PM team when tenant sends message
+    if (session.user_type === 'tenant') {
+      // Get property address and PM notification email
+      const [repairResult, settingsResult] = await Promise.all([
+        supabase
+          .from('repair_requests')
+          .select('title, managed_properties(property_address)')
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('company_settings')
+          .select('pm_notification_email')
+          .single()
+      ])
+
+      const repairWithProperty = repairResult.data
+      const pmNotificationEmail = settingsResult.data?.pm_notification_email || 'office@collectiverealtyco.com'
+      const propertyAddress = repairWithProperty?.managed_properties?.property_address || 'Property'
+      
+      try {
+        await resend.emails.send({
+          from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
+          to: 'pm@coachingbrokeragetools.com',
+          cc: pmNotificationEmail,
+          replyTo: `repair+${id}@coachingbrokeragetools.com`,
+          subject: `Tenant Reply: ${repairWithProperty?.title || 'Repair Request'} - ${propertyAddress}`,
+          html: pmTenantReplyEmail(senderName, propertyAddress, repairWithProperty?.title || 'Repair Request', message.trim(), id)
+        })
+      } catch (emailErr) {
+        console.error('Failed to send tenant reply notification:', emailErr)
+      }
     }
 
     return NextResponse.json({ repair: updated, message: newMessage, success: true })

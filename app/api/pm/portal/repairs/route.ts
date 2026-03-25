@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { Resend } from 'resend'
+import { pmRepairSubmittedEmail } from '@/lib/email/pm-layout'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Validate PM session
 async function validatePMSession(request: NextRequest) {
@@ -139,6 +143,41 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating repair:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Get property details and PM notification email for email
+    const [propertyResult, settingsResult] = await Promise.all([
+      supabase
+        .from('managed_properties')
+        .select('property_address, unit, city, state')
+        .eq('id', property_id)
+        .single(),
+      supabase
+        .from('company_settings')
+        .select('pm_notification_email')
+        .single()
+    ])
+
+    const property = propertyResult.data
+    const pmNotificationEmail = settingsResult.data?.pm_notification_email || 'office@collectiverealtyco.com'
+
+    const propertyAddress = property 
+      ? `${property.property_address}${property.unit ? ` ${property.unit}` : ''}, ${property.city}, ${property.state}`
+      : 'Unknown property'
+
+    // Send notification email to PM team
+    try {
+      await resend.emails.send({
+        from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
+        to: 'pm@coachingbrokeragetools.com',
+        cc: pmNotificationEmail,
+        replyTo: `repair+${repair.id}@coachingbrokeragetools.com`,
+        subject: `New Repair Request: ${title} - ${propertyAddress}`,
+        html: pmRepairSubmittedEmail(tenantName, propertyAddress, title, description || '', urgency || 'routine', repair.id)
+      })
+    } catch (emailError) {
+      console.error('Failed to send notification email:', emailError)
+      // Don't fail the request if email fails
     }
 
     return NextResponse.json({ repair, success: true })

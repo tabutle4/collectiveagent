@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
+import { Resend } from 'resend'
+import { pmAdminMessageEmail } from '@/lib/email/pm-layout'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // GET - Single repair request
 export async function GET(
@@ -112,6 +116,45 @@ export async function PATCH(
     // Auto-set completed_at when status changes to completed
     if (updates.status === 'completed' && !updates.completed_at) {
       updates.completed_at = new Date().toISOString()
+    }
+
+    // Handle adding a message
+    let newMessage = null
+    if (body.add_message) {
+      // Fetch current repair to get existing messages
+      const { data: currentRepair } = await supabase
+        .from('repair_requests')
+        .select('messages, tenants(first_name, last_name, email), managed_properties(property_address)')
+        .eq('id', id)
+        .single()
+
+      const existingMessages = currentRepair?.messages || []
+      newMessage = {
+        id: crypto.randomUUID(),
+        sender_type: body.add_message.sender_type || 'admin',
+        sender_name: body.add_message.sender_name || 'CRC Property Management',
+        message: body.add_message.message,
+        created_at: new Date().toISOString()
+      }
+      updates.messages = [...existingMessages, newMessage]
+
+      // Send email notification to tenant if message is from admin
+      if (newMessage.sender_type === 'admin' && currentRepair?.tenants?.email) {
+        const tenant = currentRepair.tenants
+        const propertyAddress = currentRepair.managed_properties?.property_address || 'your property'
+        
+        try {
+          await resend.emails.send({
+            from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
+            to: tenant.email,
+            replyTo: `repair+${id}@coachingbrokeragetools.com`,
+            subject: `Update on Your Repair Request - ${propertyAddress}`,
+            html: pmAdminMessageEmail(tenant.first_name, propertyAddress, newMessage.message)
+          })
+        } catch (emailErr) {
+          console.error('Failed to send message notification:', emailErr)
+        }
+      }
     }
 
     updates.updated_at = new Date().toISOString()

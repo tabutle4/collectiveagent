@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
+import { pmLoginEmail } from '@/lib/email/pm-layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Email config
 const FROM_EMAIL = 'pm@coachingbrokeragetools.com'
-const FROM_NAME = 'Collective Realty Co. Property Management'
+const FROM_NAME = 'CRC Property Management'
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +31,6 @@ export async function POST(request: NextRequest) {
 
     if (!landlord && !tenant) {
       // Don't reveal whether email exists - always show success
-      // But log it for debugging
       console.log(`PM login attempted for unknown email: ${normalizedEmail}`)
       return NextResponse.json({
         success: true,
@@ -69,46 +69,12 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
     const loginUrl = `${baseUrl}/api/pm/auth/verify?token=${tokenData.token}`
 
-    // Send email
+    // Send email using standardized template
     const { error: emailError } = await resend.emails.send({
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
       to: normalizedEmail,
-      subject: 'Your Login Link - Collective Realty Co.',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <img src="${baseUrl}/CRC-Luxury-Logo.png" alt="Collective Realty Co." style="height: 50px;">
-          </div>
-          
-          <h1 style="font-size: 24px; font-weight: 600; margin-bottom: 20px;">Hi ${firstName},</h1>
-          
-          <p style="margin-bottom: 20px;">Click the button below to sign in to your ${userType === 'landlord' ? 'Landlord' : 'Tenant'} Portal:</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${loginUrl}" style="display: inline-block; background-color: #B8860B; color: white; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 500;">
-              Sign In to Portal
-            </a>
-          </div>
-          
-          <p style="font-size: 14px; color: #666; margin-bottom: 10px;">This link will expire in 15 minutes.</p>
-          
-          <p style="font-size: 14px; color: #666;">If you didn't request this link, you can safely ignore this email.</p>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-          
-          <p style="font-size: 12px; color: #999; text-align: center;">
-            Collective Realty Co. Property Management<br>
-            <a href="mailto:pm@collectiverealtyco.com" style="color: #B8860B;">pm@collectiverealtyco.com</a>
-          </p>
-        </body>
-        </html>
-      `,
+      subject: 'Your Login Link - CRC Property Management',
+      html: pmLoginEmail(firstName, userType, loginUrl),
     })
 
     if (emailError) {

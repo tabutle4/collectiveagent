@@ -5,8 +5,17 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { 
   Wrench, ArrowLeft, Building2, User, AlertTriangle, Save,
-  Clock, CheckCircle, Loader2, XCircle, DollarSign, FileText
+  Clock, CheckCircle, Loader2, XCircle, DollarSign, FileText,
+  MessageSquare, Send
 } from 'lucide-react'
+
+interface Message {
+  id: string
+  sender_type: 'tenant' | 'landlord' | 'admin'
+  sender_name: string
+  message: string
+  created_at: string
+}
 
 interface Repair {
   id: string
@@ -31,6 +40,7 @@ interface Repair {
   payment_date: string | null
   completed_at: string | null
   admin_notes: string | null
+  messages: Message[] | null
   created_at: string
   managed_properties?: {
     id: string
@@ -115,6 +125,9 @@ export default function RepairDetailPage() {
     admin_notes: ''
   })
 
+  const [newMessage, setNewMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+
   useEffect(() => {
     loadRepair()
   }, [repairId])
@@ -193,6 +206,41 @@ export default function RepairDetailPage() {
       setError('An error occurred')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!newMessage.trim()) return
+    
+    setSendingMessage(true)
+    setError('')
+    
+    try {
+      const res = await fetch(`/api/pm/repair-requests/${repairId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          add_message: {
+            sender_type: 'admin',
+            sender_name: 'CRC Property Management',
+            message: newMessage.trim()
+          }
+        })
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setRepair(data.repair)
+        setNewMessage('')
+      } else {
+        const data = await res.json()
+        setError(data.error || 'Failed to send message')
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err)
+      setError('Failed to send message')
+    } finally {
+      setSendingMessage(false)
     }
   }
 
@@ -472,6 +520,77 @@ export default function RepairDetailPage() {
               </Link>
             </div>
           </form>
+
+          {/* Messages Section */}
+          <div className="container-card mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest flex items-center gap-2">
+                <MessageSquare size={16} />
+                Messages
+              </h2>
+              <span className="text-xs text-luxury-gray-3">
+                {(repair.messages || []).length} message{(repair.messages || []).length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* Message Thread */}
+            <div className="space-y-4 mb-4 max-h-96 overflow-y-auto">
+              {(repair.messages || []).length === 0 ? (
+                <p className="text-sm text-luxury-gray-3 italic">No messages yet</p>
+              ) : (
+                (repair.messages || []).map((msg: any) => (
+                  <div 
+                    key={msg.id} 
+                    className={`p-3 rounded-lg ${
+                      msg.sender_type === 'admin' 
+                        ? 'bg-luxury-accent/10 ml-8' 
+                        : 'bg-luxury-light mr-8'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-luxury-gray-1">
+                        {msg.sender_name}
+                      </span>
+                      <span className="text-xs text-luxury-gray-3">
+                        {new Date(msg.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-luxury-gray-2 whitespace-pre-wrap">{msg.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Reply Form */}
+            <div className="border-t border-luxury-gray-5 pt-4">
+              <div className="flex gap-2">
+                <textarea
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type a message to the tenant..."
+                  rows={2}
+                  className="textarea-luxury flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={sendMessage}
+                  disabled={sendingMessage || !newMessage.trim()}
+                  className="btn btn-primary self-end flex items-center gap-2"
+                >
+                  <Send size={16} />
+                  {sendingMessage ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+              <p className="text-xs text-luxury-gray-3 mt-2">
+                The tenant will receive an email notification when you send a message.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Sidebar */}
