@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
     // Format lease for response
     const lease = activeLease ? {
       id: activeLease.id,
+      property_id: activeLease.property_id,
+      landlord_id: activeLease.landlord_id,
       property_address: activeLease.managed_properties?.property_address,
       unit: activeLease.managed_properties?.unit,
       city: activeLease.managed_properties?.city,

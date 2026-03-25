@@ -21,7 +21,10 @@ import {
   Wrench,
   X,
   Loader2,
-  Plus
+  Plus,
+  MessageCircle,
+  Send,
+  ChevronRight
 } from 'lucide-react'
 
 interface Invoice {
@@ -42,6 +45,8 @@ interface Invoice {
 
 interface Lease {
   id: string
+  property_id: string
+  landlord_id: string
   property_address: string
   unit: string
   city: string
@@ -62,6 +67,14 @@ interface Tenant {
   phone: string | null
 }
 
+interface RepairMessage {
+  id: string
+  sender_type: 'tenant' | 'landlord' | 'admin'
+  sender_name: string
+  message: string
+  created_at: string
+}
+
 interface Repair {
   id: string
   title: string
@@ -69,7 +82,9 @@ interface Repair {
   urgency: string
   status: string
   created_at: string
+  updated_at: string
   description: string | null
+  messages: RepairMessage[]
   managed_properties?: {
     property_address: string
   }
@@ -103,6 +118,10 @@ function TenantDashboardContent() {
     title: '',
     description: ''
   })
+  const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null)
+  const [showRepairDetail, setShowRepairDetail] = useState(false)
+  const [newMessage, setNewMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
 
   useEffect(() => {
     if (previewId) {
@@ -217,14 +236,79 @@ function TenantDashboardContent() {
     
     setSubmittingRepair(true)
     try {
-      alert('Repair request noted! Please contact pm@collectiverealtyco.com or call (281) 638-9407 to report your repair.')
-      setShowRepairModal(false)
-      setRepairForm({ category: '', urgency: 'routine', title: '', description: '' })
+      const res = await fetch('/api/pm/portal/repairs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: repairForm.category,
+          urgency: repairForm.urgency,
+          title: repairForm.title,
+          description: repairForm.description,
+          property_id: data.lease.property_id,
+          landlord_id: data.lease.landlord_id,
+          lease_id: data.lease.id
+        })
+      })
+      
+      const result = await res.json()
+      
+      if (res.ok && result.success) {
+        // Refresh repairs list
+        const repairsRes = await fetch('/api/pm/portal/repairs')
+        if (repairsRes.ok) {
+          const repairsData = await repairsRes.json()
+          setData({ ...data, repairs: repairsData.repairs || [] })
+        }
+        setShowRepairModal(false)
+        setRepairForm({ category: '', urgency: 'routine', title: '', description: '' })
+      } else {
+        alert(result.error || 'Failed to submit repair request')
+      }
     } catch (err) {
       console.error('Failed to submit repair:', err)
-      alert('Failed to submit repair request. Please contact property management directly.')
+      alert('Failed to submit repair request. Please try again.')
     } finally {
       setSubmittingRepair(false)
+    }
+  }
+
+  const openRepairDetail = (repair: Repair) => {
+    setSelectedRepair(repair)
+    setShowRepairDetail(true)
+    setNewMessage('')
+  }
+
+  const sendMessage = async () => {
+    if (!selectedRepair || !newMessage.trim()) return
+    
+    setSendingMessage(true)
+    try {
+      const res = await fetch(`/api/pm/portal/repairs/${selectedRepair.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: newMessage.trim() })
+      })
+      
+      const result = await res.json()
+      
+      if (res.ok && result.success) {
+        // Update the repair in local state
+        setSelectedRepair(result.repair)
+        if (data) {
+          const updatedRepairs = data.repairs.map(r => 
+            r.id === result.repair.id ? result.repair : r
+          )
+          setData({ ...data, repairs: updatedRepairs })
+        }
+        setNewMessage('')
+      } else {
+        alert(result.error || 'Failed to send message')
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err)
+      alert('Failed to send message. Please try again.')
+    } finally {
+      setSendingMessage(false)
     }
   }
 
@@ -235,13 +319,13 @@ function TenantDashboardContent() {
     const selected = unpaidInvoices.filter(inv => selectedInvoices.includes(inv.id))
     if (selected.length === 0) return
 
-    // If single invoice with existing URL, use it
+    // Single invoice with existing URL - reuse it (no new email)
     if (selected.length === 1 && selected[0].payment_url) {
       window.open(selected[0].payment_url, '_blank')
       return
     }
 
-    // Otherwise, generate payment link via portal API
+    // Multiple invoices or no existing URL - create fresh payment
     setProcessingPayment(true)
     try {
       const res = await fetch('/api/pm/portal/get-payment-link', {
@@ -252,6 +336,15 @@ function TenantDashboardContent() {
       const result = await res.json()
       
       if (res.ok && result.payment_url) {
+        // Update local state with payment URL only for single invoice
+        if (selected.length === 1 && data) {
+          const updatedInvoices = data.invoices.map(inv => 
+            inv.id === selected[0].id 
+              ? { ...inv, payment_url: result.payment_url }
+              : inv
+          )
+          setData({ ...data, invoices: updatedInvoices })
+        }
         window.open(result.payment_url, '_blank')
       } else if (result.fallback) {
         alert('Online payment is temporarily unavailable. Please pay via Zelle to info@collectiverealtyco.com')
@@ -654,45 +747,41 @@ function TenantDashboardContent() {
           ) : (
             <div className="space-y-3">
               {repairs.map((repair) => (
-                <div key={repair.id} className="inner-card">
+                <button
+                  key={repair.id}
+                  onClick={() => openRepairDetail(repair)}
+                  className="inner-card w-full text-left hover:bg-luxury-gray-6/50 transition-colors cursor-pointer"
+                >
                   <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <p className="font-medium text-luxury-gray-1">{repair.title}</p>
-                      <p className="text-xs text-luxury-gray-3">{repair.category}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-luxury-gray-1 truncate">{repair.title}</p>
+                      <p className="text-xs text-luxury-gray-3 capitalize">{repair.category.replace('_', ' ')}</p>
                     </div>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      repair.status === 'completed' ? 'bg-green-50 text-green-700' :
-                      repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                      repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
-                      'bg-amber-50 text-amber-700'
-                    }`}>
-                      {repair.status.replace('_', ' ')}
-                    </span>
+                    <div className="flex items-center gap-2 ml-2">
+                      {repair.messages && repair.messages.length > 0 && (
+                        <span className="flex items-center gap-1 text-xs text-luxury-gray-3">
+                          <MessageCircle size={12} />
+                          {repair.messages.length}
+                        </span>
+                      )}
+                      <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${
+                        repair.status === 'completed' ? 'bg-green-50 text-green-700' :
+                        repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                        repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
+                        'bg-amber-50 text-amber-700'
+                      }`}>
+                        {repair.status.replace('_', ' ')}
+                      </span>
+                      <ChevronRight size={16} className="text-luxury-gray-4" />
+                    </div>
                   </div>
                   <p className="text-xs text-luxury-gray-3">
                     Submitted {formatDate(repair.created_at)}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
           )}
-        </div>
-
-        {/* Contact Info */}
-        <div className="container-card mt-6">
-          <h2 className="field-label mb-4">Your Contact Info</h2>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2 text-luxury-gray-1">
-              <Mail size={16} className="text-luxury-gray-3" />
-              {tenant.email}
-            </div>
-            {tenant.phone && (
-              <div className="flex items-center gap-2 text-luxury-gray-1">
-                <Phone size={16} className="text-luxury-gray-3" />
-                {tenant.phone}
-              </div>
-            )}
-          </div>
         </div>
       </main>
 
@@ -791,6 +880,129 @@ function TenantDashboardContent() {
                 For emergencies, please call (281) 638-9407 immediately
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Repair Detail Modal with Messaging */}
+      {showRepairDetail && selectedRepair && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-luxury-gray-5 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-luxury-gray-1">{selectedRepair.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-luxury-gray-3 capitalize">
+                      {selectedRepair.category.replace('_', ' ')}
+                    </span>
+                    <span className="text-luxury-gray-4">•</span>
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                      selectedRepair.status === 'completed' ? 'bg-green-50 text-green-700' :
+                      selectedRepair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
+                      selectedRepair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
+                      'bg-amber-50 text-amber-700'
+                    }`}>
+                      {selectedRepair.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowRepairDetail(false)
+                    setSelectedRepair(null)
+                  }}
+                  className="text-luxury-gray-3 hover:text-luxury-gray-1"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-luxury-gray-6/30">
+              {selectedRepair.messages && selectedRepair.messages.length > 0 ? (
+                selectedRepair.messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.sender_type === 'tenant' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] rounded-lg p-3 ${
+                      msg.sender_type === 'tenant' 
+                        ? 'bg-luxury-accent text-white' 
+                        : 'bg-white border border-luxury-gray-5'
+                    }`}>
+                      <p className={`text-xs mb-1 ${
+                        msg.sender_type === 'tenant' ? 'text-white/70' : 'text-luxury-gray-3'
+                      }`}>
+                        {msg.sender_name}
+                      </p>
+                      <p className={`text-sm ${
+                        msg.sender_type === 'tenant' ? 'text-white' : 'text-luxury-gray-1'
+                      }`}>
+                        {msg.message}
+                      </p>
+                      <p className={`text-xs mt-1 ${
+                        msg.sender_type === 'tenant' ? 'text-white/50' : 'text-luxury-gray-4'
+                      }`}>
+                        {formatDate(msg.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <MessageCircle size={32} className="mx-auto text-luxury-gray-4 mb-2" />
+                  <p className="text-sm text-luxury-gray-3">No messages yet</p>
+                  <p className="text-xs text-luxury-gray-3 mt-1">
+                    Send a message to provide updates or ask questions
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {/* Message Input */}
+            {selectedRepair.status !== 'completed' && selectedRepair.status !== 'cancelled' && (
+              <div className="p-4 border-t border-luxury-gray-5 flex-shrink-0">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey && newMessage.trim()) {
+                        e.preventDefault()
+                        sendMessage()
+                      }
+                    }}
+                    placeholder="Type a message..."
+                    className="input-luxury flex-1"
+                    disabled={sendingMessage}
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={sendingMessage || !newMessage.trim()}
+                    className="btn btn-primary px-4 flex items-center gap-2"
+                  >
+                    {sendingMessage ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Send size={16} />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Closed status message */}
+            {(selectedRepair.status === 'completed' || selectedRepair.status === 'cancelled') && (
+              <div className="p-4 border-t border-luxury-gray-5 flex-shrink-0">
+                <p className="text-sm text-center text-luxury-gray-3">
+                  This repair request is {selectedRepair.status}. Contact us to reopen if needed.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
