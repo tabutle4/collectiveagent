@@ -38,6 +38,7 @@ export async function POST(
         'intent[entity_name]': 'Collective Realty Co.',
         'intent[purpose]': 'Receive rent disbursements',
         'intent[type]': 'bank_account',
+        'intent[entity_type]': 'individual',
         'send_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
         'send_to[0][email]': landlord.email,
       }),
