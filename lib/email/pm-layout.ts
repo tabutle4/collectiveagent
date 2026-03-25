@@ -3,7 +3,7 @@
 
 export const PM_EMAIL_COLORS = {
   accent: '#C5A278', // luxury-accent (tan/gold) - matches app
-  headerBg: '#FFFFFF', // white header
+  headerBg: '#1A1A1A', // dark header for white logo visibility
   bodyText: '#555555', // luxury-gray-2
   headingText: '#1A1A1A', // luxury-gray-1
   lightText: '#888888', // luxury-gray-3
@@ -45,11 +45,11 @@ export function getPMEmailLayout(
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: ${PM_EMAIL_COLORS.bodyText}; margin: 0; padding: 0; background-color: ${PM_EMAIL_COLORS.lightBg};">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     
-    <!-- Header -->
-    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${PM_EMAIL_COLORS.border}; border-bottom: none;">
-      <img src="${BASE_URL}/logo.png" alt="Collective Realty Co." style="height: 80px; margin-bottom: 12px;">
-      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.headingText};">${title}</h1>` : ''}
-      ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
+    <!-- Header with dark background for white logo -->
+    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 28px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+      <img src="${BASE_URL}/logo-white.png" alt="Collective Realty Co." style="height: 80px; margin-bottom: 12px;">
+      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.white};">${title}</h1>` : ''}
+      ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.accent};">${subtitle}</p>` : ''}
     </div>
     
     <!-- Content -->
@@ -178,7 +178,7 @@ export function pmRepairSubmittedEmail(
      ${pmEmailBox(description, title)}
      ${pmEmailDetail('Property', propertyAddress)}
      ${pmEmailDetail('Urgency', urgency)}
-     ${pmEmailText(`Reply to this email to respond directly, or ${pmEmailLink('view in dashboard', dashboardUrl)}.`)}`,
+     ${pmEmailButton('View in Dashboard', dashboardUrl)}`,
     { title: 'New Repair Request', subtitle: propertyAddress, preheader: `${title} - ${propertyAddress}` }
   )
 }
@@ -200,7 +200,7 @@ export function pmTenantReplyEmail(
      ${pmEmailBox(message)}
      ${pmEmailDetail('Property', propertyAddress)}
      ${pmEmailDetail('Issue', repairTitle)}
-     ${pmEmailText(`Reply to this email to respond, or ${pmEmailLink('view in dashboard', dashboardUrl)}.`)}`,
+     ${pmEmailButton('View in Dashboard', dashboardUrl)}`,
     { title: 'Tenant Reply', subtitle: repairTitle, preheader: `Reply from ${tenantName}` }
   )
 }
@@ -217,8 +217,31 @@ export function pmAdminMessageEmail(
     `${pmEmailGreeting(tenantFirstName)}
      ${pmEmailText(`You have a new message regarding your repair request at <strong>${propertyAddress}</strong>:`)}
      ${pmEmailBox(message)}
-     ${pmEmailSmall('Reply to this email or log in to your tenant portal to respond.')}`,
+     ${pmEmailSmall('Log in to your tenant portal to view details or respond.')}`,
     { title: 'Repair Request Update', preheader: `Update on your repair at ${propertyAddress}` }
+  )
+}
+
+/**
+ * Admin message sent notification (to admin team - so everyone sees admin replies)
+ */
+export function pmAdminMessageSentEmail(
+  adminName: string,
+  tenantName: string,
+  propertyAddress: string,
+  repairTitle: string,
+  message: string,
+  repairId: string
+): string {
+  const dashboardUrl = `${BASE_URL}/admin/pm/repairs/${repairId}`
+  
+  return getPMEmailLayout(
+    `${pmEmailText(`<strong>${adminName}</strong> sent a message to <strong>${tenantName}</strong>:`)}
+     ${pmEmailBox(message)}
+     ${pmEmailDetail('Property', propertyAddress)}
+     ${pmEmailDetail('Issue', repairTitle)}
+     ${pmEmailButton('View in Dashboard', dashboardUrl)}`,
+    { title: 'Staff Reply Sent', subtitle: repairTitle, preheader: `Reply sent to ${tenantName}` }
   )
 }
 

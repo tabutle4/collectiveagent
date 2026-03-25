@@ -7,20 +7,20 @@ const authHeader = () =>
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_landlords')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const { id } = await params
     const supabase = createClient()
 
     // Get landlord
     const { data: landlord, error: fetchError } = await supabase
       .from('landlords')
       .select('id, first_name, last_name, email, payload_activation_id, bank_status')
-      .eq('id', resolvedParams.id)
+      .eq('id', id)
       .single()
 
     if (fetchError || !landlord) {
@@ -28,17 +28,18 @@ export async function POST(
     }
 
     // Create Payload payout activation
-    const res = await fetch('https://api.payload.com/payment_activations', {
+    const res = await fetch('https://api.payload.com/payment_activations/', {
       method: 'POST',
       headers: {
         Authorization: authHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        type: 'bank_account',
+        'intent[entity_name]': 'Collective Realty Co.',
+        'intent[purpose]': 'Receive rent disbursements',
         'intent[type]': 'bank_account',
-        email: landlord.email,
-        name: `${landlord.first_name} ${landlord.last_name}`,
+        'sent_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
+        'sent_to[0][email]': landlord.email,
       }),
     })
 
