@@ -243,8 +243,15 @@ function LandlordDashboardContent() {
         headers: { 'Content-Type': 'application/json' }
       })
       const result = await res.json()
-      if (res.ok && result.activation_url) {
-        window.open(result.activation_url, '_blank')
+      if (res.ok && result.success) {
+        if (result.activation_url) {
+          window.open(result.activation_url, '_blank')
+        } else {
+          // Payload sent email directly (204 response)
+          alert('Bank activation email sent! Please check your inbox.')
+          // Refresh to update status
+          window.location.reload()
+        }
       } else if (result.fallback) {
         alert('Please contact pm@collectiverealtyco.com to connect your bank account.')
       } else {

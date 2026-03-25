@@ -8,15 +8,17 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // Resend inbound email webhook
 // Receives emails sent to repair+{repair_id}@coachingbrokeragetools.com
 export async function POST(request: NextRequest) {
-  const supabase = createClient()
+  const supabase = await createClient()
   
   try {
     const body = await request.json()
     
-    // Resend inbound webhook payload structure
-    const { from, to, subject, text } = body
+    // Resend inbound webhook payload is nested under "data"
+    // Structure: { type: "email.received", data: { from, to, subject, text, ... } }
+    const emailData = body.data || body
+    const { from, to, subject, text } = emailData
 
-    console.log('Received inbound email:', { from, to, subject })
+    console.log('Received inbound email:', { from, to, subject, type: body.type })
 
     // Extract repair_id from the "to" address
     // Format: repair+{repair_id}@coachingbrokeragetools.com
@@ -43,8 +45,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Type assertions: .single() returns objects but TS types joined tables as arrays
-    const tenantData = repair.tenants as unknown as { first_name: string; last_name: string; email: string } | null
-    const propertyData = repair.managed_properties as unknown as { property_address: string } | null
+    const tenantData = repair.tenants as { first_name: string; last_name: string; email: string } | null
+    const propertyData = repair.managed_properties as { property_address: string } | null
 
     // Parse sender info
     const fromEmail = typeof from === 'string' ? from : from?.address || ''
