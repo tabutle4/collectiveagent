@@ -86,6 +86,7 @@ const tcNav: NavItem[] = [
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
+  { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 }, 
   { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
@@ -106,7 +107,7 @@ const supportNav: NavItem[] = [
   { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
-  { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },  // ADD THIS
+  { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 }, 
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   {
