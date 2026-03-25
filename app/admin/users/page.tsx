@@ -3,7 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
-import { Search, ChevronDown, ExternalLink, Download } from 'lucide-react'
+import { Search, ChevronDown, ExternalLink, Download, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -13,6 +14,7 @@ export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [licensedOnly, setLicensedOnly] = useState<boolean>(true) // Default to licensed agents only
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -83,6 +85,8 @@ export default function AdminUsersPage() {
 
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = [...users]
+    
+    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(user => {
@@ -100,11 +104,24 @@ export default function AdminUsersPage() {
         )
       })
     }
-    if (roleFilter !== 'all') filtered = filtered.filter(user => getUserRole(user) === roleFilter)
+    
+    // Role filter
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(user => getUserRole(user) === roleFilter)
+    }
+    
+    // Status filter (is_active)
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
     }
+    
+    // Licensed agents filter - when enabled, only show users with is_licensed_agent = true
+    if (licensedOnly) {
+      filtered = filtered.filter(user => user.is_licensed_agent === true)
+    }
+    
+    // Sort
     filtered.sort((a, b) => {
       let aValue: any, bValue: any
       switch (sortBy) {
@@ -145,7 +162,7 @@ export default function AdminUsersPage() {
       return 0
     })
     return filtered
-  }, [users, searchQuery, roleFilter, statusFilter, sortBy, sortOrder])
+  }, [users, searchQuery, roleFilter, statusFilter, licensedOnly, sortBy, sortOrder])
 
   const roleCounts = useMemo(() => {
     const counts: Record<string, number> = { all: users.length }
@@ -161,6 +178,11 @@ export default function AdminUsersPage() {
       active: users.filter(u => u.is_active).length,
       inactive: users.filter(u => !u.is_active).length,
     }),
+    [users]
+  )
+
+  const licensedCount = useMemo(
+    () => users.filter(u => u.is_licensed_agent === true).length,
     [users]
   )
 
@@ -196,6 +218,7 @@ export default function AdminUsersPage() {
       'Phone',
       'Birthday Month',
       'Status',
+      'Licensed',
       'Social Links',
       'Division',
     ]
@@ -210,19 +233,65 @@ export default function AdminUsersPage() {
       user.personal_phone || '',
       user.birth_month || '',
       user.is_active ? 'Active' : 'Inactive',
+      user.is_licensed_agent ? 'Yes' : 'No',
       getSocialLinks(user) || '',
       user.division || '',
     ])
     const csvContent = [headers, ...rows]
       .map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
       .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    // Add BOM for Excel compatibility
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `agents_${new Date().toISOString().split('T')[0]}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  const exportExcel = () => {
+    const data = filteredAndSortedUsers.map(user => ({
+      'Preferred Name': `${user.preferred_first_name || ''} ${user.preferred_last_name || ''}`.trim(),
+      'Legal Name': `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      'Email': user.email || '',
+      'Office': user.office || '',
+      'Role': getDisplayRole(user),
+      'Additional Roles': getAdditionalRoles(user) || '',
+      'Team': user.team_name || '',
+      'Phone': user.personal_phone || '',
+      'Birthday Month': user.birth_month || '',
+      'Status': user.is_active ? 'Active' : 'Inactive',
+      'Licensed': user.is_licensed_agent ? 'Yes' : 'No',
+      'Social Links': getSocialLinks(user) || '',
+      'Division': user.division || '',
+      'Join Date': user.created_at ? new Date(user.created_at).toLocaleDateString() : '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 20 }, // Preferred Name
+      { wch: 20 }, // Legal Name
+      { wch: 30 }, // Email
+      { wch: 12 }, // Office
+      { wch: 12 }, // Role
+      { wch: 15 }, // Additional Roles
+      { wch: 20 }, // Team
+      { wch: 15 }, // Phone
+      { wch: 12 }, // Birthday
+      { wch: 10 }, // Status
+      { wch: 10 }, // Licensed
+      { wch: 25 }, // Social
+      { wch: 20 }, // Division
+      { wch: 12 }, // Join Date
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Agents')
+    XLSX.writeFile(wb, `agents_${new Date().toISOString().split('T')[0]}.xlsx`)
   }
 
   const exportPDF = () => {
@@ -252,10 +321,11 @@ export default function AdminUsersPage() {
       [
         roleFilter !== 'all' ? `Role: ${roleFilter}` : '',
         statusFilter !== 'all' ? `Status: ${statusFilter}` : '',
+        licensedOnly ? 'Licensed Only' : '',
         searchQuery ? `Search: "${searchQuery}"` : '',
       ]
         .filter(Boolean)
-        .join(' | ') || 'All agents'
+        .join(' | ') || 'All users'
     printWindow.document
       .write(`<!DOCTYPE html><html><head><title>Agents - Collective Realty Co.</title>
       <style>@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
@@ -291,6 +361,9 @@ export default function AdminUsersPage() {
           <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5">
             <Download size={14} /> CSV
           </button>
+          <button onClick={exportExcel} className="btn btn-secondary flex items-center gap-1.5">
+            <FileSpreadsheet size={14} /> Excel
+          </button>
           <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5">
             <Download size={14} /> PDF
           </button>
@@ -315,7 +388,7 @@ export default function AdminUsersPage() {
               className="input-luxury pl-10"
             />
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap items-center">
             <select
               value={roleFilter}
               onChange={e => setRoleFilter(e.target.value)}
@@ -324,7 +397,7 @@ export default function AdminUsersPage() {
               <option value="all">All Roles ({roleCounts.all})</option>
               {allRoles.map(role => (
                 <option key={role} value={role} className="capitalize">
-                  {role.replace('_', ' ')} ({roleCounts[role] || 0})
+                  {String(role).replace('_', ' ')} ({roleCounts[role] || 0})
                 </option>
               ))}
             </select>
@@ -339,6 +412,15 @@ export default function AdminUsersPage() {
                 </option>
               ))}
             </select>
+            <label className="flex items-center gap-2 text-sm text-luxury-gray-2 cursor-pointer whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={licensedOnly}
+                onChange={e => setLicensedOnly(e.target.checked)}
+                className="rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+              />
+              Licensed Only ({licensedCount})
+            </label>
           </div>
         </div>
 
