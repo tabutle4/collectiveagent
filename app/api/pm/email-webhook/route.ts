@@ -42,6 +42,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Repair not found' }, { status: 404 })
     }
 
+    // Type assertions: .single() returns objects but TS types joined tables as arrays
+    const tenantData = repair.tenants as unknown as { first_name: string; last_name: string; email: string } | null
+    const propertyData = repair.managed_properties as unknown as { property_address: string } | null
+
     // Parse sender info
     const fromEmail = typeof from === 'string' ? from : from?.address || ''
     const fromName = typeof from === 'string' ? fromEmail.split('@')[0] : from?.name || 'Unknown'
@@ -50,9 +54,9 @@ export async function POST(request: NextRequest) {
     let senderType: 'tenant' | 'admin' = 'admin'
     let senderName = fromName
     
-    if (repair.tenants?.email && fromEmail.toLowerCase() === repair.tenants.email.toLowerCase()) {
+    if (tenantData?.email && fromEmail.toLowerCase() === tenantData.email.toLowerCase()) {
       senderType = 'tenant'
-      senderName = `${repair.tenants.first_name} ${repair.tenants.last_name}`
+      senderName = `${tenantData.first_name} ${tenantData.last_name}`
     } else {
       senderName = 'CRC Property Management'
     }
@@ -112,20 +116,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to save message' }, { status: 500 })
     }
 
-    const propertyAddress = repair.managed_properties?.property_address || 'Property'
+    const propertyAddress = propertyData?.property_address || 'Property'
 
     // Send appropriate notification based on sender type
-    if (senderType === 'admin' && repair.tenants?.email) {
+    if (senderType === 'admin' && tenantData?.email) {
       // Admin replied via email - notify tenant
-      const tenant = repair.tenants
-      
       try {
         await resend.emails.send({
           from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
-          to: tenant.email,
+          to: tenantData.email,
           replyTo: `repair+${repairId}@coachingbrokeragetools.com`,
           subject: `Re: Repair Request - ${propertyAddress}`,
-          html: pmAdminMessageEmail(tenant.first_name, propertyAddress, cleanText)
+          html: pmAdminMessageEmail(tenantData.first_name, propertyAddress, cleanText)
         })
       } catch (emailErr) {
         console.error('Failed to send tenant notification:', emailErr)

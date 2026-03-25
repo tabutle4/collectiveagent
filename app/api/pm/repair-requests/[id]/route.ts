@@ -138,18 +138,21 @@ export async function PATCH(
       }
       updates.messages = [...existingMessages, newMessage]
 
+      // Type assertions: .single() returns objects but TS types joined tables as arrays
+      const tenantData = currentRepair?.tenants as unknown as { first_name: string; last_name: string; email: string } | null
+      const propertyData = currentRepair?.managed_properties as unknown as { property_address: string } | null
+
       // Send email notification to tenant if message is from admin
-      if (newMessage.sender_type === 'admin' && currentRepair?.tenants?.email) {
-        const tenant = currentRepair.tenants
-        const propertyAddress = currentRepair.managed_properties?.property_address || 'your property'
+      if (newMessage.sender_type === 'admin' && tenantData?.email) {
+        const propertyAddress = propertyData?.property_address || 'your property'
         
         try {
           await resend.emails.send({
             from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
-            to: tenant.email,
+            to: tenantData.email,
             replyTo: `repair+${id}@coachingbrokeragetools.com`,
             subject: `Update on Your Repair Request - ${propertyAddress}`,
-            html: pmAdminMessageEmail(tenant.first_name, propertyAddress, newMessage.message)
+            html: pmAdminMessageEmail(tenantData.first_name, propertyAddress, newMessage.message)
           })
         } catch (emailErr) {
           console.error('Failed to send message notification:', emailErr)
