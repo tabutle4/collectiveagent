@@ -418,17 +418,18 @@ export default function PublicRosterPage() {
         }}
       />
 
-      {/* Header - sticky so it stays on top while scrolling */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F9F9F9' }}>
-        <LuxuryHeader showTrainingCenter={false} />
-      </div>
+      {/* Header - LuxuryHeader is position:fixed with z-50 */}
+      <LuxuryHeader showTrainingCenter={false} />
 
-      {/* Export buttons - below header, not inside sticky */}
+      {/* Spacer for fixed header - LuxuryHeader is ~80px tall */}
+      <div style={{ height: '80px' }} />
+
+      {/* Export buttons - z-index 60 to be above fixed header (z-50) */}
       {!loading && (
         <div 
           style={{ 
             position: 'relative',
-            zIndex: 5,
+            zIndex: 60,
             backgroundColor: '#F9F9F9',
             borderBottom: '1px solid #E5E5E5',
             padding: '10px 24px',
