@@ -9,12 +9,12 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePermission(request, 'can_manage_pm_landlords')
+  const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
     const { id } = await params
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // Get landlord
     const { data: landlord, error: fetchError } = await supabase
@@ -38,8 +38,8 @@ export async function POST(
         'intent[entity_name]': 'Collective Realty Co.',
         'intent[purpose]': 'Receive rent disbursements',
         'intent[type]': 'bank_account',
-        'sent_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
-        'sent_to[0][email]': landlord.email,
+        'send_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
+        'send_to[0][email]': landlord.email,
       }),
     })
 

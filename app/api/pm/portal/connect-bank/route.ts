@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // Verify session
     const { data: session } = await supabase
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
         'intent[entity_name]': 'Collective Realty Co.',
         'intent[purpose]': 'Receive rent disbursements',
         'intent[type]': 'bank_account',
-        'sent_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
-        'sent_to[0][email]': landlord.email,
+        'send_to[0][name]': `${landlord.first_name} ${landlord.last_name}`,
+        'send_to[0][email]': landlord.email,
       }),
     })
 
