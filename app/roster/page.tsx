@@ -3,11 +3,28 @@
 import { useEffect, useState } from 'react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
+import { Download, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 export default function PublicRosterPage() {
   const [htmlContent, setHtmlContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [scriptsExecuted, setScriptsExecuted] = useState(false)
+  const [users, setUsers] = useState<any[]>([])
+
+  useEffect(() => {
+    // Fetch users for export functionality
+    fetch('/api/users/list')
+      .then(res => res.json())
+      .then(data => {
+        // Only keep licensed and active agents
+        const filtered = (data.users || []).filter(
+          (u: any) => u.is_licensed_agent === true && u.is_active === true
+        )
+        setUsers(filtered)
+      })
+      .catch(err => console.error('Error fetching users:', err))
+  }, [])
 
   useEffect(() => {
     fetch('/agent-roster.html')
@@ -173,6 +190,110 @@ export default function PublicRosterPage() {
     }
   }, [htmlContent])
 
+  const getDisplayRole = (user: any): string => {
+    const role = (user.role || '').toLowerCase()
+    switch (role) {
+      case 'broker':
+        return 'Broker'
+      case 'operations':
+        return 'Operations'
+      case 'tc':
+        return 'TC'
+      case 'agent':
+        return 'Agent'
+      default:
+        return role || 'Agent'
+    }
+  }
+
+  const getSocialLinks = (user: any): string => {
+    const links: string[] = []
+    if (user.instagram_handle) links.push(`IG: ${user.instagram_handle}`)
+    if (user.tiktok_handle) links.push(`TT: ${user.tiktok_handle}`)
+    if (user.threads_handle) links.push(`Threads: ${user.threads_handle}`)
+    if (user.linkedin_url) links.push('LinkedIn')
+    if (user.facebook_url) links.push('Facebook')
+    if (user.youtube_url) links.push('YouTube')
+    return links.join(', ')
+  }
+
+  const exportExcel = () => {
+    const data = users.map((user, index) => ({
+      '#': index + 1,
+      'Preferred Name': `${user.preferred_first_name || ''} ${user.preferred_last_name || ''}`.trim(),
+      'Legal Name': `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+      'Email': user.email || '',
+      'Office': user.office || '',
+      'Role': getDisplayRole(user),
+      'Team': user.team_name || '',
+      'Phone': user.personal_phone || '',
+      'Birthday Month': user.birth_month || '',
+      'Social Links': getSocialLinks(user) || '',
+      'Division': user.division || '',
+      'Join Date': user.created_at ? new Date(user.created_at).toLocaleDateString() : '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    
+    ws['!cols'] = [
+      { wch: 5 },  // #
+      { wch: 20 }, // Preferred Name
+      { wch: 20 }, // Legal Name
+      { wch: 30 }, // Email
+      { wch: 12 }, // Office
+      { wch: 12 }, // Role
+      { wch: 20 }, // Team
+      { wch: 15 }, // Phone
+      { wch: 12 }, // Birthday
+      { wch: 25 }, // Social
+      { wch: 20 }, // Division
+      { wch: 12 }, // Join Date
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Agents')
+    XLSX.writeFile(wb, `agent_roster_${new Date().toISOString().split('T')[0]}.xlsx`)
+  }
+
+  const exportPDF = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    const tableRows = users
+      .map((user, idx) => {
+        const headshotCell = user.headshot_url
+          ? `<img src="${user.headshot_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:center top;" />`
+          : `<div style="width:24px;height:24px;border-radius:50%;background:#C5A278;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:600;">${(user.preferred_first_name || user.first_name || '?')[0]}${(user.preferred_last_name || user.last_name || '?')[0]}</div>`
+        return `<tr>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;width:30px;">${headshotCell}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;"><strong>${user.preferred_first_name || ''} ${user.preferred_last_name || ''}</strong><br/><span style="color:#888;font-size:8px;">${user.first_name || ''} ${user.last_name || ''}</span></td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.office || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getDisplayRole(user)}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.team_name || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.personal_phone || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.birth_month || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getSocialLinks(user) || ''}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.division || ''}</td>
+      </tr>`
+      })
+      .join('')
+    printWindow.document
+      .write(`<!DOCTYPE html><html><head><title>Agent Roster - Collective Realty Co.</title>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+      body{font-family:'Montserrat',sans-serif;padding:30px;color:#1A1A1A;font-size:10px;}
+      h1{font-size:16px;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;font-weight:600;}
+      .subtitle{font-size:10px;color:#555;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;}
+      th{text-align:left;padding:6px 5px;border-bottom:2px solid #1A1A1A;font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#555;font-weight:600;}
+      @media print{body{padding:15px;} @page{size:landscape;margin:0.4in;}}</style></head>
+      <body><h1>Collective Realty Co. Agent Roster</h1>
+      <p class="subtitle">${users.length} licensed, active agents | ${new Date().toLocaleDateString()}</p>
+      <table><thead><tr><th></th><th>Agent Name</th><th>Email</th><th>Office</th><th>Role</th><th>Team</th><th>Phone</th><th>Birthday</th><th>Social</th><th>Division</th></tr></thead>
+      <tbody>${tableRows}</tbody></table></body></html>`)
+    printWindow.document.close()
+    printWindow.onload = () => printWindow.print()
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col"
@@ -280,6 +401,56 @@ export default function PublicRosterPage() {
       {/* Header - sticky so it stays on top while scrolling */}
       <div style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#F9F9F9' }}>
         <LuxuryHeader showTrainingCenter={false} />
+      </div>
+
+      {/* Export toolbar */}
+      <div 
+        style={{ 
+          position: 'relative', 
+          zIndex: 5, 
+          backgroundColor: '#F9F9F9',
+          borderBottom: '1px solid #E5E5E5',
+          padding: '12px 24px',
+        }}
+      >
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button 
+            onClick={exportExcel}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              backgroundColor: '#fff',
+              border: '1px solid #E5E5E5',
+              borderRadius: '4px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#1A1A1A',
+              cursor: 'pointer',
+            }}
+          >
+            <FileSpreadsheet size={14} /> Excel
+          </button>
+          <button 
+            onClick={exportPDF}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              backgroundColor: '#fff',
+              border: '1px solid #E5E5E5',
+              borderRadius: '4px',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#1A1A1A',
+              cursor: 'pointer',
+            }}
+          >
+            <Download size={14} /> PDF
+          </button>
+        </div>
       </div>
 
       {/* Roster Content - no extra padding needed since header is sticky not fixed */}
