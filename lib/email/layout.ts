@@ -24,166 +24,38 @@ export function getEmailLayout(
 ): string {
   const { title, subtitle, preheader } = options || {}
 
+  // Using inline styles for maximum email client compatibility
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  ${preheader ? `<span style="display:none;font-size:1px;color:${EMAIL_COLORS.white};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</span>` : ''}
-  <style>
-    body {
-      font-family: 'Montserrat', 'Trebuchet MS', Arial, sans-serif;
-      line-height: 1.6;
-      color: ${EMAIL_COLORS.bodyText};
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: ${EMAIL_COLORS.lightBg};
-    }
-    .email-wrapper {
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    .email-header {
-      background-color: ${EMAIL_COLORS.headerBg};
-      padding: 24px 20px;
-      text-align: center;
-      border-radius: 8px 8px 0 0;
-      border: 1px solid ${EMAIL_COLORS.border};
-      border-bottom: 3px solid ${EMAIL_COLORS.accent};
-    }
-    .email-header h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: ${EMAIL_COLORS.headingText};
-    }
-    .email-header p {
-      margin: 6px 0 0 0;
-      font-size: 12px;
-      color: ${EMAIL_COLORS.lightText};
-    }
-    .email-content {
-      background-color: ${EMAIL_COLORS.white};
-      padding: 30px 24px;
-      border: 1px solid ${EMAIL_COLORS.border};
-      border-top: none;
-    }
-    .email-content p {
-      font-size: 14px;
-      margin: 12px 0;
-      color: ${EMAIL_COLORS.bodyText};
-    }
-    .email-content h3 {
-      font-size: 13px;
-      font-weight: 600;
-      color: ${EMAIL_COLORS.accent};
-      margin: 0 0 10px 0;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .email-greeting {
-      font-size: 15px;
-      color: ${EMAIL_COLORS.headingText};
-      margin-bottom: 16px;
-    }
-    .email-section {
-      background-color: ${EMAIL_COLORS.lightBg};
-      padding: 20px;
-      border-radius: 6px;
-      margin: 20px 0;
-    }
-    .email-section p {
-      margin: 6px 0;
-      font-size: 13px;
-    }
-    .email-btn {
-      display: inline-block;
-      padding: 12px 28px;
-      background-color: ${EMAIL_COLORS.accent};
-      color: ${EMAIL_COLORS.buttonText} !important;
-      text-decoration: none;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-    }
-    .email-btn-dark {
-      display: inline-block;
-      padding: 12px 28px;
-      background-color: ${EMAIL_COLORS.headingText};
-      color: ${EMAIL_COLORS.buttonText} !important;
-      text-decoration: none;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-    }
-    .email-divider {
-      border: none;
-      border-top: 1px solid ${EMAIL_COLORS.border};
-      margin: 24px 0;
-    }
-    .email-footer {
-      padding: 20px 24px;
-      border: 1px solid ${EMAIL_COLORS.border};
-      border-top: none;
-      border-radius: 0 0 8px 8px;
-      background-color: ${EMAIL_COLORS.white};
-    }
-    .email-footer p {
-      margin: 0;
-      font-size: 11px;
-      color: ${EMAIL_COLORS.lightText};
-      text-align: center;
-    }
-    .email-footer a {
-      color: ${EMAIL_COLORS.accent};
-      text-decoration: none;
-    }
-    .email-signature {
-      margin-top: 24px;
-      font-size: 13px;
-      color: ${EMAIL_COLORS.bodyText};
-    }
-    .email-signature strong {
-      color: ${EMAIL_COLORS.headingText};
-    }
-    ul {
-      margin: 10px 0;
-      padding-left: 20px;
-    }
-    li {
-      margin: 6px 0;
-      font-size: 13px;
-      color: ${EMAIL_COLORS.bodyText};
-    }
-    a {
-      color: ${EMAIL_COLORS.accent};
-    }
-  </style>
+  ${preheader ? `<span style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</span>` : ''}
 </head>
-<body>
-  <div class="email-wrapper">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: ${EMAIL_COLORS.bodyText}; margin: 0; padding: 0; background-color: ${EMAIL_COLORS.lightBg};">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    
     ${
       title
-        ? `<div class="email-header">
-      <h1>${title}</h1>
-      ${subtitle ? `<p>${subtitle}</p>` : ''}
+        ? `<!-- Header with white background and accent border -->
+    <div style="background-color: ${EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${EMAIL_COLORS.border}; border-bottom: 3px solid ${EMAIL_COLORS.accent};">
+      <h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${EMAIL_COLORS.headingText};">${title}</h1>
+      ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: ${EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
     </div>`
         : ''
     }
     
-    <div class="email-content">
+    <!-- Content -->
+    <div style="background-color: ${EMAIL_COLORS.white}; padding: 30px 24px; border: 1px solid ${EMAIL_COLORS.border}; ${title ? 'border-top: none;' : 'border-radius: 8px 8px 0 0;'}">
       ${content}
     </div>
     
-    <div class="email-footer">
-      <p>Collective Realty Co. | 13201 Northwest Fwy, Ste 450, Houston, TX</p>
-      <p style="margin-top: 4px;"><a href="https://collectiverealtyco.com">collectiverealtyco.com</a></p>
+    <!-- Footer -->
+    <div style="padding: 20px 24px; border: 1px solid ${EMAIL_COLORS.border}; border-top: none; border-radius: 0 0 8px 8px; background-color: ${EMAIL_COLORS.white}; text-align: center;">
+      <p style="margin: 0; font-size: 11px; color: ${EMAIL_COLORS.lightText};">Collective Realty Co. | 13201 Northwest Fwy, Ste 450, Houston, TX</p>
+      <p style="margin: 4px 0 0 0; font-size: 11px; color: ${EMAIL_COLORS.lightText};"><a href="https://collectiverealtyco.com" style="color: ${EMAIL_COLORS.accent}; text-decoration: none;">collectiverealtyco.com</a></p>
     </div>
+    
   </div>
 </body>
 </html>`
