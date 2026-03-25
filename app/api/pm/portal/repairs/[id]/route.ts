@@ -175,7 +175,7 @@ export async function POST(
 
       const repairWithProperty = repairResult.data
       const pmNotificationEmail = settingsResult.data?.pm_notification_email || 'office@collectiverealtyco.com'
-      const propertyAddress = repairWithProperty?.managed_properties?.property_address || 'Property'
+      const propertyAddress = repairWithProperty?.managed_properties?.[0]?.property_address || 'Property'
       
       try {
         await resend.emails.send({
