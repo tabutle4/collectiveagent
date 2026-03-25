@@ -14,7 +14,7 @@ export default function AdminUsersPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
-  const [licensedOnly, setLicensedOnly] = useState<boolean>(true) // Default to licensed agents only
+  const [licensedOnly, setLicensedOnly] = useState<boolean>(true)
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -35,7 +35,6 @@ export default function AdminUsersPage() {
     }
   }
 
-  // Get display role from the role column (not roles array)
   const getDisplayRole = (user: any): string => {
     const role = (user.role || '').toLowerCase()
     switch (role) {
@@ -52,12 +51,10 @@ export default function AdminUsersPage() {
     }
   }
 
-  // Get role value for filtering (lowercase)
   const getUserRole = (user: any): string => {
     return (user.role || 'agent').toLowerCase()
   }
 
-  // Additional roles from additional_roles field if present
   const getAdditionalRoles = (user: any): string => {
     if (!user.additional_roles) return ''
     return user.additional_roles
@@ -86,7 +83,6 @@ export default function AdminUsersPage() {
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = [...users]
     
-    // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(user => {
@@ -105,23 +101,19 @@ export default function AdminUsersPage() {
       })
     }
     
-    // Role filter
     if (roleFilter !== 'all') {
       filtered = filtered.filter(user => getUserRole(user) === roleFilter)
     }
     
-    // Status filter (is_active)
     if (statusFilter !== 'all') {
       const isActive = statusFilter === 'active'
       filtered = filtered.filter(user => user.is_active === isActive)
     }
     
-    // Licensed agents filter - when enabled, only show users with is_licensed_agent = true
     if (licensedOnly) {
       filtered = filtered.filter(user => user.is_licensed_agent === true)
     }
     
-    // Sort
     filtered.sort((a, b) => {
       let aValue: any, bValue: any
       switch (sortBy) {
@@ -206,53 +198,9 @@ export default function AdminUsersPage() {
     </th>
   )
 
-  const exportCSV = () => {
-    const headers = [
-      'Preferred Name',
-      'Legal Name',
-      'Email',
-      'Office',
-      'Role',
-      'Additional Roles',
-      'Team',
-      'Phone',
-      'Birthday Month',
-      'Status',
-      'Licensed',
-      'Social Links',
-      'Division',
-    ]
-    const rows = filteredAndSortedUsers.map(user => [
-      `${user.preferred_first_name || ''} ${user.preferred_last_name || ''}`.trim(),
-      `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-      user.email || '',
-      user.office || '',
-      getDisplayRole(user),
-      getAdditionalRoles(user) || '',
-      user.team_name || '',
-      user.personal_phone || '',
-      user.birth_month || '',
-      user.is_active ? 'Active' : 'Inactive',
-      user.is_licensed_agent ? 'Yes' : 'No',
-      getSocialLinks(user) || '',
-      user.division || '',
-    ])
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    // Add BOM for Excel compatibility
-    const BOM = '\uFEFF'
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `agents_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
   const exportExcel = () => {
-    const data = filteredAndSortedUsers.map(user => ({
+    const data = filteredAndSortedUsers.map((user, index) => ({
+      '#': index + 1,
       'Preferred Name': `${user.preferred_first_name || ''} ${user.preferred_last_name || ''}`.trim(),
       'Legal Name': `${user.first_name || ''} ${user.last_name || ''}`.trim(),
       'Email': user.email || '',
@@ -271,8 +219,8 @@ export default function AdminUsersPage() {
 
     const ws = XLSX.utils.json_to_sheet(data)
     
-    // Set column widths
     ws['!cols'] = [
+      { wch: 5 },  // #
       { wch: 20 }, // Preferred Name
       { wch: 20 }, // Legal Name
       { wch: 30 }, // Email
@@ -348,7 +296,7 @@ export default function AdminUsersPage() {
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-        <h1 className="page-title">AGENTS ({statusCounts.active} Active)</h1>
+        <h1 className="page-title">AGENTS ({filteredAndSortedUsers.length})</h1>
         <div className="flex flex-wrap gap-2">
           <a
             href="/roster"
@@ -358,9 +306,6 @@ export default function AdminUsersPage() {
           >
             <ExternalLink size={14} /> Roster
           </a>
-          <button onClick={exportCSV} className="btn btn-secondary flex items-center gap-1.5">
-            <Download size={14} /> CSV
-          </button>
           <button onClick={exportExcel} className="btn btn-secondary flex items-center gap-1.5">
             <FileSpreadsheet size={14} /> Excel
           </button>
@@ -374,8 +319,8 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="container-card">
-        <div className="flex flex-col md:flex-row gap-4 mb-5">
-          <div className="flex-1 relative">
+        <div className="flex flex-col gap-4 mb-5">
+          <div className="relative">
             <Search
               className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-3"
               size={18}
@@ -385,10 +330,10 @@ export default function AdminUsersPage() {
               placeholder="Search by name, email, office, team..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="input-luxury pl-10"
+              className="input-luxury pl-10 w-full"
             />
           </div>
-          <div className="flex gap-3 flex-wrap items-center">
+          <div className="flex flex-wrap gap-3 items-center">
             <select
               value={roleFilter}
               onChange={e => setRoleFilter(e.target.value)}
