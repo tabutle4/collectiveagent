@@ -1,6 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+const PAYLOAD_SECRET_KEY = process.env.PAYLOAD_SECRET_KEY || ''
+
+// Helper to delete a payment link from Payload
+async function deletePayloadPaymentLink(paymentLinkId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.payload.com/payment_links/${paymentLinkId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(PAYLOAD_SECRET_KEY + ':').toString('base64'),
+      },
+    })
+    if (res.ok) {
+      console.log('Deleted Payload payment link:', paymentLinkId)
+      return true
+    } else {
+      console.log('Failed to delete payment link:', paymentLinkId, res.status)
+      return false
+    }
+  } catch (err) {
+    console.error('Error deleting payment link:', paymentLinkId, err)
+    return false
+  }
+}
+
+// Helper to delete an invoice from Payload
+async function deletePayloadInvoice(invoiceId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.payload.com/invoices/${invoiceId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(PAYLOAD_SECRET_KEY + ':').toString('base64'),
+      },
+    })
+    if (res.ok) {
+      console.log('Deleted Payload invoice:', invoiceId)
+      return true
+    } else {
+      console.log('Failed to delete invoice:', invoiceId, res.status)
+      return false
+    }
+  } catch (err) {
+    console.error('Error deleting invoice:', invoiceId, err)
+    return false
+  }
+}
+
+// Clean up Payload when lease is fully paid
+async function cleanupPayloadForLease(supabase: any, leaseId: string) {
+  // Get all invoices for this lease
+  const { data: allInvoices } = await supabase
+    .from('tenant_invoices')
+    .select('id, status, payload_invoice_id, payload_payment_link_id')
+    .eq('lease_id', leaseId)
+
+  if (!allInvoices || allInvoices.length === 0) return
+
+  // Check if any unpaid invoices remain
+  const unpaidInvoices = allInvoices.filter((inv: any) => 
+    !['paid', 'cancelled'].includes(inv.status)
+  )
+
+  if (unpaidInvoices.length > 0) {
+    console.log(`Lease ${leaseId} still has ${unpaidInvoices.length} unpaid invoices, skipping cleanup`)
+    return
+  }
+
+  console.log(`Lease ${leaseId} fully paid, cleaning up Payload...`)
+
+  // Delete all payment links and invoices from Payload
+  for (const invoice of allInvoices) {
+    // Delete payment link first (it references the invoice)
+    if (invoice.payload_payment_link_id) {
+      await deletePayloadPaymentLink(invoice.payload_payment_link_id)
+    }
+
+    // Delete invoice from Payload
+    if (invoice.payload_invoice_id) {
+      await deletePayloadInvoice(invoice.payload_invoice_id)
+    }
+
+    // Clear Payload IDs from our database
+    if (invoice.payload_invoice_id || invoice.payload_payment_link_id) {
+      await supabase
+        .from('tenant_invoices')
+        .update({
+          payload_invoice_id: null,
+          payload_payment_link_id: null,
+          payload_payment_link_url: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', invoice.id)
+    }
+  }
+
+  console.log(`Cleanup complete for lease ${leaseId}`)
+}
+
 // POST - Handle tenant rent payment webhook from Payload
 export async function POST(request: NextRequest) {
   try {
@@ -9,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     console.log('PM tenant payment webhook received:', type, data?.id)
 
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // Payment link paid
     if (type === 'payment_link.paid' && data?.id) {
@@ -88,6 +185,11 @@ export async function POST(request: NextRequest) {
         console.error('Error creating disbursement:', disbError)
       } else {
         console.log('Disbursement created for landlord:', invoice.landlord_id)
+      }
+
+      // Check if lease is fully paid and clean up Payload
+      if (invoice.lease_id) {
+        await cleanupPayloadForLease(supabase, invoice.lease_id)
       }
     }
 
