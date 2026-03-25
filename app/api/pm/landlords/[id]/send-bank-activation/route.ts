@@ -44,34 +44,44 @@ export async function POST(
       }),
     })
 
-    const data = await res.json()
-
+    // 204 = success, Payload sent email directly (no body)
+    // 200/201 = success with body
     if (!res.ok) {
-      console.error('Payload activation creation failed:', data)
+      const errorData = await res.json().catch(() => ({}))
+      console.error('Payload activation creation failed:', errorData)
       return NextResponse.json(
-        { error: data.message || 'Failed to create bank activation' },
+        { error: errorData.message || 'Failed to create bank activation' },
         { status: 500 }
       )
+    }
+
+    // Parse body only if there is one
+    let activationId = null
+    let activationUrl = null
+    
+    if (res.status !== 204) {
+      const data = await res.json().catch(() => ({}))
+      activationId = data.id
+      activationUrl = data.url
     }
 
     // Update landlord with activation ID and status
     await supabase
       .from('landlords')
       .update({
-        payload_activation_id: data.id,
+        payload_activation_id: activationId,
         bank_status: 'pending',
         updated_at: new Date().toISOString(),
       })
       .eq('id', landlord.id)
 
-    // TODO: Send email to landlord with activation URL (data.url)
-    // For now, return the URL so admin can share it manually
-    console.log(`Bank activation URL for ${landlord.email}: ${data.url}`)
+    console.log(`Bank activation email sent to ${landlord.email} by Payload`)
 
     return NextResponse.json({
       success: true,
-      activation_id: data.id,
-      activation_url: data.url,
+      message: 'Bank activation email sent to landlord',
+      activation_id: activationId,
+      activation_url: activationUrl, // Will be null when Payload sends email directly
     })
   } catch (error: any) {
     console.error('Error creating bank activation:', error)
