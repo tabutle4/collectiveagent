@@ -421,10 +421,10 @@ function LandlordDashboardContent() {
                               {property.city}, {property.state} {property.zip}
                             </p>
                           </div>
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                          <span className={`text-xs font-medium capitalize ${
                             property.status === 'active' 
-                              ? 'bg-green-50 text-green-700' 
-                              : 'bg-gray-50 text-gray-600'
+                              ? 'text-green-600' 
+                              : 'text-luxury-gray-3'
                           }`}>
                             {property.status}
                           </span>

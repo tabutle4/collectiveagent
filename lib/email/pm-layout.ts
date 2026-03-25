@@ -47,7 +47,7 @@ export function getPMEmailLayout(
     
     <!-- Header -->
     <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${PM_EMAIL_COLORS.border}; border-bottom: none;">
-      <img src="${BASE_URL}/logo.png" alt="Collective Realty Co." style="height: 40px; margin-bottom: 12px;">
+      <img src="${BASE_URL}/logo.png" alt="Collective Realty Co." style="height: 80px; margin-bottom: 12px;">
       ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.headingText};">${title}</h1>` : ''}
       ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
     </div>
