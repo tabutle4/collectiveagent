@@ -365,6 +365,50 @@ export function pmRentDueEmail(
 }
 
 /**
+ * Tenant portal invite email
+ */
+export function pmTenantInviteEmail(
+  tenantName: string,
+  propertyAddress: string
+): string {
+  return getPMEmailLayout(
+    `${pmEmailGreeting(tenantName)}
+     ${pmEmailText(`You've been added as a tenant at <strong>${propertyAddress}</strong>.`)}
+     ${pmEmailText('Your tenant portal is ready. From there you can:')}
+     <ul style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
+       <li>View your lease details</li>
+       <li>Pay rent online</li>
+       <li>Submit maintenance requests</li>
+       <li>Contact property management</li>
+     </ul>
+     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/tenant/login`)}
+     ${pmEmailSmall('Click the button above and enter your email to receive a secure login link.')}`,
+    { title: 'CRC Property Management', subtitle: 'Portal Access', preheader: `Access your tenant portal for ${propertyAddress}` }
+  )
+}
+
+/**
+ * Landlord portal invite email
+ */
+export function pmLandlordInviteEmail(
+  landlordName: string
+): string {
+  return getPMEmailLayout(
+    `${pmEmailGreeting(landlordName)}
+     ${pmEmailText('Your landlord portal is ready. From your dashboard you can:')}
+     <ul style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
+       <li>View your properties and tenants</li>
+       <li>Track rent payments and disbursements</li>
+       <li>Download monthly statements</li>
+       <li>Complete your W9 and bank setup</li>
+     </ul>
+     ${pmEmailButton('Access Landlord Portal', `${BASE_URL}/pm/landlord/login`)}
+     ${pmEmailSmall('Click the button above and enter your email to receive a secure login link.')}`,
+    { title: 'CRC Property Management', subtitle: 'Portal Access', preheader: 'Access your landlord portal' }
+  )
+}
+
+/**
  * Disbursement sent email for landlord
  */
 export function pmDisbursementEmail(

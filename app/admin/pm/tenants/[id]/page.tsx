@@ -13,6 +13,8 @@ import {
   FileText,
   DollarSign,
   Copy,
+  Mail,
+  Loader2,
 } from 'lucide-react'
 
 interface Tenant {
@@ -60,6 +62,7 @@ export default function TenantDetailPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sendingInvite, setSendingInvite] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isEditing, setIsEditing] = useState(false)
@@ -126,31 +129,51 @@ export default function TenantDetailPage() {
     setTimeout(() => setSuccess(''), 2000)
   }
 
+  const sendInvite = async () => {
+    if (!tenant) return
+    setError('')
+    setSuccess('')
+    setSendingInvite(true)
+    try {
+      const res = await fetch(`/api/pm/tenants/${id}/send-invite`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send invite')
+      setSuccess(data.message || 'Invite sent successfully')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to send invite')
+    } finally {
+      setSendingInvite(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
       case 'paid':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700">
-            <CheckCircle size={12} /> {status === 'paid' ? 'Paid' : 'Active'}
+          <span className="text-xs text-green-600 font-medium">
+            {status === 'paid' ? 'Paid' : 'Active'}
           </span>
         )
       case 'pending':
       case 'sent':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-yellow-50 text-yellow-700">
-            <Clock size={12} /> Pending
+          <span className="text-xs text-amber-600 font-medium">
+            Pending
           </span>
         )
       case 'overdue':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-50 text-red-700">
+          <span className="text-xs text-red-600 font-medium">
             Overdue
           </span>
         )
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-600">
+          <span className="text-xs text-luxury-gray-3 font-medium">
             {status}
           </span>
         )
@@ -223,11 +246,23 @@ export default function TenantDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={sendInvite}
+            disabled={sendingInvite}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            {sendingInvite ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Mail size={14} />
+            )}
+            {sendingInvite ? 'Sending...' : 'Send Invite'}
+          </button>
+          <button
             onClick={copyDashboardLink}
             className="btn btn-secondary flex items-center gap-2"
           >
             <Copy size={14} />
-            Copy Dashboard Link
+            Copy Link
           </button>
           <a
             href={`${window.location.origin}/pm/tenant/${tenant.dashboard_token}`}
@@ -236,7 +271,7 @@ export default function TenantDetailPage() {
             className="btn btn-secondary flex items-center gap-2"
           >
             <ExternalLink size={14} />
-            Open Dashboard
+            Open Portal
           </a>
         </div>
       </div>
