@@ -275,53 +275,6 @@ export function pmRepairStatusEmail(
 }
 
 /**
- * Landlord welcome email with dashboard link
- */
-export function pmLandlordWelcomeEmail(
-  landlordName: string,
-  dashboardToken: string
-): string {
-  const dashboardUrl = `${BASE_URL}/pm/landlord/${dashboardToken}`
-  
-  return getPMEmailLayout(
-    `${pmEmailGreeting(landlordName)}
-     ${pmEmailText('Welcome to CRC Property Management! Your landlord dashboard is ready.')}
-     ${pmEmailText('From your dashboard you can:')}
-     <ul style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
-       <li>View your properties and tenants</li>
-       <li>Track rent payments and disbursements</li>
-       <li>Download monthly statements</li>
-       <li>Complete your W9 and bank setup</li>
-     </ul>
-     ${pmEmailButton('Access Your Dashboard', dashboardUrl)}
-     ${pmEmailSmall('Save this email - your dashboard link is unique to you.')}`,
-    { title: 'CRC Property Management', subtitle: 'Welcome', preheader: 'Your landlord dashboard is ready' }
-  )
-}
-
-/**
- * Tenant welcome email
- */
-export function pmTenantWelcomeEmail(
-  tenantName: string,
-  propertyAddress: string
-): string {
-  return getPMEmailLayout(
-    `${pmEmailGreeting(tenantName)}
-     ${pmEmailText(`Welcome to your new home at <strong>${propertyAddress}</strong>!`)}
-     ${pmEmailText('Your tenant portal is ready. From there you can:')}
-     <ul style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
-       <li>View your lease details</li>
-       <li>Pay rent online</li>
-       <li>Submit maintenance requests</li>
-       <li>Contact property management</li>
-     </ul>
-     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/login`)}`,
-    { title: 'CRC Property Management', subtitle: 'Welcome', preheader: `Welcome to your new home at ${propertyAddress}` }
-  )
-}
-
-/**
  * Bank activation email for landlord
  */
 export function pmBankActivationEmail(
