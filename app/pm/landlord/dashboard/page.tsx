@@ -364,24 +364,24 @@ function LandlordDashboardContent() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Setup Warning Banner */}
         {(!setupStatus.w9Complete || !setupStatus.bankConnected) && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <div className="inner-card border border-luxury-gray-5 mb-6">
             <div className="flex items-start gap-3">
               <AlertCircle size={20} className="text-amber-600 mt-0.5" />
               <div>
-                <h3 className="font-medium text-amber-800">Complete Your Account Setup</h3>
-                <p className="text-sm text-amber-700 mt-1">
+                <h3 className="font-medium text-luxury-gray-1">Complete Your Account Setup</h3>
+                <p className="text-sm text-luxury-gray-3 mt-1">
                   To receive disbursements, please complete the following:
                 </p>
-                <ul className="text-sm text-amber-700 mt-2 space-y-1">
+                <ul className="text-sm text-luxury-gray-3 mt-2 space-y-1">
                   {!setupStatus.w9Complete && (
                     <li className="flex items-center gap-2">
-                      <AlertCircle size={16} />
+                      <AlertCircle size={16} className="text-amber-600" />
                       Submit your W9 form
                     </li>
                   )}
                   {!setupStatus.bankConnected && (
                     <li className="flex items-center gap-2">
-                      <AlertCircle size={16} />
+                      <AlertCircle size={16} className="text-amber-600" />
                       Connect your bank account for ACH deposits
                     </li>
                   )}
@@ -618,11 +618,11 @@ function LandlordDashboardContent() {
                         {repair.managed_properties?.property_address} • {repair.category}
                       </p>
                     </div>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      repair.status === 'completed' ? 'bg-green-50 text-green-700' :
-                      repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                      repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
-                      'bg-amber-50 text-amber-700'
+                    <span className={`text-xs capitalize ${
+                      repair.status === 'completed' ? 'text-green-600' :
+                      repair.status === 'in_progress' ? 'text-blue-600' :
+                      repair.status === 'approved' ? 'text-purple-600' :
+                      'text-amber-600'
                     }`}>
                       {repair.status.replace('_', ' ')}
                     </span>

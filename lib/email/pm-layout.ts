@@ -3,7 +3,7 @@
 
 export const PM_EMAIL_COLORS = {
   accent: '#C5A278', // luxury-accent (tan/gold) - matches app
-  headerBg: '#1A1A1A', // luxury-black
+  headerBg: '#FFFFFF', // white header
   bodyText: '#555555', // luxury-gray-2
   headingText: '#1A1A1A', // luxury-gray-1
   lightText: '#888888', // luxury-gray-3
@@ -19,7 +19,8 @@ export const PM_CONTACT = {
   name: 'CRC Property Management',
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+// Production URL for email assets (must be absolute for email clients)
+const BASE_URL = 'https://agent.collectiverealtyco.com'
 
 /**
  * Generate a complete PM email with header, content, and footer
@@ -45,9 +46,9 @@ export function getPMEmailLayout(
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     
     <!-- Header -->
-    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+    <div style="background-color: ${PM_EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${PM_EMAIL_COLORS.border}; border-bottom: none;">
       <img src="${BASE_URL}/logo.png" alt="Collective Realty Co." style="height: 40px; margin-bottom: 12px;">
-      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.white};">${title}</h1>` : ''}
+      ${title ? `<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.05em; color: ${PM_EMAIL_COLORS.headingText};">${title}</h1>` : ''}
       ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: ${PM_EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
     </div>
     

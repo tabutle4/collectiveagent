@@ -274,10 +274,30 @@ function TenantDashboardContent() {
     }
   }
 
-  const openRepairDetail = (repair: Repair) => {
-    setSelectedRepair(repair)
+  const openRepairDetail = async (repair: Repair) => {
+    setSelectedRepair(repair) // Show immediately with cached data
     setShowRepairDetail(true)
     setNewMessage('')
+    
+    // Fetch fresh data to get latest messages
+    try {
+      const res = await fetch(`/api/pm/portal/repairs/${repair.id}`)
+      if (res.ok) {
+        const result = await res.json()
+        if (result.repair) {
+          setSelectedRepair(result.repair)
+          // Also update in the list
+          if (data) {
+            const updatedRepairs = data.repairs.map(r => 
+              r.id === result.repair.id ? result.repair : r
+            )
+            setData({ ...data, repairs: updatedRepairs })
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch repair details:', err)
+    }
   }
 
   const sendMessage = async () => {
@@ -487,43 +507,6 @@ function TenantDashboardContent() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Pay Selected - At Top */}
-        {selectedInvoices.length > 0 && (
-          <div className="mb-6 p-4 bg-luxury-accent/10 rounded-lg border border-luxury-accent/30">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-luxury-gray-3">
-                  {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} selected
-                </p>
-                <p className="text-2xl font-bold text-luxury-accent">
-                  {formatMoney(selectedTotal)}
-                </p>
-              </div>
-              <button 
-                onClick={handlePayment}
-                disabled={processingPayment}
-                className="btn btn-primary flex items-center justify-center gap-2"
-              >
-                {processingPayment ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard size={16} />
-                    Pay Now
-                    <ExternalLink size={16} />
-                  </>
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-luxury-gray-3 mt-2">
-              You will be redirected to our secure payment portal
-            </p>
-          </div>
-        )}
-
         {/* Total Due and Lease Info */}
         <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
           {/* Total Due */}
@@ -557,18 +540,18 @@ function TenantDashboardContent() {
                 {lease.unit && ` ${lease.unit}`}
               </p>
               <p className="text-sm text-luxury-gray-3">{lease.city}, {lease.state} {lease.zip}</p>
-              <div className="mt-3 pt-3 border-t border-luxury-gray-5 grid grid-cols-2 gap-2 text-sm">
+              <div className="mt-3 pt-3 border-t border-luxury-gray-5 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-luxury-gray-3">Monthly Rent</span>
                   <span className="font-semibold text-luxury-accent">{formatMoney(lease.monthly_rent)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-luxury-gray-3">Due Day</span>
+                  <span className="text-luxury-gray-3">Due Date</span>
                   <span className="text-luxury-gray-1">{lease.rent_due_day}{getOrdinalSuffix(lease.rent_due_day)} of each month</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-luxury-gray-3">Lease Dates</span>
-                  <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} — {formatDate(lease.lease_end)}</span>
+                  <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} – {formatDate(lease.lease_end)}</span>
                 </div>
               </div>
             </div>
@@ -592,6 +575,43 @@ function TenantDashboardContent() {
                 </button>
               )}
             </div>
+
+            {/* Pay Now - Above Invoice List */}
+            {selectedInvoices.length > 0 && (
+              <div className="mb-4 p-4 bg-luxury-accent/10 rounded-lg border border-luxury-accent/30">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-luxury-gray-3">
+                      {selectedInvoices.length} invoice{selectedInvoices.length !== 1 ? 's' : ''} selected
+                    </p>
+                    <p className="text-2xl font-bold text-luxury-accent">
+                      {formatMoney(selectedTotal)}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={handlePayment}
+                    disabled={processingPayment}
+                    className="btn btn-primary flex items-center justify-center gap-2"
+                  >
+                    {processingPayment ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={16} />
+                        Pay Now
+                        <ExternalLink size={16} />
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-xs text-luxury-gray-3 mt-2">
+                  You will be redirected to our secure payment portal
+                </p>
+              </div>
+            )}
 
             <div className="space-y-3">
               {unpaidInvoices.map((invoice) => {
@@ -642,7 +662,7 @@ function TenantDashboardContent() {
                           </p>
                         )}
                         {invoice.status === 'sent' && (
-                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs bg-blue-50 text-blue-700 rounded-full">
+                          <span className="inline-flex items-center gap-1 mt-1 text-xs text-blue-600">
                             <Clock size={12} />
                             Sent
                           </span>
@@ -707,7 +727,7 @@ function TenantDashboardContent() {
                         {invoice.paid_at ? formatDate(invoice.paid_at) : '—'}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-50 text-green-700 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600">
                           <CheckCircle size={12} />
                           Paid
                         </span>
@@ -774,11 +794,11 @@ function TenantDashboardContent() {
                           {repair.messages.length}
                         </span>
                       )}
-                      <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${
-                        repair.status === 'completed' ? 'bg-green-50 text-green-700' :
-                        repair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                        repair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
-                        'bg-amber-50 text-amber-700'
+                      <span className={`text-xs whitespace-nowrap ${
+                        repair.status === 'completed' ? 'text-green-600' :
+                        repair.status === 'in_progress' ? 'text-blue-600' :
+                        repair.status === 'approved' ? 'text-purple-600' :
+                        'text-amber-600'
                       }`}>
                         {repair.status.replace('_', ' ')}
                       </span>
@@ -908,11 +928,11 @@ function TenantDashboardContent() {
                       {selectedRepair.category.replace('_', ' ')}
                     </span>
                     <span className="text-luxury-gray-4">•</span>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      selectedRepair.status === 'completed' ? 'bg-green-50 text-green-700' :
-                      selectedRepair.status === 'in_progress' ? 'bg-blue-50 text-blue-700' :
-                      selectedRepair.status === 'approved' ? 'bg-purple-50 text-purple-700' :
-                      'bg-amber-50 text-amber-700'
+                    <span className={`text-xs capitalize ${
+                      selectedRepair.status === 'completed' ? 'text-green-600' :
+                      selectedRepair.status === 'in_progress' ? 'text-blue-600' :
+                      selectedRepair.status === 'approved' ? 'text-purple-600' :
+                      'text-amber-600'
                     }`}>
                       {selectedRepair.status.replace('_', ' ')}
                     </span>
