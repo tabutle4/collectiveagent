@@ -217,7 +217,7 @@ export function pmAdminMessageEmail(
     `${pmEmailGreeting(tenantFirstName)}
      ${pmEmailText(`You have a new message regarding your repair request at <strong>${propertyAddress}</strong>:`)}
      ${pmEmailBox(message)}
-     ${pmEmailButton('View in Tenant Portal', `${BASE_URL}/pm/tenant/login`)}`,
+     ${pmEmailButton('View in Tenant Portal', `${BASE_URL}/pm/login`)}`,
     { title: 'CRC Property Management', subtitle: 'Repair Request Update', preheader: `Update on your repair at ${propertyAddress}` }
   )
 }
@@ -269,7 +269,7 @@ export function pmRepairStatusEmail(
      ${pmEmailDetail('Issue', repairTitle)}
      ${pmEmailDetail('Status', statusLabels[newStatus] || newStatus)}
      ${notes ? pmEmailBox(notes, 'Notes') : ''}
-     ${pmEmailButton('View in Tenant Portal', `${BASE_URL}/pm/tenant/login`)}`,
+     ${pmEmailButton('View in Tenant Portal', `${BASE_URL}/pm/login`)}`,
     { title: 'CRC Property Management', subtitle: 'Repair Status Update', preheader: `${repairTitle} - ${statusLabels[newStatus] || newStatus}` }
   )
 }
@@ -316,7 +316,7 @@ export function pmTenantWelcomeEmail(
        <li>Submit maintenance requests</li>
        <li>Contact property management</li>
      </ul>
-     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/tenant/login`)}`,
+     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/login`)}`,
     { title: 'CRC Property Management', subtitle: 'Welcome', preheader: `Welcome to your new home at ${propertyAddress}` }
   )
 }
@@ -381,7 +381,7 @@ export function pmTenantInviteEmail(
        <li>Submit maintenance requests</li>
        <li>Contact property management</li>
      </ul>
-     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/tenant/login`)}
+     ${pmEmailButton('Access Tenant Portal', `${BASE_URL}/pm/login`)}
      ${pmEmailSmall('Click the button above and enter your email to receive a secure login link.')}`,
     { title: 'CRC Property Management', subtitle: 'Portal Access', preheader: `Access your tenant portal for ${propertyAddress}` }
   )
@@ -402,7 +402,7 @@ export function pmLandlordInviteEmail(
        <li>Download monthly statements</li>
        <li>Complete your W9 and bank setup</li>
      </ul>
-     ${pmEmailButton('Access Landlord Portal', `${BASE_URL}/pm/landlord/login`)}
+     ${pmEmailButton('Access Landlord Portal', `${BASE_URL}/pm/login`)}
      ${pmEmailSmall('Click the button above and enter your email to receive a secure login link.')}`,
     { title: 'CRC Property Management', subtitle: 'Portal Access', preheader: 'Access your landlord portal' }
   )
