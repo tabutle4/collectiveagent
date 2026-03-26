@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Script from 'next/script'
 import Link from 'next/link'
 import { 
   Building2, 
@@ -219,8 +220,47 @@ function LandlordDashboardContent() {
         headers: { 'Content-Type': 'application/json' }
       })
       const result = await res.json()
-      if (res.ok && result.form_url) {
-        window.open(result.form_url, '_blank')
+      
+      if (res.ok && result.success && result.form_request) {
+        // Check if Avalara1099 SDK is loaded
+        if (typeof window !== 'undefined' && (window as any).Avalara1099) {
+          // Use embedded SDK to open W9 form modal (Promise-based)
+          (window as any).Avalara1099.requestW9(result.form_request, {
+            prefill: {
+              name: `${data.landlord.first_name} ${data.landlord.last_name}`,
+              email: data.landlord.email
+            }
+          })
+          .then(async (newRequest: any) => {
+            console.log('W9 completed:', newRequest)
+            // Update status via API
+            const attributes = (newRequest.data || newRequest).attributes
+            await fetch('/api/pm/portal/w9-complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tin_match_status: attributes?.tin_match_status,
+                signed_at: attributes?.signed_at,
+                signed_pdf: newRequest.links?.signed_pdf
+              })
+            })
+            alert('W9 completed successfully!')
+            window.location.reload()
+          })
+          .catch((errors: any) => {
+            console.log('W9 errors:', errors)
+            if (errors === 'cancel') {
+              // User closed without completing - that's ok
+            } else if (errors?.errors?.[0]?.status === '404') {
+              alert('Session timed out. Please reload and try again.')
+            } else {
+              alert('There was an error with the W9 form. Please try again.')
+            }
+          })
+        } else {
+          console.error('Avalara1099 SDK not loaded')
+          alert('W9 form is loading. Please try again in a moment.')
+        }
       } else if (result.fallback) {
         alert('Please contact pm@collectiverealtyco.com to complete your W9.')
       } else {
@@ -315,6 +355,13 @@ function LandlordDashboardContent() {
 
   return (
     <div className="min-h-screen bg-luxury-light">
+      {/* Track1099/Avalara W9 SDK */}
+      <Script 
+        src="https://www.track1099.com/api/request_form.js" 
+        strategy="afterInteractive"
+        type="module"
+      />
+      
       {/* Admin Preview Banner */}
       {isAdminPreview && (
         <div className="bg-amber-500 text-white px-6 py-2">

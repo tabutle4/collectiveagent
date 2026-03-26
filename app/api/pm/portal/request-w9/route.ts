@@ -49,9 +49,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'W9 already completed' }, { status: 400 })
     }
 
-    // Check if Track1099 API key is configured
-    const track1099ApiKey = process.env.TRACK1099_API_KEY
-    if (!track1099ApiKey) {
+    // Check if Track1099 is configured
+    const track1099ApiToken = process.env.TRACK1099_API_TOKEN
+    const track1099TeamId = process.env.TRACK1099_TEAM_API_ID
+    const track1099CompanyId = process.env.TRACK1099_COMPANY_ID
+    
+    if (!track1099ApiToken || !track1099TeamId || !track1099CompanyId) {
       // Fallback: direct them to contact PM
       return NextResponse.json({ 
         error: 'W9 service not configured. Please contact pm@collectiverealtyco.com',
@@ -59,25 +62,30 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    // Create form request via Track1099 API
-    const res = await fetch('https://api.track1099.com/api/v2/form_requests', {
+    // Create form request via Track1099/Avalara API
+    // Docs: https://www.track1099.com/api_info/docs#/Embedded%20W-9%2FW-8
+    const res = await fetch(`https://www.track1099.com/api/v1/${track1099TeamId}/form_requests`, {
       method: 'POST',
       headers: {
-        'X-Api-Key': track1099ApiKey,
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${track1099ApiToken}`,
+        'Content-Type': 'application/vnd.api+json',
       },
       body: JSON.stringify({
-        form_type: 'w9',
-        reference_id: landlord.id,
-        recipient_email: landlord.email,
-        recipient_name: `${landlord.first_name} ${landlord.last_name}`,
+        data: {
+          type: 'form_request',
+          attributes: {
+            form_type: 'W-9',
+            company_id: parseInt(track1099CompanyId),
+            reference_id: landlord.id,
+          }
+        }
       }),
     })
 
-    const data = await res.json()
+    const responseData = await res.json()
 
     if (!res.ok) {
-      console.error('Track1099 form request failed:', data)
+      console.error('Track1099 form request failed:', responseData)
       return NextResponse.json(
         { error: 'Failed to create W9 request. Please try again or contact support.' },
         { status: 500 }
@@ -89,17 +97,18 @@ export async function POST(request: NextRequest) {
       .from('landlords')
       .update({
         track1099_reference_id: landlord.id,
-        track1099_form_request_id: data.id,
+        track1099_form_request_id: responseData.data?.id,
         w9_status: 'pending',
         updated_at: new Date().toISOString(),
       })
       .eq('id', landlord.id)
 
-    console.log(`W9 form request created for ${landlord.email}: ${data.id}`)
+    console.log(`W9 form request created for ${landlord.email}:`, responseData.data?.id)
 
+    // Return the full form_request data for the frontend SDK
     return NextResponse.json({
       success: true,
-      form_url: data.url,
+      form_request: responseData.data,
     })
   } catch (error: any) {
     console.error('Error creating W9 form request:', error)
