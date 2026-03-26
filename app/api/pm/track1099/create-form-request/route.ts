@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
 
-// POST - Create W9 form request via Track1099
+// POST - Create W9 form request via Track1099 (admin route)
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_pm_landlords')
+  const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     const { landlord_id } = await request.json()
 
     if (!landlord_id) {

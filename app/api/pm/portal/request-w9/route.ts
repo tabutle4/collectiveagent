@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // Verify session
     const { data: session } = await supabase

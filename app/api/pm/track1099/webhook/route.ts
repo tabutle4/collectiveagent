@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     // }
 
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // W9 form completed
     if (body.event_type === 'form_request.completed') {
