@@ -348,16 +348,22 @@ export function pmLandlordInviteEmail(
 ): string {
   return getPMEmailLayout(
     `${pmEmailGreeting(landlordName)}
-     ${pmEmailText('Your landlord portal is ready. From your dashboard you can:')}
+     ${pmEmailText('Welcome to CRC Property Management! Your landlord portal is now ready.')}
+     ${pmEmailText('<strong>To receive rent disbursements, you\'ll need to complete two quick steps:</strong>')}
+     <ol style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
+       <li style="margin-bottom: 8px;"><strong>Submit your W9</strong> — Required for tax reporting (we'll send you a 1099 at year-end)</li>
+       <li><strong>Connect your bank account</strong> — So we can deposit rent payments directly via ACH</li>
+     </ol>
+     ${pmEmailText('Both can be completed from your portal in just a few minutes.')}
+     ${pmEmailText('<strong>Once set up, you\'ll be able to:</strong>')}
      <ul style="margin: 10px 0; padding-left: 20px; color: ${PM_EMAIL_COLORS.bodyText}; font-size: 14px;">
        <li>View your properties and tenants</li>
        <li>Track rent payments and disbursements</li>
        <li>Download monthly statements</li>
-       <li>Complete your W9 and bank setup</li>
      </ul>
      ${pmEmailButton('Access Landlord Portal', `${BASE_URL}/pm/login`)}
      ${pmEmailSmall('Click the button above and enter your email to receive a secure login link.')}`,
-    { title: 'CRC Property Management', subtitle: 'Portal Access', preheader: 'Access your landlord portal' }
+    { title: 'CRC Property Management', subtitle: 'Welcome to Your Portal', preheader: 'Complete your landlord setup to receive rent payments' }
   )
 }
 
