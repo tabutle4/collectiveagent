@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AuthFooter from '@/components/shared/AuthFooter'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import CornerLines from '@/components/shared/CornerLines'
 import { useAuth } from '@/lib/context/AuthContext'
 
 function LoginForm() {
@@ -159,95 +160,8 @@ export default function LoginPage() {
       className="min-h-screen flex flex-col"
       style={{ backgroundColor: '#F9F9F9', position: 'relative', overflow: 'hidden' }}
     >
-      {/* Corner lines SVG background */}
-      <svg
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-        xmlns="http://www.w3.org/2000/svg"
-        preserveAspectRatio="none"
-      >
-        {/* Top-left corner lines */}
-        <line
-          x1="0"
-          y1="0"
-          x2="500"
-          y2="500"
-          stroke="#C5A278"
-          strokeWidth="0.8"
-          strokeOpacity="0.18"
-        />
-        <line
-          x1="0"
-          y1="60"
-          x2="500"
-          y2="560"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.13"
-        />
-        <line
-          x1="0"
-          y1="120"
-          x2="400"
-          y2="520"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.09"
-        />
-        <line
-          x1="60"
-          y1="0"
-          x2="560"
-          y2="500"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.13"
-        />
-        <line
-          x1="120"
-          y1="0"
-          x2="520"
-          y2="400"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.09"
-        />
-        {/* Bottom-right corner lines */}
-        <line
-          x1="100%"
-          y1="100%"
-          x2="calc(100% - 500px)"
-          y2="calc(100% - 500px)"
-          stroke="#C5A278"
-          strokeWidth="0.8"
-          strokeOpacity="0.15"
-        />
-        <line
-          x1="100%"
-          y1="calc(100% - 60px)"
-          x2="calc(100% - 500px)"
-          y2="calc(100% - 560px)"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.1"
-        />
-        <line
-          x1="calc(100% - 60px)"
-          y1="100%"
-          x2="calc(100% - 560px)"
-          y2="calc(100% - 500px)"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.1"
-        />
-      </svg>
+      {/* Corner lines background */}
+      <CornerLines thickness="thick" />
 
       {/* Top accent bar */}
       <div
