@@ -120,12 +120,26 @@ export async function GET(request: NextRequest) {
       sessionId
     )
 
-    // Determine redirect: use custom redirect if provided, otherwise role-based default
+    // Determine redirect based on role
     const userRole = (user.role || '').toLowerCase()
-    const defaultRedirect = ADMIN_ROLES.includes(userRole as any)
-      ? '/admin/dashboard'
-      : '/agent/profile'
-    const redirectTo = customRedirect || defaultRedirect
+    const isAdminRole = ADMIN_ROLES.includes(userRole as any)
+    const defaultRedirect = isAdminRole ? '/admin/dashboard' : '/agent/profile'
+
+    // Validate customRedirect matches user's role - don't send agents to /admin or admins to /agent
+    let redirectTo = defaultRedirect
+    if (customRedirect) {
+      const isAdminPath = customRedirect.startsWith('/admin')
+      const isAgentPath = customRedirect.startsWith('/agent')
+      
+      if (isAdminRole && !isAgentPath) {
+        // Admin can go to /admin paths or shared paths, but not /agent
+        redirectTo = customRedirect
+      } else if (!isAdminRole && !isAdminPath) {
+        // Agent can go to /agent paths or shared paths, but not /admin
+        redirectTo = customRedirect
+      }
+      // Otherwise use defaultRedirect (role mismatch)
+    }
 
     // Set cookie and redirect
     const { name, options } = getSessionCookieOptions()
