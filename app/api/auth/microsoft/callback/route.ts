@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select(
-        'id, email, role, is_active, first_name, last_name, preferred_first_name, preferred_last_name'
+        'id, email, role, is_active, status, first_name, last_name, preferred_first_name, preferred_last_name'
       )
       .eq('email', microsoftEmail.toLowerCase())
       .single()
@@ -87,7 +87,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (!user.is_active) {
+    // Check both is_active AND status
+    if (!user.is_active || user.status !== 'active') {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/auth/login?error=account_inactive`
       )
@@ -98,6 +99,7 @@ export async function GET(request: NextRequest) {
     const expiresAt = new Date(Date.now() + SESSION_DURATION_MS)
 
     await supabaseAdmin.from('sessions').insert({
+      is_valid: true,
       user_id: user.id,
       session_id: sessionId,
       expires_at: expiresAt.toISOString(),

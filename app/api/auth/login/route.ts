@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select(
-        'id, email, role, is_active, password_hash, first_name, last_name, preferred_first_name, preferred_last_name'
+        'id, email, role, is_active, status, password_hash, first_name, last_name, preferred_first_name, preferred_last_name'
       )
       .eq('email', email.toLowerCase())
       .single()
@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    if (!user.is_active) {
+    // Check both is_active AND status
+    if (!user.is_active || user.status !== 'active') {
       return NextResponse.json(
         { error: 'Account is inactive. Please contact support.' },
         { status: 403 }
