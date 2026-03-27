@@ -106,10 +106,14 @@ export async function POST(request: NextRequest) {
     console.log(`W9 form request created for ${landlord.email}:`, responseData.data?.id)
 
     // Return the full form_request data for the frontend SDK
-    return NextResponse.json({
-      success: true,
-      form_request: responseData.data,
-    })
+    // Log the full response so we can see what Track1099 returns
+console.log('Track1099 full response:', JSON.stringify(responseData, null, 2))
+
+// Return the data object (should include links.action_complete)
+return NextResponse.json({
+  success: true,
+  form_request: responseData.data,
+})
   } catch (error: any) {
     console.error('Error creating W9 form request:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

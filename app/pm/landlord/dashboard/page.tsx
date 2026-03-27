@@ -356,11 +356,12 @@ function LandlordDashboardContent() {
   return (
     <div className="min-h-screen bg-luxury-light">
       {/* Track1099/Avalara W9 SDK */}
-      <Script 
-        src="https://www.track1099.com/api/request_form.js" 
-        strategy="afterInteractive"
-        type="module"
-      />
+     <Script 
+  src="https://www.track1099.com/api/request_form.js" 
+  strategy="afterInteractive"
+  type="module"
+  crossOrigin="anonymous"
+/>
       
       {/* Admin Preview Banner */}
       {isAdminPreview && (
