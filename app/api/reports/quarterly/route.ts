@@ -63,22 +63,7 @@ export async function GET(request: NextRequest) {
       // closing_date for sales and move_in_date for leases
       supabaseAdmin
         .from('transactions')
-        .select(`
-          id, 
-          transaction_type, 
-          sales_price, 
-          monthly_rent, 
-          lease_term, 
-          closing_date, 
-          closed_date, 
-          move_in_date, 
-          office_location, 
-          status,
-          processing_fee_type:processing_fee_types!transactions_processing_fee_type_id_fkey(
-            id,
-            is_lease
-          )
-        `)
+        .select('id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status')
         .eq('status', 'closed'),
       
       // All internal agent records for closed transactions
@@ -141,7 +126,7 @@ export async function GET(request: NextRequest) {
       transactions
         .filter(t => {
           let dateField: string | null = null
-          const isLease = (t.processing_fee_type as any)?.is_lease === true
+          const isLease = t.transaction_type === 'lease'
           if (isLease) {
             dateField = t.move_in_date
           } else {
@@ -166,9 +151,11 @@ export async function GET(request: NextRequest) {
     // Calculate totals
     let totalVolume = 0
     let totalUnits = 0
+    let totalAgentNet = 0
     relevantAgentRows.forEach(row => {
       totalVolume += parseFloat(row.sales_volume || '0')
       totalUnits += parseFloat(row.units || '0')
+      totalAgentNet += parseFloat(row.agent_net || '0')
     })
 
     // Agent count by office
@@ -208,8 +195,7 @@ export async function GET(request: NextRequest) {
       const volume = parseFloat(row.sales_volume || '0')
       const units = parseFloat(row.units || '0')
       
-      // Use processing_fee_type.is_lease to determine transaction type
-      const isLease = (txn.processing_fee_type as any)?.is_lease === true
+      const isLease = txn.transaction_type === 'lease'
       
       if (isLease) {
         agentStats[agentId].leaseVolume += volume
@@ -371,6 +357,7 @@ export async function GET(request: NextRequest) {
         totalVolume,
         totalUnits,
         avgDealSize: totalUnits > 0 ? totalVolume / totalUnits : 0,
+        totalAgentNet,
       },
       topTeams,
       topProducers: {
