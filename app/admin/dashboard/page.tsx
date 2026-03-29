@@ -205,7 +205,7 @@ interface DonutSegment {
 
 function MultiSegmentDonut({
   segments,
-  size = 130,
+  size = 150,
   strokeWidth = 12,
   centerLabel,
   centerValue,
