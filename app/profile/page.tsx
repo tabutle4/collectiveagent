@@ -497,13 +497,26 @@ export default function ProfilePage({
               )}
             </div>
             <div>
-              <label className="text-xs text-luxury-gray-3 mb-1 block">Date of Birth</label>
-              <input
-                type="date"
-                className="input-luxury"
-                value={personalForm.date_of_birth ? personalForm.date_of_birth.substring(0, 10) : ''}
-                onChange={e => handlePersonalChange('date_of_birth', e.target.value)}
-              />
+              <label className="text-xs text-luxury-gray-3 mb-1 block">
+                Date of Birth
+                {!canEditPersonalContact && <span className="text-luxury-gray-4 ml-1">(view only)</span>}
+              </label>
+              {canEditPersonalContact ? (
+                <input
+                  type="date"
+                  className="input-luxury"
+                  value={personalForm.date_of_birth ? personalForm.date_of_birth.substring(0, 10) : ''}
+                  onChange={e => handlePersonalChange('date_of_birth', e.target.value)}
+                />
+              ) : (
+                <input
+                  type="date"
+                  className="input-luxury bg-luxury-gray-5/30"
+                  value={user.date_of_birth ? user.date_of_birth.substring(0, 10) : ''}
+                  readOnly
+                  disabled
+                />
+              )}
             </div>
           </div>
 
@@ -817,6 +830,40 @@ export default function ProfilePage({
               </>
             )}
           </div>
+
+          {/* Team Members - Only show for team leads */}
+          {user.is_team_lead && user.team_members && user.team_members.length > 0 && (
+            <div className="container-card mb-5">
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+                My Team Members
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {user.team_members.map((member: any) => (
+                  <div key={member.id} className="inner-card flex items-center gap-3">
+                    {member.headshot_url ? (
+                      <img
+                        src={member.headshot_url}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-luxury-gray-5 flex items-center justify-center text-luxury-gray-3 text-sm font-medium">
+                        {(member.preferred_first_name || member.first_name || '?')[0]}
+                        {(member.preferred_last_name || member.last_name || '')[0]}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {member.preferred_first_name || member.first_name}{' '}
+                        {member.preferred_last_name || member.last_name}
+                      </p>
+                      <p className="text-xs text-luxury-gray-3">{member.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* License Information */}
           <div className="container-card mb-5">

@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
 
     let teamName = null
     let isTeamLead = false
+    let teamMembers: any[] = []
 
     if (teamMembership) {
       // Get team name
@@ -52,6 +53,27 @@ export async function GET(request: NextRequest) {
         .maybeSingle()
       
       isTeamLead = !!leadRecord
+
+      // If user is a team lead, fetch all team members
+      if (isTeamLead) {
+        const { data: members } = await supabaseAdmin
+          .from('team_member_agreements')
+          .select('agent_id')
+          .eq('team_id', teamMembership.team_id)
+          .is('end_date', null)
+
+        if (members && members.length > 0) {
+          const memberIds = members.map(m => m.agent_id)
+          const { data: memberUsers } = await supabaseAdmin
+            .from('users')
+            .select('id, first_name, last_name, preferred_first_name, preferred_last_name, headshot_url, email')
+            .in('id', memberIds)
+            .eq('is_active', true)
+            .order('first_name')
+
+          teamMembers = memberUsers || []
+        }
+      }
     }
 
     // Strip sensitive fields
@@ -60,7 +82,8 @@ export async function GET(request: NextRequest) {
       user: { 
         ...safeData, 
         team_name: teamName,
-        is_team_lead: isTeamLead
+        is_team_lead: isTeamLead,
+        team_members: teamMembers,
       } 
     })
   } catch (error) {
