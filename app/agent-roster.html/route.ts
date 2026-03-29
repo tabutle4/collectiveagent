@@ -47,7 +47,7 @@ export async function GET() {
     // Query active team memberships with team names
     const { data: teamMemberships } = await supabaseAdmin
       .from('team_member_agreements')
-      .select('agent_id, team_id, teams(team_name)')
+      .select('agent_id, teams!inner(team_name)')
       .is('end_date', null)
 
     // Query active team leads
