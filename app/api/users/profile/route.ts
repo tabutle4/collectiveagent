@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth, canAccessAgent, canManageAgent } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
@@ -16,13 +16,53 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = createClient()
-    const { data, error } = await supabase.from('users').select('*').eq('id', id).single()
+        const { data, error } = await supabaseAdmin.from('users').select('*').eq('id', id).single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // Fetch team membership from new tables
+    const { data: teamMembership } = await supabaseAdmin
+      .from('team_member_agreements')
+      .select('team_id')
+      .eq('agent_id', id)
+      .is('end_date', null)
+      .maybeSingle()
+
+    let teamName = null
+    let isTeamLead = false
+
+    if (teamMembership) {
+      // Get team name
+            const { data: team } = await supabaseAdmin
+        .from('teams')
+        .select('team_name')
+        .eq('id', teamMembership.team_id)
+        .single()
+      
+      if (team) {
+        teamName = team.team_name
+      }
+
+      // Check if user is a team lead
+      const { data: leadRecord } = await supabaseAdmin
+        .from('team_leads')
+        .select('id')
+        .eq('agent_id', id)
+        .eq('team_id', teamMembership.team_id)
+        .is('end_date', null)
+        .maybeSingle()
+      
+      isTeamLead = !!leadRecord
+    }
 
     // Strip sensitive fields
     const { password_hash, reset_token, reset_token_expires, ...safeData } = data
-    return NextResponse.json({ user: safeData })
+    return NextResponse.json({ 
+      user: { 
+        ...safeData, 
+        team_name: teamName,
+        is_team_lead: isTeamLead
+      } 
+    })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })
   }
@@ -33,7 +73,6 @@ export async function PATCH(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const supabase = createClient()
     const { id, updates } = await request.json()
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
@@ -66,11 +105,11 @@ export async function PATCH(request: NextRequest) {
           filteredUpdates[key] = updates[key]
         }
       }
-      const { error } = await supabase.from('users').update(filteredUpdates).eq('id', id)
+      const { error } = await supabaseAdmin.from('users').update(filteredUpdates).eq('id', id)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     } else {
       // Admin can update anything
-      const { error } = await supabase.from('users').update(updates).eq('id', id)
+      const { error } = await supabaseAdmin.from('users').update(updates).eq('id', id)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     }
 

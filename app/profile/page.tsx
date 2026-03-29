@@ -63,7 +63,6 @@ export default function ProfilePage({
     office: '',
     status: '',
     is_active: true,
-    team_name: '',
     division: '',
     join_date: '',
     commission_plan: '',
@@ -171,7 +170,6 @@ export default function ProfilePage({
         office: freshUserData.office || '',
         status: freshUserData.status || '',
         is_active: freshUserData.is_active ?? true,
-        team_name: freshUserData.team_name || '',
         division: freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
         commission_plan: freshUserData.commission_plan || '',
@@ -696,11 +694,14 @@ export default function ProfilePage({
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Team</label>
-                    <input
-                      className="input-luxury"
-                      value={realEstateForm.team_name}
-                      onChange={e => handleRealEstateChange('team_name', e.target.value)}
-                    />
+                    <p className="text-sm font-medium text-luxury-gray-1 py-2">
+                      {user.team_name ? (
+                        <>
+                          {user.team_name}
+                          {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
+                        </>
+                      ) : 'N/A'}
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Division(s)</label>
@@ -777,11 +778,14 @@ export default function ProfilePage({
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Team</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.team_name || 'N/A'}</p>
-                  </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Team Lead</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.team_lead || 'N/A'}</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">
+                      {user.team_name ? (
+                        <>
+                          {user.team_name}
+                          {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
+                        </>
+                      ) : 'N/A'}
+                    </p>
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
