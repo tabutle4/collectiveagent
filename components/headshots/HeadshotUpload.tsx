@@ -231,7 +231,7 @@ export default function HeadshotUpload({
             <img
               src={displayUrl}
               alt="Headshot"
-              className="w-full h-full object-contain select-none"
+              className="absolute inset-0 w-full h-full object-cover select-none"
               style={{
                 transform: `translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${crop.scale})`,
                 transformOrigin: 'center center',
