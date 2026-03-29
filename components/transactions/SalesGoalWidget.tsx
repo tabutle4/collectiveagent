@@ -331,7 +331,7 @@ function GoalRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#E5E5E5"
+          stroke="#A3A3A3"
           strokeWidth={strokeWidth}
         />
         <circle
