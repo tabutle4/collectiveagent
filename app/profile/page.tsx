@@ -835,7 +835,7 @@ export default function ProfilePage({
           {user.is_team_lead && user.team_members && user.team_members.length > 0 && (
             <div className="container-card mb-5">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                My Team Members
+                My Team
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {user.team_members.map((member: any) => (
@@ -847,7 +847,7 @@ export default function ProfilePage({
                         className="w-10 h-10 rounded-full object-cover"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-luxury-gray-5 flex items-center justify-center text-luxury-gray-3 text-sm font-medium">
+                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black text-sm font-semibold border border-luxury-gray-5">
                         {(member.preferred_first_name || member.first_name || '?')[0]}
                         {(member.preferred_last_name || member.last_name || '')[0]}
                       </div>
