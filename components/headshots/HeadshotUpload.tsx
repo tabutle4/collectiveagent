@@ -213,9 +213,9 @@ export default function HeadshotUpload({
         onWheel={handleWheel}
       >
         <div
-          className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 flex items-center justify-center ${
+          className={`rounded-full overflow-hidden border-2 border-luxury-gray-5 bg-gray-100 ${
             sizeClasses[size]
-          }`}
+          } ${!displayUrl ? 'flex items-center justify-center' : 'relative'}`}
           onMouseDown={handleMouseDown}
           style={{
             cursor: editingCrop ? (dragging ? 'grabbing' : 'grab') : 'default',
