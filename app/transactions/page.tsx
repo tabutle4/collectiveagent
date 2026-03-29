@@ -108,7 +108,7 @@ export default function TransactionsPage() {
 
   const formatDate = (d: string | null) => {
     if (!d) return ''
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
@@ -216,7 +216,7 @@ export default function TransactionsPage() {
                     <th className="th-luxury">Price</th>
                     <th className="th-luxury">Status</th>
                     {canViewAll && <th className="th-luxury">Compliance</th>}
-                    <th className="th-luxury">Updated</th>
+                    <th className="th-luxury">Closing Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -267,7 +267,7 @@ export default function TransactionsPage() {
                         </td>
                       )}
                       <td className="py-3 px-4 text-xs text-luxury-gray-3">
-                        {formatDate(t.updated_at)}
+                        {formatDate(t.closing_date)}
                       </td>
                     </tr>
                   ))}
