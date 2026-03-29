@@ -378,29 +378,44 @@ export default function AdminDashboard() {
       volume += txnVolume
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
-      const txnType = (t.transaction_type || '').toLowerCase()
-      let typeCategory = 'Other'
-      if (txnType.includes('buyer')) typeCategory = 'Buyers'
-      else if (txnType.includes('seller') || txnType.includes('listing')) typeCategory = 'Sellers'
-      else if (txnType.includes('tenant') || txnType.includes('lease')) typeCategory = 'Tenants'
-      else if (txnType.includes('landlord')) typeCategory = 'Landlords'
-      volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
+      const txnType = t.transaction_type || ''
+      let typeCategory: string | null = null
+      
+      if (['buyer_v2', 'nc_buyer_v2', 'land_buyer_v2', 'commercial_buyer_v2'].includes(txnType)) {
+        typeCategory = 'Buyers'
+      } else if (['tenant_apt_v2', 'tenant_non_apt_v2', 'tenant_simplyhome_v2', 'tenant_commercial_v2'].includes(txnType)) {
+        typeCategory = 'Tenants'
+      } else if (['seller_v2', 'land_seller_v2'].includes(txnType)) {
+        typeCategory = 'Sellers'
+      } else if (txnType === 'landlord_v2') {
+        typeCategory = 'Landlords'
+      } else if (txnType === 'referred_out_v2') {
+        typeCategory = 'Referred Out'
+      }
+      
+      if (typeCategory) {
+        volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
+      }
 
       const office = t.office_location || 'Unknown'
-      unitOffice[office] = (unitOffice[office] || 0) + 1
-      officeOffice[office] = (officeOffice[office] || 0) + parseFloat(t.office_net || 0)
 
       const txnAgentRows = agentRowsByTxn[t.id] || []
       txnAgentRows.forEach(a => {
         const aNet = parseFloat(a.agent_net || 0)
         agentNet += aNet
+        const officeNetShare = parseFloat(t.office_net || 0) / txnAgentRows.length
 
-        const team = a.team_name || 'No Team'
-        unitTeam[team] = (unitTeam[team] || 0) + 1
-        agentTeam[team] = (agentTeam[team] || 0) + aNet
-        officeTeam[team] = (officeTeam[team] || 0) + parseFloat(t.office_net || 0) / txnAgentRows.length
-
-        agentOffice[office] = (agentOffice[office] || 0) + aNet
+        if (a.team_name) {
+          // Agent is on a team - bucket by team (gold)
+          unitTeam[a.team_name] = (unitTeam[a.team_name] || 0) + 1
+          agentTeam[a.team_name] = (agentTeam[a.team_name] || 0) + aNet
+          officeTeam[a.team_name] = (officeTeam[a.team_name] || 0) + officeNetShare
+        } else {
+          // Agent not on a team - bucket by office (gray)
+          unitOffice[office] = (unitOffice[office] || 0) + 1
+          agentOffice[office] = (agentOffice[office] || 0) + aNet
+          officeOffice[office] = (officeOffice[office] || 0) + officeNetShare
+        }
       })
     })
 
@@ -434,6 +449,7 @@ export default function AdminDashboard() {
     { label: 'Tenants', value: volumeByType['Tenants'] || 0, color: GOLD_COLORS[1] },
     { label: 'Sellers', value: volumeByType['Sellers'] || 0, color: GRAY_COLORS[0] },
     { label: 'Landlords', value: volumeByType['Landlords'] || 0, color: GRAY_COLORS[1] },
+    { label: 'Referred Out', value: volumeByType['Referred Out'] || 0, color: GRAY_COLORS[2] },
   ].filter(s => s.value > 0)
 
   const buildTeamOfficeSegments = (
@@ -441,16 +457,15 @@ export default function AdminDashboard() {
     officeData: Record<string, number>
   ): DonutSegment[] => {
     const segments: DonutSegment[] = []
-    const teamNames = Object.keys(teamData).filter(k => k !== 'No Team').sort()
+    // Teams in gold
+    const teamNames = Object.keys(teamData).sort()
     teamNames.forEach((name, i) => {
       segments.push({ label: name, value: teamData[name], color: GOLD_COLORS[i % GOLD_COLORS.length] })
     })
-    if (teamData['No Team']) {
-      segments.push({ label: 'No Team', value: teamData['No Team'], color: '#DCC49E' })
-    }
+    // Offices in gray (with "Office " prefix)
     const officeNames = Object.keys(officeData).filter(k => k !== 'Unknown').sort()
     officeNames.forEach((name, i) => {
-      segments.push({ label: name, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
+      segments.push({ label: `Office ${name}`, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
     })
     return segments.filter(s => s.value > 0)
   }
