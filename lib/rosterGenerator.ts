@@ -20,6 +20,8 @@ type AgentRecord = {
   division: string | null
   role: string | null
   job_title: string | null
+  additional_roles: string[] | null
+  is_team_lead: boolean
   instagram_handle: string | null
   tiktok_handle: string | null
   threads_handle: string | null
@@ -134,17 +136,25 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const officeDisplay = agent.office || 'N/A'
       const role = agent.role || 'Agent'
       const roleLabel = formatRole(role)
-      // No additional roles with simple role string
-      const filteredAdditionalRoles: string[] = []
-
-      // Combine additional roles with job title
+      
+      // Build additional roles from: additional_roles array + Team Lead flag + job_title
       const roleParts: string[] = []
-      if (filteredAdditionalRoles.length > 0) {
-        roleParts.push(filteredAdditionalRoles.join(', '))
+      
+      // Add additional_roles from users table
+      if (agent.additional_roles && agent.additional_roles.length > 0) {
+        roleParts.push(...agent.additional_roles)
       }
+      
+      // Add Team Lead if applicable
+      if (agent.is_team_lead) {
+        roleParts.push('Team Lead')
+      }
+      
+      // Add job_title last
       if (agent.job_title && agent.job_title.trim()) {
         roleParts.push(agent.job_title.trim())
       }
+      
       const additionalRoles = roleParts.length > 0 ? roleParts.join(' • ') : '-'
       const team = agent.team_name || '-'
       const phoneDigits = cleanPhone(agent.business_phone || agent.personal_phone)
@@ -1164,7 +1174,7 @@ export const regenerateRoster = async () => {
   const { data: allUsers, error } = await client
     .from('users')
     .select(
-      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, role, roles, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
+      'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, division, role, roles, job_title, additional_roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
     )
     .eq('is_active', true)
 
@@ -1173,11 +1183,59 @@ export const regenerateRoster = async () => {
     throw error
   }
 
+  // Query active team memberships with team names
+  const { data: teamMemberships, error: teamError } = await client
+    .from('team_member_agreements')
+    .select('agent_id, team_id, teams(team_name)')
+    .is('end_date', null)
+
+  if (teamError) {
+    console.error('❌ Error fetching team memberships:', teamError)
+    // Don't throw - roster can still work without team data
+  }
+
+  // Query active team leads
+  const { data: teamLeads, error: leadsError } = await client
+    .from('team_leads')
+    .select('agent_id')
+    .is('end_date', null)
+
+  if (leadsError) {
+    console.error('❌ Error fetching team leads:', leadsError)
+    // Don't throw - roster can still work without team lead data
+  }
+
+  // Build lookup maps
+  const teamByAgentId = new Map<string, string>()
+  if (teamMemberships) {
+    for (const membership of teamMemberships) {
+      const teamData = membership.teams as { team_name: string }[] | null
+if (teamData && teamData.length > 0 && teamData[0]?.team_name) {
+  teamByAgentId.set(membership.agent_id, teamData[0].team_name)
+      }
+    }
+  }
+
+  const teamLeadIds = new Set<string>()
+  if (teamLeads) {
+    for (const lead of teamLeads) {
+      teamLeadIds.add(lead.agent_id)
+    }
+  }
+
   // Filter for users with 'agent' in roles array
-  const agents = (allUsers || []).filter(user => {
+  const filteredUsers = (allUsers || []).filter(user => {
     const roles = Array.isArray(user.roles) ? user.roles : []
     return roles.includes('agent')
   })
+
+  // Merge team data into agent records
+  const agents: AgentRecord[] = filteredUsers.map(user => ({
+    ...user,
+    team_name: teamByAgentId.get(user.id) || null,
+    is_team_lead: teamLeadIds.has(user.id),
+    additional_roles: user.additional_roles || null,
+  }))
 
   // Sort agents
   agents.sort((a, b) => {
