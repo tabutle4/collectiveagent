@@ -111,7 +111,10 @@ export async function PATCH(request: NextRequest) {
         'preferred_first_name',
         'preferred_last_name',
         'phone',
+        'business_phone',
         'instagram_handle',
+        'tiktok_handle',
+        'threads_handle',
         'facebook_url',
         'linkedin_url',
         'twitter_url',
@@ -121,6 +124,14 @@ export async function PATCH(request: NextRequest) {
         'bio',
         'headshot_url',
         'headshot_crop',
+        'shipping_address_line1',
+        'shipping_address_line2',
+        'shipping_city',
+        'shipping_state',
+        'shipping_zip',
+        'birth_month',
+        'shirt_type',
+        'shirt_size',
       ]
       const filteredUpdates: Record<string, any> = {}
       for (const key of Object.keys(updates)) {
