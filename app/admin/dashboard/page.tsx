@@ -206,7 +206,7 @@ interface DonutSegment {
 function MultiSegmentDonut({
   segments,
   size = 130,
-  strokeWidth = 8,
+  strokeWidth = 12,
   centerLabel,
   centerValue,
   formatValue,
@@ -249,7 +249,7 @@ function MultiSegmentDonut({
               r={radius}
               fill="none"
               stroke={seg.color}
-              strokeWidth={hoveredIndex === seg.originalIndex ? strokeWidth + 4 : strokeWidth}
+              strokeWidth={hoveredIndex === seg.originalIndex ? strokeWidth + 2 : strokeWidth}
               strokeDasharray={`${seg.dashLength} ${circumference - seg.dashLength}`}
               strokeDashoffset={-seg.offset}
               strokeLinecap="round"
