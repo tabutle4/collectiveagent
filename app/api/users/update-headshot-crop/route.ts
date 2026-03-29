@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_agents')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -11,6 +11,12 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !crop || typeof crop !== 'object') {
       return NextResponse.json({ error: 'User ID and crop settings are required' }, { status: 400 })
+    }
+    // Allow if admin OR updating own headshot crop
+    const isAdmin = auth.permissions.has('can_manage_agents')
+    const isOwnProfile = userId === auth.user.id
+    if (!isAdmin && !isOwnProfile) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
     const { offsetX, offsetY, scale } = crop as {

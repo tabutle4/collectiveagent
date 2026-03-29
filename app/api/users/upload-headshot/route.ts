@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -12,7 +12,7 @@ if (!supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_agents')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -22,6 +22,13 @@ export async function POST(request: NextRequest) {
 
     if (!file || !userId) {
       return NextResponse.json({ error: 'File and userId are required' }, { status: 400 })
+    }
+
+    // Allow if admin OR uploading own headshot
+    const isAdmin = auth.permissions.has('can_manage_agents')
+    const isOwnProfile = userId === auth.user.id
+    if (!isAdmin && !isOwnProfile) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
     // Validate file type
@@ -95,6 +102,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
@@ -103,6 +113,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
+    // Allow if admin OR deleting own headshot
+    const isAdmin = auth.permissions.has('can_manage_agents')
+    const isOwnProfile = userId === auth.user.id
+    if (!isAdmin && !isOwnProfile) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+    
     // Get current headshot URL
     const { data: user, error: fetchError } = await supabase
       .from('users')
