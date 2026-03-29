@@ -60,10 +60,12 @@ function useAnimatedNumber(target: number, duration = 1800, active = true) {
   return value
 }
 
-function Headshot({ initials, size = 48, highlight = false, className = '' }: { initials: string; size?: number; highlight?: boolean; className?: string }) {
+function Headshot({ initials, url, size = 48, highlight = false, className = '' }: { initials: string; url?: string | null; size?: number; highlight?: boolean; className?: string }) {
+  const hasImage = url && url.length > 0
+  
   return (
     <div 
-      className={`flex items-center justify-center font-mono font-bold shrink-0 ${className}`}
+      className={`flex items-center justify-center font-mono font-bold shrink-0 overflow-hidden ${className}`}
       style={{ 
         width: size, 
         height: size, 
@@ -73,7 +75,19 @@ function Headshot({ initials, size = 48, highlight = false, className = '' }: { 
         color: highlight ? GOLD : '#666'
       }}
     >
-      {initials}
+      {hasImage ? (
+        <img 
+          src={url} 
+          alt={initials}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            // Hide broken image and show initials instead
+            (e.target as HTMLImageElement).style.display = 'none'
+          }}
+        />
+      ) : (
+        initials
+      )}
     </div>
   )
 }
@@ -384,11 +398,11 @@ function GrowthSlide({ data, active }: { data: QuarterlyData; active: boolean })
       <div className="flex flex-wrap gap-4 sm:gap-8 md:gap-12 mt-6 sm:mt-10 md:mt-12">
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="w-3 h-3 sm:w-4 sm:h-4" style={{ background: GOLD }} />
-          <span className="font-mono text-xs sm:text-sm text-neutral-500">HOUSTON — {data.growth.houstonAgents}</span>
+          <span className="font-mono text-xs sm:text-sm text-neutral-500">HOUSTON: {data.growth.houstonAgents}</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="w-3 h-3 sm:w-4 sm:h-4 bg-neutral-700" />
-          <span className="font-mono text-xs sm:text-sm text-neutral-500">DALLAS — {data.growth.dallasAgents}</span>
+          <span className="font-mono text-xs sm:text-sm text-neutral-500">DALLAS: {data.growth.dallasAgents}</span>
         </div>
       </div>
     </div>
@@ -441,8 +455,8 @@ function TeamSlide({ team, rank, active }: { team: QuarterlyData['topTeams'][0];
           
           {team.lead && (
             <div className="flex items-center gap-3 sm:gap-5 py-4 sm:py-6 border-t border-b border-neutral-800 mb-6 sm:mb-10">
-              <Headshot initials={team.lead.initials} size={48} highlight className="sm:hidden" />
-              <Headshot initials={team.lead.initials} size={64} highlight className="hidden sm:flex" />
+              <Headshot initials={team.lead.initials} url={team.lead.headshot_url} size={48} highlight className="sm:hidden" />
+              <Headshot initials={team.lead.initials} url={team.lead.headshot_url} size={64} highlight className="hidden sm:flex" />
               <div>
                 <p className="font-mono text-[10px] text-neutral-500 tracking-widest mb-1">TEAM LEAD</p>
                 <p className="text-base sm:text-xl font-bold">{team.lead.name}</p>
@@ -452,10 +466,10 @@ function TeamSlide({ team, rank, active }: { team: QuarterlyData['topTeams'][0];
           
           <div className="flex gap-2">
             {team.members.slice(0, 4).map((m, i) => (
-              <Headshot key={i} initials={m.initials} size={32} className="sm:hidden" />
+              <Headshot key={i} initials={m.initials} url={m.headshot_url} size={32} className="sm:hidden" />
             ))}
             {team.members.slice(0, 4).map((m, i) => (
-              <Headshot key={`lg-${i}`} initials={m.initials} size={40} className="hidden sm:flex" />
+              <Headshot key={`lg-${i}`} initials={m.initials} url={m.headshot_url} size={40} className="hidden sm:flex" />
             ))}
           </div>
         </div>
@@ -482,8 +496,8 @@ function ProducersSlide({
   showConfetti 
 }: { 
   type: string
-  houston: { name: string; initials: string; volume: number; units: number }[]
-  dallas: { name: string; initials: string; volume: number; units: number }[]
+  houston: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
+  dallas: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
   showConfetti?: boolean 
 }) {
   const [confetti, setConfetti] = useState(false)
@@ -499,7 +513,7 @@ function ProducersSlide({
     <div className="absolute inset-0 p-4 sm:p-10 md:p-16 bg-black overflow-y-auto">
       <Confetti active={confetti} />
       <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight mb-4 sm:mb-8 md:mb-10">
-        TOP PRODUCERS — <span style={{ color: GOLD }}>{type}</span>
+        TOP PRODUCERS: <span style={{ color: GOLD }}>{type}</span>
       </h2>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 md:gap-10">
@@ -516,7 +530,7 @@ function OfficeList({
   isGold 
 }: { 
   office: string
-  data: { name: string; initials: string; volume: number; units: number }[]
+  data: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
   isGold: boolean 
 }) {
   return (
@@ -537,8 +551,8 @@ function OfficeList({
               animationDelay: `${i * 0.12}s`
             }}
           >
-            <Headshot initials={agent.initials} size={36} highlight={isGold && i === 0} className="sm:hidden" />
-            <Headshot initials={agent.initials} size={48} highlight={isGold && i === 0} className="hidden sm:flex" />
+            <Headshot initials={agent.initials} url={agent.headshot_url} size={36} highlight={isGold && i === 0} className="sm:hidden" />
+            <Headshot initials={agent.initials} url={agent.headshot_url} size={48} highlight={isGold && i === 0} className="hidden sm:flex" />
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm sm:text-base truncate">{agent.name.toUpperCase()}</p>
               <p className="font-mono text-[10px] sm:text-[11px] text-neutral-500 mt-0.5 sm:mt-1 tracking-widest">{agent.units} UNITS</p>
@@ -574,7 +588,7 @@ function CloseSlide({ quarter }: { quarter: string }) {
       <div className="w-16 sm:w-24 md:w-28 h-0.5 sm:h-1 my-6 sm:my-10 md:my-12" style={{ background: GOLD }} />
       <p className="font-mono text-sm text-neutral-600 tracking-widest">QUESTIONS?</p>
       <p className="absolute bottom-16 sm:bottom-20 text-[10px] sm:text-xs font-mono text-neutral-800 tracking-widest">
-        COLLECTIVE REALTY CO. — {quarter}
+        COLLECTIVE REALTY CO. | {quarter}
       </p>
     </div>
   )

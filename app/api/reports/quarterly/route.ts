@@ -63,7 +63,22 @@ export async function GET(request: NextRequest) {
       // closing_date for sales and move_in_date for leases
       supabaseAdmin
         .from('transactions')
-        .select('id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status')
+        .select(`
+          id, 
+          transaction_type, 
+          sales_price, 
+          monthly_rent, 
+          lease_term, 
+          closing_date, 
+          closed_date, 
+          move_in_date, 
+          office_location, 
+          status,
+          processing_fee_type:processing_fee_types!transactions_processing_fee_type_id_fkey(
+            id,
+            is_lease
+          )
+        `)
         .eq('status', 'closed'),
       
       // All internal agent records for closed transactions
@@ -126,7 +141,8 @@ export async function GET(request: NextRequest) {
       transactions
         .filter(t => {
           let dateField: string | null = null
-          if (t.transaction_type === 'Lease') {
+          const isLease = (t.processing_fee_type as any)?.is_lease === true
+          if (isLease) {
             dateField = t.move_in_date
           } else {
             // For sales, prefer closed_date (actual) over closing_date (target)
@@ -158,7 +174,10 @@ export async function GET(request: NextRequest) {
     // Agent count by office
     const activeAgents = activeAgentsRes.data || []
     const houstonCount = activeAgents.filter(a => a.office?.toLowerCase().includes('houston')).length
-    const dallasCount = activeAgents.filter(a => a.office?.toLowerCase().includes('dallas')).length
+    const dallasCount = activeAgents.filter(a => {
+      const office = a.office?.toLowerCase() || ''
+      return office.includes('dallas') || office.includes('dfw')
+    }).length
 
     // Top producers by office and type
     const agentStats: Record<string, { 
@@ -189,12 +208,15 @@ export async function GET(request: NextRequest) {
       const volume = parseFloat(row.sales_volume || '0')
       const units = parseFloat(row.units || '0')
       
-      if (txn.transaction_type === 'Sale') {
-        agentStats[agentId].salesVolume += volume
-        agentStats[agentId].salesUnits += units
-      } else {
+      // Use processing_fee_type.is_lease to determine transaction type
+      const isLease = (txn.processing_fee_type as any)?.is_lease === true
+      
+      if (isLease) {
         agentStats[agentId].leaseVolume += volume
         agentStats[agentId].leaseUnits += units
+      } else {
+        agentStats[agentId].salesVolume += volume
+        agentStats[agentId].salesUnits += units
       }
     })
 
@@ -211,53 +233,63 @@ export async function GET(request: NextRequest) {
       return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase()
     }
 
+    // Helper to check if office is Dallas/DFW
+    const isDallasOffice = (office: string | null | undefined) => {
+      const o = (office || '').toLowerCase()
+      return o.includes('dallas') || o.includes('dfw')
+    }
+    
+    const isHoustonOffice = (office: string | null | undefined) => {
+      return (office || '').toLowerCase().includes('houston')
+    }
+
     // Split by office and sort
     const agentList = Object.values(agentStats)
     
     const topSalesHouston = agentList
-      .filter(a => a.office?.toLowerCase().includes('houston') && a.salesVolume > 0)
+      .filter(a => isHoustonOffice(a.office) && a.salesVolume > 0)
       .sort((a, b) => b.salesVolume - a.salesVolume)
       .slice(0, 3)
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: a.agent.headshot_url,
+        headshot_url: (a.agent as any).headshot_url,
         volume: a.salesVolume,
         units: a.salesUnits,
       }))
 
     const topSalesDallas = agentList
-      .filter(a => a.office?.toLowerCase().includes('dallas') && a.salesVolume > 0)
+      .filter(a => isDallasOffice(a.office) && a.salesVolume > 0)
       .sort((a, b) => b.salesVolume - a.salesVolume)
       .slice(0, 3)
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: a.agent.headshot_url,
+        headshot_url: (a.agent as any).headshot_url,
         volume: a.salesVolume,
         units: a.salesUnits,
       }))
 
     const topLeasesHouston = agentList
-      .filter(a => a.office?.toLowerCase().includes('houston') && a.leaseVolume > 0)
+      .filter(a => isHoustonOffice(a.office) && a.leaseVolume > 0)
       .sort((a, b) => b.leaseVolume - a.leaseVolume)
       .slice(0, 3)
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: a.agent.headshot_url,
+        headshot_url: (a.agent as any).headshot_url,
         volume: a.leaseVolume,
         units: a.leaseUnits,
       }))
 
     const topLeasesDallas = agentList
-      .filter(a => a.office?.toLowerCase().includes('dallas') && a.leaseVolume > 0)
+      .filter(a => isDallasOffice(a.office) && a.leaseVolume > 0)
       .sort((a, b) => b.leaseVolume - a.leaseVolume)
       .slice(0, 3)
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: a.agent.headshot_url,
+        headshot_url: (a.agent as any).headshot_url,
         volume: a.leaseVolume,
         units: a.leaseUnits,
       }))
