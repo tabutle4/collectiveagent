@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         office_location
       `
       )
-      .order('updated_at', { ascending: false })
+      .order('closing_date', { ascending: false })
 
     // Filter by user if they don't have can_view_all_transactions
     if (!canViewAll) {

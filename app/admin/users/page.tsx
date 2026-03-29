@@ -15,8 +15,8 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
   const [licensedOnly, setLicensedOnly] = useState<boolean>(true)
-  const [sortBy, setSortBy] = useState<string>('created_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [sortBy, setSortBy] = useState<string>('preferred_first_name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc') 
 
   useEffect(() => {
     fetchUsers()
