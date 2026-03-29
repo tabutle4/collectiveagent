@@ -178,7 +178,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       }
 
       const headshotImg = headshotUrl
-        ? `<img src="${escapeAttr(headshotUrl)}" alt="${escapeAttr(fullName)}" class="agent-headshot"${cropStyle} onerror="this.onerror=null; this.style.display='none'; const placeholder = this.nextElementSibling; if(placeholder) placeholder.style.display='flex';">`
+        ? `<div class="agent-headshot-wrapper"><img src="${escapeAttr(headshotUrl)}" alt="${escapeAttr(fullName)}" class="agent-headshot-img"${cropStyle} onerror="this.onerror=null; this.style.display='none'; const placeholder = this.parentElement.nextElementSibling; if(placeholder) placeholder.style.display='flex';"></div>`
         : ''
       const placeholderDiv = `<div class="agent-headshot-placeholder" style="background-color: #FFFFFF; color: #000000; display: ${headshotUrl ? 'none' : 'flex'}; align-items: center; justify-content: center; font-weight: 600; font-size: 18px;">${escapeHtml(initials)}</div>`
       const headshotDisplay = headshotUrl ? headshotImg + placeholderDiv : placeholderDiv
