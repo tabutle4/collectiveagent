@@ -434,13 +434,19 @@ export const buildRosterHtml = ({
     '        }'
   )
   parts.push(
-    '        .agent-headshot {',
+    '        .agent-headshot-wrapper {',
     '            width: 48px;',
     '            height: 48px;',
     '            border-radius: 50%;',
-    '            object-fit: cover;',
     '            border: 2px solid #e5e7eb;',
     '            display: inline-block;',
+    '            overflow: hidden;',
+    '            position: relative;',
+    '        }',
+    '        .agent-headshot-img {',
+    '            width: 100%;',
+    '            height: 100%;',
+    '            object-fit: cover;',
     '        }'
   )
   parts.push(
