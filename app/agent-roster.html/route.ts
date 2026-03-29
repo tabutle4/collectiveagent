@@ -44,11 +44,24 @@ export async function GET() {
       throw fetchError
     }
 
-    // Query active team memberships with team names
+    // Query active team memberships
     const { data: teamMemberships } = await supabaseAdmin
       .from('team_member_agreements')
-      .select('agent_id, teams!inner(team_name)')
+      .select('agent_id, team_id')
       .is('end_date', null)
+
+    // Query all teams
+    const { data: allTeams } = await supabaseAdmin
+      .from('teams')
+      .select('id, team_name')
+
+    // Build team lookup
+    const teamNamesById = new Map<string, string>()
+    if (allTeams) {
+      for (const team of allTeams) {
+        teamNamesById.set(team.id, team.team_name)
+      }
+    }
 
     // Query active team leads
     const { data: teamLeads } = await supabaseAdmin
@@ -60,9 +73,9 @@ export async function GET() {
     const teamByAgentId = new Map<string, string>()
     if (teamMemberships) {
       for (const membership of teamMemberships) {
-        const teamData = membership.teams as { team_name: string }[] | null
-        if (teamData && teamData.length > 0 && teamData[0]?.team_name) {
-          teamByAgentId.set(membership.agent_id, teamData[0].team_name)
+        const teamName = teamNamesById.get(membership.team_id)
+        if (teamName) {
+          teamByAgentId.set(membership.agent_id, teamName)
         }
       }
     }
