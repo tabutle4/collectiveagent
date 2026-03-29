@@ -133,9 +133,9 @@ export default function AgentDashboard() {
   }
 
   const formatDate = (d: string | null) => {
-    if (!d) return ''
-    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
+  if (!d) return ''
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
   if (!user) return null
