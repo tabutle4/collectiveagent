@@ -218,6 +218,7 @@ function MultiSegmentDonut({
   centerValue?: string
   formatValue?: (val: number) => string
 }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const total = segments.reduce((sum, s) => sum + s.value, 0)
@@ -225,13 +226,15 @@ function MultiSegmentDonut({
   let accumulatedOffset = 0
   const segmentArcs = segments
     .filter(s => s.value > 0)
-    .map(segment => {
+    .map((segment, i) => {
       const percentage = total > 0 ? segment.value / total : 0
       const dashLength = percentage * circumference
       const offset = accumulatedOffset
       accumulatedOffset += dashLength
-      return { ...segment, dashLength, offset, percentage }
+      return { ...segment, dashLength, offset, percentage, originalIndex: i }
     })
+
+  const hoveredSegment = hoveredIndex !== null ? segmentArcs.find(s => s.originalIndex === hoveredIndex) : null
 
   return (
     <div className="flex items-start gap-4">
@@ -246,22 +249,48 @@ function MultiSegmentDonut({
               r={radius}
               fill="none"
               stroke={seg.color}
-              strokeWidth={strokeWidth}
+              strokeWidth={hoveredIndex === seg.originalIndex ? strokeWidth + 4 : strokeWidth}
               strokeDasharray={`${seg.dashLength} ${circumference - seg.dashLength}`}
               strokeDashoffset={-seg.offset}
               strokeLinecap="butt"
-              style={{ transition: 'stroke-dasharray 0.8s ease-out, stroke-dashoffset 0.8s ease-out' }}
+              style={{ 
+                transition: 'stroke-dasharray 0.8s ease-out, stroke-dashoffset 0.8s ease-out, stroke-width 0.15s ease-out',
+                cursor: 'pointer'
+              }}
+              onMouseEnter={() => setHoveredIndex(seg.originalIndex)}
+              onMouseLeave={() => setHoveredIndex(null)}
             />
           ))}
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <p className="text-lg font-bold text-luxury-gray-1">{centerValue}</p>
-          {centerLabel && <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wide">{centerLabel}</p>}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          {hoveredSegment ? (
+            <>
+              <p className="text-lg font-bold text-luxury-gray-1">
+                {formatValue ? formatValue(hoveredSegment.value) : hoveredSegment.value.toLocaleString()}
+              </p>
+              <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wide text-center px-2">
+                {hoveredSegment.label}
+              </p>
+              <p className="text-[10px] text-luxury-gray-4">
+                {(hoveredSegment.percentage * 100).toFixed(0)}%
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-bold text-luxury-gray-1">{centerValue}</p>
+              {centerLabel && <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wide">{centerLabel}</p>}
+            </>
+          )}
         </div>
       </div>
       <div className="flex flex-col gap-1.5 pt-2 min-w-0">
         {segmentArcs.map((seg, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs">
+          <div 
+            key={i} 
+            className={`flex items-center gap-2 text-xs cursor-pointer transition-opacity ${hoveredIndex !== null && hoveredIndex !== seg.originalIndex ? 'opacity-40' : ''}`}
+            onMouseEnter={() => setHoveredIndex(seg.originalIndex)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: seg.color }} />
             <span className="text-luxury-gray-2 truncate">{seg.label}</span>
             <span className="text-luxury-gray-1 font-medium ml-auto">
