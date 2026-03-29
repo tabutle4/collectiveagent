@@ -1084,20 +1084,15 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm text-luxury-gray-2">Team Name</label>
-                  <input
-                    className="input-luxury"
-                    value={formData.team_name}
-                    onChange={e => handleInputChange('team_name', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-luxury-gray-2">Team Lead</label>
-                  <input
-                    className="input-luxury"
-                    value={formData.team_lead}
-                    onChange={e => handleInputChange('team_lead', e.target.value)}
-                  />
+                  <label className="text-sm text-luxury-gray-2">Team</label>
+                  <p className="text-sm font-medium text-luxury-gray-1 py-2">
+                    {freshUser?.team_name ? (
+                      <>
+                        {freshUser.team_name}
+                        {freshUser.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
+                      </>
+                    ) : 'N/A'}
+                  </p>
                 </div>
                 <div>
                   <label className="text-sm text-luxury-gray-2">Division</label>
