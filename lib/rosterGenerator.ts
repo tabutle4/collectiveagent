@@ -169,10 +169,14 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const initials = `${firstInitial}${lastInitial}` || '?'
 
       // Build CSS transform for crop if available
+      // Scale offsets from edit size (128px) to roster size (48px)
       let cropStyle = ''
       if (headshotCrop && headshotUrl) {
-        const offsetX = headshotCrop.offsetX || 0
-        const offsetY = headshotCrop.offsetY || 0
+        const editSize = 128
+        const rosterSize = 48
+        const scaleFactor = rosterSize / editSize
+        const offsetX = (headshotCrop.offsetX || 0) * scaleFactor
+        const offsetY = (headshotCrop.offsetY || 0) * scaleFactor
         const scale = headshotCrop.scale || 1
         cropStyle = ` style="transform: translate(${offsetX}px, ${offsetY}px) scale(${scale}); transform-origin: center center;"`
       }
