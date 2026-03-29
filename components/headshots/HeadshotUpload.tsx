@@ -228,16 +228,20 @@ export default function HeadshotUpload({
           }}
         >
           {displayUrl ? (
-            <img
-              src={displayUrl}
-              alt="Headshot"
-              className="absolute inset-0 w-full h-full object-cover select-none"
+            <div
+              className="w-full h-full"
               style={{
                 transform: `translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${crop.scale})`,
                 transformOrigin: 'center center',
               }}
-              draggable={false}
-            />
+            >
+              <img
+                src={displayUrl}
+                alt="Headshot"
+                className="w-full h-full object-cover select-none"
+                draggable={false}
+              />
+            </div>
           ) : (
             <HeadshotPlaceholder
               firstName={firstName || ''}
