@@ -64,8 +64,8 @@ export default function AgentDashboard() {
         complianceCount = 0
 
       txns.forEach((t: any) => {
-        const closedYear = t.closed_date ? new Date(t.closed_date).getFullYear() : null
-        if (t.status === 'closed' && closedYear === currentYear) {
+        const closingYear = t.closing_date ? new Date(t.closing_date).getFullYear() : null
+        if (t.status === 'closed' && closingYear === currentYear) {
           closedCount++
           totalUnits++
           if (t.sales_price) totalVolume += parseFloat(t.sales_price)
@@ -234,7 +234,7 @@ export default function AgentDashboard() {
                   <tr className="border-b border-luxury-gray-5/50">
                     <th className="th-luxury">Property</th>
                     <th className="th-luxury">Type</th>
-                    <th className="th-luxury">Client</th>
+                    <th className="th-luxury">Closing Date</th>
                     <th className="th-luxury">Status</th>
                     <th className="th-luxury">Updated</th>
                   </tr>
@@ -253,7 +253,7 @@ export default function AgentDashboard() {
                         {t.transaction_type || ''}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
-                        {t.client_name || ''}
+                        {formatDate(t.closing_date)}
                       </td>
                       <td className="py-3 px-4">
                         <StatusBadge status={t.status as TransactionStatus} />
@@ -283,7 +283,7 @@ export default function AgentDashboard() {
                   </div>
                   <p className="text-xs text-luxury-gray-3">
                     {t.transaction_type}
-                    {t.client_name ? ` · ${t.client_name}` : ''}
+                    {t.closing_date ? ` · ${formatDate(t.closing_date)}` : ''}
                   </p>
                 </div>
               ))}
