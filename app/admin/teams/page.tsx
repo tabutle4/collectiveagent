@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, Users, Crown } from 'lucide-react'
+import { Plus, Search, Users, Crown, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 
 interface TeamLead {
@@ -156,46 +156,44 @@ export default function TeamsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-3">
             {filteredTeams.map(team => (
-              <Link
-                key={team.id}
-                href={`/admin/teams/${team.id}`}
-                className="inner-card hover:border-luxury-accent/30 transition-colors cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-luxury-gray-1">{team.team_name}</h3>
-                  <span
-                    className={`text-xs capitalize font-medium ${
-                      team.status === 'active'
-                        ? 'text-green-600'
-                        : 'text-luxury-gray-3'
-                    }`}
-                  >
-                    {team.status}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-xs text-luxury-gray-3">
-                  <div className="flex items-center gap-2">
-                    <Crown size={13} className="text-luxury-accent" />
-                    <span>{getLeadsDisplay(team)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users size={13} />
-                    <span>
-                      {team.active_member_count} active member
-                      {team.active_member_count !== 1 ? 's' : ''}
-                      {team.total_member_count > team.active_member_count && (
-                        <span className="text-luxury-gray-3/60">
-                          {' '}
-                          ({team.total_member_count} total)
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </Link>
+  <Link
+    key={team.id}
+    href={`/admin/teams/${team.id}`}
+    className="inner-card block hover:bg-luxury-gray-6/50 transition-colors cursor-pointer"
+  >
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="flex-1">
+        <div className="flex items-center gap-3 mb-2">
+          <h3 className="text-sm font-semibold text-luxury-gray-1">{team.team_name}</h3>
+          <span
+            className={`text-xs capitalize font-medium ${
+              team.status === 'active' ? 'text-green-600' : 'text-luxury-gray-3'
+            }`}
+          >
+            {team.status}
+          </span>
+        </div>
+        <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs text-luxury-gray-3">
+          <div className="flex items-center gap-2">
+            <Crown size={13} className="text-luxury-accent" />
+            <span>{getLeadsDisplay(team)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Users size={13} />
+            <span>
+              {team.active_member_count} active member{team.active_member_count !== 1 ? 's' : ''}
+              {team.total_member_count > team.active_member_count && (
+                <span className="text-luxury-gray-3/60"> ({team.total_member_count} total)</span>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+      <ChevronRight size={18} className="text-luxury-gray-4 hidden md:block" />
+    </div>
+  </Link>
             ))}
           </div>
         )}

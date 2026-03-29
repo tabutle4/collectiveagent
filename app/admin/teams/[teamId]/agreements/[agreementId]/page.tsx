@@ -213,10 +213,10 @@ export default function AgreementDetailPage({
             <img
               src={agreement.agent.headshot_url}
               alt=""
-              className="w-16 h-16 rounded-full object-cover"
+              className="w-16 h-16 rounded-full object-cover flex-shrink-0"
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-white border border-luxury-gray-5 flex items-center justify-center text-black text-lg font-semibold">
+            <div className="w-16 h-16 rounded-full bg-white border border-luxury-gray-5 flex items-center justify-center text-black text-lg font-semibold flex-shrink-0">
               {getAgentInitials(agreement.agent)}
             </div>
           )}
@@ -249,7 +249,7 @@ export default function AgreementDetailPage({
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href={`/admin/users?search=${encodeURIComponent(agreement.agent.email)}`}
+              href={`/admin/users/${agreement.agent.id}`}
               className="btn btn-secondary text-xs"
             >
               <User size={14} />

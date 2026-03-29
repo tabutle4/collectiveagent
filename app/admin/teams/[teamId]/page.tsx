@@ -455,7 +455,11 @@ export default function TeamDetailPage({
           {showInactive && (
             <div className="mt-4 space-y-3">
               {inactiveMembers.map(member => (
-                <div key={member.id} className="inner-card opacity-60">
+                <Link
+                  key={member.id}
+                  href={`/admin/teams/${teamId}/agreements/${member.id}`}
+                  className="inner-card opacity-60 block hover:opacity-80 transition-opacity"
+                >
                   <div className="flex items-center gap-3">
                     {member.agent.headshot_url ? (
                       <img
@@ -477,7 +481,7 @@ export default function TeamDetailPage({
                       </p>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
