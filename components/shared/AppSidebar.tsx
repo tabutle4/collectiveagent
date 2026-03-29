@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
+import CornerLines from './CornerLines'
 import { useAuth } from '@/lib/context/AuthContext'
 
 interface NavItem {
@@ -62,7 +63,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
   { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
-  { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   {
@@ -80,13 +81,14 @@ const tcNav: NavItem[] = [
   { href: '/admin/users', label: 'Agents', icon: UserCog },
   { href: '/admin/teams', label: 'Teams', icon: UsersRound },
   { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
-  { href: '/admin/contacts', label: 'Contacts', icon: BookUser, disabled: true },
-  { href: '/admin/documents', label: 'Documents', icon: FolderOpen, disabled: true },
+  { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
+  { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
   { href: '/admin/billing', label: 'Billing', icon: Wallet },
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
   { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 }, 
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   {
@@ -103,7 +105,7 @@ const supportNav: NavItem[] = [
   { href: '/admin/users', label: 'Agents', icon: UserCog },
   { href: '/admin/teams', label: 'Teams', icon: UsersRound },
   { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
-  { href: '/admin/contacts', label: 'Contacts', icon: BookUser, disabled: true },
+  { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
   { href: '/admin/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 }, 
@@ -389,94 +391,16 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     </>
   )
 
+  // Hide corner lines on reports pages (they have their own styling)
+  const showCornerLines = !pathname.startsWith('/admin/reports')
+
   return (
     <div className="min-h-screen bg-luxury-page-bg" style={{ position: 'relative' }}>
-      <svg
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          zIndex: 0,
-          opacity: 0.5,
-        }}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <line
-          x1="0"
-          y1="0"
-          x2="500"
-          y2="500"
-          stroke="#C5A278"
-          strokeWidth="0.8"
-          strokeOpacity="0.18"
-        />
-        <line
-          x1="0"
-          y1="60"
-          x2="500"
-          y2="560"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.13"
-        />
-        <line
-          x1="0"
-          y1="120"
-          x2="400"
-          y2="520"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.09"
-        />
-        <line
-          x1="60"
-          y1="0"
-          x2="560"
-          y2="500"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.13"
-        />
-        <line
-          x1="120"
-          y1="0"
-          x2="520"
-          y2="400"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.09"
-        />
-        <line
-          x1="100%"
-          y1="100%"
-          x2="calc(100% - 500px)"
-          y2="calc(100% - 500px)"
-          stroke="#C5A278"
-          strokeWidth="0.8"
-          strokeOpacity="0.15"
-        />
-        <line
-          x1="100%"
-          y1="calc(100% - 60px)"
-          x2="calc(100% - 500px)"
-          y2="calc(100% - 560px)"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.1"
-        />
-        <line
-          x1="calc(100% - 60px)"
-          y1="100%"
-          x2="calc(100% - 560px)"
-          y2="calc(100% - 500px)"
-          stroke="#C5A278"
-          strokeWidth="0.6"
-          strokeOpacity="0.1"
-        />
-      </svg>
+      {showCornerLines && (
+        <div className="fixed inset-0 pointer-events-none z-0" style={{ opacity: 0.85 }}>
+          <CornerLines thickness="normal" />
+        </div>
+      )}
       {mobileMenuOpen && isMobile && (
         <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setMobileMenuOpen(false)} />
       )}
