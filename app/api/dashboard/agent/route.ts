@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
           'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date'
         )
         .eq('submitted_by', userId)
-        .order('updated_at', { ascending: false }),
+        .order('closing_date', { ascending: false }),
       supabase
         .from('transaction_internal_agents')
         .select('transaction_id, agent_net, sales_volume, units')
