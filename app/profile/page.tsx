@@ -79,9 +79,11 @@ export default function ProfilePage({
   })
 
   const [billingForm, setBillingForm] = useState({
-    monthly_fee_waived: false,
-    waive_processing_fees: false,
-  })
+  monthly_fee_waived: false,
+  waive_buyer_processing_fees: false,
+  waive_seller_processing_fees: false,
+  admin_notes: '',
+})
 
   // Permission checks from DB
   const canManageAgents = hasPermission('can_manage_agents')
@@ -186,9 +188,11 @@ export default function ProfilePage({
       })
 
       setBillingForm({
-        monthly_fee_waived: freshUserData.monthly_fee_waived || false,
-        waive_processing_fees: freshUserData.waive_processing_fees || false,
-      })
+  monthly_fee_waived: freshUserData.monthly_fee_waived || false,
+  waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
+  waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
+  admin_notes: freshUserData.admin_notes || '',
+})
 
       setLoading(false)
     } catch (error: any) {
@@ -332,9 +336,11 @@ export default function ProfilePage({
         body: JSON.stringify({
           id: user.id,
           updates: {
-            monthly_fee_waived: billingForm.monthly_fee_waived,
-            waive_processing_fees: billingForm.waive_processing_fees,
-          },
+  monthly_fee_waived: billingForm.monthly_fee_waived,
+  waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
+  waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
+  admin_notes: billingForm.admin_notes,
+},
         }),
       })
 
@@ -1031,7 +1037,7 @@ export default function ProfilePage({
                           monthly_fee_waived: !prev.monthly_fee_waived,
                         }))
                       }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.monthly_fee_waived ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.monthly_fee_waived ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.monthly_fee_waived ? 'translate-x-6' : 'translate-x-1'}`}
@@ -1040,26 +1046,62 @@ export default function ProfilePage({
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-luxury-gray-1">Processing Fees Waived</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">Buyer Processing Fees Waived</p>
                       <p className="text-xs text-luxury-gray-3">
-                        Transaction processing fees will not be deducted from commissions
+                        Buyer-side processing fees will not be deducted
                       </p>
                     </div>
                     <button
                       onClick={() =>
                         setBillingForm(prev => ({
                           ...prev,
-                          waive_processing_fees: !prev.waive_processing_fees,
+                          waive_buyer_processing_fees: !prev.waive_buyer_processing_fees,
                         }))
                       }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${billingForm.waive_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.waive_buyer_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                     >
                       <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_buyer_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Seller Processing Fees Waived</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Seller-side processing fees will not be deducted
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          waive_seller_processing_fees: !prev.waive_seller_processing_fees,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.waive_seller_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_seller_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
                       />
                     </button>
                   </div>
                 </div>
+                <div className="pt-4 border-t border-luxury-gray-5/30">
+                    <label className="text-sm font-medium text-luxury-gray-1 block mb-2">
+                      Admin Notes
+                    </label>
+                    <textarea
+                      value={billingForm.admin_notes}
+                      onChange={(e) =>
+                        setBillingForm(prev => ({ ...prev, admin_notes: e.target.value }))
+                      }
+                      placeholder="Internal notes about this agent (only visible to admins)..."
+                      rows={3}
+                      className="input-luxury resize-none"
+                    />
+                  </div>
+                
                 {billingSuccess && (
                   <p
                     className={`text-xs mt-4 ${billingSuccess.includes('Failed') ? 'text-red-600' : 'text-green-700'}`}
@@ -1086,10 +1128,24 @@ export default function ProfilePage({
                   </p>
                 </div>
                 <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Processing Fees</p>
+                  <p className="text-xs text-luxury-gray-3 mb-1">Buyer Processing Fees</p>
                   <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.waive_processing_fees ? 'Waived' : 'Standard'}
+                    {user.waive_buyer_processing_fees ? 'Waived' : 'Standard'}
                   </p>
+                </div>
+                <div className="inner-card">
+                  <p className="text-xs text-luxury-gray-3 mb-1">Seller Processing Fees</p>
+                  <p className="text-sm font-medium text-luxury-gray-1">
+                    {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
+                  </p>
+                  {user.admin_notes && (
+                  <div className="inner-card md:col-span-2">
+                    <p className="text-xs text-luxury-gray-3 mb-1">Admin Notes</p>
+                    <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap">
+                      {user.admin_notes}
+                    </p>
+                  </div>
+                )}
                 </div>
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Paid Through</p>
