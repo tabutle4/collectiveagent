@@ -249,7 +249,7 @@ function MultiSegmentDonut({
               r={radius}
               fill="none"
               stroke={seg.color}
-              strokeWidth={hoveredIndex === seg.originalIndex ? strokeWidth + 2 : strokeWidth}
+              strokeWidth={strokeWidth}
               strokeDasharray={`${seg.dashLength} ${circumference - seg.dashLength}`}
               strokeDashoffset={-seg.offset}
               strokeLinecap="round"
