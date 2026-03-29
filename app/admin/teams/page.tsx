@@ -163,7 +163,7 @@ export default function TeamsPage() {
     href={`/admin/teams/${team.id}`}
     className="inner-card block hover:bg-luxury-gray-6/50 transition-colors cursor-pointer"
   >
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div className="flex-1">
         <div className="flex items-center gap-3 mb-2">
           <h3 className="text-sm font-semibold text-luxury-gray-1">{team.team_name}</h3>
