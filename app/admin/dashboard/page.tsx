@@ -42,6 +42,12 @@ const DATE_RANGE_OPTIONS: { value: DateRange; label: string }[] = [
   { value: 'q4', label: 'Q4 This Year' },
 ]
 
+// Chart color palettes
+const GOLD_COLORS = [
+  '#C5A278', '#B08F60', '#A68552', '#967545', '#8B6D3F', '#7A5F35', '#DCC49E', '#E8D4B8',
+]
+const GRAY_COLORS = ['#888888', '#A3A3A3', '#BEBEBE', '#D5D5D5']
+
 function getDateRange(range: DateRange): {
   start: Date
   end: Date
@@ -190,6 +196,85 @@ function getDateRange(range: DateRange): {
   }
 }
 
+// Multi-segment donut chart component
+interface DonutSegment {
+  label: string
+  value: number
+  color: string
+}
+
+function MultiSegmentDonut({
+  segments,
+  size = 130,
+  strokeWidth = 12,
+  centerLabel,
+  centerValue,
+  formatValue,
+}: {
+  segments: DonutSegment[]
+  size?: number
+  strokeWidth?: number
+  centerLabel?: string
+  centerValue?: string
+  formatValue?: (val: number) => string
+}) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const total = segments.reduce((sum, s) => sum + s.value, 0)
+
+  let accumulatedOffset = 0
+  const segmentArcs = segments
+    .filter(s => s.value > 0)
+    .map(segment => {
+      const percentage = total > 0 ? segment.value / total : 0
+      const dashLength = percentage * circumference
+      const offset = accumulatedOffset
+      accumulatedOffset += dashLength
+      return { ...segment, dashLength, offset, percentage }
+    })
+
+  return (
+    <div className="flex items-start gap-4">
+      <div className="relative flex-shrink-0">
+        <svg width={size} height={size} className="transform -rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E5E5E5" strokeWidth={strokeWidth} />
+          {segmentArcs.map((seg, i) => (
+            <circle
+              key={i}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={strokeWidth}
+              strokeDasharray={`${seg.dashLength} ${circumference - seg.dashLength}`}
+              strokeDashoffset={-seg.offset}
+              strokeLinecap="butt"
+              style={{ transition: 'stroke-dasharray 0.8s ease-out, stroke-dashoffset 0.8s ease-out' }}
+            />
+          ))}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-lg font-bold text-luxury-gray-1">{centerValue}</p>
+          {centerLabel && <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wide">{centerLabel}</p>}
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5 pt-2 min-w-0">
+        {segmentArcs.map((seg, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: seg.color }} />
+            <span className="text-luxury-gray-2 truncate">{seg.label}</span>
+            <span className="text-luxury-gray-1 font-medium ml-auto">
+              {formatValue ? formatValue(seg.value) : seg.value.toLocaleString()}
+            </span>
+          </div>
+        ))}
+        {segments.length === 0 || total === 0 ? <p className="text-xs text-luxury-gray-3 italic">No data</p> : null}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminDashboard() {
   const { hasPermission } = useAuth()
   const [prospects, setProspects] = useState<any[]>([])
@@ -200,6 +285,15 @@ export default function AdminDashboard() {
   const [allTransactions, setAllTransactions] = useState<any[]>([])
   const [allAgentRows, setAllAgentRows] = useState<any[]>([])
   const [leaseTypes, setLeaseTypes] = useState<string[]>([])
+
+  // Breakdown states
+  const [volumeByType, setVolumeByType] = useState<Record<string, number>>({})
+  const [unitsByTeam, setUnitsByTeam] = useState<Record<string, number>>({})
+  const [unitsByOffice, setUnitsByOffice] = useState<Record<string, number>>({})
+  const [agentNetByTeam, setAgentNetByTeam] = useState<Record<string, number>>({})
+  const [agentNetByOffice, setAgentNetByOffice] = useState<Record<string, number>>({})
+  const [officeNetByTeam, setOfficeNetByTeam] = useState<Record<string, number>>({})
+  const [officeNetByOffice, setOfficeNetByOffice] = useState<Record<string, number>>({})
 
   const canViewFinancials = hasPermission('can_view_dashboard_financials')
 
@@ -242,10 +336,21 @@ export default function AdminDashboard() {
 
   const calculateMetrics = () => {
     const { start, end, isFuture } = getDateRange(dateRange)
-    let volume = 0,
-      units = 0,
-      agentNet = 0,
-      officeNet = 0
+    let volume = 0, units = 0, agentNet = 0, officeNet = 0
+
+    const volByType: Record<string, number> = {}
+    const unitTeam: Record<string, number> = {}
+    const unitOffice: Record<string, number> = {}
+    const agentTeam: Record<string, number> = {}
+    const agentOffice: Record<string, number> = {}
+    const officeTeam: Record<string, number> = {}
+    const officeOffice: Record<string, number> = {}
+
+    const agentRowsByTxn: Record<string, any[]> = {}
+    allAgentRows.forEach(row => {
+      if (!agentRowsByTxn[row.transaction_id]) agentRowsByTxn[row.transaction_id] = []
+      agentRowsByTxn[row.transaction_id].push(row)
+    })
 
     allTransactions.forEach(t => {
       const isLease =
@@ -264,21 +369,49 @@ export default function AdminDashboard() {
       if (!isFuture && t.status !== 'closed') return
       if (isFuture && t.status === 'cancelled') return
 
+      let txnVolume = 0
+      if (t.sales_price) txnVolume = parseFloat(t.sales_price)
+      else if (t.monthly_rent && t.lease_term) txnVolume = parseFloat(t.monthly_rent) * parseInt(t.lease_term)
+      else if (t.monthly_rent) txnVolume = parseFloat(t.monthly_rent) * 12
+
       units++
-      if (t.sales_price) volume += parseFloat(t.sales_price)
-      else if (t.monthly_rent && t.lease_term)
-        volume += parseFloat(t.monthly_rent) * parseInt(t.lease_term)
-      else if (t.monthly_rent) volume += parseFloat(t.monthly_rent) * 12
+      volume += txnVolume
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
-      allAgentRows
-        .filter(a => a.transaction_id === t.id)
-        .forEach(a => {
-          if (a.agent_net) agentNet += parseFloat(a.agent_net)
-        })
+      const txnType = (t.transaction_type || '').toLowerCase()
+      let typeCategory = 'Other'
+      if (txnType.includes('buyer')) typeCategory = 'Buyers'
+      else if (txnType.includes('seller') || txnType.includes('listing')) typeCategory = 'Sellers'
+      else if (txnType.includes('tenant') || txnType.includes('lease')) typeCategory = 'Tenants'
+      else if (txnType.includes('landlord')) typeCategory = 'Landlords'
+      volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
+
+      const office = t.office_location || 'Unknown'
+      unitOffice[office] = (unitOffice[office] || 0) + 1
+      officeOffice[office] = (officeOffice[office] || 0) + parseFloat(t.office_net || 0)
+
+      const txnAgentRows = agentRowsByTxn[t.id] || []
+      txnAgentRows.forEach(a => {
+        const aNet = parseFloat(a.agent_net || 0)
+        agentNet += aNet
+
+        const team = a.team_name || 'No Team'
+        unitTeam[team] = (unitTeam[team] || 0) + 1
+        agentTeam[team] = (agentTeam[team] || 0) + aNet
+        officeTeam[team] = (officeTeam[team] || 0) + parseFloat(t.office_net || 0) / txnAgentRows.length
+
+        agentOffice[office] = (agentOffice[office] || 0) + aNet
+      })
     })
 
     setMetrics({ volume, units, agentNet, officeNet })
+    setVolumeByType(volByType)
+    setUnitsByTeam(unitTeam)
+    setUnitsByOffice(unitOffice)
+    setAgentNetByTeam(agentTeam)
+    setAgentNetByOffice(agentOffice)
+    setOfficeNetByTeam(officeTeam)
+    setOfficeNetByOffice(officeOffice)
   }
 
   const stats = {
@@ -295,48 +428,36 @@ export default function AdminDashboard() {
     return `$${amount.toLocaleString()}`
   }
 
-  const formatFullCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
+  // Build donut segments
+  const volumeSegments: DonutSegment[] = [
+    { label: 'Buyers', value: volumeByType['Buyers'] || 0, color: GOLD_COLORS[0] },
+    { label: 'Tenants', value: volumeByType['Tenants'] || 0, color: GOLD_COLORS[1] },
+    { label: 'Sellers', value: volumeByType['Sellers'] || 0, color: GRAY_COLORS[0] },
+    { label: 'Landlords', value: volumeByType['Landlords'] || 0, color: GRAY_COLORS[1] },
+  ].filter(s => s.value > 0)
+
+  const buildTeamOfficeSegments = (
+    teamData: Record<string, number>,
+    officeData: Record<string, number>
+  ): DonutSegment[] => {
+    const segments: DonutSegment[] = []
+    const teamNames = Object.keys(teamData).filter(k => k !== 'No Team').sort()
+    teamNames.forEach((name, i) => {
+      segments.push({ label: name, value: teamData[name], color: GOLD_COLORS[i % GOLD_COLORS.length] })
+    })
+    if (teamData['No Team']) {
+      segments.push({ label: 'No Team', value: teamData['No Team'], color: '#DCC49E' })
+    }
+    const officeNames = Object.keys(officeData).filter(k => k !== 'Unknown').sort()
+    officeNames.forEach((name, i) => {
+      segments.push({ label: name, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
+    })
+    return segments.filter(s => s.value > 0)
   }
 
-  const ringSize = 130
-  const strokeWidth = 10
-  const radius = (ringSize - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-
-  const ALL_REPORT_METRICS = [
-    {
-      key: 'volume',
-      label: 'Sales Volume',
-      icon: TrendingUp,
-      value: metrics.volume,
-      isCurrency: true,
-    },
-    { key: 'units', label: 'Units Closed', icon: Hash, value: metrics.units, isCurrency: false },
-    {
-      key: 'agentNet',
-      label: 'Agent Net',
-      icon: DollarSign,
-      value: metrics.agentNet,
-      isCurrency: true,
-      requiresPermission: true,
-    },
-    {
-      key: 'officeNet',
-      label: 'Office Net',
-      icon: DollarSign,
-      value: metrics.officeNet,
-      isCurrency: true,
-      requiresPermission: true,
-    },
-  ]
-
-  const REPORT_METRICS = ALL_REPORT_METRICS.filter(m => !m.requiresPermission || canViewFinancials)
+  const unitsSegments = buildTeamOfficeSegments(unitsByTeam, unitsByOffice)
+  const agentNetSegments = buildTeamOfficeSegments(agentNetByTeam, agentNetByOffice)
+  const officeNetSegments = buildTeamOfficeSegments(officeNetByTeam, officeNetByOffice)
 
   const rangeInfo = getDateRange(dateRange)
 
@@ -376,58 +497,43 @@ export default function AdminDashboard() {
             </select>
           </div>
         </div>
-        <div
-          className={`grid gap-6 ${REPORT_METRICS.length === 2 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}
-        >
-          {REPORT_METRICS.map(metric => {
-            const Icon = metric.icon
-            return (
-              <div key={metric.key} className="flex flex-col items-center">
-                <div className="relative">
-                  <svg width={ringSize} height={ringSize} className="transform -rotate-90">
-                    <circle
-                      cx={ringSize / 2}
-                      cy={ringSize / 2}
-                      r={radius}
-                      fill="none"
-                      stroke="#E5E5E5"
-                      strokeWidth={strokeWidth}
-                    />
-                    <circle
-                      cx={ringSize / 2}
-                      cy={ringSize / 2}
-                      r={radius}
-                      fill="none"
-                      stroke={metric.value > 0 ? 'var(--accent-color, #C5A278)' : '#E5E5E5'}
-                      strokeWidth={strokeWidth}
-                      strokeLinecap="round"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={metric.value > 0 ? 0 : circumference}
-                      style={{ transition: 'stroke-dashoffset 1.2s ease-out' }}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <p className="text-lg font-bold text-luxury-gray-1">
-                      {metric.isCurrency
-                        ? formatCurrency(metric.value)
-                        : metric.value.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <Icon size={12} className="text-luxury-accent" />
-                  <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
-                    {metric.label}
-                  </span>
-                </div>
-                <p className="text-xs text-luxury-gray-2 mt-0.5">
-                  {metric.isCurrency
-                    ? formatFullCurrency(metric.value)
-                    : metric.value.toLocaleString()}
-                </p>
+        {/* Donut charts grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="inner-card">
+            <div className="flex items-center gap-1.5 mb-3">
+              <TrendingUp size={14} className="text-luxury-accent" />
+              <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Sales Volume</span>
+            </div>
+            <MultiSegmentDonut segments={volumeSegments} centerValue={formatCurrency(metrics.volume)} centerLabel="Total" formatValue={formatCurrency} />
+          </div>
+
+          <div className="inner-card">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Hash size={14} className="text-luxury-accent" />
+              <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Units Closed</span>
+            </div>
+            <MultiSegmentDonut segments={unitsSegments} centerValue={metrics.units.toString()} centerLabel="Units" />
+          </div>
+
+          {canViewFinancials && (
+            <div className="inner-card">
+              <div className="flex items-center gap-1.5 mb-3">
+                <DollarSign size={14} className="text-luxury-accent" />
+                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Agent Net</span>
               </div>
-            )
-          })}
+              <MultiSegmentDonut segments={agentNetSegments} centerValue={formatCurrency(metrics.agentNet)} centerLabel="Total" formatValue={formatCurrency} />
+            </div>
+          )}
+
+          {canViewFinancials && (
+            <div className="inner-card">
+              <div className="flex items-center gap-1.5 mb-3">
+                <DollarSign size={14} className="text-luxury-accent" />
+                <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Office Net</span>
+              </div>
+              <MultiSegmentDonut segments={officeNetSegments} centerValue={formatCurrency(metrics.officeNet)} centerLabel="Total" formatValue={formatCurrency} />
+            </div>
+          )}
         </div>
       </div>
 

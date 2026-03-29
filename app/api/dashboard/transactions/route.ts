@@ -1,29 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { verifySessionToken } from '@/lib/session'
+import { supabaseAdmin } from '@/lib/supabase'
+import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionToken = request.cookies.get('ca_session')?.value
-    if (!sessionToken) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    const session = await verifySessionToken(sessionToken)
-    if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    const session = await requireAuth(request)
+    if (session instanceof NextResponse) return session
 
-    const supabase = createClient()
-
-    const [txnRes, agentRes, typesRes] = await Promise.all([
-      supabase
+    const [txnRes, agentRes, typesRes, teamsRes] = await Promise.all([
+      supabaseAdmin
         .from('transactions')
         .select(
-          'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net'
+          'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net, office_location'
         ),
-      supabase.from('transaction_internal_agents').select('transaction_id, agent_net'),
-      supabase.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
+      supabaseAdmin.from('transaction_internal_agents').select('transaction_id, agent_id, agent_net'),
+      supabaseAdmin.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
+      supabaseAdmin
+        .from('team_member_agreements')
+        .select('agent_id, team:teams(team_name)')
+        .is('end_date', null),
     ])
+
+    // Build agent_id -> team_name lookup
+    const agentTeamMap: Record<string, string> = {}
+    if (teamsRes.data) {
+      teamsRes.data.forEach((row: any) => {
+        if (row.agent_id && row.team?.team_name) {
+          agentTeamMap[row.agent_id] = row.team.team_name
+        }
+      })
+    }
+
+    // Enrich agent rows with team names
+    const enrichedAgentRows = (agentRes.data || []).map((row: any) => ({
+      ...row,
+      team_name: agentTeamMap[row.agent_id] || null,
+    }))
 
     return NextResponse.json({
       transactions: txnRes.data || [],
-      agentRows: agentRes.data || [],
+      agentRows: enrichedAgentRows,
       processingFeeTypes: typesRes.data || [],
     })
   } catch (err: any) {
