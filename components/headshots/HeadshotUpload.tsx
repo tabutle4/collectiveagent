@@ -150,12 +150,13 @@ export default function HeadshotUpload({
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!editingCrop || !dragging || !dragStartRef.current) return
     e.preventDefault()
-    const dx = e.clientX - dragStartRef.current.x
-    const dy = e.clientY - dragStartRef.current.y
+    const dragStart = dragStartRef.current
+    const dx = e.clientX - dragStart.x
+    const dy = e.clientY - dragStart.y
     setCrop(prev => ({
       ...prev,
-      offsetX: dragStartRef.current!.offsetX + dx,
-      offsetY: dragStartRef.current!.offsetY + dy,
+      offsetX: dragStart.offsetX + dx,
+      offsetY: dragStart.offsetY + dy,
     }))
   }
 
