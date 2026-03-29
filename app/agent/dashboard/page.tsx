@@ -6,9 +6,11 @@ import { Plus, FileText, Clock, CheckCircle } from 'lucide-react'
 import SalesGoalWidget from '@/components/transactions/SalesGoalWidget'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
+import { useAuth } from '@/lib/context/AuthContext'
 
 export default function AgentDashboard() {
   const router = useRouter()
+  const { user: authUser } = useAuth()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -28,7 +30,14 @@ export default function AgentDashboard() {
     commissionPlan: '',
   })
   const [recentTransactions, setRecentTransactions] = useState<any[]>([])
-
+  // Hide dashboard for agents until transaction data is verified
+if (authUser?.role === 'agent') {
+  return (
+    <div className="text-center py-12">
+      <p className="text-luxury-gray-3">Dashboard coming soon</p>
+    </div>
+  )
+}
   useEffect(() => {
     loadDashboard()
   }, [])
