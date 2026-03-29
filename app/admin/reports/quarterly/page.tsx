@@ -60,10 +60,10 @@ function useAnimatedNumber(target: number, duration = 1800, active = true) {
   return value
 }
 
-function Headshot({ initials, size = 48, highlight = false }: { initials: string; size?: number; highlight?: boolean }) {
+function Headshot({ initials, size = 48, highlight = false, className = '' }: { initials: string; size?: number; highlight?: boolean; className?: string }) {
   return (
     <div 
-      className="flex items-center justify-center font-mono font-bold shrink-0"
+      className={`flex items-center justify-center font-mono font-bold shrink-0 ${className}`}
       style={{ 
         width: size, 
         height: size, 
@@ -210,20 +210,20 @@ export default function QuarterlyPresentationPage() {
   const quarterLabel = `Q${data.quarter.quarter} ${data.quarter.year}`
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 md:p-8">
+    <div className="min-h-screen bg-black text-white p-2 sm:p-4 md:p-8">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-4 pb-4 border-b-2 border-neutral-800 flex justify-between items-center print:hidden">
+      <div className="max-w-7xl mx-auto mb-2 sm:mb-4 pb-2 sm:pb-4 border-b border-neutral-800 flex justify-between items-center print:hidden">
         <button
           onClick={() => router.push('/admin/reports')}
-          className="text-neutral-500 hover:text-white text-xs font-bold tracking-widest font-mono flex items-center gap-3"
+          className="text-neutral-500 hover:text-white text-xs font-bold tracking-widest font-mono flex items-center gap-2"
         >
-          <ArrowLeft size={16} />
-          BACK
+          <ArrowLeft size={14} />
+          <span className="hidden sm:inline">BACK</span>
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={toggleFullscreen}
-            className="flex items-center gap-2 px-5 py-3 text-xs font-bold tracking-wider"
+            className="hidden sm:flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wider"
             style={{ background: GOLD, color: '#000' }}
           >
             <Maximize2 size={14} />
@@ -231,12 +231,12 @@ export default function QuarterlyPresentationPage() {
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-5 py-3 border-2 border-neutral-700 text-neutral-500 text-xs font-bold tracking-wider"
+            className="hidden md:flex items-center gap-2 px-4 py-2 border border-neutral-700 text-neutral-500 text-xs font-bold tracking-wider"
           >
             <Printer size={14} />
             PRINT
           </button>
-          <span className="font-mono text-sm text-neutral-600 ml-4 font-bold">
+          <span className="font-mono text-xs sm:text-sm text-neutral-600 font-bold">
             {String(slide + 1).padStart(2, '0')}/{String(totalSlides).padStart(2, '0')}
           </span>
         </div>
@@ -244,8 +244,8 @@ export default function QuarterlyPresentationPage() {
 
       {/* Slide Container */}
       <div 
-        className="max-w-7xl mx-auto bg-neutral-950 border-2 border-neutral-800 relative"
-        style={{ aspectRatio: '16/9', minHeight: 640 }}
+        className="max-w-7xl mx-auto bg-neutral-950 border border-neutral-800 relative overflow-hidden"
+        style={{ minHeight: 'calc(100vh - 120px)' }}
       >
         {/* Slides */}
         {currentSlide === 'title' && <TitleSlide quarter={quarterLabel} />}
@@ -259,17 +259,17 @@ export default function QuarterlyPresentationPage() {
         {currentSlide === 'sales' && <ProducersSlide type="SALES" houston={data.topProducers.sales.houston} dallas={data.topProducers.sales.dallas} showConfetti />}
         {currentSlide === 'close' && <CloseSlide quarter={quarterLabel} />}
 
-        {/* Click zones */}
+        {/* Click zones - hidden on mobile, use buttons instead */}
         <div
           onClick={() => slide > 0 && go(-1)}
           onMouseEnter={() => setHoverZone('left')}
           onMouseLeave={() => setHoverZone(null)}
-          className="absolute top-0 left-0 w-[30%] h-[calc(100%-80px)] flex items-center justify-start pl-6 z-10"
+          className="hidden md:flex absolute top-0 left-0 w-[30%] h-[calc(100%-80px)] items-center justify-start pl-6 z-10"
           style={{ cursor: slide > 0 ? 'w-resize' : 'default' }}
         >
           {hoverZone === 'left' && slide > 0 && (
-            <div className="w-14 h-14 bg-white flex items-center justify-center">
-              <ChevronLeft size={28} className="text-black" />
+            <div className="w-12 h-12 bg-white flex items-center justify-center">
+              <ChevronLeft size={24} className="text-black" />
             </div>
           )}
         </div>
@@ -277,33 +277,33 @@ export default function QuarterlyPresentationPage() {
           onClick={() => slide < totalSlides - 1 && go(1)}
           onMouseEnter={() => setHoverZone('right')}
           onMouseLeave={() => setHoverZone(null)}
-          className="absolute top-0 right-0 w-[30%] h-[calc(100%-80px)] flex items-center justify-end pr-6 z-10"
+          className="hidden md:flex absolute top-0 right-0 w-[30%] h-[calc(100%-80px)] items-center justify-end pr-6 z-10"
           style={{ cursor: slide < totalSlides - 1 ? 'e-resize' : 'default' }}
         >
           {hoverZone === 'right' && slide < totalSlides - 1 && (
-            <div className="w-14 h-14 flex items-center justify-center" style={{ background: GOLD }}>
-              <ChevronRight size={28} className="text-black" />
+            <div className="w-12 h-12 flex items-center justify-center" style={{ background: GOLD }}>
+              <ChevronRight size={24} className="text-black" />
             </div>
           )}
         </div>
 
         {/* Navigation */}
-        <div className="absolute bottom-7 left-0 right-0 flex justify-center items-center gap-4 z-5 print:hidden">
+        <div className="absolute bottom-4 sm:bottom-7 left-0 right-0 flex justify-center items-center gap-2 sm:gap-4 z-20 print:hidden">
           <button
             onClick={() => go(-1)}
             disabled={slide === 0}
-            className="w-12 h-12 border-2 border-neutral-700 bg-black flex items-center justify-center disabled:opacity-20"
+            className="w-10 h-10 sm:w-12 sm:h-12 border border-neutral-700 bg-black flex items-center justify-center disabled:opacity-20"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={18} />
           </button>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1 sm:gap-1.5">
             {slides.map((_, i) => (
               <div
                 key={i}
                 onClick={() => setSlide(i)}
                 className="h-1 cursor-pointer transition-all"
                 style={{
-                  width: i === slide ? 40 : 12,
+                  width: i === slide ? 24 : 8,
                   background: i === slide ? GOLD : '#333'
                 }}
               />
@@ -312,15 +312,15 @@ export default function QuarterlyPresentationPage() {
           <button
             onClick={() => go(1)}
             disabled={slide === totalSlides - 1}
-            className="w-12 h-12 flex items-center justify-center disabled:opacity-20"
+            className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center disabled:opacity-20"
             style={{ background: GOLD }}
           >
-            <ChevronRight size={20} className="text-black" />
+            <ChevronRight size={18} className="text-black" />
           </button>
         </div>
       </div>
 
-      <p className="text-center text-neutral-700 text-xs font-mono tracking-widest mt-4 print:hidden">
+      <p className="hidden md:block text-center text-neutral-700 text-xs font-mono tracking-widest mt-4 print:hidden">
         ARROW KEYS / CLICK SIDES
       </p>
     </div>
@@ -331,29 +331,29 @@ export default function QuarterlyPresentationPage() {
 function TitleSlide({ quarter }: { quarter: string }) {
   const [q, year] = quarter.split(' ')
   return (
-    <div className="absolute inset-0 flex flex-col justify-center items-center bg-black">
-      <div className="w-28 h-28 border-4 flex items-center justify-center mb-16" style={{ borderColor: GOLD }}>
-        <span className="font-bold text-3xl tracking-[0.2em]" style={{ color: GOLD }}>CRC</span>
+    <div className="absolute inset-0 flex flex-col justify-center items-center bg-black px-4">
+      <div className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 border-2 sm:border-4 flex items-center justify-center mb-8 sm:mb-12 md:mb-16" style={{ borderColor: GOLD }}>
+        <span className="font-bold text-lg sm:text-2xl md:text-3xl tracking-[0.2em]" style={{ color: GOLD }}>CRC</span>
       </div>
-      <h1 className="text-[140px] font-black text-white tracking-tighter leading-none">{q}</h1>
-      <h2 className="text-5xl font-mono text-neutral-600 tracking-[0.3em] mt-2">{year}</h2>
-      <div className="w-28 h-1 my-12" style={{ background: GOLD }} />
-      <p className="text-sm tracking-[0.3em] font-bold" style={{ color: GOLD }}>SALES MEETING</p>
-      <p className="absolute bottom-20 text-xs font-mono text-neutral-800 tracking-widest">COLLECTIVE REALTY CO.</p>
+      <h1 className="text-6xl sm:text-8xl md:text-[140px] font-black text-white tracking-tighter leading-none">{q}</h1>
+      <h2 className="text-2xl sm:text-4xl md:text-5xl font-mono text-neutral-600 tracking-[0.3em] mt-1 sm:mt-2">{year}</h2>
+      <div className="w-16 sm:w-24 md:w-28 h-0.5 sm:h-1 my-6 sm:my-10 md:my-12" style={{ background: GOLD }} />
+      <p className="text-xs sm:text-sm tracking-[0.2em] sm:tracking-[0.3em] font-bold" style={{ color: GOLD }}>SALES MEETING</p>
+      <p className="absolute bottom-16 sm:bottom-20 text-[10px] sm:text-xs font-mono text-neutral-800 tracking-widest">COLLECTIVE REALTY CO.</p>
     </div>
   )
 }
 
 function AgendaSlide() {
-  const items = ['WELCOME NEW AGENTS', 'Q4 SALES OVERVIEW', 'TOP TEAMS', 'TOP PRODUCERS', 'Q&A']
+  const items = ['WELCOME NEW AGENTS', 'SALES OVERVIEW', 'TOP TEAMS', 'TOP PRODUCERS', 'Q&A']
   return (
-    <div className="absolute inset-0 p-20 bg-black">
-      <h2 className="text-7xl font-black text-white tracking-tight mb-16">AGENDA</h2>
-      <div className="border-t-2 border-neutral-800">
+    <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
+      <h2 className="text-4xl sm:text-5xl md:text-7xl font-black text-white tracking-tight mb-8 sm:mb-12 md:mb-16">AGENDA</h2>
+      <div className="border-t border-neutral-800">
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-10 py-7 border-b-2 border-neutral-800">
-            <span className="font-mono text-2xl font-bold w-16" style={{ color: GOLD }}>0{i + 1}</span>
-            <span className="text-3xl font-bold tracking-wide">{item}</span>
+          <div key={i} className="flex items-center gap-4 sm:gap-6 md:gap-10 py-4 sm:py-5 md:py-7 border-b border-neutral-800">
+            <span className="font-mono text-lg sm:text-xl md:text-2xl font-bold w-10 sm:w-12 md:w-16" style={{ color: GOLD }}>0{i + 1}</span>
+            <span className="text-base sm:text-xl md:text-3xl font-bold tracking-wide">{item}</span>
           </div>
         ))}
       </div>
@@ -366,29 +366,29 @@ function GrowthSlide({ data, active }: { data: QuarterlyData; active: boolean })
   const totalAgents = useAnimatedNumber(data.growth.totalAgents, 1600, active)
   
   return (
-    <div className="absolute inset-0 p-20 bg-black">
-      <h2 className="text-6xl font-black text-white tracking-tight mb-4">NEW AGENTS</h2>
-      <p className="font-mono text-sm text-neutral-600 tracking-widest mb-14">Q{data.quarter.quarter} {data.quarter.year} GROWTH</p>
+    <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
+      <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-white tracking-tight mb-2 sm:mb-4">NEW AGENTS</h2>
+      <p className="font-mono text-xs text-neutral-600 tracking-widest mb-6 sm:mb-10 md:mb-14">Q{data.quarter.quarter} {data.quarter.year} GROWTH</p>
       
-      <div className="grid grid-cols-2 gap-1">
-        <div className="bg-neutral-900 p-14" style={{ borderLeft: `3px solid ${GOLD}` }}>
-          <p className="font-mono text-xs tracking-widest mb-5" style={{ color: GOLD }}>NEW THIS QUARTER</p>
-          <p className="text-[160px] font-black text-white leading-none tracking-tighter">{newAgents}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <div className="bg-neutral-900 p-6 sm:p-10 md:p-14" style={{ borderLeft: `3px solid ${GOLD}` }}>
+          <p className="font-mono text-[10px] sm:text-xs tracking-widest mb-3 sm:mb-5" style={{ color: GOLD }}>NEW THIS QUARTER</p>
+          <p className="text-6xl sm:text-8xl md:text-[160px] font-black text-white leading-none tracking-tighter">{newAgents}</p>
         </div>
-        <div className="bg-neutral-900 p-14 border-l-[3px] border-neutral-700">
-          <p className="font-mono text-xs text-neutral-500 tracking-widest mb-5">TOTAL ROSTER</p>
-          <p className="text-[160px] font-black text-neutral-600 leading-none tracking-tighter">{totalAgents}</p>
+        <div className="bg-neutral-900 p-6 sm:p-10 md:p-14 border-l-[3px] border-neutral-700">
+          <p className="font-mono text-[10px] sm:text-xs text-neutral-500 tracking-widest mb-3 sm:mb-5">TOTAL ROSTER</p>
+          <p className="text-6xl sm:text-8xl md:text-[160px] font-black text-neutral-600 leading-none tracking-tighter">{totalAgents}</p>
         </div>
       </div>
       
-      <div className="flex gap-12 mt-12">
-        <div className="flex items-center gap-4">
-          <div className="w-4 h-4" style={{ background: GOLD }} />
-          <span className="font-mono text-sm text-neutral-500">HOUSTON — {data.growth.houstonAgents}</span>
+      <div className="flex flex-wrap gap-4 sm:gap-8 md:gap-12 mt-6 sm:mt-10 md:mt-12">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="w-3 h-3 sm:w-4 sm:h-4" style={{ background: GOLD }} />
+          <span className="font-mono text-xs sm:text-sm text-neutral-500">HOUSTON — {data.growth.houstonAgents}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="w-4 h-4 bg-neutral-700" />
-          <span className="font-mono text-sm text-neutral-500">DALLAS — {data.growth.dallasAgents}</span>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-neutral-700" />
+          <span className="font-mono text-xs sm:text-sm text-neutral-500">DALLAS — {data.growth.dallasAgents}</span>
         </div>
       </div>
     </div>
@@ -400,25 +400,25 @@ function VolumeSlide({ data, active }: { data: QuarterlyData; active: boolean })
   const units = useAnimatedNumber(data.volume.totalUnits, 1500, active)
   
   return (
-    <div className="absolute inset-0 p-20 bg-black">
-      <h2 className="text-6xl font-black text-white tracking-tight mb-14">Q{data.quarter.quarter} CLOSED</h2>
+    <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
+      <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-white tracking-tight mb-6 sm:mb-10 md:mb-14">Q{data.quarter.quarter} CLOSED</h2>
       
-      <div className="grid grid-cols-[1.4fr_1fr] gap-1">
-        <div className="bg-neutral-900 p-16" style={{ borderLeft: `3px solid ${GOLD}` }}>
-          <p className="font-mono text-xs tracking-widest mb-6" style={{ color: GOLD }}>VOLUME</p>
-          <p className="text-[120px] font-black text-white leading-none tracking-tight">{formatVolume(volume)}</p>
-          <p className="font-mono text-base text-neutral-600 mt-5">${volume.toLocaleString()}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr] gap-1">
+        <div className="bg-neutral-900 p-6 sm:p-10 md:p-16" style={{ borderLeft: `3px solid ${GOLD}` }}>
+          <p className="font-mono text-[10px] sm:text-xs tracking-widest mb-3 sm:mb-6" style={{ color: GOLD }}>VOLUME</p>
+          <p className="text-5xl sm:text-7xl md:text-[120px] font-black text-white leading-none tracking-tight">{formatVolume(volume)}</p>
+          <p className="font-mono text-sm text-neutral-600 mt-3 sm:mt-5">${volume.toLocaleString()}</p>
         </div>
-        <div className="bg-neutral-900 p-16 border-l-[3px] border-neutral-700">
-          <p className="font-mono text-xs text-neutral-500 tracking-widest mb-6">UNITS</p>
-          <p className="text-[120px] font-black text-neutral-600 leading-none tracking-tight">{units}</p>
-          <p className="font-mono text-base text-neutral-700 mt-5">TRANSACTIONS</p>
+        <div className="bg-neutral-900 p-6 sm:p-10 md:p-16 border-l-[3px] border-neutral-700">
+          <p className="font-mono text-[10px] sm:text-xs text-neutral-500 tracking-widest mb-3 sm:mb-6">UNITS</p>
+          <p className="text-5xl sm:text-7xl md:text-[120px] font-black text-neutral-600 leading-none tracking-tight">{units}</p>
+          <p className="font-mono text-sm text-neutral-700 mt-3 sm:mt-5">TRANSACTIONS</p>
         </div>
       </div>
       
-      <div className="mt-1 p-7 flex justify-between items-center" style={{ background: GOLD }}>
-        <span className="text-sm font-bold tracking-widest text-black">AVG DEAL</span>
-        <span className="text-3xl font-black text-black tracking-tight">${Math.round(data.volume.avgDealSize).toLocaleString()}</span>
+      <div className="mt-1 p-4 sm:p-6 md:p-7 flex justify-between items-center" style={{ background: GOLD }}>
+        <span className="text-xs sm:text-sm font-bold tracking-widest text-black">AVG DEAL</span>
+        <span className="text-xl sm:text-2xl md:text-3xl font-black text-black tracking-tight">${Math.round(data.volume.avgDealSize).toLocaleString()}</span>
       </div>
     </div>
   )
@@ -429,41 +429,45 @@ function TeamSlide({ team, rank, active }: { team: QuarterlyData['topTeams'][0];
   const units = useAnimatedNumber(team.units, 1200, active)
   
   return (
-    <div className="absolute inset-0 p-20 bg-black">
-      <h2 className="text-6xl font-black text-white tracking-tight mb-14">
+    <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
+      <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-white tracking-tight mb-6 sm:mb-10 md:mb-14">
         TOP TEAM <span className="text-neutral-600">#{rank}</span>
       </h2>
       
-      <div className="grid grid-cols-[1.2fr_1fr] gap-12">
+      <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 sm:gap-8 md:gap-12">
         <div>
-          <p className="font-mono text-xs text-neutral-600 tracking-widest mb-4">Q4 TOP PERFORMER</p>
-          <p className="text-4xl font-black text-white tracking-tight leading-tight mb-10">{team.name}</p>
+          <p className="font-mono text-[10px] sm:text-xs text-neutral-600 tracking-widest mb-2 sm:mb-4">Q4 TOP PERFORMER</p>
+          <p className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight mb-6 sm:mb-10">{team.name}</p>
           
           {team.lead && (
-            <div className="flex items-center gap-5 py-6 border-t-2 border-b-2 border-neutral-800 mb-10">
-              <Headshot initials={team.lead.initials} size={64} highlight />
+            <div className="flex items-center gap-3 sm:gap-5 py-4 sm:py-6 border-t border-b border-neutral-800 mb-6 sm:mb-10">
+              <Headshot initials={team.lead.initials} size={48} highlight className="sm:hidden" />
+              <Headshot initials={team.lead.initials} size={64} highlight className="hidden sm:flex" />
               <div>
                 <p className="font-mono text-[10px] text-neutral-500 tracking-widest mb-1">TEAM LEAD</p>
-                <p className="text-xl font-bold">{team.lead.name}</p>
+                <p className="text-base sm:text-xl font-bold">{team.lead.name}</p>
               </div>
             </div>
           )}
           
           <div className="flex gap-2">
             {team.members.slice(0, 4).map((m, i) => (
-              <Headshot key={i} initials={m.initials} size={40} />
+              <Headshot key={i} initials={m.initials} size={32} className="sm:hidden" />
+            ))}
+            {team.members.slice(0, 4).map((m, i) => (
+              <Headshot key={`lg-${i}`} initials={m.initials} size={40} className="hidden sm:flex" />
             ))}
           </div>
         </div>
         
-        <div className="flex flex-col gap-1">
-          <div className="bg-neutral-900 p-10 flex-1" style={{ borderLeft: `3px solid ${GOLD}` }}>
-            <p className="font-mono text-xs tracking-widest mb-4" style={{ color: GOLD }}>VOLUME</p>
-            <p className="text-7xl font-black text-white leading-none tracking-tight">{formatVolume(volume)}</p>
+        <div className="flex flex-row md:flex-col gap-1">
+          <div className="bg-neutral-900 p-4 sm:p-6 md:p-10 flex-1" style={{ borderLeft: `3px solid ${GOLD}` }}>
+            <p className="font-mono text-[10px] sm:text-xs tracking-widest mb-2 sm:mb-4" style={{ color: GOLD }}>VOLUME</p>
+            <p className="text-3xl sm:text-5xl md:text-7xl font-black text-white leading-none tracking-tight">{formatVolume(volume)}</p>
           </div>
-          <div className="bg-neutral-900 p-10 flex-1 border-l-[3px] border-neutral-700">
-            <p className="font-mono text-xs text-neutral-500 tracking-widest mb-4">UNITS</p>
-            <p className="text-7xl font-black text-neutral-600 leading-none tracking-tight">{units}</p>
+          <div className="bg-neutral-900 p-4 sm:p-6 md:p-10 flex-1 border-l-[3px] border-neutral-700">
+            <p className="font-mono text-[10px] sm:text-xs text-neutral-500 tracking-widest mb-2 sm:mb-4">UNITS</p>
+            <p className="text-3xl sm:text-5xl md:text-7xl font-black text-neutral-600 leading-none tracking-tight">{units}</p>
           </div>
         </div>
       </div>
@@ -492,13 +496,13 @@ function ProducersSlide({
   }, [showConfetti])
   
   return (
-    <div className="absolute inset-0 p-16 bg-black">
+    <div className="absolute inset-0 p-4 sm:p-10 md:p-16 bg-black overflow-y-auto">
       <Confetti active={confetti} />
-      <h2 className="text-5xl font-black text-white tracking-tight mb-10">
+      <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight mb-4 sm:mb-8 md:mb-10">
         TOP PRODUCERS — <span style={{ color: GOLD }}>{type}</span>
       </h2>
       
-      <div className="grid grid-cols-2 gap-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 md:gap-10">
         <OfficeList office="HOUSTON" data={houston} isGold />
         <OfficeList office="DALLAS" data={dallas} isGold={false} />
       </div>
@@ -517,8 +521,8 @@ function OfficeList({
 }) {
   return (
     <div>
-      <div className="mb-5 pb-4" style={{ borderBottom: `2px solid ${isGold ? GOLD : '#333'}` }}>
-        <span className="font-mono text-xs font-bold tracking-[0.2em]" style={{ color: isGold ? GOLD : '#555' }}>
+      <div className="mb-3 sm:mb-5 pb-2 sm:pb-4" style={{ borderBottom: `2px solid ${isGold ? GOLD : '#333'}` }}>
+        <span className="font-mono text-[10px] sm:text-xs font-bold tracking-[0.2em]" style={{ color: isGold ? GOLD : '#555' }}>
           {office}
         </span>
       </div>
@@ -526,20 +530,21 @@ function OfficeList({
         {data.map((agent, i) => (
           <div
             key={i}
-            className="flex items-center gap-5 p-5 border-b-2 border-neutral-900 animate-slideIn"
+            className="flex items-center gap-3 sm:gap-5 p-3 sm:p-5 border-b border-neutral-900 animate-slideIn"
             style={{
               background: i === 0 ? '#111' : 'transparent',
               borderLeft: i === 0 ? `3px solid ${isGold ? GOLD : '#444'}` : '3px solid transparent',
               animationDelay: `${i * 0.12}s`
             }}
           >
-            <Headshot initials={agent.initials} size={48} highlight={isGold && i === 0} />
-            <div className="flex-1">
-              <p className="font-bold text-base">{agent.name.toUpperCase()}</p>
-              <p className="font-mono text-[11px] text-neutral-500 mt-1 tracking-widest">{agent.units} UNITS</p>
+            <Headshot initials={agent.initials} size={36} highlight={isGold && i === 0} className="sm:hidden" />
+            <Headshot initials={agent.initials} size={48} highlight={isGold && i === 0} className="hidden sm:flex" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm sm:text-base truncate">{agent.name.toUpperCase()}</p>
+              <p className="font-mono text-[10px] sm:text-[11px] text-neutral-500 mt-0.5 sm:mt-1 tracking-widest">{agent.units} UNITS</p>
             </div>
             <p 
-              className="text-3xl font-black tracking-tight"
+              className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight shrink-0"
               style={{ color: i === 0 && isGold ? GOLD : '#666' }}
             >
               {formatVolume(agent.volume)}
@@ -547,7 +552,7 @@ function OfficeList({
           </div>
         ))}
         {data.length === 0 && (
-          <p className="text-neutral-600 font-mono text-sm py-8">No data available</p>
+          <p className="text-neutral-600 font-mono text-xs sm:text-sm py-6 sm:py-8">No data available</p>
         )}
       </div>
       
@@ -564,11 +569,11 @@ function OfficeList({
 
 function CloseSlide({ quarter }: { quarter: string }) {
   return (
-    <div className="absolute inset-0 flex flex-col justify-center items-center bg-black">
-      <h1 className="text-[180px] font-black text-white tracking-tighter">Q&A</h1>
-      <div className="w-28 h-1 my-12" style={{ background: GOLD }} />
-      <p className="font-mono text-base text-neutral-600 tracking-widest">QUESTIONS?</p>
-      <p className="absolute bottom-20 text-xs font-mono text-neutral-800 tracking-widest">
+    <div className="absolute inset-0 flex flex-col justify-center items-center bg-black px-4">
+      <h1 className="text-7xl sm:text-9xl md:text-[180px] font-black text-white tracking-tighter">Q&A</h1>
+      <div className="w-16 sm:w-24 md:w-28 h-0.5 sm:h-1 my-6 sm:my-10 md:my-12" style={{ background: GOLD }} />
+      <p className="font-mono text-sm text-neutral-600 tracking-widest">QUESTIONS?</p>
+      <p className="absolute bottom-16 sm:bottom-20 text-[10px] sm:text-xs font-mono text-neutral-800 tracking-widest">
         COLLECTIVE REALTY CO. — {quarter}
       </p>
     </div>
@@ -578,7 +583,7 @@ function CloseSlide({ quarter }: { quarter: string }) {
 function NoDataSlide({ message }: { message: string }) {
   return (
     <div className="absolute inset-0 flex flex-col justify-center items-center bg-black">
-      <p className="font-mono text-xl text-neutral-600">{message}</p>
+      <p className="font-mono text-base sm:text-xl text-neutral-600">{message}</p>
     </div>
   )
 }
