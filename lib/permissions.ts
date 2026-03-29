@@ -99,8 +99,6 @@ export type PermissionCode =
   | 'can_manage_prospects'
   // Revenue Share (existing in DB)
   | 'can_view_revenue_share'
-  // Roster
-  | 'can_regenerate_roster'
   // Calendar (existing in DB)
   | 'can_view_calendar'
   | 'can_manage_calendar'
@@ -317,8 +315,6 @@ export async function getPermissionsObject(
     'can_manage_onboarding',
     // Teams
     'can_manage_team_agreements',
-    // Roster
-    'can_regenerate_roster',
     // Calendar
     'can_manage_calendar',
     // Training Center

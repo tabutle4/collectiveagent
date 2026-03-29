@@ -553,20 +553,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           }
         }
 
-        await fetch('/api/roster/regenerate', { method: 'POST' })
-        // Regenerate roster in background (don't wait for it)
-        fetch('/api/roster/regenerate', { method: 'POST' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.error) {
-              console.error('Roster regeneration error:', data.error)
-            } else {
-              console.log('Roster regenerated successfully:', data.agentCount, 'agents')
-            }
-          })
-          .catch(err => console.error('Roster regeneration failed:', err))
-
         onSaved(data.user)
+
         onClose()
       } else {
         // Update existing user
@@ -652,18 +640,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           // Use fresh data from database
           onSaved(fetchData.user)
         }
-
-        // Regenerate roster in background (don't wait for it)
-        fetch('/api/roster/regenerate', { method: 'POST' })
-          .then(res => res.json())
-          .then(data => {
-            if (data.error) {
-              console.error('Roster regeneration error:', data.error)
-            } else {
-              console.log('Roster regenerated successfully:', data.agentCount, 'agents')
-            }
-          })
-          .catch(err => console.error('Roster regeneration failed:', err))
 
         onClose()
       }

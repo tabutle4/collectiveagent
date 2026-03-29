@@ -34,7 +34,7 @@ export async function GET() {
     const { data: agents, error: fetchError } = await supabaseAdmin
       .from('users')
       .select(
-        'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, team_name, division, role, roles, job_title, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
+        'id, preferred_first_name, preferred_last_name, first_name, last_name, email, personal_phone, business_phone, birth_month, date_of_birth, office, division, role, roles, job_title, additional_roles, instagram_handle, tiktok_handle, threads_handle, youtube_url, linkedin_url, facebook_url, headshot_url, headshot_crop'
       )
       .eq('is_active', true)
       .eq('is_licensed_agent', true)
@@ -44,8 +44,46 @@ export async function GET() {
       throw fetchError
     }
 
+    // Query active team memberships with team names
+    const { data: teamMemberships } = await supabaseAdmin
+      .from('team_member_agreements')
+      .select('agent_id, team_id, teams(team_name)')
+      .is('end_date', null)
+
+    // Query active team leads
+    const { data: teamLeads } = await supabaseAdmin
+      .from('team_leads')
+      .select('agent_id')
+      .is('end_date', null)
+
+    // Build lookup maps
+    const teamByAgentId = new Map<string, string>()
+    if (teamMemberships) {
+      for (const membership of teamMemberships) {
+        const teamData = membership.teams as { team_name: string }[] | null
+        if (teamData && teamData.length > 0 && teamData[0]?.team_name) {
+          teamByAgentId.set(membership.agent_id, teamData[0].team_name)
+        }
+      }
+    }
+
+    const teamLeadIds = new Set<string>()
+    if (teamLeads) {
+      for (const lead of teamLeads) {
+        teamLeadIds.add(lead.agent_id)
+      }
+    }
+
+    // Merge team data into agent records
+    const agentsWithTeams = (agents || []).map(user => ({
+      ...user,
+      team_name: teamByAgentId.get(user.id) || null,
+      is_team_lead: teamLeadIds.has(user.id),
+      additional_roles: user.additional_roles || null,
+    }))
+
     // Sort agents
-    const sortedAgents = (agents || []).sort((a, b) => {
+    const sortedAgents = agentsWithTeams.sort((a, b) => {
       const aName = `${a.preferred_first_name} ${a.preferred_last_name}`.toLowerCase()
       const bName = `${b.preferred_first_name} ${b.preferred_last_name}`.toLowerCase()
       return aName.localeCompare(bName)

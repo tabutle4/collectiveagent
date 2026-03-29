@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { normalizeSocialUrl } from '@/lib/socialLinks'
-import { regenerateRoster } from '@/lib/rosterGenerator'
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,8 +75,6 @@ export async function POST(request: NextRequest) {
         profile_updates: profile_data,
       })
     }
-
-    regenerateRoster().catch(err => console.error('Roster regenerate error:', err))
 
     return NextResponse.json({ success: true })
   } catch (error) {
