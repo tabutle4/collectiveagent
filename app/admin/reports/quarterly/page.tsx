@@ -211,6 +211,13 @@ export default function QuarterlyPresentationPage() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 sm:p-4 md:p-8">
+      {/* Logo - fixed in left margin area */}
+      <img 
+        src="/logo-white.png" 
+        alt="Collective Realty Co." 
+        className="fixed bottom-1/3 left-4 h-12 sm:h-16 lg:h-20 w-auto z-30 opacity-80 hidden lg:block"
+      />
+      
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-2 sm:mb-4 pb-2 sm:pb-4 border-b border-neutral-800 flex justify-between items-center print:hidden">
         <button
@@ -247,13 +254,6 @@ export default function QuarterlyPresentationPage() {
         className="max-w-7xl mx-auto bg-neutral-950 border border-neutral-800 relative overflow-hidden"
         style={{ minHeight: 'calc(100vh - 120px)' }}
       >
-        {/* Logo - bottom left corner */}
-        <img 
-          src="/logo-white.png" 
-          alt="Collective Realty Co." 
-          className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 h-10 sm:h-14 w-auto z-20 opacity-70"
-        />
-        
         {/* Slides */}
         {currentSlide === 'title' && <TitleSlide quarter={quarterLabel} />}
         {currentSlide === 'agenda' && <AgendaSlide />}
