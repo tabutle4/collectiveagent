@@ -60,6 +60,25 @@ export default function TransactionsPage() {
     return `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.trim()
   }
 
+  const formatTransactionType = (type: string | null) => {
+    if (!type) return ''
+    const typeMap: Record<string, string> = {
+      'buyer_v2': 'Buyer',
+      'seller_v2': 'Seller',
+      'tenant_apt_v2': 'Tenant (apartment)',
+      'tenant_other_v2': 'Tenant (not apartment)',
+      'tenant_simplyhome_v2': 'Tenant (SimplyHome Rental)',
+      'tenant_commercial_v2': 'Tenant (commercial lease)',
+      'landlord_v2': 'Landlord',
+      'new_construction_buyer_v2': 'New Construction Buyer',
+      'land_lot_buyer_v2': 'Land/Lot Buyer',
+      'commercial_buyer_v2': 'Commercial Buyer',
+      'land_lot_seller_v2': 'Land/Lot Seller',
+      'referred_out_v2': 'Referred Out',
+    }
+    return typeMap[type] || type
+  }
+
   const filtered = useMemo(() => {
     let list = [...transactions]
 
@@ -184,7 +203,7 @@ export default function TransactionsPage() {
                 <option value="all">All Types</option>
                 {transactionTypes.map(t => (
                   <option key={t} value={t}>
-                    {t}
+                    {formatTransactionType(t)}
                   </option>
                 ))}
               </select>
@@ -225,7 +244,7 @@ export default function TransactionsPage() {
                     <tr
                       key={t.id}
                       className="tr-luxury-clickable"
-                      onClick={() => router.push(`/transactions/${t.id}`)}
+                      onClick={() => router.push(canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`)}
                     >
                       <td className="py-3 px-4">
                         <p className="text-sm font-semibold text-luxury-gray-1">
@@ -241,7 +260,7 @@ export default function TransactionsPage() {
                         </td>
                       )}
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
-                        {t.transaction_type || ''}
+                        {formatTransactionType(t.transaction_type)}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
                         {t.client_name || ''}
@@ -284,7 +303,7 @@ export default function TransactionsPage() {
                 <div
                   key={t.id}
                   className="inner-card cursor-pointer"
-                  onClick={() => router.push(`/transactions/${t.id}`)}
+                  onClick={() => router.push(canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`)}
                 >
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-sm font-semibold text-luxury-gray-1 flex-1">
@@ -301,7 +320,7 @@ export default function TransactionsPage() {
                       </p>
                     )}
                     <p>
-                      {t.transaction_type}
+                      {formatTransactionType(t.transaction_type)}
                       {t.client_name ? ` · ${t.client_name}` : ''}
                     </p>
                     {formatVolume(t) && <p>{formatVolume(t)}</p>}
