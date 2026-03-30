@@ -63,7 +63,7 @@ const adminNav: NavItem[] = [
   { href: '/admin/form-responses', label: 'Forms', icon: FileText },
   { href: '/admin/coordination', label: 'Listings', icon: Briefcase },
   { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
-  { href: '/admin/reports', label: 'Reports', icon: BarChart3, disabled: true },
+  { href: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   {

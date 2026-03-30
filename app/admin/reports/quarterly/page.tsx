@@ -247,6 +247,13 @@ export default function QuarterlyPresentationPage() {
         className="max-w-7xl mx-auto bg-neutral-950 border border-neutral-800 relative overflow-hidden"
         style={{ minHeight: 'calc(100vh - 120px)' }}
       >
+        {/* Logo - top left corner */}
+        <img 
+          src="/logo-white.png" 
+          alt="Collective Realty Co." 
+          className="absolute top-4 left-4 sm:top-6 sm:left-6 h-6 sm:h-8 w-auto z-20 opacity-60"
+        />
+        
         {/* Slides */}
         {currentSlide === 'title' && <TitleSlide quarter={quarterLabel} />}
         {currentSlide === 'agenda' && <AgendaSlide />}
