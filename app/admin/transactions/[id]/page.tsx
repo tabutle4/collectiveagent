@@ -232,7 +232,7 @@ export default function AdminTransactionDetailPage() {
     paymentMethod: string
     paymentReference: string
     fundingSource: string
-    countsTowardProgress: boolean  // Controls cap/qualifying count updates
+    countsTowardProgress: boolean
   }>({
     open: false,
     agent: null,
@@ -345,8 +345,7 @@ export default function AdminTransactionDetailPage() {
     const txnType = data?.transaction_type || ''
     const txnIsLease = isLease(txnType)
     
-    // For New Agent Plan: sales count, leases don't count by default
-    // For cap plans: everything counts by default
+    // For New Agent Plan: sales count, leases don't by default
     const defaultCountsToward = isNewAgentPlan ? !txnIsLease : true
 
     setMarkPaidModal(prev => ({
