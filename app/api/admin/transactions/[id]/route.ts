@@ -210,6 +210,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission(request, 'can_view_all_transactions')
+  if (auth.error) return auth.error
+
   try {
     const { id } = await params
     const body = await request.json()
@@ -317,6 +320,169 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
+    // ── Update internal agent (payment status, payment date, agent_net, etc.) ─
+    if (action === 'update_internal_agent') {
+      const { internal_agent_id, updates } = body
+      const { error } = await supabase
+        .from('transaction_internal_agents')
+        .update(updates)
+        .eq('id', internal_agent_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Mark agent PAID with full financial tracking ─────────────────────────────
+    if (action === 'mark_paid') {
+      const { 
+        internal_agent_id, 
+        payment_date,
+        payment_method,
+        payment_reference,
+        funding_source,
+        debts_to_apply,  // Array of { debt_id, amount }
+        agent_net_override,  // Optional manual override
+      } = body
+
+      // 1. Get the internal agent record
+      const { data: tia, error: tiaError } = await supabase
+        .from('transaction_internal_agents')
+        .select('*')
+        .eq('id', internal_agent_id)
+        .single()
+      if (tiaError || !tia) throw new Error('Agent record not found')
+
+      // 2. Get the agent's user record (for cap tracking)
+      const { data: agentUser, error: userError } = await supabase
+        .from('users')
+        .select('id, commission_plan, cap_progress, qualifying_transaction_count')
+        .eq('id', tia.agent_id)
+        .single()
+      if (userError) throw userError
+
+      // 3. Calculate 1099 amount (agent_gross - fees, NOT minus debts)
+      const agentGross = parseFloat(tia.agent_gross || 0)
+      const processingFee = parseFloat(tia.processing_fee || 0)
+      const coachingFee = parseFloat(tia.coaching_fee || 0)
+      const otherFees = parseFloat(tia.other_fees || 0)
+      const brokerageSplit = parseFloat(tia.brokerage_split || 0)
+      
+      let amount1099: number
+      if (tia.agent_role === 'primary_agent') {
+        // Primary agents: 1099 = gross - fees
+        amount1099 = agentGross - processingFee - coachingFee - otherFees
+      } else {
+        // Team leads and rev share: 1099 = the payment amount (agent_net)
+        amount1099 = parseFloat(tia.agent_net || 0)
+      }
+
+      // 4. Calculate debts deducted
+      let totalDebtsDeducted = 0
+      if (debts_to_apply && debts_to_apply.length > 0) {
+        for (const debtApp of debts_to_apply) {
+          totalDebtsDeducted += parseFloat(debtApp.amount || 0)
+        }
+      }
+
+      // 5. Calculate final agent_net
+      const agentNet = agent_net_override != null 
+        ? parseFloat(agent_net_override)
+        : amount1099 - totalDebtsDeducted
+
+      // 6. Update the transaction_internal_agents record
+      const tiaUpdate: any = {
+        payment_status: 'paid',
+        payment_date,
+        payment_method: payment_method || null,
+        payment_reference: payment_reference || null,
+        funding_source: funding_source || 'crc',
+        amount_1099_reportable: Math.round(amount1099 * 100) / 100,
+        debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
+        agent_net: Math.round(agentNet * 100) / 100,
+      }
+
+      const { error: updateTiaError } = await supabase
+        .from('transaction_internal_agents')
+        .update(tiaUpdate)
+        .eq('id', internal_agent_id)
+      if (updateTiaError) throw updateTiaError
+
+      // 7. Apply debts (mark as paid/offset)
+      if (debts_to_apply && debts_to_apply.length > 0) {
+        for (const debtApp of debts_to_apply) {
+          // Get current debt
+          const { data: debt } = await supabase
+            .from('agent_debts')
+            .select('*')
+            .eq('id', debtApp.debt_id)
+            .single()
+          
+          if (debt) {
+            const amountRemaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
+            const amountApplied = parseFloat(debtApp.amount || 0)
+            const newRemaining = amountRemaining - amountApplied
+            
+            const debtUpdate: any = {
+              amount_paid: (parseFloat(debt.amount_paid || 0) + amountApplied),
+              offset_transaction_id: id,
+              offset_transaction_agent_id: internal_agent_id,
+            }
+
+            if (newRemaining <= 0) {
+              debtUpdate.status = 'paid'
+              debtUpdate.date_resolved = payment_date
+            }
+
+            await supabase
+              .from('agent_debts')
+              .update(debtUpdate)
+              .eq('id', debtApp.debt_id)
+          }
+        }
+      }
+
+      // 8. Update user's cap_progress (only for primary agents with brokerage_split)
+      if (tia.agent_role === 'primary_agent' && brokerageSplit > 0 && agentUser) {
+        const currentCapProgress = parseFloat(agentUser.cap_progress || 0)
+        const newCapProgress = currentCapProgress + brokerageSplit
+
+        const userUpdate: any = {
+          cap_progress: Math.round(newCapProgress * 100) / 100,
+        }
+
+        // Increment qualifying_transaction_count for New Agent Plan
+        const plan = (agentUser.commission_plan || '').toLowerCase()
+        if (plan.includes('new') || plan.includes('70')) {
+          userUpdate.qualifying_transaction_count = (agentUser.qualifying_transaction_count || 0) + 1
+        }
+
+        await supabase
+          .from('users')
+          .update(userUpdate)
+          .eq('id', tia.agent_id)
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        updates: {
+          ...tiaUpdate,
+          debts_applied: debts_to_apply?.length || 0,
+        }
+      })
+    }
+
+    // ── Get agent debts for mark paid modal ──────────────────────────────────────
+    if (action === 'get_agent_debts') {
+      const { agent_id } = body
+      const { data: debts, error } = await supabase
+        .from('agent_debts')
+        .select('*')
+        .eq('agent_id', agent_id)
+        .eq('status', 'outstanding')
+        .order('date_incurred', { ascending: true })
+      if (error) throw error
+      return NextResponse.json({ debts: debts || [] })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (err: any) {
     console.error('Transaction detail POST error:', err)
@@ -326,5 +492,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 function isLeaseType(txnType: string): boolean {
   const t = txnType.toLowerCase()
-  return t.includes('lease') || t.includes('apartment') || t.includes('rent')
+  return t.includes('lease') || t.includes('apartment') || t.includes('rent') || t.includes('tenant') || t.includes('landlord')
 }

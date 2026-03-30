@@ -49,8 +49,35 @@ const fmtName = (u: any) =>
 const isLease = (txnType: string | null) => {
   if (!txnType) return false
   const t = txnType.toLowerCase()
-  return t.includes('lease') || t.includes('apartment') || t.includes('rent')
+  return t.includes('lease') || t.includes('apartment') || t.includes('rent') || t.includes('tenant') || t.includes('landlord')
 }
+
+const formatTransactionType = (type: string | null) => {
+  if (!type) return '--'
+  const typeMap: Record<string, string> = {
+    'buyer_v2': 'Buyer',
+    'seller_v2': 'Seller',
+    'tenant_apt_v2': 'Tenant (apartment)',
+    'tenant_other_v2': 'Tenant (not apartment)',
+    'tenant_simplyhome_v2': 'Tenant (SimplyHome Rental)',
+    'tenant_commercial_v2': 'Tenant (commercial lease)',
+    'landlord_v2': 'Landlord',
+    'new_construction_buyer_v2': 'New Construction Buyer',
+    'land_lot_buyer_v2': 'Land/Lot Buyer',
+    'commercial_buyer_v2': 'Commercial Buyer',
+    'land_lot_seller_v2': 'Land/Lot Seller',
+    'referred_out_v2': 'Referred Out',
+  }
+  return typeMap[type] || type
+}
+
+const STATUS_OPTIONS = [
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'active', label: 'Active' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
 
 const getDaysUntil = (dateStr: string | null) => {
   if (!dateStr) return null
@@ -194,6 +221,29 @@ export default function AdminTransactionDetailPage() {
   const [newPayoutForm, setNewPayoutForm] = useState<any>(null)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
 
+  // Mark Paid modal state
+  const [markPaidModal, setMarkPaidModal] = useState<{
+    open: boolean
+    agent: any
+    debts: any[]
+    loadingDebts: boolean
+    selectedDebts: Record<string, number>  // debt_id -> amount to apply
+    paymentDate: string
+    paymentMethod: string
+    paymentReference: string
+    fundingSource: string
+  }>({
+    open: false,
+    agent: null,
+    debts: [],
+    loadingDebts: false,
+    selectedDebts: {},
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMethod: 'ACH',
+    paymentReference: '',
+    fundingSource: 'crc',
+  })
+
   // Right panel section toggles
   const [expandedSections, setExpandedSections] = useState({
     transaction: true,
@@ -263,6 +313,141 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const updateInternalAgent = async (internalAgentId: string, updates: any) => {
+    setSaving(true)
+    try {
+      await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_internal_agent', internal_agent_id: internalAgentId, updates }),
+      })
+      setData((prev: any) => ({
+        ...prev,
+        agents: prev.agents.map((a: any) =>
+          a.id === internalAgentId ? { ...a, ...updates } : a
+        ),
+      }))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Mark Paid Modal Functions ────────────────────────────────────────────────
+
+  const openMarkPaidModal = async (agent: any) => {
+    setMarkPaidModal(prev => ({
+      ...prev,
+      open: true,
+      agent,
+      loadingDebts: true,
+      debts: [],
+      selectedDebts: {},
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMethod: 'ACH',
+      paymentReference: '',
+      fundingSource: 'crc',
+    }))
+
+    // Load outstanding debts for this agent
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_agent_debts', agent_id: agent.agent_id }),
+      })
+      const json = await res.json()
+      setMarkPaidModal(prev => ({
+        ...prev,
+        loadingDebts: false,
+        debts: json.debts || [],
+      }))
+    } catch {
+      setMarkPaidModal(prev => ({ ...prev, loadingDebts: false }))
+    }
+  }
+
+  const closeMarkPaidModal = () => {
+    setMarkPaidModal(prev => ({ ...prev, open: false, agent: null }))
+  }
+
+  const submitMarkPaid = async () => {
+    const { agent, selectedDebts, paymentDate, paymentMethod, paymentReference, fundingSource } = markPaidModal
+    if (!agent) return
+
+    setSaving(true)
+    try {
+      // Convert selectedDebts to array format
+      const debtsToApply = Object.entries(selectedDebts)
+        .filter(([, amount]) => (amount as number) > 0)
+        .map(([debtId, amount]) => ({ debt_id: debtId, amount }))
+
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mark_paid',
+          internal_agent_id: agent.id,
+          payment_date: paymentDate,
+          payment_method: paymentMethod,
+          payment_reference: paymentReference,
+          funding_source: fundingSource,
+          debts_to_apply: debtsToApply,
+        }),
+      })
+      
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to mark paid')
+      }
+
+      const result = await res.json()
+
+      // Update local state
+      setData((prev: any) => ({
+        ...prev,
+        agents: prev.agents.map((a: any) =>
+          a.id === agent.id
+            ? { 
+                ...a, 
+                payment_status: 'paid',
+                payment_date: paymentDate,
+                payment_method: paymentMethod,
+                payment_reference: paymentReference,
+                funding_source: fundingSource,
+                amount_1099_reportable: result.updates?.amount_1099_reportable,
+                debts_deducted: result.updates?.debts_deducted,
+                agent_net: result.updates?.agent_net,
+              }
+            : a
+        ),
+        // Clear agent_billing since debts may have been applied
+        agent_billing: null,
+      }))
+
+      closeMarkPaidModal()
+      // Reload to get fresh data including updated billing
+      loadData()
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark paid')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleDebt = (debtId: string, maxAmount: number) => {
+    setMarkPaidModal(prev => {
+      const current = prev.selectedDebts[debtId]
+      if (current) {
+        // Remove it
+        const { [debtId]: _, ...rest } = prev.selectedDebts
+        return { ...prev, selectedDebts: rest }
+      } else {
+        // Add it with full amount
+        return { ...prev, selectedDebts: { ...prev.selectedDebts, [debtId]: maxAmount } }
+      }
+    })
   }
 
   const toggleChecklist = async (itemId: string, currentlyComplete: boolean) => {
@@ -556,11 +741,19 @@ export default function AdminTransactionDetailPage() {
                 <SectionHeader>Transaction</SectionHeader>
                 <div className="space-y-0">
                   <FieldRow label="Property" value={txn.property_address} />
-                  <FieldRow label="Type" value={txn.transaction_type} />
-                  <FieldRow
-                    label="Status"
-                    value={<StatusBadge status={txn.status as TransactionStatus} />}
-                  />
+                  <FieldRow label="Type" value={formatTransactionType(txn.transaction_type)} />
+                  <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                    <span className="field-label shrink-0">Status</span>
+                    <select
+                      value={txn.status || ''}
+                      onChange={e => updateTransaction({ status: e.target.value })}
+                      className="text-xs bg-transparent border border-luxury-gray-5 rounded px-2 py-1 text-luxury-gray-1 cursor-pointer"
+                    >
+                      {STATUS_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
                   <FieldRow
                     label="Compliance"
                     value={
@@ -666,10 +859,26 @@ export default function AdminTransactionDetailPage() {
                   <FieldRow label="Created" value={fmtDate(txn.created_at)} />
                   <FieldRow label="Acceptance Date" value={fmtDate(txn.acceptance_date)} />
                   {!leaseTransaction && (
-                    <FieldRow label="Closing Date" value={fmtDate(txn.closing_date)} />
+                    <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                      <span className="field-label shrink-0">Closing Date</span>
+                      <input
+                        type="date"
+                        value={txn.closing_date || ''}
+                        onChange={e => updateTransaction({ closing_date: e.target.value || null })}
+                        className="text-xs bg-transparent border border-luxury-gray-5 rounded px-2 py-1 text-luxury-gray-1 cursor-pointer"
+                      />
+                    </div>
                   )}
                   {leaseTransaction && (
-                    <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />
+                    <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                      <span className="field-label shrink-0">Move-In Date</span>
+                      <input
+                        type="date"
+                        value={txn.move_in_date || ''}
+                        onChange={e => updateTransaction({ move_in_date: e.target.value || null })}
+                        className="text-xs bg-transparent border border-luxury-gray-5 rounded px-2 py-1 text-luxury-gray-1 cursor-pointer"
+                      />
+                    </div>
                   )}
                   {txn.compliance_submitted_at && (
                     <FieldRow
@@ -781,66 +990,92 @@ export default function AdminTransactionDetailPage() {
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {agents.map((a: any) => (
-                      <div key={a.id} className="inner-card">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="text-sm font-semibold text-luxury-gray-1">
-                              {fmtName(a.user)}
-                            </p>
-                            <p className="text-xs text-luxury-gray-3">
-                              {a.agent_role?.replace(/_/g, ' ')} · {a.commission_plan || '--'}
-                            </p>
+                    {agents.map((a: any) => {
+                      const isPaid = a.payment_status === 'paid'
+                      const agentGross = parseFloat(a.agent_gross || 0)
+                      const processingFee = parseFloat(a.processing_fee || 0)
+                      const coachingFee = parseFloat(a.coaching_fee || 0)
+                      const otherFees = parseFloat(a.other_fees || 0)
+                      const totalFees = processingFee + coachingFee + otherFees
+                      const brokerageSplit = parseFloat(a.brokerage_split || 0)
+                      const debtsDeducted = parseFloat(a.debts_deducted || 0)
+                      const amount1099 = a.amount_1099_reportable || (agentGross - totalFees)
+
+                      return (
+                        <div key={a.id} className="inner-card">
+                          {/* Header */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="text-sm font-semibold text-luxury-gray-1">
+                                {fmtName(a.user)}
+                              </p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {a.agent_role?.replace(/_/g, ' ')} · {a.commission_plan || '--'}
+                              </p>
+                            </div>
+                            {isPaid ? (
+                              <div className="text-right">
+                                <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
+                                  Paid
+                                </span>
+                                <p className="text-xs text-luxury-gray-3 mt-1">
+                                  {fmtDate(a.payment_date)}
+                                </p>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => openMarkPaidModal(a)}
+                                className="btn-primary text-xs px-3 py-1"
+                              >
+                                Mark Paid
+                              </button>
+                            )}
                           </div>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded ${
-                              a.payment_status === 'paid'
-                                ? 'bg-green-50 text-green-700'
-                                : 'bg-orange-50 text-orange-700'
-                            }`}
-                          >
-                            {a.payment_status || 'pending'}
-                          </span>
+
+                          {/* Financial breakdown */}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <FieldRow label="Basis (100%)" value={fmt$(a.agent_basis)} />
+                            <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : null} />
+                            <FieldRow label="Agent Gross" value={fmt$(agentGross)} />
+                            <FieldRow label="Brokerage Split" value={brokerageSplit > 0 ? fmt$(brokerageSplit) : null} />
+                            <FieldRow label="Processing Fee" value={processingFee > 0 ? `-${fmt$(processingFee)}` : null} />
+                            <FieldRow label="Coaching Fee" value={coachingFee > 0 ? `-${fmt$(coachingFee)}` : null} />
+                            <FieldRow label="Other Fees" value={otherFees > 0 ? `-${fmt$(otherFees)}` : null} />
+                            <FieldRow label="Rebate" value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null} />
+                            <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
+                          </div>
+
+                          {/* Totals */}
+                          <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs text-luxury-gray-3">1099 Amount</span>
+                              <span className="text-xs text-luxury-gray-2">{fmt$(amount1099)}</span>
+                            </div>
+                            {debtsDeducted > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-luxury-gray-3">Debts Deducted</span>
+                                <span className="text-xs text-red-500">-{fmt$(debtsDeducted)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
+                              <span className="text-xs font-semibold text-luxury-gray-2">Agent Net</span>
+                              <span className="text-sm font-bold text-luxury-accent">{fmt$(a.agent_net)}</span>
+                            </div>
+                          </div>
+
+                          {/* Payment details (if paid) */}
+                          {isPaid && (
+                            <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 text-xs text-luxury-gray-3 space-y-0.5">
+                              {a.payment_method && <p>Method: {a.payment_method}</p>}
+                              {a.payment_reference && <p>Reference: {a.payment_reference}</p>}
+                              {a.funding_source && a.funding_source !== 'crc' && (
+                                <p>Funding: {a.funding_source === 'title_direct' ? 'Title paid directly' : a.funding_source}</p>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                          <FieldRow label="Basis" value={fmt$(a.agent_basis)} />
-                          <FieldRow
-                            label="Split"
-                            value={a.split_percentage ? `${a.split_percentage}%` : null}
-                          />
-                          <FieldRow label="Agent Gross" value={fmt$(a.agent_gross)} />
-                          <FieldRow
-                            label="Processing Fee"
-                            value={a.processing_fee > 0 ? fmt$(a.processing_fee) : null}
-                          />
-                          <FieldRow
-                            label="Coaching Fee"
-                            value={a.coaching_fee > 0 ? fmt$(a.coaching_fee) : null}
-                          />
-                          <FieldRow
-                            label="Rebate"
-                            value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null}
-                          />
-                          <FieldRow
-                            label="BTSA"
-                            value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null}
-                          />
-                        </div>
-                        <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 flex justify-between items-center">
-                          <span className="text-xs font-semibold text-luxury-gray-2">
-                            Agent Net
-                          </span>
-                          <span className="text-sm font-bold text-luxury-accent">
-                            {fmt$(a.agent_net)}
-                          </span>
-                        </div>
-                        {a.payment_date && (
-                          <p className="text-xs text-luxury-gray-3 mt-1">
-                            Paid {fmtDate(a.payment_date)}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1668,6 +1903,193 @@ export default function AdminTransactionDetailPage() {
               <button
                 onClick={() => setShowEmailModal(false)}
                 className="btn btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mark Paid Modal ─────────────────────────────────────────────────── */}
+      {markPaidModal.open && markPaidModal.agent && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-luxury-gray-5">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Mark Paid</h2>
+              <p className="text-xs text-luxury-gray-3">{fmtName(markPaidModal.agent.user)}</p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Financial Summary */}
+              <div className="inner-card">
+                <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment Summary</p>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-luxury-gray-3">Agent Gross</span>
+                    <span>{fmt$(markPaidModal.agent.agent_gross)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-luxury-gray-3">- Fees</span>
+                    <span className="text-red-500">
+                      -{fmt$(
+                        parseFloat(markPaidModal.agent.processing_fee || 0) +
+                        parseFloat(markPaidModal.agent.coaching_fee || 0) +
+                        parseFloat(markPaidModal.agent.other_fees || 0)
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-luxury-gray-5/30">
+                    <span className="font-semibold">1099 Amount</span>
+                    <span className="font-semibold">
+                      {fmt$(
+                        parseFloat(markPaidModal.agent.agent_gross || 0) -
+                        parseFloat(markPaidModal.agent.processing_fee || 0) -
+                        parseFloat(markPaidModal.agent.coaching_fee || 0) -
+                        parseFloat(markPaidModal.agent.other_fees || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Outstanding Debts */}
+              {markPaidModal.loadingDebts ? (
+                <p className="text-xs text-luxury-gray-3 text-center py-2">Loading debts...</p>
+              ) : markPaidModal.debts.length > 0 ? (
+                <div className="inner-card">
+                  <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Apply Outstanding Debts</p>
+                  <div className="space-y-2">
+                    {markPaidModal.debts.map((debt: any) => {
+                      const remaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
+                      const isSelected = markPaidModal.selectedDebts[debt.id] != null
+                      return (
+                        <label
+                          key={debt.id}
+                          className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'border-luxury-accent bg-luxury-accent/5'
+                              : 'border-luxury-gray-5 hover:border-luxury-gray-4'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleDebt(debt.id, remaining)}
+                              className="rounded"
+                            />
+                            <div>
+                              <p className="text-xs font-medium text-luxury-gray-1">
+                                {debt.debt_type?.replace(/_/g, ' ')}
+                              </p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {debt.description || fmtDate(debt.date_incurred)}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-semibold text-red-500">{fmt$(remaining)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {Object.keys(markPaidModal.selectedDebts).length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 flex justify-between text-xs">
+                      <span className="text-luxury-gray-3">Total Deductions</span>
+                      <span className="font-semibold text-red-500">
+                        -{fmt$(Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Final Amount */}
+              <div className="inner-card bg-luxury-accent/5 border-luxury-accent">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-luxury-gray-2">Agent Will Receive</span>
+                  <span className="text-lg font-bold text-luxury-accent">
+                    {fmt$(
+                      parseFloat(markPaidModal.agent.agent_gross || 0) -
+                      parseFloat(markPaidModal.agent.processing_fee || 0) -
+                      parseFloat(markPaidModal.agent.coaching_fee || 0) -
+                      parseFloat(markPaidModal.agent.other_fees || 0) -
+                      Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0)
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Details */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Payment Date</label>
+                  <input
+                    type="date"
+                    value={markPaidModal.paymentDate}
+                    onChange={e =>
+                      setMarkPaidModal(prev => ({ ...prev, paymentDate: e.target.value }))
+                    }
+                    className="input-luxury text-xs w-full"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Method</label>
+                  <select
+                    value={markPaidModal.paymentMethod}
+                    onChange={e =>
+                      setMarkPaidModal(prev => ({ ...prev, paymentMethod: e.target.value }))
+                    }
+                    className="input-luxury text-xs w-full"
+                  >
+                    <option value="ACH">ACH</option>
+                    <option value="check">Check</option>
+                    <option value="Zelle">Zelle</option>
+                    <option value="wire">Wire</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Reference / Check #</label>
+                  <input
+                    type="text"
+                    value={markPaidModal.paymentReference}
+                    onChange={e =>
+                      setMarkPaidModal(prev => ({ ...prev, paymentReference: e.target.value }))
+                    }
+                    placeholder="Optional"
+                    className="input-luxury text-xs w-full"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Funding Source</label>
+                  <select
+                    value={markPaidModal.fundingSource}
+                    onChange={e =>
+                      setMarkPaidModal(prev => ({ ...prev, fundingSource: e.target.value }))
+                    }
+                    className="input-luxury text-xs w-full"
+                  >
+                    <option value="crc">CRC Paid Agent</option>
+                    <option value="title_direct">Title Paid Directly</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
+              <button
+                onClick={submitMarkPaid}
+                disabled={saving}
+                className="btn-primary text-xs flex-1 disabled:opacity-50"
+              >
+                {saving ? 'Processing...' : 'Confirm Payment'}
+              </button>
+              <button
+                onClick={closeMarkPaidModal}
+                className="btn-secondary text-xs"
               >
                 Cancel
               </button>
