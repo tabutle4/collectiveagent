@@ -494,7 +494,7 @@ export default function AdminDashboard() {
     // Offices in gray (with "Office " prefix)
     const officeNames = Object.keys(officeData).filter(k => k !== 'Unknown').sort()
     officeNames.forEach((name, i) => {
-      segments.push({ label: `Office ${name}`, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
+      segments.push({ label: `${name} Office`, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
     })
     return segments.filter(s => s.value > 0)
   }
