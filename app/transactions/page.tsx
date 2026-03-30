@@ -100,8 +100,8 @@ export default function TransactionsPage() {
     [transactions]
   )
 
-  const formatPrice = (t: any) => {
-    const amount = t.monthly_rent || t.sales_price
+  const formatVolume = (t: any) => {
+    const amount = t.sales_volume
     if (!amount) return ''
     return `$${parseFloat(amount).toLocaleString()}`
   }
@@ -213,10 +213,11 @@ export default function TransactionsPage() {
                     {canViewAll && <th className="th-luxury">Agent</th>}
                     <th className="th-luxury">Type</th>
                     <th className="th-luxury">Client</th>
-                    <th className="th-luxury">Price</th>
+                    <th className="th-luxury">Sales Volume</th>
                     <th className="th-luxury">Status</th>
                     {canViewAll && <th className="th-luxury">Compliance</th>}
                     <th className="th-luxury">Closing Date</th>
+                    <th className="th-luxury">Move In Date</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -245,7 +246,7 @@ export default function TransactionsPage() {
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
                         {t.client_name || ''}
                       </td>
-                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{formatPrice(t)}</td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">{formatVolume(t)}</td>
                       <td className="py-3 px-4">
                         <StatusBadge status={t.status as TransactionStatus} />
                       </td>
@@ -268,6 +269,9 @@ export default function TransactionsPage() {
                       )}
                       <td className="py-3 px-4 text-xs text-luxury-gray-3">
                         {formatDate(t.closing_date)}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-3">
+                        {formatDate(t.move_in_date)}
                       </td>
                     </tr>
                   ))}
@@ -300,7 +304,7 @@ export default function TransactionsPage() {
                       {t.transaction_type}
                       {t.client_name ? ` · ${t.client_name}` : ''}
                     </p>
-                    {formatPrice(t) && <p>{formatPrice(t)}</p>}
+                    {formatVolume(t) && <p>{formatVolume(t)}</p>}
                     {canViewAll &&
                       t.compliance_status &&
                       t.compliance_status !== 'not_requested' && (

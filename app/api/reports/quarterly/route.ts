@@ -59,12 +59,12 @@ export async function GET(request: NextRequest) {
         .eq('is_active', true)
         .eq('is_licensed_agent', true),
       
-      // Closed transactions - we'll filter by date in JS since we need to check
-      // closing_date for sales and move_in_date for leases
+      // Transactions - we'll filter by date and status in JS since we need different logic
+      // for sales (require closed) vs leases (just need move_in_date in past)
       supabaseAdmin
         .from('transactions')
         .select('id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status')
-        .eq('status', 'closed'),
+        .neq('status', 'cancelled'),
       
       // All internal agent records for closed transactions
       supabaseAdmin
@@ -119,28 +119,42 @@ export async function GET(request: NextRequest) {
     const teamMembers = teamMembersRes.data || []
     const teams = teamsRes.data || []
 
+    // Helper to check if transaction is a lease
+    const isLeaseType = (txnType: string | null) => {
+      const t = (txnType || '').toLowerCase()
+      return t.includes('tenant') || t.includes('landlord') || t.includes('lease')
+    }
+
     // Filter transactions to only those in quarter range
-    // For sales: use closed_date if available, otherwise closing_date
-    // For leases: use move_in_date
-    const closedTransactionIds = new Set(
+    // For sales: use closed_date if available, otherwise closing_date, require closed status
+    // For leases: use move_in_date, just needs to be in the past within range
+    const qualifiedTransactionIds = new Set(
       transactions
         .filter(t => {
+          const isLease = isLeaseType(t.transaction_type)
           let dateField: string | null = null
-          const isLease = t.transaction_type === 'lease'
+          
           if (isLease) {
             dateField = t.move_in_date
+            // Lease counts if move_in_date is in range AND in the past
+            if (!dateField) return false
+            const moveInDate = new Date(dateField)
+            if (moveInDate > now) return false
           } else {
+            // Sales require closed status
+            if (t.status !== 'closed') return false
             // For sales, prefer closed_date (actual) over closing_date (target)
             dateField = t.closed_date || t.closing_date
           }
+          
           if (!dateField) return false
           return dateField >= startDateStr && dateField <= endDateStr
         })
         .map(t => t.id)
     )
 
-    // Filter internal agents to only closed transactions in range
-    const relevantAgentRows = internalAgents.filter(ia => closedTransactionIds.has(ia.transaction_id))
+    // Filter internal agents to only qualified transactions in range
+    const relevantAgentRows = internalAgents.filter(ia => qualifiedTransactionIds.has(ia.transaction_id))
 
     // Build agent -> team lookup
     const agentTeamMap: Record<string, string> = {}
@@ -195,7 +209,7 @@ export async function GET(request: NextRequest) {
       const volume = parseFloat(row.sales_volume || '0')
       const units = parseFloat(row.units || '0')
       
-      const isLease = txn.transaction_type === 'lease'
+      const isLease = isLeaseType(txn.transaction_type)
       
       if (isLease) {
         agentStats[agentId].leaseVolume += volume

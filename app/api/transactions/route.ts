@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         client_name,
         sales_price,
         monthly_rent,
+        sales_volume,
         closing_date,
         move_in_date,
         transaction_type,

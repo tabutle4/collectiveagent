@@ -317,6 +317,8 @@ export default function AdminDashboard() {
 
   // Breakdown states
   const [volumeByType, setVolumeByType] = useState<Record<string, number>>({})
+  const [volumeByTeam, setVolumeByTeam] = useState<Record<string, number>>({})
+  const [volumeByOffice, setVolumeByOffice] = useState<Record<string, number>>({})
   const [unitsByTeam, setUnitsByTeam] = useState<Record<string, number>>({})
   const [unitsByOffice, setUnitsByOffice] = useState<Record<string, number>>({})
   const [agentNetByTeam, setAgentNetByTeam] = useState<Record<string, number>>({})
@@ -368,6 +370,8 @@ export default function AdminDashboard() {
     let volume = 0, units = 0, agentNet = 0, officeNet = 0
 
     const volByType: Record<string, number> = {}
+    const volTeam: Record<string, number> = {}
+    const volOffice: Record<string, number> = {}
     const unitTeam: Record<string, number> = {}
     const unitOffice: Record<string, number> = {}
     const agentTeam: Record<string, number> = {}
@@ -390,21 +394,24 @@ export default function AdminDashboard() {
       if (txnFilter === 'sales' && isLease) return
       if (txnFilter === 'leases' && !isLease) return
 
-      const dateStr = isLease ? t.move_in_date : t.closing_date
+      // Use move_in_date for leases, fall back to closing_date
+      const dateStr = isLease ? (t.move_in_date || t.closing_date) : t.closing_date
       if (!dateStr) return
       const txnDate = new Date(dateStr)
       if (txnDate < start || txnDate > end) return
 
-      if (!isFuture && t.status !== 'closed') return
-      if (isFuture && t.status === 'cancelled') return
-
-      let txnVolume = 0
-      if (t.sales_price) txnVolume = parseFloat(t.sales_price)
-      else if (t.monthly_rent && t.lease_term) txnVolume = parseFloat(t.monthly_rent) * parseInt(t.lease_term)
-      else if (t.monthly_rent) txnVolume = parseFloat(t.monthly_rent) * 12
+      // For leases: count if move_in_date is in the past (within range)
+      // For sales: require closed status
+      if (isLease) {
+        // Lease counts if move_in_date is in the past
+        if (txnDate > new Date()) return
+      } else {
+        // Sales require closed status (unless looking at future projections)
+        if (!isFuture && t.status !== 'closed') return
+        if (isFuture && t.status === 'cancelled') return
+      }
 
       units++
-      volume += txnVolume
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
       const txnType = t.transaction_type || ''
@@ -421,35 +428,48 @@ export default function AdminDashboard() {
       } else if (txnType === 'referred_out_v2') {
         typeCategory = 'Referred Out'
       }
-      
-      if (typeCategory) {
-        volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
-      }
 
       const office = t.office_location || 'Unknown'
 
       const txnAgentRows = agentRowsByTxn[t.id] || []
+      
+      // Sum sales_volume from agent rows
+      let txnVolume = 0
+      txnAgentRows.forEach(a => {
+        txnVolume += parseFloat(a.sales_volume || 0)
+      })
+      volume += txnVolume
+      
+      if (typeCategory) {
+        volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
+      }
+      
       txnAgentRows.forEach(a => {
         const aNet = parseFloat(a.agent_net || 0)
         agentNet += aNet
         const officeNetShare = parseFloat(t.office_net || 0) / txnAgentRows.length
+        const volumeShare = parseFloat(a.sales_volume || 0)
 
         if (a.team_name) {
           // Agent is on a team - bucket by team (gold)
           unitTeam[a.team_name] = (unitTeam[a.team_name] || 0) + 1
           agentTeam[a.team_name] = (agentTeam[a.team_name] || 0) + aNet
           officeTeam[a.team_name] = (officeTeam[a.team_name] || 0) + officeNetShare
+          volTeam[a.team_name] = (volTeam[a.team_name] || 0) + volumeShare
         } else {
           // Agent not on a team - bucket by office (gray)
           unitOffice[office] = (unitOffice[office] || 0) + 1
           agentOffice[office] = (agentOffice[office] || 0) + aNet
           officeOffice[office] = (officeOffice[office] || 0) + officeNetShare
+          volOffice[office] = (volOffice[office] || 0) + volumeShare
         }
       })
     })
 
     setMetrics({ volume, units, agentNet, officeNet })
     setVolumeByType(volByType)
+    setVolumeByTeam(volTeam)
+    setVolumeByOffice(volOffice)
     setUnitsByTeam(unitTeam)
     setUnitsByOffice(unitOffice)
     setAgentNetByTeam(agentTeam)
@@ -473,14 +493,6 @@ export default function AdminDashboard() {
   }
 
   // Build donut segments
-  const volumeSegments: DonutSegment[] = [
-    { label: 'Buyers', value: volumeByType['Buyers'] || 0, color: GOLD_COLORS[0] },
-    { label: 'Tenants', value: volumeByType['Tenants'] || 0, color: GOLD_COLORS[1] },
-    { label: 'Sellers', value: volumeByType['Sellers'] || 0, color: GRAY_COLORS[0] },
-    { label: 'Landlords', value: volumeByType['Landlords'] || 0, color: GRAY_COLORS[1] },
-    { label: 'Referred Out', value: volumeByType['Referred Out'] || 0, color: GRAY_COLORS[2] },
-  ].filter(s => s.value > 0)
-
   const buildTeamOfficeSegments = (
     teamData: Record<string, number>,
     officeData: Record<string, number>
@@ -491,13 +503,22 @@ export default function AdminDashboard() {
     teamNames.forEach((name, i) => {
       segments.push({ label: name, value: teamData[name], color: GOLD_COLORS[i % GOLD_COLORS.length] })
     })
-    // Offices in gray (with "Office " prefix)
+    // Offices in gray (with " Office" suffix)
     const officeNames = Object.keys(officeData).filter(k => k !== 'Unknown').sort()
     officeNames.forEach((name, i) => {
       segments.push({ label: `${name} Office`, value: officeData[name], color: GRAY_COLORS[i % GRAY_COLORS.length] })
     })
     return segments.filter(s => s.value > 0)
   }
+
+  // Volume segments by transaction type category
+  const volumeSegments: DonutSegment[] = [
+    { label: 'Buyers', value: volumeByType['Buyers'] || 0, color: GOLD_COLORS[0] },
+    { label: 'Sellers', value: volumeByType['Sellers'] || 0, color: GOLD_COLORS[1] },
+    { label: 'Tenants', value: volumeByType['Tenants'] || 0, color: GRAY_COLORS[0] },
+    { label: 'Landlords', value: volumeByType['Landlords'] || 0, color: GRAY_COLORS[1] },
+    { label: 'Referred Out', value: volumeByType['Referred Out'] || 0, color: GRAY_COLORS[2] },
+  ].filter(s => s.value > 0)
 
   const unitsSegments = buildTeamOfficeSegments(unitsByTeam, unitsByOffice)
   const agentNetSegments = buildTeamOfficeSegments(agentNetByTeam, agentNetByOffice)
