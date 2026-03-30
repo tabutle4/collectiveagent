@@ -232,6 +232,7 @@ export default function AdminTransactionDetailPage() {
     paymentMethod: string
     paymentReference: string
     fundingSource: string
+    countsTowardProgress: boolean  // Controls cap/qualifying count updates
   }>({
     open: false,
     agent: null,
@@ -242,6 +243,7 @@ export default function AdminTransactionDetailPage() {
     paymentMethod: 'ACH',
     paymentReference: '',
     fundingSource: 'crc',
+    countsTowardProgress: true,
   })
 
   // Right panel section toggles
@@ -337,6 +339,16 @@ export default function AdminTransactionDetailPage() {
   // ── Mark Paid Modal Functions ────────────────────────────────────────────────
 
   const openMarkPaidModal = async (agent: any) => {
+    // Determine default for countsTowardProgress based on plan and transaction type
+    const plan = (agent.user?.commission_plan || '').toLowerCase()
+    const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
+    const txnType = data?.transaction_type || ''
+    const txnIsLease = isLease(txnType)
+    
+    // For New Agent Plan: sales count, leases don't count by default
+    // For cap plans: everything counts by default
+    const defaultCountsToward = isNewAgentPlan ? !txnIsLease : true
+
     setMarkPaidModal(prev => ({
       ...prev,
       open: true,
@@ -348,6 +360,7 @@ export default function AdminTransactionDetailPage() {
       paymentMethod: 'ACH',
       paymentReference: '',
       fundingSource: 'crc',
+      countsTowardProgress: defaultCountsToward,
     }))
 
     // Load outstanding debts for this agent
@@ -373,7 +386,7 @@ export default function AdminTransactionDetailPage() {
   }
 
   const submitMarkPaid = async () => {
-    const { agent, selectedDebts, paymentDate, paymentMethod, paymentReference, fundingSource } = markPaidModal
+    const { agent, selectedDebts, paymentDate, paymentMethod, paymentReference, fundingSource, countsTowardProgress } = markPaidModal
     if (!agent) return
 
     setSaving(true)
@@ -394,6 +407,7 @@ export default function AdminTransactionDetailPage() {
           payment_reference: paymentReference,
           funding_source: fundingSource,
           debts_to_apply: debtsToApply,
+          counts_toward_progress: countsTowardProgress,
         }),
       })
       
@@ -1071,6 +1085,13 @@ export default function AdminTransactionDetailPage() {
                               {a.funding_source && a.funding_source !== 'crc' && (
                                 <p>Funding: {a.funding_source === 'title_direct' ? 'Title paid directly' : a.funding_source}</p>
                               )}
+                              <button
+                                onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
+                                className="mt-2 flex items-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium"
+                              >
+                                <FileText size={12} />
+                                Generate Statement
+                              </button>
                             </div>
                           )}
                         </div>
@@ -2077,6 +2098,49 @@ export default function AdminTransactionDetailPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Plan Progress Toggle - only show for relevant plans */}
+              {(() => {
+                const plan = (markPaidModal.agent?.user?.commission_plan || '').toLowerCase()
+                const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
+                const isCapPlan = plan.includes('85') || plan.includes('100') || plan.includes('capped')
+                const txnType = data?.transaction_type || ''
+                const txnIsLease = isLease(txnType)
+
+                if (!isNewAgentPlan && !isCapPlan) return null
+
+                return (
+                  <div className="inner-card bg-luxury-light">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={markPaidModal.countsTowardProgress}
+                        onChange={e =>
+                          setMarkPaidModal(prev => ({ ...prev, countsTowardProgress: e.target.checked }))
+                        }
+                        className="mt-0.5 rounded"
+                      />
+                      <div>
+                        <p className="text-xs font-medium text-luxury-gray-1">
+                          {isNewAgentPlan 
+                            ? 'Count toward 5 qualifying sales'
+                            : 'Count toward cap'
+                          }
+                        </p>
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">
+                          {isNewAgentPlan ? (
+                            txnIsLease 
+                              ? 'Leases do not count toward the 5 sales needed to upgrade to 85/15'
+                              : 'This sale will count toward the 5 needed to upgrade to 85/15'
+                          ) : (
+                            `The $${parseFloat(markPaidModal.agent?.brokerage_split || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} brokerage split will be added to cap progress`
+                          )}
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
