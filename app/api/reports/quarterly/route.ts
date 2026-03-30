@@ -243,8 +243,11 @@ export async function GET(request: NextRequest) {
       return (office || '').toLowerCase().includes('houston')
     }
 
-    // Split by office and sort
-    const agentList = Object.values(agentStats)
+    // Exclude broker from top producers (Courtney Okanlomo)
+    const BROKER_ID = '7d99cfe9-db1e-42db-aa2a-7a42a68765f6'
+
+    // Split by office and sort (excluding broker)
+    const agentList = Object.values(agentStats).filter(a => (a.agent as any).id !== BROKER_ID)
     
     const topSalesHouston = agentList
       .filter(a => isHoustonOffice(a.office) && a.salesVolume > 0)
@@ -253,7 +256,6 @@ export async function GET(request: NextRequest) {
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: (a.agent as any).headshot_url,
         volume: a.salesVolume,
         units: a.salesUnits,
       }))
@@ -265,7 +267,6 @@ export async function GET(request: NextRequest) {
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: (a.agent as any).headshot_url,
         volume: a.salesVolume,
         units: a.salesUnits,
       }))
@@ -277,7 +278,6 @@ export async function GET(request: NextRequest) {
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: (a.agent as any).headshot_url,
         volume: a.leaseVolume,
         units: a.leaseUnits,
       }))
@@ -289,7 +289,6 @@ export async function GET(request: NextRequest) {
       .map(a => ({
         name: formatName(a.agent),
         initials: formatInitials(a.agent),
-        headshot_url: (a.agent as any).headshot_url,
         volume: a.leaseVolume,
         units: a.leaseUnits,
       }))
@@ -315,13 +314,19 @@ export async function GET(request: NextRequest) {
       .slice(0, 2)
       .map(([teamId, stats]) => {
         const team = teams.find(t => t.id === teamId)
-        const activeLead = (team?.team_leads as any[])?.find(l => l.agent)
-        const leadAgent = activeLead?.agent
         
-        // Get team members
+        // Get ALL active team leads
+        const activeLeads = (team?.team_leads as any[])?.filter(l => l.agent) || []
+        const leadAgents = activeLeads.map(l => ({
+          name: formatName(l.agent),
+          initials: formatInitials(l.agent),
+        }))
+        
+        // Get team members (excluding leads)
+        const leadIds = activeLeads.map(l => l.agent?.id)
         const memberIds = teamMembers.filter(tm => tm.team_id === teamId).map(tm => tm.agent_id)
         const memberAgents = relevantAgentRows
-          .filter(row => memberIds.includes(row.agent_id) && row.agent)
+          .filter(row => memberIds.includes(row.agent_id) && row.agent && !leadIds.includes((row.agent as any).id))
           .map(row => row.agent as any)
           .filter((agent: any, index: number, self: any[]) => 
             self.findIndex((a: any) => a.id === agent.id) === index
@@ -331,14 +336,9 @@ export async function GET(request: NextRequest) {
         return {
           id: teamId,
           name: team?.team_name || 'Unknown Team',
-          lead: leadAgent ? {
-            name: formatName(leadAgent),
-            initials: formatInitials(leadAgent),
-            headshot_url: (leadAgent as any).headshot_url,
-          } : null,
+          leads: leadAgents,
           members: memberAgents.map((m: any) => ({
             initials: formatInitials(m),
-            headshot_url: m.headshot_url,
           })),
           volume: stats.volume,
           units: stats.units,
@@ -349,7 +349,6 @@ export async function GET(request: NextRequest) {
     const newAgents = (newAgentsRes.data || []).map(a => ({
       name: formatName(a),
       initials: formatInitials(a),
-      headshot_url: a.headshot_url,
       office: a.office,
     }))
 

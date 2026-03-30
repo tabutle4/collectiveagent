@@ -12,28 +12,28 @@ interface QuarterlyData {
   quarter: { year: number; quarter: number; startDate: string; endDate: string }
   growth: {
     newAgents: number
-    newAgentsList: { name: string; initials: string; headshot_url: string | null; office: string }[]
+    newAgentsList: { name: string; initials: string; office: string }[]
     totalAgents: number
     houstonAgents: number
     dallasAgents: number
   }
-  volume: { totalVolume: number; totalUnits: number; avgDealSize: number }
+  volume: { totalVolume: number; totalUnits: number; avgDealSize: number; totalAgentNet: number }
   topTeams: {
     id: string
     name: string
-    lead: { name: string; initials: string; headshot_url: string | null } | null
-    members: { initials: string; headshot_url: string | null }[]
+    leads: { name: string; initials: string }[]
+    members: { initials: string }[]
     volume: number
     units: number
   }[]
   topProducers: {
     sales: {
-      houston: { name: string; initials: string; headshot_url: string | null; volume: number; units: number }[]
-      dallas: { name: string; initials: string; headshot_url: string | null; volume: number; units: number }[]
+      houston: { name: string; initials: string; volume: number; units: number }[]
+      dallas: { name: string; initials: string; volume: number; units: number }[]
     }
     leases: {
-      houston: { name: string; initials: string; headshot_url: string | null; volume: number; units: number }[]
-      dallas: { name: string; initials: string; headshot_url: string | null; volume: number; units: number }[]
+      houston: { name: string; initials: string; volume: number; units: number }[]
+      dallas: { name: string; initials: string; volume: number; units: number }[]
     }
   }
 }
@@ -60,34 +60,20 @@ function useAnimatedNumber(target: number, duration = 1800, active = true) {
   return value
 }
 
-function Headshot({ initials, url, size = 48, highlight = false, className = '' }: { initials: string; url?: string | null; size?: number; highlight?: boolean; className?: string }) {
-  const hasImage = url && url.length > 0
-  
+function InitialBadge({ initials, size = 48, highlight = false, className = '' }: { initials: string; size?: number; highlight?: boolean; className?: string }) {
   return (
     <div 
-      className={`flex items-center justify-center font-mono font-bold shrink-0 overflow-hidden ${className}`}
+      className={`flex items-center justify-center font-mono font-bold shrink-0 rounded-full ${className}`}
       style={{ 
         width: size, 
         height: size, 
-        border: `2px solid ${highlight ? GOLD : '#333'}`,
-        background: '#000',
+        border: `2px solid ${highlight ? GOLD : '#444'}`,
+        background: highlight ? 'rgba(197, 162, 120, 0.15)' : '#111',
         fontSize: size * 0.35,
-        color: highlight ? GOLD : '#666'
+        color: highlight ? GOLD : '#888'
       }}
     >
-      {hasImage ? (
-        <img 
-          src={url} 
-          alt={initials}
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            // Hide broken image and show initials instead
-            (e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
-      ) : (
-        initials
-      )}
+      {initials}
     </div>
   )
 }
@@ -143,7 +129,7 @@ export default function QuarterlyPresentationPage() {
   const [slide, setSlide] = useState(0)
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null)
   
-  const slides = ['title', 'agenda', 'growth', 'volume', 'team1', 'team2', 'leases', 'sales', 'close']
+  const slides = ['title', 'agenda', 'growth', 'volume', 'team1', 'team2', 'leases', 'sales', 'reveal', 'close']
   const totalSlides = slides.length
 
   const go = useCallback((delta: number) => {
@@ -266,11 +252,12 @@ export default function QuarterlyPresentationPage() {
         {currentSlide === 'agenda' && <AgendaSlide />}
         {currentSlide === 'growth' && <GrowthSlide data={data} active />}
         {currentSlide === 'volume' && <VolumeSlide data={data} active />}
-        {currentSlide === 'team1' && data.topTeams[0] && <TeamSlide team={data.topTeams[0]} rank={1} active />}
-        {currentSlide === 'team2' && data.topTeams[1] && <TeamSlide team={data.topTeams[1]} rank={2} active />}
+        {currentSlide === 'team1' && data.topTeams[0] && <TeamSlide team={data.topTeams[0]} rank={1} quarter={data.quarter.quarter} active />}
+        {currentSlide === 'team2' && data.topTeams[1] && <TeamSlide team={data.topTeams[1]} rank={2} quarter={data.quarter.quarter} active />}
         {currentSlide === 'team2' && !data.topTeams[1] && <NoDataSlide message="No second team data" />}
         {currentSlide === 'leases' && <ProducersSlide type="LEASES" houston={data.topProducers.leases.houston} dallas={data.topProducers.leases.dallas} showConfetti />}
         {currentSlide === 'sales' && <ProducersSlide type="SALES" houston={data.topProducers.sales.houston} dallas={data.topProducers.sales.dallas} showConfetti />}
+        {currentSlide === 'reveal' && <RevealSlide agentNet={data.volume.totalAgentNet} quarter={data.quarter.quarter} year={data.quarter.year} />}
         {currentSlide === 'close' && <CloseSlide quarter={quarterLabel} />}
 
         {/* Click zones - hidden on mobile, use buttons instead */}
@@ -438,7 +425,7 @@ function VolumeSlide({ data, active }: { data: QuarterlyData; active: boolean })
   )
 }
 
-function TeamSlide({ team, rank, active }: { team: QuarterlyData['topTeams'][0]; rank: number; active: boolean }) {
+function TeamSlide({ team, rank, quarter, active }: { team: QuarterlyData['topTeams'][0]; rank: number; quarter: number; active: boolean }) {
   const volume = useAnimatedNumber(team.volume, 1800, active)
   const units = useAnimatedNumber(team.units, 1200, active)
   
@@ -450,28 +437,30 @@ function TeamSlide({ team, rank, active }: { team: QuarterlyData['topTeams'][0];
       
       <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6 sm:gap-8 md:gap-12">
         <div>
-          <p className="font-mono text-[10px] sm:text-xs text-neutral-600 tracking-widest mb-2 sm:mb-4">Q4 TOP PERFORMER</p>
+          <p className="font-mono text-[10px] sm:text-xs text-neutral-600 tracking-widest mb-2 sm:mb-4">Q{quarter} TOP PERFORMER</p>
           <p className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight mb-6 sm:mb-10">{team.name}</p>
           
-          {team.lead && (
-            <div className="flex items-center gap-3 sm:gap-5 py-4 sm:py-6 border-t border-b border-neutral-800 mb-6 sm:mb-10">
-              <Headshot initials={team.lead.initials} url={team.lead.headshot_url} size={48} highlight className="sm:hidden" />
-              <Headshot initials={team.lead.initials} url={team.lead.headshot_url} size={64} highlight className="hidden sm:flex" />
-              <div>
-                <p className="font-mono text-[10px] text-neutral-500 tracking-widest mb-1">TEAM LEAD</p>
-                <p className="text-base sm:text-xl font-bold">{team.lead.name}</p>
+          {team.leads && team.leads.length > 0 && (
+            <div className="py-4 sm:py-6 border-t border-b border-neutral-800 mb-6 sm:mb-10">
+              <p className="font-mono text-[10px] text-neutral-500 tracking-widest mb-3">TEAM LEAD{team.leads.length > 1 ? 'S' : ''}</p>
+              <div className="flex flex-col gap-2">
+                {team.leads.map((lead, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <InitialBadge initials={lead.initials} size={40} highlight />
+                    <p className="text-base sm:text-xl font-bold text-white">{lead.name}</p>
+                  </div>
+                ))}
               </div>
             </div>
           )}
           
-          <div className="flex gap-2">
-            {team.members.slice(0, 4).map((m, i) => (
-              <Headshot key={i} initials={m.initials} url={m.headshot_url} size={32} className="sm:hidden" />
-            ))}
-            {team.members.slice(0, 4).map((m, i) => (
-              <Headshot key={`lg-${i}`} initials={m.initials} url={m.headshot_url} size={40} className="hidden sm:flex" />
-            ))}
-          </div>
+          {team.members.length > 0 && (
+            <div className="flex gap-2">
+              {team.members.slice(0, 4).map((m, i) => (
+                <InitialBadge key={i} initials={m.initials} size={36} />
+              ))}
+            </div>
+          )}
         </div>
         
         <div className="flex flex-row md:flex-col gap-1">
@@ -496,8 +485,8 @@ function ProducersSlide({
   showConfetti 
 }: { 
   type: string
-  houston: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
-  dallas: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
+  houston: { name: string; initials: string; volume: number; units: number }[]
+  dallas: { name: string; initials: string; volume: number; units: number }[]
   showConfetti?: boolean 
 }) {
   const [confetti, setConfetti] = useState(false)
@@ -530,7 +519,7 @@ function OfficeList({
   isGold 
 }: { 
   office: string
-  data: { name: string; initials: string; headshot_url?: string | null; volume: number; units: number }[]
+  data: { name: string; initials: string; volume: number; units: number }[]
   isGold: boolean 
 }) {
   return (
@@ -551,8 +540,7 @@ function OfficeList({
               animationDelay: `${i * 0.12}s`
             }}
           >
-            <Headshot initials={agent.initials} url={agent.headshot_url} size={36} highlight={isGold && i === 0} className="sm:hidden" />
-            <Headshot initials={agent.initials} url={agent.headshot_url} size={48} highlight={isGold && i === 0} className="hidden sm:flex" />
+            <InitialBadge initials={agent.initials} size={40} highlight={isGold && i === 0} />
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm sm:text-base truncate">{agent.name.toUpperCase()}</p>
               <p className="font-mono text-[10px] sm:text-[11px] text-neutral-500 mt-0.5 sm:mt-1 tracking-widest">{agent.units} UNITS</p>
@@ -577,6 +565,18 @@ function OfficeList({
         }
         .animate-slideIn { animation: slideIn 0.4s ease forwards; opacity: 0; }
       `}</style>
+    </div>
+  )
+}
+
+function RevealSlide({ agentNet, quarter, year }: { agentNet: number; quarter: number; year: number }) {
+  return (
+    <div className="absolute inset-0 flex flex-col justify-center items-center bg-black px-4">
+      <p className="font-mono text-xs sm:text-sm text-neutral-600 tracking-[0.3em] mb-4">Q{quarter} {year}</p>
+      <p className="font-mono text-sm sm:text-base text-neutral-500 tracking-widest mb-6 sm:mb-10">TOTAL AGENT NET</p>
+      <p className="text-5xl sm:text-7xl md:text-9xl lg:text-[180px] font-black tracking-tight leading-none text-white">
+        ${agentNet.toLocaleString()}
+      </p>
     </div>
   )
 }
