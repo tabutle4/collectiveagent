@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { sendProspectWelcomeEmail } from '@/lib/email'
 import { requirePermission } from '@/lib/api-auth'
 import crypto from 'crypto'
