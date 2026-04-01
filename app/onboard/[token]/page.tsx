@@ -128,7 +128,7 @@ function SignatureStep({
         </div>
       )}
 
-      <div className="card-section">
+      <div className="container-card">
         <p className="text-xs text-luxury-gray-3 mb-3">
           By signing below, you confirm you have read, understood, and agree to be bound by this agreement.
         </p>
@@ -195,7 +195,7 @@ function PolicyManualStep({ token, onComplete }: { token: string; onComplete: ()
         </p>
       </div>
 
-      <div className="card-section p-0 overflow-hidden">
+      <div className="container-card p-0 overflow-hidden">
         <iframe
           src="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/Doc.aspx?sourcedoc=%7BPOLICY_MANUAL_FILE_ID%7D&action=embedview"
           className="w-full"
@@ -529,7 +529,7 @@ export default function OnboardingPage() {
             )}
 
             {/* Personal */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Personal Information
               </h2>
@@ -634,7 +634,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Shipping Address */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Shipping Address
               </h2>
@@ -698,7 +698,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* License & MLS */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 License & MLS
               </h2>
@@ -781,7 +781,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Commission Plan */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Commission Plan *
               </h2>
@@ -860,7 +860,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Social Media */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Social Media
               </h2>
@@ -888,7 +888,7 @@ export default function OnboardingPage() {
             </div>
 
             {/* Referral */}
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Referral & Team
               </h2>
@@ -942,7 +942,7 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 What's Included
               </h2>
@@ -989,7 +989,7 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <div className="card-section">
+            <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
                 Payment Methods
               </h2>
@@ -1062,7 +1062,7 @@ export default function OnboardingPage() {
                 Your W-9 will be sent to your email shortly for completion. Once you receive it, complete and return it to us.
               </p>
             </div>
-            <div className="card-section text-center space-y-4">
+            <div className="container-card text-center space-y-4">
               <p className="text-sm text-luxury-gray-2">
                 We use Track1099 to collect your W-9 securely. You will receive an email with a link to complete your form electronically.
               </p>
@@ -1100,7 +1100,7 @@ export default function OnboardingPage() {
                 Your onboarding documents have been completed and saved. The final step is TREC sponsorship — we will submit your sponsorship request and notify you by email once it has been accepted.
               </p>
             </div>
-            <div className="card-section max-w-md mx-auto text-left space-y-3">
+            <div className="container-card max-w-md mx-auto text-left space-y-3">
               <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">What happens next</p>
               <div className="space-y-2 text-sm text-luxury-gray-2">
                 <p>✓ We submit your TREC sponsorship request</p>
