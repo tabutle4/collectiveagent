@@ -26,10 +26,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'No eligible agents', created: 0 })
     }
 
-    const now = new Date()
-    const monthName = now.toLocaleString('default', { month: 'long' })
-    const year = now.getFullYear()
-    const dueDate = new Date(now.getFullYear(), now.getMonth(), 5).toISOString().split('T')[0]
+    
+  const now = new Date()
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const monthName = nextMonth.toLocaleString('default', { month: 'long' })
+  const year = nextMonth.getFullYear()
+  const dueDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 5).toISOString().split('T')[0]
 
     let created = 0
     let skipped = 0
