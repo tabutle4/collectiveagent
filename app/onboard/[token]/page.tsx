@@ -273,6 +273,8 @@ export default function OnboardingPage() {
     association: '',
     association_status_on_join: '',
     commission_plan: '',
+    custom_split: '',
+    custom_plan_type: '',
     instagram_handle: '',
     tiktok_handle: '',
     threads_handle: '',
@@ -356,10 +358,18 @@ export default function OnboardingPage() {
     setError('')
     setSubmitting(true)
     try {
+      // Format custom plan into commission_plan string
+      const submittedForm = { ...joinForm }
+      if (joinForm.commission_plan === 'Custom Plan' && joinForm.custom_split && joinForm.custom_plan_type) {
+        const agentSplit = parseInt(joinForm.custom_split)
+        const brokSplit = 100 - agentSplit
+        submittedForm.commission_plan = `Custom - ${agentSplit}/${brokSplit} ${joinForm.custom_plan_type}`
+      }
+
       const res = await fetch('/api/onboarding/submit-join-form', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, ...joinForm }),
+        body: JSON.stringify({ token, ...submittedForm }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Submission failed')
@@ -477,52 +487,28 @@ export default function OnboardingPage() {
         className="fixed left-0 right-0 z-40 bg-white border-b border-luxury-gray-5 shadow-sm"
         style={{ top: '83px' }}
       >
-        <div className="max-w-2xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-1">
-            {STEPS.map((step, i) => (
-              <div key={step.id} className="flex items-center flex-1">
-                <div className="flex flex-col items-center flex-shrink-0">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all duration-300 ${
-                      currentStep > step.id
-                        ? 'bg-green-600 text-white'
-                        : currentStep === step.id
-                          ? 'bg-luxury-black text-white'
-                          : 'bg-luxury-gray-5 text-luxury-gray-3'
-                    }`}
-                  >
-                    {currentStep > step.id ? <CheckCircle2 size={14} /> : step.id}
-                  </div>
-                  <span
-                    className={`text-xs mt-1 whitespace-nowrap hidden md:block ${
-                      currentStep === step.id
-                        ? 'text-luxury-gray-1 font-semibold'
-                        : 'text-luxury-gray-3'
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </div>
-                {i < STEPS.length - 1 && (
-                  <div
-                    className={`flex-1 h-0.5 mx-1 transition-all duration-300 ${
-                      currentStep > step.id ? 'bg-green-600' : 'bg-luxury-gray-5'
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+        <div className="max-w-2xl mx-auto px-6 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-luxury-gray-1 uppercase tracking-widest">
+              {STEPS[currentStep - 1]?.label}
+            </p>
+            <p className="text-xs text-luxury-gray-3">
+              Step {currentStep} of {STEPS.length}
+            </p>
           </div>
-          <p className="text-xs text-center text-luxury-gray-3 mt-2 md:hidden">
-            Step {currentStep} of {STEPS.length} — {STEPS[currentStep - 1]?.label}
-          </p>
+          <div className="w-full h-1 bg-luxury-gray-5 rounded-full overflow-hidden">
+            <div
+              className="h-1 bg-luxury-accent rounded-full transition-all duration-500"
+              style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}
+            />
+          </div>
         </div>
       </div>
 
       {/* Main content */}
       <div
         className="flex-1 max-w-2xl mx-auto w-full px-6"
-        style={{ paddingTop: '180px', paddingBottom: '60px' }}
+        style={{ paddingTop: '150px', paddingBottom: '60px' }}
       >
         {/* ── STEP 1: Join Form ── */}
         {currentStep === 1 && (
@@ -800,7 +786,7 @@ export default function OnboardingPage() {
                 Commission Plan *
               </h2>
               <div className="space-y-2.5">
-                {['New Agent Plan', 'No Cap Plan', 'Cap Plan'].map(plan => (
+                {['New Agent Plan', 'No Cap Plan', 'Cap Plan', 'Custom Plan'].map(plan => (
                   <label
                     key={plan}
                     className="flex items-center gap-2.5 cursor-pointer inner-card hover:border-luxury-black transition-colors"
@@ -817,6 +803,50 @@ export default function OnboardingPage() {
                   </label>
                 ))}
               </div>
+
+              {joinForm.commission_plan === 'Custom Plan' && (
+                <div className="mt-4 space-y-3 pt-4 border-t border-luxury-gray-5">
+                  <p className="text-xs text-luxury-gray-3">
+                    Enter the split and plan type offered to you by the broker.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Your Split % (Agent) *
+                      </label>
+                      <input
+                        name="custom_split"
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={joinForm.custom_split}
+                        onChange={handleChange}
+                        placeholder="e.g. 80"
+                        required={joinForm.commission_plan === 'Custom Plan'}
+                        className="input-luxury"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                        Plan Type *
+                      </label>
+                      <select
+                        name="custom_plan_type"
+                        value={joinForm.custom_plan_type}
+                        onChange={handleChange}
+                        required={joinForm.commission_plan === 'Custom Plan'}
+                        className="select-luxury"
+                      >
+                        <option value="">Select type</option>
+                        <option value="No Cap">No Cap</option>
+                        <option value="Cap">Cap ($18,000)</option>
+                        <option value="New Agent Base">New Agent Base</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-luxury-gray-3 mt-3">
                 Select the plan offered to you. Questions? Contact{' '}
                 <a
