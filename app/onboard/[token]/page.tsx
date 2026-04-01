@@ -32,7 +32,17 @@ function SignatureStep({
   const [hasSignature, setHasSignature] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [docContent, setDocContent] = useState<any>(null)
+  const [docLoading, setDocLoading] = useState(true)
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/onboarding/document-preview?token=${token}&type=${documentType}`)
+      .then(r => r.json())
+      .then(data => { if (data.content) setDocContent(data.content) })
+      .catch(() => {})
+      .finally(() => setDocLoading(false))
+  }, [token, documentType])
 
   const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect()
@@ -127,6 +137,33 @@ function SignatureStep({
           {error}
         </div>
       )}
+
+      {/* Document content */}
+      <div className="container-card max-h-96 overflow-y-auto text-sm text-luxury-gray-2 leading-relaxed space-y-4">
+        {docLoading ? (
+          <p className="text-xs text-luxury-gray-3 text-center py-8">Loading agreement...</p>
+        ) : docContent ? (
+          <>
+            <p className="text-base font-semibold text-luxury-gray-1 text-center">
+              {docContent.title}
+            </p>
+            {docContent.sections?.map((section: any, i: number) => (
+              <div key={i}>
+                {section.heading && (
+                  <p className="font-semibold text-luxury-gray-1 mt-4">{section.heading}</p>
+                )}
+                {section.body && (
+                  <p className="whitespace-pre-wrap text-xs">{section.body}</p>
+                )}
+              </div>
+            ))}
+          </>
+        ) : (
+          <p className="text-xs text-luxury-gray-3 text-center py-8">
+            Agreement content unavailable. Please contact the office before signing.
+          </p>
+        )}
+      </div>
 
       <div className="container-card">
         <p className="text-xs text-luxury-gray-3 mb-3">
@@ -986,9 +1023,9 @@ export default function OnboardingPage() {
                 Payment Methods
               </h2>
               <div className="space-y-2 text-sm text-luxury-gray-2">
-                <p>Credit/debit card or bank account (ACH) — click Pay & Continue below.</p>
+                <p>Credit/debit card or bank account (ACH). Click Pay & Continue below.</p>
                 <p>
-                  Zelle — send to{' '}
+                  Zelle: send to{' '}
                   <span className="font-medium text-luxury-gray-1">info@collectiverealtyco.com</span>{' '}
                   with your name, then email{' '}
                   <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
@@ -1071,7 +1108,7 @@ export default function OnboardingPage() {
               }}
               className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
             >
-              I Understand — Continue →
+              I Understand, Continue →
             </button>
           </div>
         )}
@@ -1083,7 +1120,7 @@ export default function OnboardingPage() {
             <div>
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-3">You're Almost There</h1>
               <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                Your onboarding documents have been completed and saved. The final step is TREC sponsorship — we will submit your sponsorship request and notify you by email once it has been accepted.
+                Your onboarding documents have been completed and saved. The final step is TREC sponsorship. We will submit your sponsorship request and notify you by email once it has been accepted.
               </p>
             </div>
             <div className="container-card max-w-md mx-auto text-left space-y-3">
