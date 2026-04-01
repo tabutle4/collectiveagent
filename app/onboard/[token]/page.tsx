@@ -985,9 +985,18 @@ export default function OnboardingPage() {
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
                 Payment Methods
               </h2>
-              <p className="text-sm text-luxury-gray-2">
-                Credit/debit card or bank account (ACH).
-              </p>
+              <div className="space-y-2 text-sm text-luxury-gray-2">
+                <p>Credit/debit card or bank account (ACH) — click Pay & Continue below.</p>
+                <p>
+                  Zelle — send to{' '}
+                  <span className="font-medium text-luxury-gray-1">info@collectiverealtyco.com</span>{' '}
+                  with your name, then email{' '}
+                  <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+                    office@collectiverealtyco.com
+                  </a>{' '}
+                  to confirm.
+                </p>
+              </div>
             </div>
 
             <button
@@ -997,21 +1006,6 @@ export default function OnboardingPage() {
             >
               {paying ? 'Opening Checkout...' : 'Pay & Continue →'}
             </button>
-
-            <div className="inner-card text-center">
-              <p className="text-xs text-luxury-gray-3">
-                Prefer Zelle? Send to{' '}
-                <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span>{' '}
-                and include your name. Then contact{' '}
-                <a
-                  href="mailto:office@collectiverealtyco.com"
-                  className="text-luxury-accent hover:underline"
-                >
-                  office@collectiverealtyco.com
-                </a>{' '}
-                to confirm.
-              </p>
-            </div>
           </div>
         )}
 
