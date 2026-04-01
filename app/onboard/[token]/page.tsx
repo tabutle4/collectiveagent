@@ -622,14 +622,6 @@ export default function OnboardingPage() {
                     className="input-luxury"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Email</label>
-                  <input
-                    value={joinForm.email}
-                    readOnly
-                    className="input-luxury bg-luxury-gray-5/30 text-luxury-gray-3 cursor-not-allowed"
-                  />
-                </div>
               </div>
             </div>
 
@@ -994,7 +986,7 @@ export default function OnboardingPage() {
                 Payment Methods
               </h2>
               <p className="text-sm text-luxury-gray-2">
-                Credit/debit card or bank account (ACH). You can also set up autopay at checkout.
+                Credit/debit card or bank account (ACH).
               </p>
             </div>
 
