@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin as supabase } from '@/lib/supabase'
 
 // Helper function to convert hardcoded campaign to editable steps_config
 function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
