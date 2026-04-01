@@ -1,6 +1,3 @@
 # Exclude headshots from deployment - they're stored in Supabase Storage
 public/headshots/
 
-# Exclude other large files that aren't needed in serverless functions
-*.pdf
-
