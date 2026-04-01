@@ -158,30 +158,18 @@ export default function OnboardingPage() {
   const handlePayment = async () => {
     setPaying(true)
     try {
-      // Create onboarding invoice
-      const invoiceRes = await fetch('/api/payload/create-invoice', {
+      // Create Payload customer (if needed), invoice, and checkout token in one call
+      const res = await fetch('/api/onboarding/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: prospect.id, type: 'onboarding' }),
+        body: JSON.stringify({ token }),
       })
-      const invoiceData = await invoiceRes.json()
-      if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
-
-      // Get checkout token
-      const tokenRes = await fetch('/api/payload/checkout-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoice_id: invoiceData.invoice_id,
-          description: 'Onboarding Fee',
-        }),
-      })
-      const tokenData = await tokenRes.json()
-      if (!tokenData.client_token)
-        throw new Error(tokenData.error || 'Failed to create checkout session')
+      const data = await res.json()
+      if (!res.ok || !data.client_token)
+        throw new Error(data.error || 'Failed to create checkout session')
 
       // Open embedded checkout
-      window.Payload(tokenData.client_token)
+      window.Payload(data.client_token)
       const checkout = new window.Payload.Checkout({
         style: {
           default: {
@@ -725,10 +713,25 @@ export default function OnboardingPage() {
                   <div>
                     <p className="text-sm font-semibold text-luxury-gray-1">Prorated Monthly Fee</p>
                     <p className="text-xs text-luxury-gray-3">
-                      Remaining days in the current month at $50/month.
+                      {(() => {
+                        const now = new Date()
+                        const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                        const p = (n: number) => String(n).padStart(2, '0')
+                        const yy = String(now.getFullYear()).slice(2)
+                        const start = `${p(now.getMonth() + 1)}/${p(now.getDate())}/${yy}`
+                        const end = `${p(now.getMonth() + 1)}/${p(dim)}/${yy}`
+                        return `${start} to ${end}`
+                      })()}
                     </p>
                   </div>
-                  <p className="text-sm font-semibold text-luxury-gray-1">Calculated at checkout</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {(() => {
+                      const now = new Date()
+                      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                      const remaining = dim - now.getDate() + 1
+                      return `$${(Math.round((50 / dim) * remaining * 100) / 100).toFixed(2)}`
+                    })()}
+                  </p>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-luxury-gray-5/50">
