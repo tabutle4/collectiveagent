@@ -4,6 +4,8 @@ import { sendProspectWelcomeEmail } from '@/lib/email'
 import { requirePermission } from '@/lib/api-auth'
 import crypto from 'crypto'
 
+export const dynamic = 'force-dynamic'
+
 // POST is intentionally public - this is the prospective agent form
 export async function POST(request: NextRequest) {
   try {
