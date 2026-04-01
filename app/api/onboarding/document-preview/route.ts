@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getICAContent } from '@/lib/documents/ica-content'
 import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
+import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,8 @@ export async function GET(request: NextRequest) {
         effectiveDate,
         plan: planKey,
       })
+    } else if (documentType === 'policy_manual') {
+      content = getPolicyAcknowledgmentContent({ agentName, effectiveDate })
     } else {
       return NextResponse.json({ error: 'Invalid document type' }, { status: 400 })
     }
