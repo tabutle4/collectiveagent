@@ -28,6 +28,7 @@ const PUBLIC_PATHS = [
   '/favicon.ico',
   '/logo.png',
   '/logo-white.png',
+  '/api/cron',
 ]
 
 // Paths accessible to all authenticated users regardless of role
