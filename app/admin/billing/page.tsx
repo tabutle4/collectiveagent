@@ -832,13 +832,12 @@ export default function AdminBillingPage() {
                                           <Send size={11} />
                                           {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
                                         </button>
-                                        <button
-                                          onClick={() => voidInvoice(agent.id, inv.id)}
-                                          disabled={sending === `void-${inv.id}`}
-                                          className="text-xs text-red-400 hover:text-red-600 disabled:opacity-50"
+                                        <span
+                                          title="To void this invoice, delete it manually in the Payload dashboard."
+                                          className="text-xs text-luxury-gray-3 cursor-help"
                                         >
-                                          {sending === `void-${inv.id}` ? 'Voiding...' : 'Void'}
-                                        </button>
+                                          Void in Payload ⓘ
+                                        </span>
                                       </div>
                                     </div>
                                   </div>
