@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import AdminUserProfileModal from '@/components/admin/AdminUserProfileModal'
 
 export default function ProspectDetailPage() {
   const params = useParams()
@@ -11,6 +12,7 @@ export default function ProspectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [newStatus, setNewStatus] = useState('')
+  const [convertModalOpen, setConvertModalOpen] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -22,9 +24,7 @@ export default function ProspectDetailPage() {
     try {
       const res = await fetch(`/api/prospects/${params.id}`)
       const data = await res.json()
-
       if (!res.ok) throw new Error(data.error)
-
       setProspect(data.prospect)
       setNewStatus(data.prospect.prospect_status || 'new')
       setLoading(false)
@@ -36,7 +36,6 @@ export default function ProspectDetailPage() {
 
   const updateStatus = async () => {
     if (!prospect || newStatus === prospect.prospect_status) return
-
     setUpdating(true)
     try {
       const res = await fetch(`/api/prospects/${params.id}`, {
@@ -44,9 +43,7 @@ export default function ProspectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prospect_status: newStatus }),
       })
-
       if (!res.ok) throw new Error('Failed to update')
-
       setProspect({ ...prospect, prospect_status: newStatus })
       alert('Status updated successfully')
     } catch (error) {
@@ -76,6 +73,23 @@ export default function ProspectDetailPage() {
 
   return (
     <div>
+      {convertModalOpen && (
+        <AdminUserProfileModal
+          user={{
+            ...prospect,
+            status: 'active',
+            role: 'agent',
+            is_active: true,
+            is_licensed_agent: true,
+          }}
+          onClose={() => setConvertModalOpen(false)}
+          onSaved={updatedUser => {
+            setConvertModalOpen(false)
+            router.push(`/admin/users/${updatedUser.id}`)
+          }}
+        />
+      )}
+
       <div className="mb-8">
         <Link
           href="/admin/prospects"
@@ -116,6 +130,13 @@ export default function ProspectDetailPage() {
                 {updating ? 'Updating...' : 'Update Status'}
               </button>
             )}
+
+            <button
+              onClick={() => setConvertModalOpen(true)}
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
+            >
+              Convert to Agent
+            </button>
           </div>
         </div>
       </div>

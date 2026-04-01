@@ -488,3 +488,25 @@ export async function uploadWeeklyReports(
     file2DownloadUrl: file2Result?.downloadUrl || null,
   }
 }
+
+export async function createAgentFolder(
+  firstName: string,
+  lastName: string,
+  userId: string
+): Promise<{ folderPath: string; sharingUrl: string }> {
+  const sanitizedName = `${firstName} ${lastName}`.replace(/[/\\?%*:|"<>]/g, '-')
+  const folderPath = `Agent Documents/${sanitizedName}-${userId}`
+
+  await graphClient.createFolder(folderPath)
+  const sharingUrl = await graphClient.createSharingLink(folderPath, 'view')
+
+  return { folderPath, sharingUrl }
+}
+
+export async function uploadAgentDocument(
+  folderPath: string,
+  fileName: string,
+  fileBuffer: Buffer
+): Promise<{ fileUrl: string; downloadUrl: string }> {
+  return graphClient.uploadFileToFolder(folderPath, fileName, fileBuffer)
+}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, RotateCcw } from 'lucide-react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
@@ -11,6 +11,223 @@ declare global {
   interface Window {
     Payload: any
   }
+}
+
+// ── Signature Step Component ──────────────────────────────────────────────────
+function SignatureStep({
+  token,
+  documentType,
+  title,
+  description,
+  onComplete,
+}: {
+  token: string
+  documentType: 'ica' | 'commission_plan'
+  title: string
+  description: string
+  onComplete: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [hasSignature, setHasSignature] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const lastPos = useRef<{ x: number; y: number } | null>(null)
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    if ('touches' in e) {
+      return {
+        x: (e.touches[0].clientX - rect.left) * scaleX,
+        y: (e.touches[0].clientY - rect.top) * scaleY,
+      }
+    }
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    }
+  }
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    e.preventDefault()
+    setIsDrawing(true)
+    lastPos.current = getPos(e, canvas)
+  }
+
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawing) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    e.preventDefault()
+    const ctx = canvas.getContext('2d')
+    if (!ctx || !lastPos.current) return
+    const pos = getPos(e, canvas)
+    ctx.beginPath()
+    ctx.moveTo(lastPos.current.x, lastPos.current.y)
+    ctx.lineTo(pos.x, pos.y)
+    ctx.strokeStyle = '#1A1A1A'
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+    lastPos.current = pos
+    setHasSignature(true)
+  }
+
+  const stopDraw = () => {
+    setIsDrawing(false)
+    lastPos.current = null
+  }
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    setHasSignature(false)
+  }
+
+  const handleSubmit = async () => {
+    if (!hasSignature) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const signatureDataUrl = canvas.toDataURL('image/png')
+      const res = await fetch('/api/onboarding/sign-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, documentType, signatureDataUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to submit')
+      onComplete()
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">{title}</h1>
+        <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">{description}</p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      <div className="card-section">
+        <p className="text-xs text-luxury-gray-3 mb-3">
+          By signing below, you confirm you have read, understood, and agree to be bound by this agreement.
+        </p>
+        <div className="relative border border-luxury-gray-5 rounded bg-white">
+          <canvas
+            ref={canvasRef}
+            width={560}
+            height={160}
+            className="w-full touch-none cursor-crosshair"
+            onMouseDown={startDraw}
+            onMouseMove={draw}
+            onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
+            onTouchStart={startDraw}
+            onTouchMove={draw}
+            onTouchEnd={stopDraw}
+          />
+          {!hasSignature && (
+            <p className="absolute inset-0 flex items-center justify-center text-xs text-luxury-gray-3 pointer-events-none">
+              Sign here
+            </p>
+          )}
+        </div>
+        <div className="flex justify-end mt-2">
+          <button onClick={clearSignature} className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1">
+            <RotateCcw size={12} /> Clear
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={!hasSignature || submitting}
+        className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase disabled:opacity-50"
+      >
+        {submitting ? 'Saving...' : 'Sign & Continue →'}
+      </button>
+    </div>
+  )
+}
+
+// ── Policy Manual Step Component ───────────────────────────────────────────────
+function PolicyManualStep({ token, onComplete }: { token: string; onComplete: () => void }) {
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleContinue = async () => {
+    setSubmitting(true)
+    await fetch('/api/onboarding/acknowledge-step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, step: 5 }),
+    }).catch(() => {})
+    onComplete()
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Policy Manual</h1>
+        <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+          Please review the Collective Realty Co. policy manual below.
+        </p>
+      </div>
+
+      <div className="card-section p-0 overflow-hidden">
+        <iframe
+          src="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/Doc.aspx?sourcedoc=%7BPOLICY_MANUAL_FILE_ID%7D&action=embedview"
+          className="w-full"
+          style={{ height: '500px', border: 'none' }}
+          title="Policy Manual"
+        />
+      </div>
+
+      <div
+        className="flex items-start gap-3 cursor-pointer inner-card"
+        onClick={() => setAcknowledged(!acknowledged)}
+      >
+        <input
+          type="checkbox"
+          checked={acknowledged}
+          onChange={e => setAcknowledged(e.target.checked)}
+          className="mt-0.5 flex-shrink-0"
+        />
+        <span className="text-sm text-luxury-gray-2">
+          I have read and understand the Collective Realty Co. policy manual and agree to comply with all policies outlined.
+        </span>
+      </div>
+
+      <button
+        onClick={handleContinue}
+        disabled={!acknowledged || submitting}
+        className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase disabled:opacity-50"
+      >
+        {submitting ? 'Saving...' : 'Acknowledge & Continue →'}
+      </button>
+    </div>
+  )
 }
 
 const STEPS = [
@@ -190,7 +407,7 @@ export default function OnboardingPage() {
           body: JSON.stringify({ transaction_id: evt.transaction_id }),
         })
         // Advance to step 3
-        await fetch('/api/onboarding/advance-step', {
+        await fetch('/api/onboarding/acknowledge-step', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token, step: 2 }),
@@ -776,25 +993,98 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* ── STEPS 3-7: Coming soon placeholders ── */}
-        {currentStep > 2 && (
-          <div className="text-center py-16">
-            <div className="container-card inline-block p-10">
-              <CheckCircle2 size={40} className="text-luxury-accent mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-luxury-gray-1 mb-2">
-                Step {currentStep}: {STEPS[currentStep - 1]?.label}
-              </h2>
-              <p className="text-sm text-luxury-gray-3">
-                This step is being prepared. Check back soon or contact{' '}
-                <a
-                  href="mailto:office@collectiverealtyco.com"
-                  className="text-luxury-accent hover:underline"
-                >
-                  office@collectiverealtyco.com
-                </a>
-                .
+        {/* ── STEP 3: ICA ── */}
+        {currentStep === 3 && (
+          <SignatureStep
+            token={token}
+            documentType="ica"
+            title="Independent Contractor Agreement"
+            description="Please read the agreement below carefully and sign at the bottom to continue."
+            onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
+        )}
+
+        {/* ── STEP 4: Commission Plan Agreement ── */}
+        {currentStep === 4 && (
+          <SignatureStep
+            token={token}
+            documentType="commission_plan"
+            title="Commission Plan Agreement"
+            description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
+            onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
+        )}
+
+        {/* ── STEP 5: Policy Manual ── */}
+        {currentStep === 5 && (
+          <PolicyManualStep
+            token={token}
+            onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
+        )}
+
+        {/* ── STEP 6: W-9 ── */}
+        {currentStep === 6 && (
+          <div className="space-y-5">
+            <div className="text-center mb-8">
+              <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Form</h1>
+              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                Your W-9 will be sent to your email shortly for completion. Once you receive it, complete and return it to us.
               </p>
             </div>
+            <div className="card-section text-center space-y-4">
+              <p className="text-sm text-luxury-gray-2">
+                We use Track1099 to collect your W-9 securely. You will receive an email with a link to complete your form electronically.
+              </p>
+              <p className="text-sm text-luxury-gray-3">
+                If you have not received it within 24 hours, contact{' '}
+                <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+                  office@collectiverealtyco.com
+                </a>
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                await fetch('/api/onboarding/acknowledge-step', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, step: 6 }),
+                })
+                setCurrentStep(7)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+            >
+              I Understand — Continue →
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 7: TREC ── */}
+        {currentStep === 7 && (
+          <div className="text-center py-12 space-y-6">
+            <CheckCircle2 size={48} className="text-luxury-accent mx-auto" />
+            <div>
+              <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-3">You're Almost There</h1>
+              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                Your onboarding documents have been completed and saved. The final step is TREC sponsorship — we will submit your sponsorship request and notify you by email once it has been accepted.
+              </p>
+            </div>
+            <div className="card-section max-w-md mx-auto text-left space-y-3">
+              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">What happens next</p>
+              <div className="space-y-2 text-sm text-luxury-gray-2">
+                <p>✓ We submit your TREC sponsorship request</p>
+                <p>✓ You'll receive a TREC invitation email to accept</p>
+                <p>✓ Once accepted, we'll send your welcome email with next steps</p>
+                <p>✓ You'll gain full access to the agent portal</p>
+              </div>
+            </div>
+            <p className="text-xs text-luxury-gray-3">
+              Questions? Contact us at{' '}
+              <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+                office@collectiverealtyco.com
+              </a>
+            </p>
           </div>
         )}
       </div>

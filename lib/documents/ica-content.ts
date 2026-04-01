@@ -1,0 +1,94 @@
+export interface ICAFields {
+  agentFirstName: string
+  agentLastName: string
+  effectiveDate: string
+  mailingAddress: string
+  email: string
+}
+
+export function getICAContent(fields: ICAFields) {
+  const { agentFirstName, agentLastName, effectiveDate, mailingAddress, email } = fields
+  const agentName = `${agentFirstName} ${agentLastName}`
+
+  return {
+    title: 'REAL ESTATE AGENT INDEPENDENT CONTRACTOR AGREEMENT',
+    effectiveDate,
+    agentName,
+    mailingAddress,
+    email,
+    sections: [
+      {
+        heading: null,
+        body: `The Parties. This Real Estate Agent Independent Contractor Agreement ("Agreement") is made on ${effectiveDate} ("Effective Date"), by and between ${agentName} ("Salesperson") and Collective Realty Co., with a principal office address of 13201 Northwest Fwy, Ste 450, Houston, Texas, 77040 ("Agency").\n\nThe Salesperson and Agency, collectively the "Parties", agree as follows:`,
+      },
+      {
+        heading: 'I. The Salesperson',
+        body: `The Salesperson is a licensed real estate agent in the State(s) of Texas. In accordance with State law, the Salesperson is duly qualified to solicit real estate as a service to the general public.\n\na.) Status. The Parties agree that the services provided by the Salesperson are as an Independent Contractor and no other legal relationship exists or is implied. Nothing in this Agreement shall constitute an offer of employment, a partnership, a joint venture, or any other form of relationship other than the Salesperson's relationship with the Agency.\n\nb.) Licensing. At the Salesperson's own expense, he or she will be required to remain in "good standing", or the State's equivalent, through the term of this Agreement. In the event the license issued to the Salesperson is revoked, suspended, or not renewed for any reason, the Salesperson shall automatically terminate effective the date of termination provided. The Salesperson agrees to hold the Agency harmless in any case related to licensing.\n\nc.) Board of Realtors. Under this Agreement, the Salesperson is required to apply and become a paying dues member to the local Association of Realtors board within 30 days of the Effective Date.\n\nd.) Fines. The Salesperson is entirely responsible for any fines or judgments made against them, including payment, in regards to the Real Estate Commission, the National Association of Realtors, or any other regulatory institution.\n\ne.) Best Efforts. Salesperson shall exert his/her best efforts in all activities related to the listing, selling, leasing, or exchanging of real property and will always and at all times conduct himself/herself in full compliance with local, state, and federal statutes, rules and guidelines and in a way that reflects the high standards of the Agency.\n\nf.) Fees. The Salesperson agrees to bear all fees and expenses incurred in the process of selling real estate, including an initial onboarding fee of $399 or other amount agreed to in writing. Brokerage processing fees may apply based on transaction type. Refer to the Agent Training Center for a complete fee schedule. The Agency shall not be responsible for any expenses related to the Salesperson. Furthermore, if the Agency is presented with a receivable related to the actions of the Salesperson, it shall be the debt of the Salesperson.\n\nThe monthly agent fee is $50 or other amount agreed to in writing and is due on the 1st day of each month. If payment is not received by the 5th day of the month, the agent's fee will be considered late. If the fee remains unpaid by the 6th day of the month, a late fee of $25 will be incurred. If the fee remains unpaid by the 6th day of the month, the agent will be subject to the termination of benefits and sponsorship (return of license to TREC) until the outstanding fee is paid in full. These benefits include, but are not limited to, access to company resources, marketing materials, and client referrals. Benefits are able to be reinstated once the full payment is received.`,
+      },
+      {
+        heading: 'II. Withholdings',
+        body: `As an independent contractor, the Salesperson understands they will be personally responsible for all Local, State, and Federal Taxes. In addition, the Salesperson agrees to indemnify the Agency for any and all liabilities or costs related to the aforementioned employment withholdings.\n\na.) Employment Insurance. As an independent contractor relationship, Salesperson provides no Worker's Compensation or Unemployment Insurance coverage of any kind. Salesperson expressly waives such coverage and is hereby notified that if Workers Compensation Coverage is desired, Salesperson must personally obtain coverage directly from a licensed insurance carrier at the Salesperson's sole expense.`,
+      },
+      {
+        heading: 'III. Office Support',
+        body: `The Agency shall provide an atmosphere with support for assisting the Salesperson with running their own business. The offices provided by the Agency are not guaranteed to have computers or equipment and it shall be the responsibility of the Salesperson to bring laptop, cellphone, and other equipment needed to work.\n\na.) Supervision. Agency is responsible for the supervision of all work performed by Salesperson as required by law and this Agreement. Except where such methods are inconsistent with the law or this agreement, Salesperson is solely responsible for the management of their own real estate business including, but not limited to, the management of time, efforts, expenses, etc. Agency shall have no right, except to the extent required by law to direct or limit Salesperson's activities as to hours, leads, floor time, open houses, prospecting, reports, sales meeting attendance, services, time off, vacation, or other similar activities.`,
+      },
+      {
+        heading: "IV. Salesperson's Authority",
+        body: `Salesperson is NOT an agent of the Agency and shall have NO authority to bind the Agency by any promise or representation unless such authority is expressly granted in writing which writing must include the specific time period and terms included in said agreement. Salesperson indemnifies and agrees to hold Agency harmless for any acts or omissions made by Salesperson contrary to this Agreement.`,
+      },
+      {
+        heading: 'V. Fair Housing Requirements',
+        body: `The Agency is committed to full compliance with all Federal and State Fair Housing Laws. Therefore, Salesperson shall fully understand and comply with all Fair Housing requirements and shall not act or advertise in any way to deny equal professional services or housing opportunity to any person for reasons of race, color, religion, sex, handicap, familial status, or national origin as mandated in the "Equal Housing Opportunity Act" or any other current or future enacted regulations.`,
+      },
+      {
+        heading: 'VI. Termination',
+        body: `This Agreement remains in effect for an indefinite term and will not expire annually. Salesperson may terminate without cause by following firm exit process upon separation. In the event of termination during the term, any fees prepaid to the Agency, as outlined in this agreement, shall be retained by the Agency, except in situations where early termination is due to the Agency's inability to perform services as agreed. If the Agency is unable to fulfill agreed upon services for any reason, any prepaid fees (if any) shall be returned on a prorated basis for each full month of the remaining prepaid term. The Agency shall have no further obligation or liability to the Salesperson beyond the repayment of prepaid fees as outlined herein.`,
+      },
+      {
+        heading: 'VII. Commissions',
+        body: `All commissions charged by the Salesperson to a Client in the solicitation of their property to procure a sale shall be payable to the Agency. The Salesperson has the right to negotiate and charge their own rates.\n\na.) Payment of Commissions. For every commission generated by the Salesperson and paid to the Agency, the Salesperson shall be paid according to the commission plan agreed to when joining the Agency ("Commission Arrangement").\n\nSpecial Commission Arrangements:\n\nLease Transactions (Agent's Lead): 85/15 split in favor of agent\nBrokerage Lead Referrals: 50/50 split for buyer transactions, 75/25 split for lease transactions in favor of agent\nClient Ownership: All brokerage-provided leads and resulting clients remain property of the Agency\nCap Exclusions: Lease transactions and brokerage lead transactions do not count toward commission caps\n\nThis commission arrangement is separate from any other liabilities in this Agreement. All commissions shall be paid up to thirty (30) days to the Salesperson. Agents may elect to receive commission payments at closing table when available.\n\nb.) Commission Minimums. For buyer and seller transactions, a minimum commission of 3% of the sales price is required. Any commission below 3% of the sales price requires prior written approval from the Broker. For lease transactions, a minimum commission of 40% of one month's rent is required. Any commission below 40% of one month's rent requires prior written approval from the Broker.\n\nc.) Post-Departure Commissions. In the event that a transaction closes or a lease is executed after the Salesperson is no longer affiliated with the Agency for any reason, an additional 10% processing fee will be assessed on all transaction types in addition to any applicable commission split and brokerage processing fees.\n\nAvailable Commission Plans:\n\nNew Agent Plan - Applies to the first 5 sales transactions for newly licensed agents. Split: 70/30. Cap: None. Required New Agent Training Fee: $500/Transaction. Brokerage processing fees may apply.\n\nNo Cap Plan - Applies to all buyer deals, commercial deals, and listing transactions. Split: 85/15. Cap: None. Brokerage processing fees may apply.\n\nCap Plan - Applies to all buyer deals, commercial deals, and listing transactions. Split: 70/30. Cap: $18,000. Post-Cap Split: 97/3 (the 3% represents the post-cap processing fee). Brokerage processing fees may apply.\n\nApartment and Lease Plan - Applies to all apartment and lease transactions. Split: 85/15. Cap: None.\n\nBrokerage Lead Referral Plan - Buyer - Applies to buyer deals referred by the brokerage. Split: 50/50. Cap: None. Required Transaction Coordinator Fee: $250/Transaction. Brokerage processing fees may apply.\n\nBrokerage Lead Referral Plan - Apartment and Lease - Applies to apartment and lease transactions referred by the brokerage. Split: 75/25. Cap: None.\n\nRealtor Self-Investment Plan - Applies to (3) deals per year for agents investing in their own real estate. Split: 95/5. Cap: None. Required Brokerage Processing Fee: $250.\n\nComplete plan details, processing fees, and additional terms are provided in the Agent Training Center and welcome communications. Brokerage processing fees are subject to change; refer to the Agent Training Center for the current fee schedule.`,
+      },
+      {
+        heading: 'VIII. Assignment',
+        body: `The Salesperson shall not assign or otherwise transfer any of the rights and obligations so placed on the Salesperson hereunder. Any purported or attempted assignment or other transfer or delegation in violation of this section shall deem this Agreement null and void.`,
+      },
+      {
+        heading: 'IX. Indemnification',
+        body: `Salesperson agrees to indemnify and hold harmless the Agency, its agents, employees, officers, successors, assigns, and any other party deriving title under the term Agency from all fines, levies, suits, proceedings, claims, actions, or causes of actions of any kind whatsoever including, but not limited to, all costs, court costs, litigation expenses and attorney fees arising from, growing out of, in connection with or incidental to the Salesperson activities and operation of real estate business.`,
+      },
+      {
+        heading: 'X. Notice',
+        body: `Any notice to be given by one of the Parties to the other under, or in connection with this Agreement, shall be in writing and signed by or on behalf of the Party giving it, and addressed to the recipient at the mailing address, facsimile number, or following e-mail:\n\nSalesperson\nMailing Address: ${mailingAddress}\nE-Mail: ${email}\n\nAgency\nMailing Address: 13201 Northwest Fwy, Ste 450, Houston, Texas, 77040\nE-Mail: info@collectiverealtyco.com`,
+      },
+      {
+        heading: 'XI. Amendments & Modifications',
+        body: `At any time with thirty (30) days' written notice, the Agency has the right to change the terms of this Agreement.`,
+      },
+      {
+        heading: 'XII. No Waivers',
+        body: `The rights and remedies of the parties to this Agreement are cumulative and not alternative. No waiver of any rights is to be charged against any Party unless such waiver is in writing signed by an authorized representative of the Party so charged. Neither the failure nor any delay by any Party in exercising any right, power, or privilege under this Agreement will operate as a waiver of such right, power, or privilege, and no single or partial exercise of any such right, power, or privilege will preclude any other or further exercise of such right, power, or privilege or the exercise of any other right, power, or privilege.`,
+      },
+      {
+        heading: 'XIII. Severability',
+        body: `If any provision of this Agreement is held invalid or unenforceable by any court of competent jurisdiction, the other provisions of this Agreement will remain in full force and effect, and, if legally permitted, such offending provision will be replaced with an enforceable provision that as nearly as possible effects the party's intent.`,
+      },
+      {
+        heading: 'XIV. Execution in Counterparts',
+        body: `This Agreement may be executed in counterparts (which may be exchanged by facsimile), each of which will be deemed an original, but all of which together will constitute the same Agreement.`,
+      },
+      {
+        heading: 'XV. Governing Law',
+        body: `The validity, construction, interpretation of this Agreement shall be governed by and construed in accordance with the laws in the State of the Agency's principal office, without regard to principles of conflicts of law. The Parties hereby consent and agree to the exclusive jurisdiction of the state and federal courts located in said State for all suits, actions or proceedings directly or indirectly arising out of or relating to this Agreement, and waive any and all objections to such courts, including but not limited to objections based on improper venue or inconvenient forum, and each Party hereby irrevocably submits to the jurisdiction of such courts in any suits, actions or proceedings arising out of or relating to this Agreement.`,
+      },
+      {
+        heading: 'XVI. Additional Terms and Conditions',
+        body: `Initial Onboarding Fee is paid with first Monthly fee. Brokerage processing fees may apply based on transaction type. Refer to the Agent Training Center for a complete fee schedule. Monthly fees are automatically drafted by the 5th of each month.`,
+      },
+      {
+        heading: 'XVII. Entire Agreement',
+        body: `This Agreement constitutes the entire Agreement between the parties with respect to the subject matter contained herein, superseding all previous Agreement pertaining to such subject matter, and may be modified only by an amendment executed in writing by the authorized officers of both parties hereto. All prior agreements, representations, warranties, statements, negotiations, understandings and undertakings are superseded hereby.\n\nBoth parties hereto represent that they have read this Agreement, understand it, agree to be bound by all terms and conditions stated herein, and acknowledge receipt of a signed, true and exact copy of this Agreement.\n\nIN WITNESS WHEREOF, the parties have executed this Agreement under seal as of the day and year first written above.`,
+      },
+    ],
+  }
+}

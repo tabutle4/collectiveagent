@@ -21,6 +21,7 @@ const PUBLIC_PATHS = [
   '/api/seller',
   '/api/campaign',
   '/api/training-center',
+  '/api/cron',
   '/api/pm',
   '/pm',
   '/manifest.json',
@@ -28,7 +29,6 @@ const PUBLIC_PATHS = [
   '/favicon.ico',
   '/logo.png',
   '/logo-white.png',
-  '/api/cron',
 ]
 
 // Paths accessible to all authenticated users regardless of role
