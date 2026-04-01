@@ -405,6 +405,7 @@ export default function OnboardingPage() {
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const [paymentPaid, setPaymentPaid] = useState(false)
+  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
 
   const [joinForm, setJoinForm] = useState({
@@ -483,6 +484,15 @@ export default function OnboardingPage() {
       }))
       if (data.session?.current_step) setCurrentStep(data.session.current_step)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
+      const s = data.session || {}
+      setCompletedSteps({
+        2: !!s.step_2_completed_at,
+        3: !!s.step_3_completed_at,
+        4: !!s.step_4_completed_at,
+        5: !!s.step_5_completed_at,
+        6: !!s.step_6_completed_at,
+        7: !!s.step_7_completed_at,
+      })
     } catch {
       setInvalid(true)
     } finally {
@@ -1195,39 +1205,91 @@ export default function OnboardingPage() {
 
         {/* ── STEP 3: ICA ── */}
         {currentStep === 3 && (
-          <SignatureStep
-            token={token}
-            documentType="ica"
-            title="Independent Contractor Agreement"
-            description="Please read the agreement below carefully and sign at the bottom to continue."
-            onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            onBack={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-          />
+          completedSteps[3] ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
+              </div>
+              <div className="container-card flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                <p className="text-sm text-luxury-gray-2">Independent Contractor Agreement signed.</p>
+              </div>
+              <button onClick={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
+            </div>
+          ) : (
+            <SignatureStep
+              token={token}
+              documentType="ica"
+              title="Independent Contractor Agreement"
+              description="Please read the agreement below carefully and sign at the bottom to continue."
+              onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              onBack={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            />
+          )
         )}
 
         {/* ── STEP 4: Commission Plan Agreement ── */}
         {currentStep === 4 && (
-          <SignatureStep
-            token={token}
-            documentType="commission_plan"
-            title="Commission Plan Agreement"
-            description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
-            onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            onBack={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-          />
+          completedSteps[4] ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
+              </div>
+              <div className="container-card flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                <p className="text-sm text-luxury-gray-2">Commission Plan Agreement signed.</p>
+              </div>
+              <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
+            </div>
+          ) : (
+            <SignatureStep
+              token={token}
+              documentType="commission_plan"
+              title="Commission Plan Agreement"
+              description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
+              onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              onBack={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            />
+          )
         )}
 
         {/* ── STEP 5: Policy Manual ── */}
         {currentStep === 5 && (
-          <PolicyManualStep
-            token={token}
-            onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-          />
+          completedSteps[5] ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
+              </div>
+              <div className="container-card flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                <p className="text-sm text-luxury-gray-2">Policy Manual acknowledged and signed.</p>
+              </div>
+              <button onClick={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
+            </div>
+          ) : (
+            <PolicyManualStep
+              token={token}
+              onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            />
+          )
         )}
 
         {/* ── STEP 6: W-9 ── */}
         {currentStep === 6 && (
+        {currentStep === 6 && (
+          completedSteps[6] ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 mb-2">
+                <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
+              </div>
+              <div className="container-card flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                <p className="text-sm text-luxury-gray-2">W-9 acknowledged.</p>
+              </div>
+              <button onClick={() => { setCurrentStep(7); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
+            </div>
+          ) : (
           <div className="space-y-5">
             <div className="flex items-center gap-3 mb-2">
               <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
@@ -1266,6 +1328,7 @@ export default function OnboardingPage() {
               I Understand, Continue →
             </button>
           </div>
+          )
         )}
 
         {/* ── STEP 7: TREC ── */}
