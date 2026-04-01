@@ -132,21 +132,6 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id' }
     )
 
-    // Advance onboarding session step (step 3 = ICA, step 4 = commission plan)
-    const completedStep = documentType === 'ica' ? 3 : 4
-    const nextStep = completedStep + 1
-    const completedAtField = `step_${completedStep}_completed_at`
-
-    await supabaseAdmin.from('onboarding_sessions').upsert(
-      {
-        user_id: prospect.id,
-        current_step: nextStep,
-        [completedAtField]: today.toISOString(),
-        updated_at: today.toISOString(),
-      },
-      { onConflict: 'user_id' }
-    )
-
     return NextResponse.json({ success: true, fileUrl })
   } catch (error: any) {
     console.error('Sign document error:', error)
