@@ -1229,6 +1229,11 @@ export default function OnboardingPage() {
         {/* ── STEP 6: W-9 ── */}
         {currentStep === 6 && (
           <div className="space-y-5">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+                ← Back
+              </button>
+            </div>
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Form</h1>
               <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
@@ -1266,6 +1271,11 @@ export default function OnboardingPage() {
         {/* ── STEP 7: TREC ── */}
         {currentStep === 7 && (
           <div className="text-center py-12 space-y-6">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+                ← Back
+              </button>
+            </div>
             <CheckCircle2 size={48} className="text-luxury-accent mx-auto" />
             <div>
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-3">You're Almost There</h1>
