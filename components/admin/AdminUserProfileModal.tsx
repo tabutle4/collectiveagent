@@ -336,6 +336,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       shirt_type: freshUser?.shirt_type || '',
       shirt_size: freshUser?.shirt_size || '',
       is_active: freshUser?.is_active ?? true,
+      is_licensed_agent: freshUser?.is_licensed_agent ?? true,
+      monthly_fee_waived: freshUser?.monthly_fee_waived ?? false,
+      waive_buyer_processing_fees: freshUser?.waive_buyer_processing_fees ?? false,
+      waive_seller_processing_fees: freshUser?.waive_seller_processing_fees ?? false,
       roles: freshUser?.roles || [],
       password: '', // For new users
     }),
@@ -578,6 +582,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           linkedin_url: normalizeSocialUrl(formData.linkedin_url, 'linkedin'),
           facebook_url: normalizeSocialUrl(formData.facebook_url, 'facebook'),
           is_active: !!formData.is_active,
+          is_licensed_agent: !!formData.is_licensed_agent,
+          monthly_fee_waived: !!formData.monthly_fee_waived,
+          waive_buyer_processing_fees: !!formData.waive_buyer_processing_fees,
+          waive_seller_processing_fees: !!formData.waive_seller_processing_fees,
           office: toNullableString(formData.office),
           division: toNullableString(formData.division),
           status: toNullableString(formData.status),
@@ -886,6 +894,44 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     onChange={e => handleInputChange('is_active', e.target.checked)}
                   />
                   <span className="text-sm">Active Agent</span>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_licensed_agent}
+                    onChange={e => handleInputChange('is_licensed_agent', e.target.checked)}
+                  />
+                  <span className="text-sm">Licensed Agent</span>
+                </div>
+              </div>
+
+              <div className="border-t border-luxury-gray-5 pt-4">
+                <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Fee Waivers</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.monthly_fee_waived}
+                      onChange={e => handleInputChange('monthly_fee_waived', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Monthly Fee</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.waive_buyer_processing_fees}
+                      onChange={e => handleInputChange('waive_buyer_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Buyer Processing Fees</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.waive_seller_processing_fees}
+                      onChange={e => handleInputChange('waive_seller_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Seller Processing Fees</span>
+                  </div>
                 </div>
               </div>
 
