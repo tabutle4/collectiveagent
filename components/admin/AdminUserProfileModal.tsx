@@ -906,36 +906,6 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
               </div>
 
               <div className="border-t border-luxury-gray-5 pt-4">
-                <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Fee Waivers</h4>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.monthly_fee_waived}
-                      onChange={e => handleInputChange('monthly_fee_waived', e.target.checked)}
-                    />
-                    <span className="text-sm">Waive Monthly Fee</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.waive_buyer_processing_fees}
-                      onChange={e => handleInputChange('waive_buyer_processing_fees', e.target.checked)}
-                    />
-                    <span className="text-sm">Waive Buyer Processing Fees</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.waive_seller_processing_fees}
-                      onChange={e => handleInputChange('waive_seller_processing_fees', e.target.checked)}
-                    />
-                    <span className="text-sm">Waive Seller Processing Fees</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-luxury-gray-5 pt-4">
                 <h4 className="text-sm font-medium text-luxury-gray-2 mb-2">Shirt Preference</h4>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -1301,6 +1271,36 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="border-t border-luxury-gray-5 pt-4">
+                <h4 className="text-sm font-medium text-luxury-gray-2 mb-3">Fee Waivers</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.monthly_fee_waived}
+                      onChange={e => handleInputChange('monthly_fee_waived', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Monthly Fee</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.waive_buyer_processing_fees}
+                      onChange={e => handleInputChange('waive_buyer_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Buyer Processing Fees</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.waive_seller_processing_fees}
+                      onChange={e => handleInputChange('waive_seller_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Waive Seller Processing Fees</span>
+                  </div>
                 </div>
               </div>
             </div>
