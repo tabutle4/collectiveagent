@@ -1277,7 +1277,6 @@ export default function OnboardingPage() {
 
         {/* ── STEP 6: W-9 ── */}
         {currentStep === 6 && (
-        {currentStep === 6 && (
           completedSteps[6] ? (
             <div className="space-y-5">
               <div className="flex items-center gap-3 mb-2">
