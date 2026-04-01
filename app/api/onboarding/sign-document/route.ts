@@ -6,6 +6,7 @@ import {
   getCommissionPlanContent,
   getCommissionPlanKey,
 } from '@/lib/documents/commission-plan-content'
+import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!['ica', 'commission_plan'].includes(documentType)) {
+    if (!['ica', 'commission_plan', 'policy_manual'].includes(documentType)) {
       return NextResponse.json({ error: 'Invalid documentType' }, { status: 400 })
     }
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
         email: prospect.email,
       })
       fileName = `ICA_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
-    } else {
+    } else if (documentType === 'commission_plan') {
       const planKey = getCommissionPlanKey(prospect.commission_plan || '')
       pdfContent = getCommissionPlanContent({
         agentName,
@@ -90,6 +91,9 @@ export async function POST(request: NextRequest) {
         plan: planKey,
       })
       fileName = `Commission_Plan_Agreement_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
+    } else {
+      pdfContent = getPolicyAcknowledgmentContent({ agentName, effectiveDate })
+      fileName = `Policy_Acknowledgment_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
     }
 
     // Generate PDF with signature
@@ -99,38 +103,48 @@ export async function POST(request: NextRequest) {
       agentName,
       agentSignatureDataUrl: signatureDataUrl,
       effectiveDate,
+      showAgencySignature: documentType !== 'policy_manual',
     })
 
     // Upload to OneDrive
     const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
 
-    // Update user record
     const updateFields: Record<string, any> = {}
     if (documentType === 'ica') {
       updateFields.independent_contractor_agreement_signed = true
       updateFields.ica_signed_at = today.toISOString()
       updateFields.ica_document_url = fileUrl
-    } else {
+    } else if (documentType === 'commission_plan') {
       updateFields.commission_plan_agreement_signed = true
       updateFields.commission_plan_agreement_signed_at = today.toISOString()
       updateFields.commission_plan_agreement_url = fileUrl
     }
+    // policy_manual: tracked in onboarding_sessions only (policy_ack_document_url + step_5_completed_at)
 
-    await supabaseAdmin.from('users').update(updateFields).eq('id', prospect.id)
+    if (Object.keys(updateFields).length > 0) {
+      await supabaseAdmin.from('users').update(updateFields).eq('id', prospect.id)
+    }
 
     // Advance the onboarding session step
-    const nextStep = documentType === 'ica' ? 4 : 5
-    const completedField = documentType === 'ica' ? 'step_3_completed_at' : 'step_4_completed_at'
+    const nextStep = documentType === 'ica' ? 4 : documentType === 'commission_plan' ? 5 : 6
+    const completedField =
+      documentType === 'ica'
+        ? 'step_3_completed_at'
+        : documentType === 'commission_plan'
+          ? 'step_4_completed_at'
+          : 'step_5_completed_at'
 
-    await supabaseAdmin.from('onboarding_sessions').upsert(
-      {
-        user_id: prospect.id,
-        current_step: nextStep,
-        [completedField]: today.toISOString(),
-        updated_at: today.toISOString(),
-      },
-      { onConflict: 'user_id' }
-    )
+    const sessionUpdate: Record<string, any> = {
+      user_id: prospect.id,
+      current_step: nextStep,
+      [completedField]: today.toISOString(),
+      updated_at: today.toISOString(),
+    }
+    if (documentType === 'policy_manual') {
+      sessionUpdate.policy_ack_document_url = fileUrl
+    }
+
+    await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
 
     return NextResponse.json({ success: true, fileUrl })
   } catch (error: any) {

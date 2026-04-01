@@ -20,12 +20,14 @@ function SignatureStep({
   title,
   description,
   onComplete,
+  onBack,
 }: {
   token: string
   documentType: 'ica' | 'commission_plan'
   title: string
   description: string
   onComplete: () => void
+  onBack: () => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -208,60 +210,174 @@ function SignatureStep({
 }
 
 // ── Policy Manual Step Component ───────────────────────────────────────────────
-function PolicyManualStep({ token, onComplete }: { token: string; onComplete: () => void }) {
-  const [acknowledged, setAcknowledged] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+// Policy manual PDF URL — swap in the OneDrive sharing link once uploaded
+const POLICY_MANUAL_PDF_URL = '/BrokerPolicyManual.pdf'
 
-  const handleContinue = async () => {
-    setSubmitting(true)
-    await fetch('/api/onboarding/acknowledge-step', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, step: 5 }),
-    }).catch(() => {})
-    onComplete()
-    setSubmitting(false)
+function PolicyManualStep({ token, onComplete, onBack }: { token: string; onComplete: () => void; onBack: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [hasSignature, setHasSignature] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [docContent, setDocContent] = useState<any>(null)
+  const [docLoading, setDocLoading] = useState(true)
+  const lastPos = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    fetch(`/api/onboarding/document-preview?token=${token}&type=policy_manual`)
+      .then(r => r.json())
+      .then(data => { if (data.content) setDocContent(data.content) })
+      .catch(() => {})
+      .finally(() => setDocLoading(false))
+  }, [token])
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    if ('touches' in e) {
+      return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY }
+    }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
+  }
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current; if (!canvas) return
+    e.preventDefault(); setIsDrawing(true); lastPos.current = getPos(e, canvas)
+  }
+
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isDrawing) return
+    const canvas = canvasRef.current; if (!canvas) return
+    e.preventDefault()
+    const ctx = canvas.getContext('2d')
+    if (!ctx || !lastPos.current) return
+    const pos = getPos(e, canvas)
+    ctx.beginPath(); ctx.moveTo(lastPos.current.x, lastPos.current.y)
+    ctx.lineTo(pos.x, pos.y); ctx.strokeStyle = '#1A1A1A'
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke()
+    lastPos.current = pos; setHasSignature(true)
+  }
+
+  const stopDraw = () => { setIsDrawing(false); lastPos.current = null }
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current; if (!canvas) return
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    setHasSignature(false)
+  }
+
+  const handleSubmit = async () => {
+    if (!hasSignature) return
+    const canvas = canvasRef.current; if (!canvas) return
+    setSubmitting(true); setError('')
+    try {
+      const signatureDataUrl = canvas.toDataURL('image/png')
+      const res = await fetch('/api/onboarding/sign-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, documentType: 'policy_manual', signatureDataUrl }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to submit')
+      onComplete()
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+          &larr; Back
+        </button>
+      </div>
+
       <div className="text-center mb-6">
         <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Policy Manual</h1>
         <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-          Please review the Collective Realty Co. policy manual below.
+          Please read the Brokerage Policies and Procedures, then sign the acknowledgment below.
         </p>
       </div>
 
-      <div className="container-card p-0 overflow-hidden">
-        <iframe
-          src="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/Doc.aspx?sourcedoc=%7BPOLICY_MANUAL_FILE_ID%7D&action=embedview"
-          className="w-full"
-          style={{ height: '500px', border: 'none' }}
-          title="Policy Manual"
-        />
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded">{error}</div>
+      )}
+
+      <div className="container-card flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-luxury-gray-1">2026 Brokerage Policies and Procedures</p>
+          <p className="text-xs text-luxury-gray-3 mt-0.5">Texas REALTORS Model Policy Manual</p>
+        </div>
+        <a
+          href={POLICY_MANUAL_PDF_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary text-xs px-4 py-2 flex-shrink-0"
+        >
+          Read Manual
+        </a>
       </div>
 
-      <div
-        className="flex items-start gap-3 cursor-pointer inner-card"
-        onClick={() => setAcknowledged(!acknowledged)}
-      >
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={e => setAcknowledged(e.target.checked)}
-          className="mt-0.5 flex-shrink-0"
-        />
-        <span className="text-sm text-luxury-gray-2">
-          I have read and understand the Collective Realty Co. policy manual and agree to comply with all policies outlined.
-        </span>
+      {/* TAR-2303 Acknowledgment */}
+      <div className="container-card max-h-72 overflow-y-auto text-sm text-luxury-gray-2 leading-relaxed space-y-4">
+        {docLoading ? (
+          <p className="text-xs text-luxury-gray-3 text-center py-8">Loading acknowledgment...</p>
+        ) : docContent ? (
+          <>
+            <p className="text-base font-semibold text-luxury-gray-1 text-center whitespace-pre-line">
+              {docContent.title}
+            </p>
+            {docContent.sections?.map((section: any, i: number) => (
+              <div key={i}>
+                {section.body && <p className="whitespace-pre-wrap text-xs">{section.body}</p>}
+              </div>
+            ))}
+          </>
+        ) : (
+          <p className="text-xs text-luxury-gray-3 text-center py-8">Acknowledgment unavailable. Contact the office before signing.</p>
+        )}
+      </div>
+
+      {/* Signature */}
+      <div className="container-card">
+        <p className="text-xs text-luxury-gray-3 mb-3">
+          By signing below, you confirm you have read and agree to the Brokerage Policies and Procedures.
+        </p>
+        <div className="relative border border-luxury-gray-5 rounded bg-white">
+          <canvas
+            ref={canvasRef}
+            width={560}
+            height={160}
+            className="w-full touch-none cursor-crosshair"
+            onMouseDown={startDraw}
+            onMouseMove={draw}
+            onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
+            onTouchStart={startDraw}
+            onTouchMove={draw}
+            onTouchEnd={stopDraw}
+          />
+          {!hasSignature && (
+            <p className="absolute inset-0 flex items-center justify-center text-xs text-luxury-gray-3 pointer-events-none">Sign here</p>
+          )}
+        </div>
+        <div className="flex justify-end mt-2">
+          <button onClick={clearSignature} className="flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1">
+            <RotateCcw size={12} /> Clear
+          </button>
+        </div>
       </div>
 
       <button
-        onClick={handleContinue}
-        disabled={!acknowledged || submitting}
+        onClick={handleSubmit}
+        disabled={!hasSignature || submitting}
         className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase disabled:opacity-50"
       >
-        {submitting ? 'Saving...' : 'Acknowledge & Continue →'}
+        {submitting ? 'Saving...' : 'Sign & Continue →'}
       </button>
     </div>
   )
@@ -288,6 +404,7 @@ export default function OnboardingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
+  const [paymentPaid, setPaymentPaid] = useState(false)
   const payloadScriptLoaded = useRef(false)
 
   const [joinForm, setJoinForm] = useState({
@@ -365,6 +482,7 @@ export default function OnboardingPage() {
         association: p.association || '',
       }))
       if (data.session?.current_step) setCurrentStep(data.session.current_step)
+      if (data.session?.step_2_completed_at) setPaymentPaid(true)
     } catch {
       setInvalid(true)
     } finally {
@@ -958,6 +1076,33 @@ export default function OnboardingPage() {
         {/* ── STEP 2: Payment ── */}
         {currentStep === 2 && (
           <div className="space-y-5">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => setCurrentStep(1)} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+                ← Back
+              </button>
+            </div>
+
+            {paymentPaid ? (
+              <>
+                <div className="text-center mb-8">
+                  <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Payment Complete</h1>
+                  <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                    Your onboarding payment has been received. Continue to review and sign your agreements.
+                  </p>
+                </div>
+                <div className="container-card flex items-center gap-3">
+                  <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                  <p className="text-sm text-luxury-gray-2">Onboarding invoice paid.</p>
+                </div>
+                <button
+                  onClick={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+                >
+                  Continue to Agreements →
+                </button>
+              </>
+            ) : (
+              <>
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Onboarding Payment</h1>
               <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
@@ -1043,6 +1188,8 @@ export default function OnboardingPage() {
             >
               {paying ? 'Opening Checkout...' : 'Pay & Continue →'}
             </button>
+              </>
+            )}
           </div>
         )}
 
@@ -1054,6 +1201,7 @@ export default function OnboardingPage() {
             title="Independent Contractor Agreement"
             description="Please read the agreement below carefully and sign at the bottom to continue."
             onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
           />
         )}
 
@@ -1065,6 +1213,7 @@ export default function OnboardingPage() {
             title="Commission Plan Agreement"
             description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
             onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
           />
         )}
 
@@ -1073,6 +1222,7 @@ export default function OnboardingPage() {
           <PolicyManualStep
             token={token}
             onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
           />
         )}
 

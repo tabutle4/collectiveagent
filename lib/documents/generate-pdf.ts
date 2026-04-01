@@ -150,10 +150,11 @@ export interface GeneratePDFOptions {
   agentSignatureDataUrl?: string // base64 data URL from signature pad
   effectiveDate: string
   courteySignatureName?: string
+  showAgencySignature?: boolean // default true; set false for TAR-2303 style
 }
 
 export async function generateAgreementPDF(options: GeneratePDFOptions): Promise<Uint8Array> {
-  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate } = options
+  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate, showAgencySignature = true } = options
 
   const pdfDoc = await PDFDocument.create()
 
@@ -202,50 +203,32 @@ export async function generateAgreementPDF(options: GeneratePDFOptions): Promise
   ctx.y -= PARAGRAPH_GAP * 2
   addPageIfNeeded(pdfDoc, ctx, 120, regularFont, FONT_SIZE_BODY)
 
-  // Agency signature
-  ctx.page.drawText('AGENCY', {
-    x: MARGIN,
-    y: ctx.y,
-    size: FONT_SIZE_BODY,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  })
-  ctx.y -= LINE_HEIGHT_BODY + 4
+  // Agency signature (ICA / commission plan only)
+  if (showAgencySignature) {
+    ctx.page.drawText('AGENCY', {
+      x: MARGIN,
+      y: ctx.y,
+      size: FONT_SIZE_BODY,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY + 4
 
-  drawSignatureLine(
-    ctx,
-    pdfDoc,
-    "Agency Representative's Signature:",
-    'Courtney Okanlomo',
-    regularFont,
-    boldFont
-  )
+    drawSignatureLine(ctx, pdfDoc, "Agency Representative's Signature:", 'Courtney Okanlomo', regularFont, boldFont)
 
-  ctx.page.drawText(`Print Name: Courtney Okanlomo`, {
-    x: MARGIN,
-    y: ctx.y,
-    size: FONT_SIZE_BODY,
-    font: regularFont,
-    color: rgb(0, 0, 0),
-  })
-  ctx.page.drawText(`Date: ${effectiveDate}`, {
-    x: MARGIN + 300,
-    y: ctx.y,
-    size: FONT_SIZE_BODY,
-    font: regularFont,
-    color: rgb(0, 0, 0),
-  })
-  ctx.y -= LINE_HEIGHT_BODY + PARAGRAPH_GAP * 2
+    ctx.page.drawText(`Print Name: Courtney Okanlomo`, {
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
+    })
+    ctx.page.drawText(`Date: ${effectiveDate}`, {
+      x: MARGIN + 300, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY + PARAGRAPH_GAP * 2
 
-  // Salesperson signature
-  ctx.page.drawText('SALESPERSON', {
-    x: MARGIN,
-    y: ctx.y,
-    size: FONT_SIZE_BODY,
-    font: boldFont,
-    color: rgb(0, 0, 0),
-  })
-  ctx.y -= LINE_HEIGHT_BODY + 4
+    ctx.page.drawText('SALESPERSON', {
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: boldFont, color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY + 4
+  }
 
   // Embed agent signature image if provided
   if (agentSignatureDataUrl) {
