@@ -387,7 +387,7 @@ export default function AdminBillingPage() {
     total: agents.length,
     openCustomInvoices,
     monthlyOverdue: agents.filter(a => getMonthlyStatus(a) === 'overdue').length,
-    monthlyUnpaid: agents.filter(a => getMonthlyStatus(a) === 'unpaid').length,
+    noPayloadAccount: agents.filter(a => !a.payload_payee_id).length,
   }
 
   const filtered = agents.filter(a => {
@@ -402,7 +402,7 @@ export default function AdminBillingPage() {
       if (!statusFilter) return true
       if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
       if (statusFilter === 'monthlyOverdue') return getMonthlyStatus(a) === 'overdue'
-      if (statusFilter === 'monthlyUnpaid') return getMonthlyStatus(a) === 'unpaid'
+      if (statusFilter === 'noPayloadAccount') return !a.payload_payee_id
       return true
     })()
     return matchesSearch && matchesFilter
@@ -448,11 +448,11 @@ export default function AdminBillingPage() {
         </div>
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyUnpaid' ? 'ring-2 ring-luxury-accent' : ''}`}
-          onClick={() => toggleFilter('monthlyUnpaid')}
+          onClick={() => toggleFilter('noPayloadAccount')}
         >
-          <p className="text-xs text-luxury-gray-3 mb-1">Monthly No Invoice Yet</p>
-          <p className="text-2xl font-semibold text-luxury-accent">{stats.monthlyUnpaid}</p>
-          {statusFilter === 'monthlyUnpaid' && (
+          <p className="text-xs text-luxury-gray-3 mb-1">No Payload Account</p>
+          <p className="text-2xl font-semibold text-luxury-accent">{stats.noPayloadAccount}</p>
+          {statusFilter === 'noPayloadAccount' && (
             <p className="text-xs text-luxury-accent mt-1">Filtering ✕</p>
           )}
         </div>
