@@ -11,6 +11,7 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [creatingFolders, setCreatingFolders] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('active')
@@ -198,6 +199,22 @@ export default function AdminUsersPage() {
     </th>
   )
 
+  const createAllFolders = async () => {
+    if (!confirm('Create OneDrive folders for all active agents who don\'t have one yet?')) return
+    setCreatingFolders(true)
+    try {
+      const res = await fetch('/api/users/create-all-folders', { method: 'POST' })
+      const data = await res.json()
+      alert(`Done. Created ${data.created} folders.${data.failed > 0 ? ` ${data.failed} failed — check console.` : ''}`)
+      if (data.failed > 0) console.log('Failed:', data.results.filter((r: any) => !r.success))
+    } catch (e) {
+      alert('Something went wrong. Check console.')
+      console.error(e)
+    } finally {
+      setCreatingFolders(false)
+    }
+  }
+
   const exportExcel = () => {
     const data = filteredAndSortedUsers.map((user, index) => ({
       '#': index + 1,
@@ -311,6 +328,13 @@ export default function AdminUsersPage() {
           </button>
           <button onClick={exportPDF} className="btn btn-secondary flex items-center gap-1.5">
             <Download size={14} /> PDF
+          </button>
+          <button
+            onClick={createAllFolders}
+            disabled={creatingFolders}
+            className="btn btn-secondary flex items-center gap-1.5"
+          >
+            {creatingFolders ? 'Creating...' : 'Create OneDrive Folders'}
           </button>
           <button onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
             + Create User
