@@ -106,15 +106,13 @@ export async function GET() {
 
     const offices = getUniqueSorted(sortedAgents.map(agent => agent.office?.trim() || null))
     const teams = getUniqueSorted(sortedAgents.map(agent => agent.team_name?.trim() || null))
-    // Extract individual divisions from combined divisions (split by |)
-    const extractDivisions = (division: string | null): string[] => {
-      if (!division || !division.trim()) return []
-      return division
-        .split('|')
-        .map(d => d.trim())
-        .filter(d => d.length > 0)
+    // Extract individual divisions - handles text[] array or legacy string from Supabase
+    const extractDivisions = (division: string | string[] | null): string[] => {
+      if (!division) return []
+      if (Array.isArray(division)) return division.filter(d => d && d.trim().length > 0)
+      return division.split('|').map(d => d.trim()).filter(d => d.length > 0)
     }
-    const allDivisions = sortedAgents.flatMap(agent => extractDivisions(agent.division))
+    const allDivisions = sortedAgents.flatMap(agent => extractDivisions(agent.division as string | string[] | null))
     const divisions = getUniqueSorted(allDivisions)
 
     // Generate HTML
