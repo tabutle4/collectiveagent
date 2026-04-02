@@ -8,6 +8,9 @@ import {
 } from '@/lib/documents/commission-plan-content'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const dynamic = 'force-dynamic'
 
@@ -145,6 +148,26 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
+
+    // Notify Courtney to co-sign ICA or commission plan
+    if (documentType === 'ica' || documentType === 'commission_plan') {
+      const docLabel = documentType === 'ica' ? 'Independent Contractor Agreement' : 'Commission Plan Agreement'
+      const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}?doc=${documentType}`
+      await resend.emails.send({
+        from: 'Collective Agent <noreply@collectiverealtyco.com>',
+        to: 'courtney@collectiverealtyco.com',
+        subject: `Action Required: Co-sign ${docLabel} for ${agentName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+            <p style="font-size:14px;color:#333;">${agentName} has signed their <strong>${docLabel}</strong> and is waiting for your co-signature.</p>
+            <p style="margin:24px 0;">
+              <a href="${signingUrl}" style="background-color:#C5A278;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;font-size:14px;">Review &amp; Sign</a>
+            </p>
+            <p style="font-size:12px;color:#888;">Or copy this link: ${signingUrl}</p>
+          </div>
+        `,
+      }).catch(e => console.error('Failed to send broker signing email:', e))
+    }
 
     return NextResponse.json({ success: true, fileUrl })
   } catch (error: any) {

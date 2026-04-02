@@ -149,12 +149,12 @@ export interface GeneratePDFOptions {
   agentName: string
   agentSignatureDataUrl?: string // base64 data URL from signature pad
   effectiveDate: string
-  courteySignatureName?: string
+  brokerSignatureImageBytes?: Uint8Array // PNG bytes for Courtney's signature image
   showAgencySignature?: boolean // default true; set false for TAR-2303 style
 }
 
 export async function generateAgreementPDF(options: GeneratePDFOptions): Promise<Uint8Array> {
-  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate, showAgencySignature = true } = options
+  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate, brokerSignatureImageBytes, showAgencySignature = true } = options
 
   const pdfDoc = await PDFDocument.create()
 
@@ -206,15 +206,40 @@ export async function generateAgreementPDF(options: GeneratePDFOptions): Promise
   // Agency signature (ICA / commission plan only)
   if (showAgencySignature) {
     ctx.page.drawText('AGENCY', {
-      x: MARGIN,
-      y: ctx.y,
-      size: FONT_SIZE_BODY,
-      font: boldFont,
-      color: rgb(0, 0, 0),
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: boldFont, color: rgb(0, 0, 0),
     })
     ctx.y -= LINE_HEIGHT_BODY + 4
 
-    drawSignatureLine(ctx, pdfDoc, "Agency Representative's Signature:", 'Courtney Okanlomo', regularFont, boldFont)
+    ctx.page.drawText("Agency Representative's Signature:", {
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: boldFont, color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY + 4
+
+    if (brokerSignatureImageBytes) {
+      try {
+        const brokerSigImage = await pdfDoc.embedPng(brokerSignatureImageBytes)
+        const brokerSigDims = brokerSigImage.scale(0.25)
+        ctx.page.drawImage(brokerSigImage, {
+          x: MARGIN,
+          y: ctx.y - brokerSigDims.height,
+          width: brokerSigDims.width,
+          height: brokerSigDims.height,
+        })
+        ctx.y -= brokerSigDims.height + 4
+      } catch {
+        ctx.page.drawLine({
+          start: { x: MARGIN, y: ctx.y }, end: { x: MARGIN + 250, y: ctx.y },
+          thickness: 0.5, color: rgb(0, 0, 0),
+        })
+        ctx.y -= 8
+      }
+    } else {
+      ctx.page.drawLine({
+        start: { x: MARGIN, y: ctx.y }, end: { x: MARGIN + 250, y: ctx.y },
+        thickness: 0.5, color: rgb(0, 0, 0),
+      })
+      ctx.y -= 8
+    }
 
     ctx.page.drawText(`Print Name: Courtney Okanlomo`, {
       x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
