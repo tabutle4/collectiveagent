@@ -424,7 +424,7 @@ export async function sendCourtneyFollowUpEmail(prospect: {
 
   return resend.emails.send({
     from: 'Courtney Okanlomo <courtneyo@coachingbrokeragetools.com>',
-    reply_to: 'courtneyo@collectiverealtyco.com',
+    replyTo: 'courtneyo@collectiverealtyco.com',
     to: prospect.email,
     subject: 'Courtney O. - Just Wanted You To Know',
     html,
