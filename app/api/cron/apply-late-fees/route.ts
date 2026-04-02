@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
             },
             body: new URLSearchParams({
               'items[0][type]': 'Late Fee',
-              'items[0][description]': 'Late fee — payment not received by the 5th',
+              'items[0][description]': 'Late fee: payment not received by the 5th',
               'items[0][amount]': '25',
               'items[0][entry_type]': 'charge',
             }),

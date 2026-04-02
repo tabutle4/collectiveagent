@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
             {
               title: 'Monthly Fee Due Today',
               subtitle: `${monthName} ${year}`,
-              preheader: `Your ${monthName} brokerage fee of $50 is due today — pay now to avoid a late fee.`,
+              preheader: `Your ${monthName} brokerage fee of $50 is due today. Pay now to avoid a late fee.`,
             }
           ),
         })

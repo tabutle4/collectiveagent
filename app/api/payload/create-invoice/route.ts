@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         params.append('items[1][type]', 'Monthly Fee (Prorated)')
         params.append(
           'items[1][description]',
-          `Prorated monthly fee — ${remainingDays} days remaining in ${monthName}`
+          `Prorated monthly fee, ${remainingDays} days remaining in ${monthName}`
         )
         params.append('items[1][amount]', proratedFee.toString())
         params.append('items[1][entry_type]', 'charge')

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { sendOnboardingNextStepsEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   try {
@@ -69,6 +70,22 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'user_id' }
     )
+
+    // Send next steps email (non-blocking)
+    const { data: userData } = await supabase
+      .from('users')
+      .select('preferred_first_name, first_name, email, campaign_token')
+      .eq('id', prospect.id)
+      .single()
+
+    if (userData?.email && userData?.campaign_token) {
+      sendOnboardingNextStepsEmail({
+        preferred_first_name: userData.preferred_first_name || '',
+        first_name: userData.first_name || '',
+        email: userData.email,
+        campaign_token: userData.campaign_token,
+      }).catch(err => console.error('Failed to send next steps email:', err))
+    }
 
     return NextResponse.json({ success: true, next_step: 2 })
   } catch (error: any) {
