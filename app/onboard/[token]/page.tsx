@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { CheckCircle2, RotateCcw } from 'lucide-react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
+import CornerLines from '@/components/shared/CornerLines'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 declare global {
@@ -629,6 +630,7 @@ export default function OnboardingPage() {
   if (invalid) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
+        <CornerLines thickness="thick" />
         <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
         <LuxuryHeader showTrainingCenter={false} />
         <div
@@ -656,6 +658,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
+      <CornerLines thickness="thick" />
       {/* Top accent */}
       <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
 
