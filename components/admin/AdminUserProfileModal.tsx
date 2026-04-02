@@ -341,6 +341,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       waive_buyer_processing_fees: freshUser?.waive_buyer_processing_fees ?? false,
       waive_seller_processing_fees: freshUser?.waive_seller_processing_fees ?? false,
       roles: freshUser?.roles || [],
+      role: freshUser?.role || '',
+      full_nav_access: freshUser?.full_nav_access ?? false,
+      association_status_on_join: freshUser?.association_status_on_join || '',
       password: '', // For new users
     }),
     [freshUser]
@@ -536,6 +539,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           job_title: toNullableString(formData.job_title),
           shirt_type: toNullableString(formData.shirt_type),
           shirt_size: toNullableString(formData.shirt_size),
+          full_nav_access: !!formData.full_nav_access,
+          role: toNullableString(formData.role),
+          association_status_on_join: toNullableString(formData.association_status_on_join),
         }
 
         // Only update if there are additional fields
@@ -603,6 +609,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           shirt_type: toNullableString(formData.shirt_type),
           shirt_size: toNullableString(formData.shirt_size),
           roles: normalizeRoles(formData.roles || []),
+          full_nav_access: !!formData.full_nav_access,
+          association_status_on_join: toNullableString(formData.association_status_on_join),
+          role: toNullableString(formData.role),
         }
 
         console.log('Updating user with payload:', {
