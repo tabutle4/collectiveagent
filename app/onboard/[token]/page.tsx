@@ -629,7 +629,7 @@ export default function OnboardingPage() {
   // Invalid token
   if (invalid) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
+      <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
         <CornerLines thickness="thick" />
         <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
         <LuxuryHeader showTrainingCenter={false} />
@@ -657,7 +657,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
+    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
       <CornerLines thickness="thick" />
       {/* Top accent */}
       <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
