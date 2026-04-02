@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 import { useAuth } from '@/lib/context/AuthContext'
@@ -25,6 +25,11 @@ export default function ProfilePage({
   const [savingRealEstate, setSavingRealEstate] = useState(false)
   const [savingLicense, setSavingLicense] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [documents, setDocuments] = useState<any[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Success/error states
   const [personalError, setPersonalError] = useState<string | null>(null)
@@ -144,6 +149,15 @@ export default function ProfilePage({
 
       setUser(freshUserData)
       setHeadshotUrl(freshUserData.headshot_url || null)
+
+      // Load documents if admin
+      if (isAdmin && freshUserData.id) {
+        const docsRes = await fetch(`/api/users/documents?user_id=${freshUserData.id}`)
+        if (docsRes.ok) {
+          const docsData = await docsRes.json()
+          setDocuments(docsData.documents || [])
+        }
+      }
 
       setPersonalForm({
         preferred_first_name: freshUserData.preferred_first_name || '',
@@ -351,6 +365,52 @@ export default function ProfilePage({
       setBillingSuccess('Failed to save billing settings.')
     } finally {
       setSavingBilling(false)
+    }
+  }
+
+  const handleCreateFolder = async () => {
+    if (!user) return
+    setCreatingFolder(true)
+    try {
+      const res = await fetch('/api/users/onedrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      await loadProfile()
+    } catch (e: any) {
+      setUploadError(e.message || 'Failed to create folder')
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const fd = new FormData()
+      fd.append('user_id', user.id)
+      fd.append('file', file)
+      fd.append('document_type', 'Agent Document')
+      const res = await fetch('/api/users/upload-document', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      // Refresh documents list
+      const docsRes = await fetch(`/api/users/documents?user_id=${user.id}`)
+      if (docsRes.ok) {
+        const docsData = await docsRes.json()
+        setDocuments(docsData.documents || [])
+      }
+    } catch (e: any) {
+      setUploadError(e.message || 'Failed to upload file')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -1165,6 +1225,83 @@ export default function ProfilePage({
             )}
           </div>
         </>
+      )}
+
+      {/* ── DOCUMENTS (Admin only) ── */}
+      {isAdmin && user && (
+        <div className="container-card mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Agent Documents</h2>
+            <div className="flex items-center gap-2">
+              {user.onedrive_folder_url ? (
+                <a
+                  href={user.onedrive_folder_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                >
+                  Open Folder
+                </a>
+              ) : (
+                <button
+                  onClick={handleCreateFolder}
+                  disabled={creatingFolder}
+                  className="btn btn-secondary text-xs px-3 py-1.5"
+                >
+                  {creatingFolder ? 'Creating...' : 'Create OneDrive Folder'}
+                </button>
+              )}
+              {user.onedrive_folder_url && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleUpload}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="btn btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                  >
+                    {uploading ? 'Uploading...' : '+ Upload File'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {uploadError && (
+            <p className="text-xs text-red-600 mb-3">{uploadError}</p>
+          )}
+
+          {!user.onedrive_folder_url ? (
+            <p className="text-xs text-luxury-gray-3">No OneDrive folder yet. Create one to start uploading documents.</p>
+          ) : documents.length === 0 ? (
+            <p className="text-xs text-luxury-gray-3">No documents uploaded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {documents.map((doc: any) => (
+                <div key={doc.id} className="inner-card flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-luxury-gray-1">{doc.custom_document_name || doc.document_type}</p>
+                    <p className="text-xs text-luxury-gray-3">{doc.document_type} &middot; {doc.upload_date}</p>
+                  </div>
+                  {doc.onedrive_file_url && (
+                    <a
+                      href={doc.onedrive_file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-luxury-accent hover:underline"
+                    >
+                      View
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
