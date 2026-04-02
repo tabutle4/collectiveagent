@@ -14,7 +14,7 @@ type AgentRecord = {
   date_of_birth: string | null
   office: string | null
   team_name: string | null
-  division: string | null
+  division: string | string[] | null
   role: string | null
   job_title: string | null
   additional_roles: string[] | null
@@ -88,6 +88,38 @@ const extractDivisions = (division: string | null): string[] => {
     .filter(d => d.length > 0)
 }
 
+const toProperCase = (str: string): string => {
+  return str
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bMc(\w)/g, (_, c) => `Mc${c.toUpperCase()}`)
+    .replace(/\bMac(\w)/g, (_, c) => `Mac${c.toUpperCase()}`)
+    .replace(/\bO'(\w)/g, (_, c) => `O'${c.toUpperCase()}`)
+    .replace(/\bHou\b/g, 'HOU')
+    .replace(/\bDfw\b/g, 'DFW')
+    .replace(/\bAnd Ent\b/g, '& Ent')
+    .replace(/\bAcquisition And\b/g, 'Acquisition &')
+}
+
+const formatDivision = (division: string | string[] | null): string => {
+  if (!division) return '-'
+  const parts = Array.isArray(division)
+    ? division
+    : division.split('|').map(d => d.trim())
+  const formatted = parts
+    .map(d => toProperCase(d.trim()))
+    .filter(d => d.length > 0 && d !== '-')
+  return formatted.length > 0 ? formatted.join(', ') : '-'
+}
+
+const formatOffice = (office: string | null): string => {
+  if (!office) return 'N/A'
+  const v = office.trim().toLowerCase()
+  if (v === 'dfw') return 'DFW'
+  if (v === 'houston') return 'Houston'
+  return toProperCase(office.trim())
+}
+
 const getSocialLinks = (agent: AgentRecord) => ({
   instagram: sanitizeSocialForRoster(agent.instagram_handle, 'instagram'),
   tiktok: sanitizeSocialForRoster(agent.tiktok_handle, 'tiktok'),
@@ -130,7 +162,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
   agents
     .map((agent, index) => {
       const fullName = formatName(agent)
-      const officeDisplay = agent.office || 'N/A'
+      const officeDisplay = formatOffice(agent.office)
       const role = agent.role || 'Agent'
       const roleLabel = formatRole(role)
       
@@ -157,7 +189,7 @@ export const buildTableRows = (agents: AgentRecord[]) =>
       const phoneDigits = cleanPhone(agent.business_phone || agent.personal_phone)
       const formattedPhone = formatPhone(agent.business_phone || agent.personal_phone)
       const birthday = getBirthdayLabel(agent) || '-'
-      const division = agent.division || '-'
+      const division = formatDivision(agent.division)
       const social = getSocialLinks(agent)
       const headshotUrl = agent.headshot_url || ''
       const headshotCrop = agent.headshot_crop
