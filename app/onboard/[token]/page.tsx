@@ -630,7 +630,7 @@ export default function OnboardingPage() {
   if (invalid) {
     return (
       <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
-        <CornerLines thickness="thick" />
+        <CornerLines thickness="thick" className="z-0" />
         <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
         <LuxuryHeader showTrainingCenter={false} />
         <div
@@ -658,7 +658,8 @@ export default function OnboardingPage() {
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
-      <CornerLines thickness="thick" />
+      <CornerLines thickness="thick" className="z-0" />
+      <div className="relative z-10 flex flex-col flex-1">
       {/* Top accent */}
       <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
 
@@ -1382,6 +1383,7 @@ export default function OnboardingPage() {
       </div>
 
       <AuthFooter />
+      </div>
     </div>
   )
 }
