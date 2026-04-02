@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageContainer from '@/components/shared/PageContainer'
+import AuthFooter from '@/components/shared/AuthFooter'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export default function ProspectiveAgentForm() {
@@ -555,6 +556,7 @@ export default function ProspectiveAgentForm() {
         </form>
       </div>
 
+      <AuthFooter />
       <div className="bg-gradient-to-br from-luxury-dark-3 to-luxury-dark-2 py-12 mt-16">
         <p className="text-center text-luxury-gray-4 text-sm italic tracking-luxury">
           © 2025 Collective Realty Co. All rights reserved.
