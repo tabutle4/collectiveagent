@@ -1071,7 +1071,7 @@ export default function ProfilePage({
                           </>
                         ) : 'N/A'}
                       </p>
-                      {user.team_name && teamData?.membership && (
+                      {user.team_name && teamData?.membership && !user.is_team_lead && (
                         <button
                           onClick={() => setSplitModalMember({ member: teamData.membership, title: 'My Commission Splits' })}
                           className="text-xs text-luxury-accent hover:underline"
