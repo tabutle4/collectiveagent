@@ -30,6 +30,8 @@ export default function ProfilePage({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [teamData, setTeamData] = useState<any>(null)
+  const [splitModalMember, setSplitModalMember] = useState<any>(null)
 
   // Success/error states
   const [personalError, setPersonalError] = useState<string | null>(null)
@@ -42,8 +44,11 @@ export default function ProfilePage({
 
   // Form states
   const [personalForm, setPersonalForm] = useState({
+    first_name: '',
+    last_name: '',
     preferred_first_name: '',
     preferred_last_name: '',
+    office_email: '',
     personal_email: '',
     personal_phone: '',
     business_phone: '',
@@ -62,6 +67,7 @@ export default function ProfilePage({
     date_of_birth: '',
     shirt_type: '',
     shirt_size: '',
+    job_title: '',
   })
 
   const [realEstateForm, setRealEstateForm] = useState({
@@ -72,6 +78,9 @@ export default function ProfilePage({
     join_date: '',
     commission_plan: '',
     role: '',
+    full_nav_access: false,
+    is_licensed_agent: true,
+    special_commission_notes: '',
   })
 
   const [licenseForm, setLicenseForm] = useState({
@@ -84,11 +93,14 @@ export default function ProfilePage({
   })
 
   const [billingForm, setBillingForm] = useState({
-  monthly_fee_waived: false,
-  waive_buyer_processing_fees: false,
-  waive_seller_processing_fees: false,
-  admin_notes: '',
-})
+    monthly_fee_waived: false,
+    waive_buyer_processing_fees: false,
+    waive_seller_processing_fees: false,
+    admin_notes: '',
+    accepted_trec: false,
+    w9_completed: false,
+    independent_contractor_agreement_signed: false,
+  })
 
   // Permission checks from DB
   const canManageAgents = hasPermission('can_manage_agents')
@@ -159,9 +171,28 @@ export default function ProfilePage({
         }
       }
 
+      // Load team/split data — for agents always, for admins only when viewing a team lead
+      if (!isAdmin) {
+        const teamRes = await fetch('/api/agent/team')
+        if (teamRes.ok) {
+          const td = await teamRes.json()
+          setTeamData(td)
+        }
+      } else if (freshUserData.is_team_lead && freshUserData.id) {
+        // Admin viewing a team lead — fetch that lead's team data
+        const teamRes = await fetch(`/api/agent/team?user_id=${freshUserData.id}`)
+        if (teamRes.ok) {
+          const td = await teamRes.json()
+          setTeamData(td)
+        }
+      }
+
       setPersonalForm({
+        first_name: freshUserData.first_name || '',
+        last_name: freshUserData.last_name || '',
         preferred_first_name: freshUserData.preferred_first_name || '',
         preferred_last_name: freshUserData.preferred_last_name || '',
+        office_email: freshUserData.office_email || '',
         personal_email: freshUserData.personal_email || '',
         personal_phone: freshUserData.personal_phone || '',
         business_phone: freshUserData.business_phone || freshUserData.phone || '',
@@ -180,6 +211,7 @@ export default function ProfilePage({
         date_of_birth: freshUserData.date_of_birth || '',
         shirt_type: freshUserData.shirt_type || '',
         shirt_size: freshUserData.shirt_size || '',
+        job_title: freshUserData.job_title || '',
       })
 
       setRealEstateForm({
@@ -190,6 +222,9 @@ export default function ProfilePage({
         join_date: formatDateForInput(freshUserData.join_date),
         commission_plan: freshUserData.commission_plan || '',
         role: freshUserData.role || '',
+        full_nav_access: freshUserData.full_nav_access ?? false,
+        is_licensed_agent: freshUserData.is_licensed_agent ?? true,
+        special_commission_notes: freshUserData.special_commission_notes || '',
       })
 
       setLicenseForm({
@@ -202,11 +237,14 @@ export default function ProfilePage({
       })
 
       setBillingForm({
-  monthly_fee_waived: freshUserData.monthly_fee_waived || false,
-  waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
-  waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
-  admin_notes: freshUserData.admin_notes || '',
-})
+        monthly_fee_waived: freshUserData.monthly_fee_waived || false,
+        waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
+        waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
+        admin_notes: freshUserData.admin_notes || '',
+        accepted_trec: freshUserData.accepted_trec || false,
+        w9_completed: freshUserData.w9_completed || false,
+        independent_contractor_agreement_signed: freshUserData.independent_contractor_agreement_signed || false,
+      })
 
       setLoading(false)
     } catch (error: any) {
@@ -265,6 +303,10 @@ export default function ProfilePage({
       if (canEditPersonalContact) {
         updates.personal_email = personalForm.personal_email.trim() || null
         updates.personal_phone = personalForm.personal_phone.trim() || null
+        updates.first_name = personalForm.first_name.trim() || user.first_name
+        updates.last_name = personalForm.last_name.trim() || user.last_name
+        updates.office_email = personalForm.office_email.trim() || null
+        updates.job_title = personalForm.job_title.trim() || null
       }
 
       const res = await fetch('/api/users/profile', {
@@ -350,11 +392,14 @@ export default function ProfilePage({
         body: JSON.stringify({
           id: user.id,
           updates: {
-  monthly_fee_waived: billingForm.monthly_fee_waived,
-  waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
-  waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
-  admin_notes: billingForm.admin_notes,
-},
+            monthly_fee_waived: billingForm.monthly_fee_waived,
+            waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
+            waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
+            admin_notes: billingForm.admin_notes,
+            accepted_trec: billingForm.accepted_trec,
+            w9_completed: billingForm.w9_completed,
+            independent_contractor_agreement_signed: billingForm.independent_contractor_agreement_signed,
+          },
         }),
       })
 
@@ -432,8 +477,73 @@ export default function ProfilePage({
     )
   }
 
+  const PLAN_TYPE_LABELS: Record<string, string> = {
+    sales_70_30: 'Sales (70/30 New Agent or Cap Plan)',
+    sales_85_15: 'Sales (85/15 No Cap Plan)',
+    lease: 'Leases',
+  }
+  const LEAD_SOURCE_LABELS: Record<string, string> = {
+    team_lead: 'Lead from Team Lead',
+    own: "Agent's Own Lead",
+    firm: 'Lead from Firm',
+  }
+
+  const renderSplitModal = (member: any, title: string) => {
+    const splits = member?.splits || []
+    const grouped = splits.reduce((acc: any, s: any) => {
+      if (!acc[s.plan_type]) acc[s.plan_type] = []
+      acc[s.plan_type].push(s)
+      return acc
+    }, {})
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-luxury-gray-5">
+            <div>
+              <h2 className="text-base font-semibold text-luxury-gray-1">{title}</h2>
+              {member?.agreement_document_url && (
+                <a href={member.agreement_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent hover:underline">View Agreement PDF</a>
+              )}
+            </div>
+            <button onClick={() => setSplitModalMember(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1 text-xl leading-none">&times;</button>
+          </div>
+          <div className="overflow-y-auto px-6 py-4 space-y-5">
+            {Object.keys(grouped).length === 0 ? (
+              <p className="text-sm text-luxury-gray-3">No splits configured.</p>
+            ) : Object.entries(grouped).map(([planType, planSplits]: any) => (
+              <div key={planType}>
+                <p className="text-xs font-semibold text-luxury-gray-2 mb-2">{PLAN_TYPE_LABELS[planType] || planType}</p>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-luxury-gray-3">
+                      <th className="pb-2 font-medium">Lead Source</th>
+                      <th className="pb-2 font-medium text-center">Agent</th>
+                      <th className="pb-2 font-medium text-center">Team Lead</th>
+                      <th className="pb-2 font-medium text-center">Firm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planSplits.map((s: any) => (
+                      <tr key={s.id} className="border-t border-luxury-gray-5/30">
+                        <td className="py-2 text-luxury-gray-2">{LEAD_SOURCE_LABELS[s.lead_source] || s.lead_source}</td>
+                        <td className="py-2 text-center font-medium">{s.agent_pct}%</td>
+                        <td className="py-2 text-center font-medium">{s.team_lead_pct}%</td>
+                        <td className="py-2 text-center font-medium">{s.firm_pct}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
+      {splitModalMember && renderSplitModal(splitModalMember.member, splitModalMember.title)}
       <h1 className="page-title mb-6">
         {isAdmin
           ? `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
@@ -489,6 +599,26 @@ export default function ProfilePage({
         </h2>
         <div className="inner-card">
           <div className="grid gap-4 md:grid-cols-2">
+            {canEditPersonalContact && (
+              <>
+                <div>
+                  <label className="text-xs text-luxury-gray-3 mb-1 block">Legal First Name</label>
+                  <input
+                    className="input-luxury"
+                    value={personalForm.first_name}
+                    onChange={e => handlePersonalChange('first_name', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-luxury-gray-3 mb-1 block">Legal Last Name</label>
+                  <input
+                    className="input-luxury"
+                    value={personalForm.last_name}
+                    onChange={e => handlePersonalChange('last_name', e.target.value)}
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-xs text-luxury-gray-3 mb-1 block">Preferred First Name</label>
               <input
@@ -514,6 +644,27 @@ export default function ProfilePage({
                 disabled
               />
             </div>
+            {canEditPersonalContact && (
+              <div>
+                <label className="text-xs text-luxury-gray-3 mb-1 block">Office Email</label>
+                <input
+                  className="input-luxury"
+                  value={personalForm.office_email}
+                  onChange={e => handlePersonalChange('office_email', e.target.value)}
+                />
+              </div>
+            )}
+            {canEditPersonalContact && (
+              <div>
+                <label className="text-xs text-luxury-gray-3 mb-1 block">Job Title</label>
+                <input
+                  className="input-luxury"
+                  value={personalForm.job_title}
+                  onChange={e => handlePersonalChange('job_title', e.target.value)}
+                  placeholder="e.g. Realtor, Team Lead"
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs text-luxury-gray-3 mb-1 block">
                 Personal Email
@@ -583,6 +734,15 @@ export default function ProfilePage({
                   disabled
                 />
               )}
+            </div>
+            <div>
+              <label className="text-xs text-luxury-gray-3 mb-1 block">Birth Month</label>
+              <input
+                className="input-luxury"
+                value={personalForm.birth_month}
+                onChange={e => handlePersonalChange('birth_month', e.target.value)}
+                placeholder="e.g. January"
+              />
             </div>
           </div>
 
@@ -710,6 +870,13 @@ export default function ProfilePage({
             </div>
           </div>
 
+          {user.referring_agent && (
+            <div className="mt-4 pt-4 border-t border-luxury-gray-5/30">
+              <p className="text-xs text-luxury-gray-3 mb-1">Referred By</p>
+              <p className="text-sm text-luxury-gray-1">{user.referring_agent}</p>
+            </div>
+          )}
+
           {personalError && <p className="text-xs text-red-600 mt-4">{personalError}</p>}
           {personalSuccess && <p className="text-xs text-green-700 mt-4">{personalSuccess}</p>}
 
@@ -829,6 +996,44 @@ export default function ProfilePage({
                   </div>
                 </div>
 
+                <div className="space-y-3 pt-4 border-t border-luxury-gray-5/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Licensed Agent</p>
+                      <p className="text-xs text-luxury-gray-3">Agent holds an active TREC license</p>
+                    </div>
+                    <button
+                      onClick={() => handleRealEstateChange('is_licensed_agent', !realEstateForm.is_licensed_agent)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${realEstateForm.is_licensed_agent ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${realEstateForm.is_licensed_agent ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Full Nav Access</p>
+                      <p className="text-xs text-luxury-gray-3">Agent can see all navigation items</p>
+                    </div>
+                    <button
+                      onClick={() => handleRealEstateChange('full_nav_access', !realEstateForm.full_nav_access)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${realEstateForm.full_nav_access ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${realEstateForm.full_nav_access ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-luxury-gray-5/30">
+                  <label className="text-sm font-medium text-luxury-gray-1 block mb-2">Special Commission Notes</label>
+                  <textarea
+                    value={realEstateForm.special_commission_notes}
+                    onChange={e => handleRealEstateChange('special_commission_notes', e.target.value)}
+                    placeholder="Any custom commission arrangements..."
+                    rows={2}
+                    className="input-luxury resize-none"
+                  />
+                </div>
+
                 {realEstateError && <p className="text-xs text-red-600 mt-4">{realEstateError}</p>}
                 {realEstateSuccess && <p className="text-xs text-green-700 mt-4">{realEstateSuccess}</p>}
 
@@ -857,14 +1062,24 @@ export default function ProfilePage({
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Team</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {user.team_name ? (
-                        <>
-                          {user.team_name}
-                          {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
-                        </>
-                      ) : 'N/A'}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.team_name ? (
+                          <>
+                            {user.team_name}
+                            {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
+                          </>
+                        ) : 'N/A'}
+                      </p>
+                      {user.team_name && teamData?.membership && (
+                        <button
+                          onClick={() => setSplitModalMember({ member: teamData.membership, title: 'My Commission Splits' })}
+                          className="text-xs text-luxury-accent hover:underline"
+                        >
+                          View Splits
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
@@ -904,29 +1119,36 @@ export default function ProfilePage({
                 My Team
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {user.team_members.map((member: any) => (
-                  <div key={member.id} className="inner-card flex items-center gap-3">
-                    {member.headshot_url ? (
-                      <img
-                        src={member.headshot_url}
-                        alt=""
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black text-sm font-semibold border border-luxury-gray-5">
-                        {(member.preferred_first_name || member.first_name || '?')[0]}
-                        {(member.preferred_last_name || member.last_name || '')[0]}
+                {user.team_members.map((member: any) => {
+                  const teamMemberData = teamData?.all_members?.find((m: any) => m.agent_id === member.id)
+                  return (
+                    <button
+                      key={member.id}
+                      className="inner-card flex items-center gap-3 text-left w-full hover:bg-luxury-gray-5/50 transition-colors cursor-pointer"
+                      onClick={() => teamMemberData && setSplitModalMember({
+                        member: teamMemberData,
+                        title: `${member.preferred_first_name || member.first_name} ${member.preferred_last_name || member.last_name} — Splits`,
+                      })}
+                    >
+                      {member.headshot_url ? (
+                        <img src={member.headshot_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-black text-sm font-semibold border border-luxury-gray-5">
+                          {(member.preferred_first_name || member.first_name || '?')[0]}
+                          {(member.preferred_last_name || member.last_name || '')[0]}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-luxury-gray-1">
+                          {member.preferred_first_name || member.first_name}{' '}
+                          {member.preferred_last_name || member.last_name}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3">{member.email}</p>
                       </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-medium text-luxury-gray-1">
-                        {member.preferred_first_name || member.first_name}{' '}
-                        {member.preferred_last_name || member.last_name}
-                      </p>
-                      <p className="text-xs text-luxury-gray-3">{member.email}</p>
-                    </div>
-                  </div>
-                ))}
+                      {teamMemberData && <span className="text-xs text-luxury-accent flex-shrink-0">Splits →</span>}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -1161,6 +1383,35 @@ export default function ProfilePage({
                       className="input-luxury resize-none"
                     />
                   </div>
+
+                <div className="space-y-3 pt-4 border-t border-luxury-gray-5/30">
+                  <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Onboarding Status</p>
+                  {[
+                    { key: 'accepted_trec', label: 'TREC Accepted', desc: 'Agent has accepted TREC sponsorship' },
+                    { key: 'w9_completed', label: 'W-9 Completed', desc: 'W-9 form has been received' },
+                    { key: 'independent_contractor_agreement_signed', label: 'ICA Signed', desc: 'Independent Contractor Agreement signed' },
+                  ].map(({ key, label, desc }) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-luxury-gray-1">{label}</p>
+                        <p className="text-xs text-luxury-gray-3">{desc}</p>
+                      </div>
+                      <button
+                        onClick={() => setBillingForm(prev => ({ ...prev, [key]: !(prev as any)[key] }))}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${(billingForm as any)[key] ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(billingForm as any)[key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {user.payload_payee_id && (
+                  <div className="pt-4 border-t border-luxury-gray-5/30">
+                    <p className="text-xs text-luxury-gray-3 mb-1">Payload Customer ID</p>
+                    <p className="text-sm font-mono text-luxury-gray-1">{user.payload_payee_id}</p>
+                  </div>
+                )}
                 
                 {billingSuccess && (
                   <p
@@ -1198,7 +1449,8 @@ export default function ProfilePage({
                   <p className="text-sm font-medium text-luxury-gray-1">
                     {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
                   </p>
-                  {user.admin_notes && (
+                </div>
+                {user.admin_notes && (
                   <div className="inner-card md:col-span-2">
                     <p className="text-xs text-luxury-gray-3 mb-1">Admin Notes</p>
                     <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap">
@@ -1206,7 +1458,6 @@ export default function ProfilePage({
                     </p>
                   </div>
                 )}
-                </div>
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Paid Through</p>
                   <p className="text-sm font-medium text-luxury-gray-1">
@@ -1225,6 +1476,22 @@ export default function ProfilePage({
             )}
           </div>
         </>
+      )}
+
+      {/* ── MY DOCUMENTS (Agent view) ── */}
+      {!isAdmin && user?.onedrive_folder_url && (
+        <div className="container-card mb-5">
+          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">My Documents</h2>
+          <p className="text-sm text-luxury-gray-2 mb-3">Your signed agreements and onboarding documents are stored in your OneDrive folder.</p>
+          <a
+            href={user.onedrive_folder_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary text-xs px-3 py-2 inline-flex items-center gap-1.5"
+          >
+            Open My Documents Folder
+          </a>
+        </div>
       )}
 
       {/* ── DOCUMENTS (Admin only) ── */}
