@@ -43,10 +43,23 @@ const escapeHtml = (str: string | null | undefined) =>
 const escapeAttr = (str: string | null | undefined) =>
   (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
+const toProperCase = (str: string): string => {
+  return str
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\bMc(\w)/g, (_, c) => `Mc${c.toUpperCase()}`)
+    .replace(/\bMac(\w)/g, (_, c) => `Mac${c.toUpperCase()}`)
+    .replace(/\bO'(\w)/g, (_, c) => `O'${c.toUpperCase()}`)
+    .replace(/\bHou\b/g, 'HOU')
+    .replace(/\bDfw\b/g, 'DFW')
+    .replace(/\bAnd Ent\b/g, '& Ent')
+    .replace(/\bAcquisition And\b/g, 'Acquisition &')
+}
+
 const formatName = (agent: AgentRecord) => {
   const preferredFirst = agent.preferred_first_name || agent.first_name || ''
   const preferredLast = agent.preferred_last_name || agent.last_name || ''
-  return `${preferredFirst} ${preferredLast}`.trim()
+  return toProperCase(`${preferredFirst} ${preferredLast}`.trim())
 }
 
 const cleanPhone = (phone?: string | null) => (phone || '').replace(/\D/g, '')
@@ -81,25 +94,6 @@ const getUniqueSorted = (values: (string | null)[]) => {
 
 // Extract individual divisions from combined divisions (split by |)
 const extractDivisions = (division: string | null): string[] => {
-  if (!division || !division.trim()) return []
-  return division
-    .split('|')
-    .map(d => d.trim())
-    .filter(d => d.length > 0)
-}
-
-const toProperCase = (str: string): string => {
-  return str
-    .toLowerCase()
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .replace(/\bMc(\w)/g, (_, c) => `Mc${c.toUpperCase()}`)
-    .replace(/\bMac(\w)/g, (_, c) => `Mac${c.toUpperCase()}`)
-    .replace(/\bO'(\w)/g, (_, c) => `O'${c.toUpperCase()}`)
-    .replace(/\bHou\b/g, 'HOU')
-    .replace(/\bDfw\b/g, 'DFW')
-    .replace(/\bAnd Ent\b/g, '& Ent')
-    .replace(/\bAcquisition And\b/g, 'Acquisition &')
-}
 
 const formatDivision = (division: string | string[] | null): string => {
   if (!division) return '-'
