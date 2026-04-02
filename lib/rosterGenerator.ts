@@ -93,7 +93,11 @@ const getUniqueSorted = (values: (string | null)[]) => {
 }
 
 // Extract individual divisions from combined divisions (split by |)
-const extractDivisions = (division: string | null): string[] => {
+const extractDivisions = (division: string | string[] | null): string[] => {
+  if (!division) return []
+  if (Array.isArray(division)) return division.filter(d => d && d.trim().length > 0)
+  return division.split('|').map(d => d.trim()).filter(d => d.length > 0)
+}
 
 const formatDivision = (division: string | string[] | null): string => {
   if (!division) return '-'
