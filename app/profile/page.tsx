@@ -1125,7 +1125,7 @@ export default function ProfilePage({
                     <button
                       key={member.id}
                       className="inner-card flex items-center gap-3 text-left w-full hover:bg-luxury-gray-5/50 transition-colors cursor-pointer"
-                      onClick={() => teamMemberData && setSplitModalMember({
+                      onClick={() => teamMemberData && teamMemberData.splits?.length > 0 && setSplitModalMember({
                         member: teamMemberData,
                         title: `${member.preferred_first_name || member.first_name} ${member.preferred_last_name || member.last_name} — Splits`,
                       })}
@@ -1145,7 +1145,7 @@ export default function ProfilePage({
                         </p>
                         <p className="text-xs text-luxury-gray-3">{member.email}</p>
                       </div>
-                      {teamMemberData && <span className="text-xs text-luxury-accent flex-shrink-0">Splits →</span>}
+                      {teamMemberData && teamMemberData.splits?.length > 0 && <span className="text-xs text-luxury-accent flex-shrink-0">Splits →</span>}
                     </button>
                   )
                 })}
