@@ -480,7 +480,7 @@ export default function ProfilePage({
   const PLAN_TYPE_LABELS: Record<string, string> = {
     sales_70_30: 'Sales (70/30 New Agent or Cap Plan)',
     sales_85_15: 'Sales (85/15 No Cap Plan)',
-    lease: 'Leases',
+    leases: 'Leases',
   }
   const LEAD_SOURCE_LABELS: Record<string, string> = {
     team_lead: 'Lead from Team Lead',
