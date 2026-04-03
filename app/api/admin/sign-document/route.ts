@@ -114,24 +114,18 @@ export async function POST(request: NextRequest) {
       // Flip to active
       await supabaseAdmin.from('users').update({ status: 'active', is_active: true }).eq('id', agent.id)
 
-      // Notify office to complete admin onboarding steps
+      // Simple notification — agent is active, admin setup can begin
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Action Required: Complete Admin Onboarding — ${agentFullName}`,
+        subject: `Courtney Signed All Agreements for ${agentFullName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has signed all agreements for <strong style="color:#1a1a1a;">${agentFullName}</strong>. The agent is now active in the system.</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please complete the following admin onboarding steps:</p>
-          <ol style="margin:0 0 16px;padding-left:20px;font-size:14px;color:#555;line-height:2.2;">
-            <li>Create Microsoft 365 / Outlook account</li>
-            <li>Create Brokermint account</li>
-            <li>Create Dotloop account</li>
-            <li>Send welcome and onboarding emails — complete the <strong>New Agent Automated Onboarding Emails</strong> form in Power Automate</li>
-          </ol>
+          `<p style="margin:0 0 14px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentFullName}</strong>. The agent is now active in the system.</p>
+          <p style="margin:0 0 14px;font-size:14px;color:#555;">Head to the admin onboarding page to complete their setup. The Welcome &amp; Onboarding Emails step will be ready once TREC and W-9 are confirmed.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent email: ${agent.email}</p>`,
-          { title: 'Admin Onboarding Steps Needed', preheader: `Complete admin setup for ${agentFullName}` }
+          { title: 'All Agreements Signed', preheader: `${agentFullName} is now active` }
         ),
-      }).catch(e => console.error('Failed to send admin onboarding notification:', e))
+      }).catch((e: unknown) => console.error('Failed to send activation notification:', e))
     }
 
     return NextResponse.json({ success: true, fileUrl, activated: icaDone && commDone })

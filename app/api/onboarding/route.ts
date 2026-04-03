@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifySessionToken } from '@/lib/session'
+import { Resend } from 'resend'
+import { getEmailLayout, EMAIL_COLORS } from '@/lib/email/layout'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function GET(request: NextRequest) {
   try {
@@ -118,6 +122,32 @@ export async function POST(request: NextRequest) {
     if (action === 'toggle_nav_access') {
       const { user_id, current } = body
       await supabase.from('users').update({ full_nav_access: !current }).eq('id', user_id)
+
+      // When granting access (not revoking), all setup is confirmed done — send the task reminder
+      if (!current) {
+        const { data: agent } = await supabase
+          .from('users')
+          .select('first_name, last_name, preferred_first_name, preferred_last_name, email')
+          .eq('id', user_id)
+          .single()
+
+        if (agent) {
+          const agentName = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
+          await resend.emails.send({
+            from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
+            to: 'office@collectiverealtyco.com',
+            subject: `Action Required: Send Welcome Emails for ${agentName}`,
+            html: getEmailLayout(
+              `<p style="margin:0 0 14px;font-size:14px;color:${EMAIL_COLORS.bodyText};">Full app access has been granted to <strong style="color:${EMAIL_COLORS.headingText};">${agentName}</strong>. All accounts and documents are in place.</p>
+              <p style="margin:0 0 12px;font-size:14px;color:${EMAIL_COLORS.bodyText};">The final step is to send their welcome and onboarding emails:</p>
+              <p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};padding-left:16px;border-left:3px solid ${EMAIL_COLORS.accent};">Complete the <strong>New Agent Automated Onboarding Emails</strong> form in Power Automate</p>
+              <p style="margin:0;font-size:12px;color:${EMAIL_COLORS.lightText};">Agent email: ${agent.email}</p>`,
+              { title: 'Send Welcome Emails', preheader: `Final step for ${agentName}` }
+            ),
+          }).catch((e: unknown) => console.error('Failed to send welcome email reminder:', e))
+        }
+      }
+
       return NextResponse.json({ success: true })
     }
 

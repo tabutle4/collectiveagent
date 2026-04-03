@@ -108,7 +108,7 @@ export async function sendProspectWelcomeEmail(prospect: {
       <div class="section-box">
         <h2 class="section-title">Commission Plans & Offerings</h2>
         <div style="text-align: center; margin: 20px 0;">
-          <a href="https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/SitePages/Commission-Plans.aspx" class="btn btn-black">View Plans & Offerings</a>
+          <a href="https://coachingbrokerage.com/thefirm" class="btn btn-black">View Plans & Offerings</a>
         </div>
         <div class="password-box">Password: <span class="password-code">thefirm357</span></div>
       </div>
@@ -116,7 +116,7 @@ export async function sendProspectWelcomeEmail(prospect: {
         <h2 class="section-title">Weekly Coaching & Training</h2>
         <p style="text-align: center; color: #666; font-size: 15px; margin: 0 0 20px 0;">At Collective Realty Co., you'll have access to weekly coaching sessions, market updates, and hands-on support to help you close more deals and grow your business.</p>
         <div style="text-align: center; margin: 20px 0;">
-          <a href="https://collectiverealtyco.setmore.com/services/1fe35e59-6d4f-4392-8227-c831b31cefd0" class="btn btn-black">View Coaching Calendar</a>
+          <a href="https://collectiverealtyco.com/coaching" class="btn btn-black">View Coaching Calendar</a>
         </div>
       </div>
     `,
@@ -345,7 +345,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
         </div>
       </div>
     `,
-    closing: `<p style="text-align: center; color: #666;">Welcome to the Collective, Where Excellence Meets Opportunity</p>`,
+    closing: ``,
   })
 
   return resend.emails.send({

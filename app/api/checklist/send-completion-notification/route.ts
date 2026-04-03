@@ -8,11 +8,12 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
+  const { user } = auth as import('@/lib/api-auth').AuthResult
 
   try {
     // Use the authenticated user's own data — don't trust body for identity
-    const agentName = `${auth.user.preferred_first_name || auth.user.first_name} ${auth.user.preferred_last_name || auth.user.last_name}`
-    const agentEmail = auth.user.email
+    const agentName = `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
+    const agentEmail = user.email
 
     const completionDate = new Date().toLocaleDateString('en-US', {
       month: 'long',
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     await resend.emails.send({
       from: 'Collective Agent <notifications@coachingbrokeragetools.com>',
       to: 'office@collectiverealtyco.com',
-      subject: `Onboarding Checklist Complete — ${agentName}`,
+      subject: `Onboarding Checklist Complete for ${agentName}`,
       html: getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};"><strong style="color:${EMAIL_COLORS.headingText};">${agentName}</strong> has completed all items on their onboarding checklist.</p>
         <div style="background-color:${EMAIL_COLORS.lightBg};padding:16px 20px;border-left:3px solid ${EMAIL_COLORS.accent};margin:0 0 16px;">

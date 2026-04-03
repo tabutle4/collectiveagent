@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Action Required: Submit TREC Sponsorship — ${agentName}`,
+        subject: `Action Required: Submit TREC Sponsorship for ${agentName}`,
         html: getEmailLayout(
           `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has completed all onboarding steps and is ready for TREC sponsorship.</p>
           <p style="margin:0 0 12px;font-size:14px;color:#555;">Please submit their TREC sponsorship invitation now.</p>

@@ -8,6 +8,19 @@ import AuthFooter from '@/components/shared/AuthFooter'
 import CornerLines from '@/components/shared/CornerLines'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
+type JoinFormData = {
+  first_name: string; last_name: string; preferred_first_name: string; preferred_last_name: string
+  email: string; personal_phone: string; business_phone: string
+  shipping_address_line1: string; shipping_address_line2: string
+  shipping_city: string; shipping_state: string; shipping_zip: string
+  date_of_birth: string; license_number: string; mls_id: string; nrds_id: string
+  association: string; association_status_on_join: string
+  commission_plan: string; custom_split: string; custom_plan_type: string
+  instagram_handle: string; tiktok_handle: string; threads_handle: string
+  linkedin_url: string; facebook_url: string; youtube_url: string
+  referring_agent: string; joining_team: string
+}
+
 declare global {
   interface Window {
     Payload: any
@@ -409,7 +422,7 @@ export default function OnboardingPage() {
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
 
-  const [joinForm, setJoinForm] = useState({
+  const [joinForm, setJoinForm] = useState<JoinFormData>({
     first_name: '',
     last_name: '',
     preferred_first_name: '',
@@ -467,7 +480,7 @@ export default function OnboardingPage() {
       const data = await res.json()
       const p = data.prospect
       setProspect(p)
-      setJoinForm(prev => ({
+      setJoinForm((prev: JoinFormData) => ({
         ...prev,
         first_name: p.first_name || '',
         last_name: p.last_name || '',
@@ -520,16 +533,16 @@ export default function OnboardingPage() {
   ) => {
     const { name, value } = e.target
     if (['personal_phone', 'business_phone'].includes(name)) {
-      setJoinForm(prev => ({ ...prev, [name]: value.replace(/\D/g, '').slice(0, 10) }))
+      setJoinForm((prev: JoinFormData) => ({ ...prev, [name]: value.replace(/\D/g, '').slice(0, 10) }))
       return
     }
-    setJoinForm(prev => ({ ...prev, [name]: value }))
+    setJoinForm((prev: JoinFormData) => ({ ...prev, [name]: value }))
   }
 
   const handleNameBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     if (['first_name', 'last_name', 'preferred_first_name', 'preferred_last_name'].includes(name)) {
-      setJoinForm(prev => ({ ...prev, [name]: formatNameToTitleCase(value) }))
+      setJoinForm((prev: JoinFormData) => ({ ...prev, [name]: formatNameToTitleCase(value) }))
     }
   }
 
@@ -902,13 +915,29 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">NRDS ID</label>
-                  <input
-                    name="nrds_id"
-                    value={joinForm.nrds_id}
-                    onChange={handleChange}
-                    className="input-luxury"
-                  />
+                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                    NRDS ID
+                    {joinForm.association_status_on_join === 'previous_member' && (
+                      <a
+                        href="https://login.connect.realtor/#!/forgotmember"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-2 text-luxury-accent hover:underline"
+                      >
+                        Look up NRDS ID
+                      </a>
+                    )}
+                  </label>
+                  {joinForm.association_status_on_join === 'previous_member' ? (
+                    <input
+                      name="nrds_id"
+                      value={joinForm.nrds_id}
+                      onChange={handleChange}
+                      className="input-luxury"
+                    />
+                  ) : (
+                    <p className="text-xs text-luxury-gray-3 py-2">Not applicable for new agents</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">Association *</label>
