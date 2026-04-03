@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { X, ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 
 interface CloseTransactionModalProps {
@@ -56,8 +56,7 @@ function defaultCommissionPlan(userPlan: string): string {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const num = (v: any) => parseFloat(v ?? 0) || 0
-let _uid = 0
-const uid = () => String(++_uid)
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 
 function computeAgentNet(form: any): number {
   return (
@@ -381,7 +380,7 @@ export default function CloseTransactionModal({
         }
         if (agentsRes.ok) {
           const data = await agentsRes.json()
-          const active = (data.users || []).filter((u: any) => u.is_active && u.status === 'active' && u.role === 'agent')
+          const active = (data.users || []).filter((u: any) => u.is_active && u.status === 'active' && u.role?.toLowerCase() === 'agent')
           setAllAgents(active)
         }
       } finally {
@@ -542,7 +541,7 @@ export default function CloseTransactionModal({
         await callAction('add_external_brokerage', {
           brokerage: {
             brokerage_name: row.brokerage_name,
-            brokerage_role: row.brokerage_role || null,
+            brokerage_role: row.brokerage_role || 'other', // NOT NULL in schema
             agent_name: row.agent_name || null,
             agent_email: row.agent_email || null,
             agent_phone: row.agent_phone || null,
