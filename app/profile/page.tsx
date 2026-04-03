@@ -32,6 +32,9 @@ export default function ProfilePage({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [teamData, setTeamData] = useState<any>(null)
   const [splitModalMember, setSplitModalMember] = useState<any>(null)
+  const [allAgents, setAllAgents] = useState<any[]>([])
+  const [referrerSearch, setReferrerSearch] = useState('')
+  const [referrerDropdownOpen, setReferrerDropdownOpen] = useState(false)
 
   // Success/error states
   const [personalError, setPersonalError] = useState<string | null>(null)
@@ -81,6 +84,8 @@ export default function ProfilePage({
     full_nav_access: false,
     is_licensed_agent: true,
     special_commission_notes: '',
+    referring_agent: '',
+    referring_agent_id: '',
   })
 
   const [licenseForm, setLicenseForm] = useState({
@@ -131,6 +136,22 @@ export default function ProfilePage({
 
   useEffect(() => {
     loadProfile()
+    // Load agent list for referring agent picker (admin only)
+    if (isAdmin) {
+      fetch('/api/users/list')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d?.users) {
+            const active = d.users
+              .filter((u: any) => u.is_active && u.role?.toLowerCase() === 'agent')
+              .sort((a: any, b: any) =>
+                `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`
+                  .localeCompare(`${b.preferred_first_name || b.first_name} ${b.preferred_last_name || b.last_name}`)
+              )
+            setAllAgents(active)
+          }
+        })
+    }
   }, [adminUserId, isAdmin])
 
   const loadProfile = async () => {
@@ -225,7 +246,11 @@ export default function ProfilePage({
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
         special_commission_notes: freshUserData.special_commission_notes || '',
+        referring_agent: freshUserData.referring_agent || '',
+        referring_agent_id: freshUserData.referring_agent_id || '',
       })
+
+      setReferrerSearch(freshUserData.referring_agent || '')
 
       setLicenseForm({
         license_number: freshUserData.license_number || '',
@@ -335,10 +360,14 @@ export default function ProfilePage({
     setRealEstateSuccess(null)
 
     try {
+      // Convert empty strings to null for date/nullable fields so Postgres doesn't choke
+      const sanitized = { ...realEstateForm }
+      if (sanitized.join_date === '') sanitized.join_date = null as any
+
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: realEstateForm }),
+        body: JSON.stringify({ id: user.id, updates: sanitized }),
       })
 
       if (!res.ok) {
@@ -1030,14 +1059,60 @@ export default function ProfilePage({
                 {realEstateError && <p className="text-xs text-red-600 mt-4">{realEstateError}</p>}
                 {realEstateSuccess && <p className="text-xs text-green-700 mt-4">{realEstateSuccess}</p>}
 
-                {(user.referring_agent || (user.referred_agents && user.referred_agents.length > 0)) && (
-                  <div className="pt-4 border-t border-luxury-gray-5/30 space-y-3">
-                    {user.referring_agent && (
-                      <div>
-                        <p className="text-xs text-luxury-gray-3 mb-1">Referred By</p>
-                        <p className="text-sm font-medium text-luxury-gray-1">{user.referring_agent}</p>
+                <div className="pt-4 border-t border-luxury-gray-5/30 space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-luxury-gray-1 block mb-2">Referred By</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          className="input-luxury"
+                          value={referrerSearch}
+                          onChange={e => {
+                            setReferrerSearch(e.target.value)
+                            setReferrerDropdownOpen(true)
+                            if (!e.target.value) {
+                              handleRealEstateChange('referring_agent', '')
+                              handleRealEstateChange('referring_agent_id', '')
+                            }
+                          }}
+                          onFocus={() => setReferrerDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setReferrerDropdownOpen(false), 150)}
+                          placeholder="Search agents..."
+                        />
+                        {referrerDropdownOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {allAgents
+                              .filter(u => {
+                                const name = `${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`.toLowerCase()
+                                return name.includes(referrerSearch.toLowerCase())
+                              })
+                              .map(u => {
+                                const name = `${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`
+                                return (
+                                  <div
+                                    key={u.id}
+                                    onMouseDown={() => {
+                                      setReferrerSearch(name)
+                                      handleRealEstateChange('referring_agent', name)
+                                      handleRealEstateChange('referring_agent_id', u.id)
+                                      setReferrerDropdownOpen(false)
+                                    }}
+                                    className="px-3 py-2 text-sm text-luxury-gray-1 hover:bg-luxury-light cursor-pointer"
+                                  >
+                                    {name}
+                                  </div>
+                                )
+                              })}
+                            {allAgents.filter(u => {
+                              const name = `${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`.toLowerCase()
+                              return name.includes(referrerSearch.toLowerCase())
+                            }).length === 0 && (
+                              <p className="px-3 py-2 text-xs text-luxury-gray-3">No agents found</p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                     {user.referred_agents && user.referred_agents.length > 0 && (
                       <div>
                         <p className="text-xs text-luxury-gray-3 mb-2">Referred to Firm ({user.referred_agents.length})</p>
@@ -1051,7 +1126,6 @@ export default function ProfilePage({
                       </div>
                     )}
                   </div>
-                )}
 
                 <div className="mt-6 flex justify-end">
                   <button
