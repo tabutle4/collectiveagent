@@ -92,6 +92,29 @@ export async function POST(request: NextRequest) {
       throw insertError
     }
 
+    // If a referring agent name was provided, look up their user ID and link it
+    if (formData.referring_agent && prospect) {
+      const nameParts = formData.referring_agent.trim().split(/\s+/)
+      if (nameParts.length >= 2) {
+        const firstName = nameParts[0]
+        const lastName = nameParts.slice(1).join(' ')
+        const { data: referrer } = await supabase
+          .from('users')
+          .select('id')
+          .ilike('first_name', firstName)
+          .ilike('last_name', lastName)
+          .eq('is_active', true)
+          .limit(1)
+          .single()
+        if (referrer) {
+          await supabase
+            .from('users')
+            .update({ referring_agent_id: referrer.id })
+            .eq('id', prospect.id)
+        }
+      }
+    }
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://collectiveagentapp.com'
     const joinLink = `${appUrl}/onboard/${campaign_token}`
 
