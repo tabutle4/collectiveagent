@@ -112,32 +112,21 @@ export default function ProfilePage({
   const canEditLicense = canManageAgents && isAdmin
   const canEditBilling = canManageBilling && isAdmin
 
-  // Show real estate sections for agents and brokers — role is the correct gate, not is_licensed_agent
-  const isAgent = ['agent', 'broker'].includes(user?.role?.toLowerCase() || '')
+  // Check if user is a licensed agent
+  const isLicensedAgent = user?.is_licensed_agent === true
 
   const formatDateForInput = (dateStr: string | null | undefined): string => {
     if (!dateStr) return ''
-    // Return YYYY-MM-DD directly — parsing with new Date() treats bare dates as UTC
-    // which shifts them back a day in Central Time
-    return dateStr.substring(0, 10)
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return ''
+    return date.toISOString().split('T')[0]
   }
 
   const formatDateForDisplay = (value: string | null) => {
     if (!value) return ''
-    const parts = value.substring(0, 10).split('-')
-    if (parts.length !== 3) return value
-    const [year, month, day] = parts.map(Number)
-    if (!year || !month || !day) return value
-    const date = new Date(year, month - 1, day) // local time, no UTC shift
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
-  // Normalize commission plan values — onboarding stores display strings, profile uses keys
-  const normalizeCommissionPlan = (val: string): string => {
-    if (val === 'New Agent Plan') return 'new_agent'
-    if (val === 'No Cap Plan') return 'no_cap'
-    if (val === 'Cap Plan') return 'cap'
-    return val // already normalized, custom plan, or empty
   }
 
   useEffect(() => {
@@ -229,12 +218,10 @@ export default function ProfilePage({
         office: freshUserData.office || '',
         status: freshUserData.status || '',
         is_active: freshUserData.is_active ?? true,
-        division: Array.isArray(freshUserData.division)
-          ? freshUserData.division.join(', ')
-          : freshUserData.division || '',
+        division: freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
-        commission_plan: normalizeCommissionPlan(freshUserData.commission_plan || ''),
-        role: (freshUserData.role || '').toLowerCase(),
+        commission_plan: freshUserData.commission_plan || '',
+        role: freshUserData.role || '',
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
         special_commission_notes: freshUserData.special_commission_notes || '',
@@ -348,19 +335,10 @@ export default function ProfilePage({
     setRealEstateSuccess(null)
 
     try {
-      // division is a text[] array in Postgres — convert the display string back to array (or null)
-      const divisionRaw = String(realEstateForm.division || '').trim()
-      const updates = {
-        ...realEstateForm,
-        division: divisionRaw
-          ? divisionRaw.split(',').map((d: string) => d.trim()).filter(Boolean)
-          : null,
-      }
-
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates }),
+        body: JSON.stringify({ id: user.id, updates: realEstateForm }),
       })
 
       if (!res.ok) {
@@ -573,7 +551,7 @@ export default function ProfilePage({
       </h1>
 
       {/* Non-licensed user notice */}
-      {!isAgent && (
+      {!isLicensedAgent && (
         <div className="container-card mb-5">
           <div className="inner-card bg-gray-50">
             <p className="text-sm text-luxury-gray-2 text-center">
@@ -892,13 +870,6 @@ export default function ProfilePage({
             </div>
           </div>
 
-          {user.referring_agent && (
-            <div className="mt-4 pt-4 border-t border-luxury-gray-5/30">
-              <p className="text-xs text-luxury-gray-3 mb-1">Referred By</p>
-              <p className="text-sm text-luxury-gray-1">{user.referring_agent}</p>
-            </div>
-          )}
-
           {personalError && <p className="text-xs text-red-600 mt-4">{personalError}</p>}
           {personalSuccess && <p className="text-xs text-green-700 mt-4">{personalSuccess}</p>}
 
@@ -915,7 +886,7 @@ export default function ProfilePage({
       </div>
 
       {/* ========== LICENSED AGENT SECTIONS ONLY ========== */}
-      {isAgent && (
+      {isLicensedAgent && (
         <>
           {/* Real Estate Information */}
           <div className="container-card mb-5">
@@ -1105,11 +1076,7 @@ export default function ProfilePage({
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {Array.isArray(user.division)
-                        ? user.division.join(', ') || 'N/A'
-                        : user.division || 'N/A'}
-                    </p>
+                    <p className="text-sm font-medium text-luxury-gray-1">{user.division || 'N/A'}</p>
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Join Date</p>
@@ -1130,6 +1097,28 @@ export default function ProfilePage({
                     </p>
                   </div>
                 </div>
+                {(user.referring_agent || (user.referred_agents && user.referred_agents.length > 0)) && (
+                  <div className="mt-4 pt-4 border-t border-luxury-gray-5/30 space-y-3">
+                    {user.referring_agent && (
+                      <div>
+                        <p className="text-xs text-luxury-gray-3 mb-1">Referred By</p>
+                        <p className="text-sm font-medium text-luxury-gray-1">{user.referring_agent}</p>
+                      </div>
+                    )}
+                    {user.referred_agents && user.referred_agents.length > 0 && (
+                      <div>
+                        <p className="text-xs text-luxury-gray-3 mb-2">Referred to Firm ({user.referred_agents.length})</p>
+                        <div className="flex flex-wrap gap-2">
+                          {user.referred_agents.map((a: any) => (
+                            <span key={a.id} className="text-xs bg-luxury-gray-5/40 text-luxury-gray-1 px-2 py-1 rounded">
+                              {a.preferred_first_name || a.first_name} {a.preferred_last_name || a.last_name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs text-luxury-gray-3 mt-4">
                   Real estate information is managed by the office. Contact an administrator if something
                   looks incorrect.
@@ -1229,8 +1218,7 @@ export default function ProfilePage({
                     >
                       <option value="">Select association...</option>
                       <option value="HAR">HAR</option>
-                      <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
-                      <option value="Both">Both</option>
+                      <option value="MetroTex">MetroTex</option>
                       <option value="CCAR">CCAR</option>
                       <option value="TAR">TAR</option>
                     </select>

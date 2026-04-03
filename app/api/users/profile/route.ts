@@ -78,12 +78,22 @@ export async function GET(request: NextRequest) {
 
     // Strip sensitive fields
     const { password_hash, reset_token, reset_token_expires, ...safeData } = data
+
+    // Agents this user referred
+    const { data: referredAgents } = await supabaseAdmin
+      .from('users')
+      .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+      .eq('referring_agent_id', id)
+      .eq('is_active', true)
+      .order('first_name', { ascending: true })
+
     return NextResponse.json({ 
       user: { 
         ...safeData, 
         team_name: teamName,
         is_team_lead: isTeamLead,
         team_members: teamMembers,
+        referred_agents: referredAgents || [],
       } 
     })
   } catch (error) {
