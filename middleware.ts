@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/auth/microsoft/callback',
   '/api/auth/logout',
   '/prospective-agent-form',
+  '/api/prospects',
   '/api/forms',
   '/forms',
   '/roster',
