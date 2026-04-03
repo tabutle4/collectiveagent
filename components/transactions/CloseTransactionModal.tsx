@@ -609,8 +609,11 @@ export default function CloseTransactionModal({
   }
 
   const showAdjustments = txn.has_transaction_coordinator || txn.has_ecommission || txn.brokerage_referral || txn.revenue_share_recipient_id
-  const agentName = (a: any) =>
-    `${a.user?.preferred_first_name || a.user?.first_name || ''} ${a.user?.preferred_last_name || a.user?.last_name || ''}`.trim() || `Agent (${a.agent_id?.substring(0, 8)})`
+  const agentName = (a: any) => {
+    const u = a.user || allAgents.find(u => u.id === a.agent_id)
+    if (!u) return `Agent (${a.agent_id?.substring(0, 8) || '?'})`
+    return `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
+  }
   const agentRoleLabel = (role: string) => AGENT_ROLES.find(r => r.value === role)?.label || role?.replace(/_/g, ' ') || '--'
   const planLabel = (plan: string) => COMMISSION_PLANS.find(p => p.value === plan)?.label || plan || '--'
 

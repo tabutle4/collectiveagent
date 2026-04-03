@@ -20,7 +20,6 @@ import {
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
-import CloseTransactionModal from '@/components/transactions/CloseTransactionModal'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -217,7 +216,6 @@ export default function AdminTransactionDetailPage() {
   // Check & Payouts state
   const [editCheckData, setEditCheckData] = useState<any>(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
-  const [showCloseModal, setShowCloseModal] = useState(false)
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [newPayoutForm, setNewPayoutForm] = useState<any>(null)
@@ -650,21 +648,11 @@ export default function AdminTransactionDetailPage() {
               <p className="text-sm font-semibold text-luxury-gray-1 leading-tight">{addrStreet}</p>
               {addrCity && <p className="text-xs text-luxury-gray-3">{addrCity}</p>}
             </div>
-            <div className="flex items-center gap-2">
-              {txn.status !== 'closed' && (
-                <button
-                  onClick={() => setShowCloseModal(true)}
-                  className="btn btn-primary text-xs px-3 py-1.5"
-                >
-                  Close Transaction
-                </button>
-              )}
-              <StatusBadge status={txn.status as TransactionStatus} />
-            </div>
+            <StatusBadge status={txn.status as TransactionStatus} />
           </div>
           <div className="flex gap-1 mt-1.5 flex-wrap">
             <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
-              {txn.transaction_type}
+              {formatTransactionType(txn.transaction_type)}
             </span>
             {txn.office_location && (
               <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
@@ -713,7 +701,7 @@ export default function AdminTransactionDetailPage() {
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
               <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
-                {txn.transaction_type || 'Unknown type'}
+                {formatTransactionType(txn.transaction_type) || 'Unknown type'}
               </span>
               {txn.office_location && (
                 <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
@@ -833,6 +821,7 @@ export default function AdminTransactionDetailPage() {
                         value={txn.lease_term ? `${txn.lease_term} months` : null}
                       />
                       <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />
+                      <FieldRow label="Sales Volume" value={fmt$(txn.sales_volume)} />
                     </>
                   ) : (
                     <>
@@ -2171,19 +2160,6 @@ export default function AdminTransactionDetailPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── Close Transaction Modal ─────────────────────────────────────────── */}
-      {showCloseModal && (
-        <CloseTransactionModal
-          transactionId={id}
-          transaction={data.transaction}
-          agents={data.agents || []}
-          check={data.check || null}
-          userId={user?.id || ''}
-          onClose={() => setShowCloseModal(false)}
-          onSaved={() => { setShowCloseModal(false); loadData() }}
-        />
       )}
     </div>
   )
