@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
+import CloseTransactionModal from '@/components/transactions/CloseTransactionModal'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -216,6 +217,7 @@ export default function AdminTransactionDetailPage() {
   // Check & Payouts state
   const [editCheckData, setEditCheckData] = useState<any>(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
+  const [showCloseModal, setShowCloseModal] = useState(false)
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [newPayoutForm, setNewPayoutForm] = useState<any>(null)
@@ -648,7 +650,17 @@ export default function AdminTransactionDetailPage() {
               <p className="text-sm font-semibold text-luxury-gray-1 leading-tight">{addrStreet}</p>
               {addrCity && <p className="text-xs text-luxury-gray-3">{addrCity}</p>}
             </div>
-            <StatusBadge status={txn.status as TransactionStatus} />
+            <div className="flex items-center gap-2">
+              {txn.status !== 'closed' && (
+                <button
+                  onClick={() => setShowCloseModal(true)}
+                  className="btn btn-primary text-xs px-3 py-1.5"
+                >
+                  Close Transaction
+                </button>
+              )}
+              <StatusBadge status={txn.status as TransactionStatus} />
+            </div>
           </div>
           <div className="flex gap-1 mt-1.5 flex-wrap">
             <span className="text-xs bg-luxury-gray-5/40 text-luxury-gray-2 px-1.5 py-0.5 rounded">
@@ -2160,6 +2172,19 @@ export default function AdminTransactionDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Close Transaction Modal ─────────────────────────────────────────── */}
+      {showCloseModal && (
+        <CloseTransactionModal
+          transactionId={id}
+          transaction={data.transaction}
+          agents={data.agents || []}
+          check={data.check || null}
+          userId={user?.id || ''}
+          onClose={() => setShowCloseModal(false)}
+          onSaved={() => { setShowCloseModal(false); loadData() }}
+        />
       )}
     </div>
   )
