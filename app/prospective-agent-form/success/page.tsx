@@ -2,7 +2,10 @@
 
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import PageContainer from '@/components/shared/PageContainer'
+import { CheckCircle2 } from 'lucide-react'
+import LuxuryHeader from '@/components/shared/LuxuryHeader'
+import AuthFooter from '@/components/shared/AuthFooter'
+import CornerLines from '@/components/shared/CornerLines'
 
 function SuccessContent() {
   const searchParams = useSearchParams()
@@ -10,68 +13,71 @@ function SuccessContent() {
   const email = searchParams.get('email') || ''
 
   return (
-    <PageContainer>
-      <div className="max-w-2xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
-          <div className="text-5xl mb-6 text-luxury-black">✓</div>
-          <h2 className="text-3xl font-light mb-4 tracking-luxury">Thank You, {name}!</h2>
-          <p className="text-luxury-gray-2">
-            We've received your information and are excited to connect with you.
-          </p>
-        </div>
+    <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
+      <CornerLines thickness="thick" className="z-0" />
+      <div className="relative z-10 flex flex-col flex-1">
+        <div style={{ height: '3px', backgroundColor: '#C5A278' }} />
+        <LuxuryHeader showTrainingCenter={false} />
 
-        <div className="card-section mb-12">
-          <h3 className="text-xl font-light mb-4 tracking-luxury uppercase text-center">
-            What's Next?
-          </h3>
+        <div
+          className="flex-1 flex items-center justify-center px-6"
+          style={{ paddingTop: '120px', paddingBottom: '60px' }}
+        >
+          <div className="w-full max-w-lg">
+            <div className="text-center mb-8">
+              <CheckCircle2 size={48} className="text-luxury-accent mx-auto mb-4" />
+              <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">
+                Thank You, {name}!
+              </h1>
+              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                We've received your information and are excited to connect with you.
+              </p>
+            </div>
 
-          <p className="text-center text-luxury-gray-2 mb-6">
-            Check your email{email && ` (sent to: ${email})`} for detailed information about our
-            commission plans and company offerings.
-          </p>
+            <div className="container-card mb-5">
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+                What's Next
+              </h2>
+              <p className="text-sm text-luxury-gray-2 mb-4">
+                Check your email{email && ` (${email})`} — we just sent you information about our commission plans and your next steps.
+              </p>
+              <div className="space-y-3">
+                <div className="inner-card flex items-start gap-3">
+                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">01</span>
+                  <p className="text-sm text-luxury-gray-2">Review our commission plans and company offerings</p>
+                </div>
+                <div className="inner-card flex items-start gap-3">
+                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">02</span>
+                  <p className="text-sm text-luxury-gray-2">Start your onboarding using the personalized link in your email</p>
+                </div>
+                <div className="inner-card flex items-start gap-3">
+                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">03</span>
+                  <p className="text-sm text-luxury-gray-2">Or schedule a call with our broker to talk through your goals</p>
+                </div>
+              </div>
+            </div>
 
-          <div className="space-y-4 text-luxury-gray-1">
-            <p>In that email, you'll find:</p>
-            <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Access to our Commission Plans & Offerings page</li>
-              <li>Option to submit your request to join</li>
-              <li>Option to schedule a call with our broker</li>
-            </ul>
+            <div className="container-card text-center">
+              <p className="text-sm text-luxury-gray-3 mb-1">Questions in the meantime?</p>
+              <a
+                href="mailto:office@collectiverealtyco.com"
+                className="text-sm text-luxury-accent hover:underline"
+              >
+                office@collectiverealtyco.com
+              </a>
+            </div>
           </div>
         </div>
 
-        <div className="bg-luxury-light p-8 border-l-[3px] border-luxury-black">
-          <p className="text-center text-luxury-gray-2 mb-2">Questions in the meantime?</p>
-          <p className="text-center">
-            Reach out to us at{' '}
-            <a
-              href="mailto:office@collectiverealtyco.com"
-              className="text-luxury-black hover:underline"
-            >
-              office@collectiverealtyco.com
-            </a>
-          </p>
-        </div>
-
-        <div className="text-center mt-12">
-          <a href="https://coachingbrokerage.com" className="btn btn-secondary">
-            Return to Home
-          </a>
-        </div>
+        <AuthFooter />
       </div>
-
-      <div className="bg-gradient-to-br from-luxury-dark-3 to-luxury-dark-2 py-12 mt-16">
-        <p className="text-center text-white text-sm italic tracking-luxury">
-          Welcome to Collective Realty Co. - Where Excellence Meets Opportunity
-        </p>
-      </div>
-    </PageContainer>
+    </div>
   )
 }
 
 export default function SuccessPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-luxury-gray-3">Loading...</div>}>
       <SuccessContent />
     </Suspense>
   )

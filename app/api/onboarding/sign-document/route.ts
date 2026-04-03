@@ -154,8 +154,9 @@ export async function POST(request: NextRequest) {
       const docLabel = documentType === 'ica' ? 'Independent Contractor Agreement' : 'Commission Plan Agreement'
       const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}?doc=${documentType}`
       await resend.emails.send({
-        from: 'Collective Agent <noreply@collectiverealtyco.com>',
+        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'courtney@collectiverealtyco.com',
+        replyTo: 'tarab@collectiverealtyco.com',
         subject: `Action Required: Co-sign ${docLabel} for ${agentName}`,
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
@@ -168,6 +169,25 @@ export async function POST(request: NextRequest) {
         `,
       }).catch(e => console.error('Failed to send broker signing email:', e))
     }
+
+    // Notify office when policy manual is signed
+    if (documentType === 'policy_manual') {
+      await resend.emails.send({
+        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
+        to: 'office@collectiverealtyco.com',
+        subject: `Policy Manual Signed — ${agentName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has signed and acknowledged the Policy Manual.</p>
+            <p style="font-size:14px;color:#333;">They are now on Step 6 (W-9). Please send them their W-9 request via Track1099.</p>
+            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
+          </div>
+        `,
+      }).catch(e => console.error('Failed to send policy manual notification:', e))
+    }
+
+    // Notify office when agent reaches W-9 step (acknowledge-step handles step 6, but sign-document doesn't — this fires on policy manual completion which precedes W-9)
+    // W-9 and TREC notifications are sent from acknowledge-step route
 
     return NextResponse.json({ success: true, fileUrl })
   } catch (error: any) {

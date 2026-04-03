@@ -146,6 +146,7 @@ export async function sendProspectWelcomeEmail(prospect: {
   return resend.emails.send({
     from: FROM_EMAILS.onboarding,
     to: prospect.email,
+    replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
     subject: 'Thank You for Your Interest in Joining Collective Realty Co., The Coaching Brokerage',
     html,
@@ -350,6 +351,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
   return resend.emails.send({
     from: FROM_EMAILS.onboarding,
     to: prospect.email,
+    replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
     subject: 'Next Steps: Your License Sponsorship with Collective Realty Co.',
     html,

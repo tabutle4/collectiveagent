@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const now = new Date()
-    const windowEnd = new Date(now.getTime() - 72 * 60 * 60 * 1000)
-    const windowStart = new Date(now.getTime() - 96 * 60 * 60 * 1000)
+    const windowEnd = new Date(now.getTime() - 48 * 60 * 60 * 1000)
+    const windowStart = new Date(now.getTime() - 72 * 60 * 60 * 1000)
 
     const { data: prospects, error } = await supabaseAdmin
       .from('users')

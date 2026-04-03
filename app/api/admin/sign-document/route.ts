@@ -5,8 +5,11 @@ import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
 import { getICAContent } from '@/lib/documents/ica-content'
 import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
 import { uploadAgentDocument } from '@/lib/microsoft-graph'
+import { Resend } from 'resend'
 import fs from 'fs'
 import path from 'path'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const dynamic = 'force-dynamic'
 
@@ -95,7 +98,43 @@ export async function POST(request: NextRequest) {
     }
     await supabaseAdmin.from('users').update(updateFields).eq('id', agent.id)
 
-    return NextResponse.json({ success: true, fileUrl })
+    // Check if both ICA and commission plan are now broker-signed
+    const { data: freshAgent } = await supabaseAdmin
+      .from('users')
+      .select('ica_document_url, commission_plan_agreement_url, ica_signed_at, commission_plan_agreement_signed_at, first_name, last_name, email, status')
+      .eq('id', agent.id)
+      .single()
+
+    const icaDone = !!(freshAgent?.ica_signed_at && (documentType === 'ica' ? fileUrl : freshAgent?.ica_document_url))
+    const commDone = !!(freshAgent?.commission_plan_agreement_signed_at && (documentType === 'commission_plan' ? fileUrl : freshAgent?.commission_plan_agreement_url))
+    const agentFullName = `${agent.first_name} ${agent.last_name}`
+
+    if (icaDone && commDone && freshAgent?.status === 'prospect') {
+      // Flip to active
+      await supabaseAdmin.from('users').update({ status: 'active', is_active: true }).eq('id', agent.id)
+
+      // Notify office to complete admin onboarding steps
+      await resend.emails.send({
+        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
+        to: 'office@collectiverealtyco.com',
+        subject: `Action Required: Complete Admin Onboarding — ${agentFullName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+            <p style="font-size:14px;color:#333;">Courtney has signed all agreements for <strong>${agentFullName}</strong>. The agent is now active in the system.</p>
+            <p style="font-size:14px;color:#333;">Please complete the following admin onboarding steps:</p>
+            <ol style="font-size:14px;color:#333;line-height:2;">
+              <li>Create Microsoft 365 / Outlook account</li>
+              <li>Create Brokermint account</li>
+              <li>Create Dotloop account</li>
+              <li>Send welcome and onboarding emails via Power Automate — <a href="https://forms.office.com" style="color:#C5A278;">New Agent Automated Onboarding Emails form</a></li>
+            </ol>
+            <p style="font-size:12px;color:#888;">Agent email: ${agent.email}</p>
+          </div>
+        `,
+      }).catch(e => console.error('Failed to send admin onboarding notification:', e))
+    }
+
+    return NextResponse.json({ success: true, fileUrl, activated: icaDone && commDone })
   } catch (error: any) {
     console.error('Admin sign-document error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

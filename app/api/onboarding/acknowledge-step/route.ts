@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { Resend } from 'resend'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
     // Authenticate by campaign_token
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, first_name, last_name, email')
       .eq('campaign_token', token)
       .eq('status', 'prospect')
       .single()
@@ -25,6 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired onboarding link' }, { status: 404 })
     }
 
+    const agentName = `${prospect.first_name} ${prospect.last_name}`
     const completedAtField = `step_${step}_completed_at`
     const nextStep = step + 1
 
@@ -37,6 +41,38 @@ export async function POST(request: NextRequest) {
       },
       { onConflict: 'user_id' }
     )
+
+    // Step 6 — agent acknowledged W-9: notify office to send W-9 request
+    if (step === 6) {
+      await resend.emails.send({
+        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
+        to: 'office@collectiverealtyco.com',
+        subject: `Action Required: Send W-9 Request — ${agentName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has acknowledged the W-9 step and is expecting a W-9 request.</p>
+            <p style="font-size:14px;color:#333;">Please send their W-9 request now via Track1099.</p>
+            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
+          </div>
+        `,
+      }).catch(e => console.error('Failed to send W-9 notification:', e))
+    }
+
+    // Step 7 — agent reached TREC step: notify office to submit TREC invite
+    if (step === 7) {
+      await resend.emails.send({
+        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
+        to: 'office@collectiverealtyco.com',
+        subject: `Action Required: Submit TREC Sponsorship — ${agentName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
+            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has completed all onboarding documents and is ready for TREC sponsorship.</p>
+            <p style="font-size:14px;color:#333;">Please submit their TREC sponsorship invitation now.</p>
+            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
+          </div>
+        `,
+      }).catch(e => console.error('Failed to send TREC notification:', e))
+    }
 
     return NextResponse.json({ success: true, next_step: nextStep })
   } catch (error: any) {
