@@ -24,20 +24,107 @@ export function getEmailLayout(
 ): string {
   const { title, subtitle, preheader } = options || {}
 
-  // Using inline styles for maximum email client compatibility
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   ${preheader ? `<span style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">${preheader}</span>` : ''}
+  <style>
+    /* Reset */
+    body, p, h1, h2, h3, h4 { margin: 0; padding: 0; }
+    
+    /* Base */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      line-height: 1.6;
+      color: ${EMAIL_COLORS.bodyText};
+      background-color: ${EMAIL_COLORS.lightBg};
+    }
+    
+    /* Greeting */
+    .email-greeting {
+      font-size: 15px;
+      color: ${EMAIL_COLORS.headingText};
+      margin-bottom: 16px;
+    }
+    
+    /* Section boxes */
+    .email-section {
+      background-color: ${EMAIL_COLORS.lightBg};
+      border-left: 3px solid ${EMAIL_COLORS.accent};
+      padding: 16px 20px;
+      margin: 20px 0;
+    }
+    .email-section h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: ${EMAIL_COLORS.headingText};
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    .email-section p,
+    .email-section li {
+      font-size: 14px;
+      color: ${EMAIL_COLORS.bodyText};
+      line-height: 1.6;
+    }
+    .email-section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .email-section li {
+      margin-bottom: 6px;
+    }
+    
+    /* Buttons */
+    .email-btn {
+      display: inline-block;
+      padding: 12px 28px;
+      background-color: ${EMAIL_COLORS.accent};
+      color: ${EMAIL_COLORS.white} !important;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .email-btn-dark {
+      display: inline-block;
+      padding: 12px 28px;
+      background-color: ${EMAIL_COLORS.headingText};
+      color: ${EMAIL_COLORS.white} !important;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    /* Signature */
+    .email-signature {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid ${EMAIL_COLORS.border};
+      font-size: 13px;
+      color: ${EMAIL_COLORS.lightText};
+      line-height: 1.7;
+    }
+    .email-signature strong {
+      color: ${EMAIL_COLORS.headingText};
+    }
+    
+    /* Links */
+    a {
+      color: ${EMAIL_COLORS.accent};
+    }
+  </style>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: ${EMAIL_COLORS.bodyText}; margin: 0; padding: 0; background-color: ${EMAIL_COLORS.lightBg};">
   <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
     
     ${
       title
-        ? `<!-- Header with white background and accent border -->
+        ? `<!-- Header -->
     <div style="background-color: ${EMAIL_COLORS.headerBg}; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0; border: 1px solid ${EMAIL_COLORS.border}; border-bottom: 3px solid ${EMAIL_COLORS.accent};">
       <h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${EMAIL_COLORS.headingText};">${title}</h1>
       ${subtitle ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: ${EMAIL_COLORS.lightText};">${subtitle}</p>` : ''}
@@ -80,7 +167,7 @@ export function emailSignature(
   phone?: string
 ): string {
   let sig = `<div class="email-signature">Best regards,<br><strong>${name}</strong><br>${title}<br>Collective Realty Co.`
-  if (email) sig += `<br>${email}`
+  if (email) sig += `<br><a href="mailto:${email}">${email}</a>`
   if (phone) sig += `<br>${phone}`
   sig += `</div>`
   return sig
