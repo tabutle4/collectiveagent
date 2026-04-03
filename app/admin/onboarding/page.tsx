@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search, ExternalLink } from 'lucide-react'
 
@@ -159,7 +159,7 @@ export default function AdminOnboardingPage() {
     if (field === 'onboarding_fee_paid' && !current)
       updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
     await apiPost('update_user', { user_id: agentId, updates })
-    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, [field]: !current } : a))
+    setAgents((prev: Agent[]) => prev.map((a: Agent) => a.id === agentId ? { ...a, [field]: !current } : a))
   }
 
   const toggleAdminTask = async (agentId: string, task: AdminTask) => {
@@ -170,13 +170,13 @@ export default function AdminOnboardingPage() {
       const isCompleted = !!adminCompletions[agentId]?.[task.id]
       await apiPost('toggle_admin_task', { user_id: agentId, task_id: task.id, completing: !isCompleted })
       if (isCompleted) {
-        setAdminCompletions(prev => {
+        setAdminCompletions((prev: Record<string, Record<string, AdminTaskCompletion>>) => {
           const next = { ...prev, [agentId]: { ...prev[agentId] } }
           delete next[agentId][task.id]
           return next
         })
       } else {
-        setAdminCompletions(prev => ({
+        setAdminCompletions((prev: Record<string, Record<string, AdminTaskCompletion>>) => ({
           ...prev,
           [agentId]: { ...prev[agentId], [task.id]: { user_id: agentId, task_id: task.id, completed_at: new Date().toISOString(), completed_by: user.id, notes: null } },
         }))
@@ -192,27 +192,27 @@ export default function AdminOnboardingPage() {
       const isCompleted = !!completions[agentId]?.[item.id]
       await apiPost('toggle_checklist', { user_id: agentId, checklist_item_id: item.id, completing: !isCompleted })
       if (isCompleted) {
-        setCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][item.id]; return next })
+        setCompletions((prev: Record<string, Record<string, Completion>>) => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][item.id]; return next })
       } else {
-        setCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [item.id]: { user_id: agentId, checklist_item_id: item.id, completed_at: new Date().toISOString(), completed_by: user.id } } }))
+        setCompletions((prev: Record<string, Record<string, Completion>>) => ({ ...prev, [agentId]: { ...prev[agentId], [item.id]: { user_id: agentId, checklist_item_id: item.id, completed_at: new Date().toISOString(), completed_by: user.id } } }))
       }
     } catch (e) { console.error(e) } finally { setToggling(null) }
   }
 
   const toggleNavAccess = async (agentId: string, current: boolean) => {
     await apiPost('toggle_nav_access', { user_id: agentId, current })
-    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, full_nav_access: !current } : a))
+    setAgents((prev: Agent[]) => prev.map((a: Agent) => a.id === agentId ? { ...a, full_nav_access: !current } : a))
   }
 
   const getName = (a: Agent) => `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`
 
-  const sections = items.reduce((acc, item) => {
+  const sections = items.reduce((acc: Record<string, { title: string; items: ChecklistItem[] }>, item: ChecklistItem) => {
     if (!acc[item.section]) acc[item.section] = { title: item.section_title, items: [] }
     acc[item.section].items.push(item)
     return acc
   }, {} as Record<string, { title: string; items: ChecklistItem[] }>)
 
-  const filtered = agents.filter(a => {
+  const filtered = agents.filter((a: Agent) => {
     if (search.trim()) {
       const q = search.toLowerCase()
       if (!getName(a).toLowerCase().includes(q) && !a.email.toLowerCase().includes(q)) return false
@@ -221,9 +221,9 @@ export default function AdminOnboardingPage() {
   })
 
   const counts = {
-    setup: agents.filter(a => getStage(a) === 'setup').length,
-    onboarding: agents.filter(a => getStage(a) === 'onboarding').length,
-    complete: agents.filter(a => getStage(a) === 'complete').length,
+    setup: agents.filter((a: Agent) => getStage(a) === 'setup').length,
+    onboarding: agents.filter((a: Agent) => getStage(a) === 'onboarding').length,
+    complete: agents.filter((a: Agent) => getStage(a) === 'complete').length,
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
@@ -259,7 +259,7 @@ export default function AdminOnboardingPage() {
             type="text"
             placeholder="Search agents..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e: { target: { value: string } }) => setSearch(e.target.value)}
             className="input-luxury pl-8"
           />
         </div>
@@ -267,7 +267,7 @@ export default function AdminOnboardingPage() {
 
       {/* Agent list */}
       <div className="space-y-3">
-        {filtered.map(agent => {
+        {filtered.map((agent: Agent) => {
           const stage = getStage(agent)
           const badge = STAGE_LABELS[stage]
           const agentCompletions = completions[agent.id] || {}
@@ -282,7 +282,7 @@ export default function AdminOnboardingPage() {
               {/* Header row */}
               <div
                 className="flex items-center justify-between cursor-pointer"
-                onClick={() => setExpandedAgents(prev => ({ ...prev, [agent.id]: !prev[agent.id] }))}
+                onClick={() => setExpandedAgents((prev: Record<string, boolean>) => ({ ...prev, [agent.id]: !prev[agent.id] }))}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
@@ -328,7 +328,7 @@ export default function AdminOnboardingPage() {
                             )
                           })}
                           {/* Admin tasks */}
-                          {adminTasks.map(task => {
+                          {adminTasks.map((task: AdminTask) => {
                             const isCompleted = !!agentAdminCompletions[task.id]
                             const key = `admin-${agent.id}-${task.id}`
                             return (
@@ -374,19 +374,18 @@ export default function AdminOnboardingPage() {
                     </>
                   )}
 
-                  {/* ONBOARDING / COMPLETE STAGE: agent checklist + admin override toggle */}
-                  {stage !== 'setup' && (
-                    <>
+                  {/* Agent checklist — always visible */}
+                  <>
                       <div className="progress-bar mb-1">
                         <div className="progress-bar-fill" style={{ width: `${items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0}%` }} />
                       </div>
                       <p className="text-xs text-luxury-gray-3 mb-3">{completedCount} of {items.length} checklist items complete</p>
 
-                      {Object.entries(sections).map(([sectionKey, section]) => (
+                      {(Object.entries(sections) as [string, { title: string; items: ChecklistItem[] }][]).map(([sectionKey, section]) => (
                         <div key={sectionKey}>
                           <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">{section.title}</p>
                           <div className="space-y-1.5">
-                            {section.items.map(item => {
+                            {section.items.map((item: ChecklistItem) => {
                               const isCompleted = !!agentCompletions[item.id]
                               const key = `${agent.id}-${item.id}`
                               return (
@@ -416,7 +415,7 @@ export default function AdminOnboardingPage() {
                         <a
                           href={`/admin/users/${agent.id}`}
                           className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
-                          onClick={e => e.stopPropagation()}
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         >
                           <ExternalLink size={11} /> View Profile
                         </a>
@@ -430,7 +429,6 @@ export default function AdminOnboardingPage() {
                         )}
                       </div>
                     </>
-                  )}
                 </div>
               )}
             </div>
