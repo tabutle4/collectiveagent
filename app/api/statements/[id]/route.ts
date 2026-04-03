@@ -371,7 +371,7 @@ function generateStatementHTML(data: Record<string, any>): string {
 
   <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 9px; color: #999; text-align: center;">
     <p>Collective Realty Co · Referral Collective LLC · Statement generated ${data.generated_date}</p>
-    <p style="margin-top: 4px;">Questions? Contact tcandcompliance@collectiverealtyco.com</p>
+    <p style="margin-top: 4px;">Questions? Contact transactions@collectiverealtyco.com</p>
   </div>
 </body>
 </html>`

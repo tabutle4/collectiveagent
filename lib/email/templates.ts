@@ -64,7 +64,7 @@ export function getWelcomeEmailHtml(
       
       <p style="margin-top: 15px;"><strong>Listing & Transaction Coordinator:</strong><br>
       Leah Parpan<br>
-      transactions@coachingbrokeragetools.com<br>
+      listingspecialist@collectiverealtyco.com<br>
       (281) 638-9416</p>
     `
     )}
@@ -73,7 +73,7 @@ export function getWelcomeEmailHtml(
     
     <p>We look forward to keeping you updated on your listing's progress!</p>
     
-    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'transactions@coachingbrokeragetools.com', '(281) 638-9416')}
+    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'listingspecialist@collectiverealtyco.com', '(281) 638-9416')}
   `
 
   return getEmailLayout(content, {
@@ -122,7 +122,7 @@ export function getWeeklyReportEmailHtml(
     
     <p>If you have any questions about this week's activity or your listing, please don't hesitate to reach out to your listing agent.</p>
     
-    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'transactions@coachingbrokeragetools.com', '(281) 638-9416')}
+    ${emailSignature('Leah Parpan', 'Listing & Transaction Coordinator', 'listingspecialist@collectiverealtyco.com', '(281) 638-9416')}
   `
 
   return getEmailLayout(content, {

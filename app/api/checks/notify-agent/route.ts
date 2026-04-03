@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
+import { getEmailLayout } from '@/lib/email/layout'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -70,34 +71,28 @@ export async function POST(request: NextRequest) {
         })
       : null
 
-    const subject = `Check - ${address} - ${agentName}`
+    const subject = `Check Received - ${address}`
 
-    const htmlBody = `
-      <p>Hello ${agentName},</p>
-      <p>The above referenced check is being processed.${formattedDate ? ` The date on the check is <strong>${formattedDate}</strong>, which is the date it is expected to clear.` : ''}</p>
-      <p>Please review this link detailing the compliance process:<br>
-      <a href="https://visit.collectiverealtyco.com/compliance">visit.collectiverealtyco.com/compliance</a></p>
-      <p>The goal is to process agent commission payments within 10 to 14 business days from receiving completed compliance and check. This will usually happen faster. However, as stated in the agent agreement, the guarantee is 30 days.</p>
-      <p>Thank you!</p>
-    `
-
-    const textBody = `Hello ${agentName},
-
-The above referenced check is being processed.${formattedDate ? ` The date on the check is ${formattedDate}, which is the date it is expected to clear.` : ''}
-
-Please review this link detailing the compliance process:
-visit.collectiverealtyco.com/compliance
-
-The goal is to process agent commission payments within 10 to 14 business days from receiving completed compliance and check. This will usually happen faster. However, as stated in the agent agreement, the guarantee is 30 days.
-
-Thank you!`
+    const htmlBody = getEmailLayout(
+      `<p style="margin:0 0 16px;font-size:15px;color:#1a1a1a;">Hi ${agentName},</p>
+      <p style="margin:0 0 16px;font-size:14px;color:#555;line-height:1.6;">Your check for <strong style="color:#1a1a1a;">${address}</strong> is being processed.${formattedDate ? ` The date on the check is <strong style="color:#1a1a1a;">${formattedDate}</strong>, which is the date it is expected to clear.` : ''}</p>
+      <div style="background-color:#f9f9f9;padding:16px 20px;border-left:3px solid #C5A278;margin:0 0 20px;">
+        <p style="margin:0 0 8px;font-size:13px;color:#555;"><strong style="color:#1a1a1a;">What happens next:</strong></p>
+        <p style="margin:0;font-size:13px;color:#555;line-height:1.6;">Commission payments are processed within 10-14 business days from receiving completed compliance and check. This often happens faster, but the guarantee per your agent agreement is 30 days.</p>
+      </div>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="https://visit.collectiverealtyco.com/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Compliance Process</a>
+      </p>
+      <p style="margin:0;font-size:13px;color:#888;">Questions? Reply to this email or contact transactions@collectiverealtyco.com</p>`,
+      { title: 'Check Received', subtitle: address, preheader: `Your check for ${address} is being processed` }
+    )
 
     const { error: emailError } = await resend.emails.send({
-      from: 'Collective Realty Co. <tc@collectiverealtyco.com>',
+      from: 'Collective Realty Co. <tc@coachingbrokeragetools.com>',
       to: [agentEmail],
+      replyTo: 'transactions@collectiverealtyco.com',
       subject,
       html: htmlBody,
-      text: textBody,
     })
 
     if (emailError) throw new Error(emailError.message)
