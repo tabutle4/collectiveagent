@@ -363,6 +363,8 @@ export default function ProfilePage({
       // Convert empty strings to null for date/nullable fields so Postgres doesn't choke
       const sanitized = { ...realEstateForm }
       if (sanitized.join_date === '') sanitized.join_date = null as any
+      if (sanitized.referring_agent_id === '') sanitized.referring_agent_id = null as any
+      if (sanitized.referring_agent === '') sanitized.referring_agent = null as any
 
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
