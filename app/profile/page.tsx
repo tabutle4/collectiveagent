@@ -1030,6 +1030,29 @@ export default function ProfilePage({
                 {realEstateError && <p className="text-xs text-red-600 mt-4">{realEstateError}</p>}
                 {realEstateSuccess && <p className="text-xs text-green-700 mt-4">{realEstateSuccess}</p>}
 
+                {(user.referring_agent || (user.referred_agents && user.referred_agents.length > 0)) && (
+                  <div className="pt-4 border-t border-luxury-gray-5/30 space-y-3">
+                    {user.referring_agent && (
+                      <div>
+                        <p className="text-xs text-luxury-gray-3 mb-1">Referred By</p>
+                        <p className="text-sm font-medium text-luxury-gray-1">{user.referring_agent}</p>
+                      </div>
+                    )}
+                    {user.referred_agents && user.referred_agents.length > 0 && (
+                      <div>
+                        <p className="text-xs text-luxury-gray-3 mb-2">Referred to Firm ({user.referred_agents.length})</p>
+                        <div className="flex flex-wrap gap-2">
+                          {user.referred_agents.map((a: any) => (
+                            <span key={a.id} className="text-xs bg-luxury-gray-5/40 text-luxury-gray-1 px-2 py-1 rounded">
+                              {a.preferred_first_name || a.first_name} {a.preferred_last_name || a.last_name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={handleSaveRealEstate}
