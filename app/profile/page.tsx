@@ -239,7 +239,9 @@ export default function ProfilePage({
         office: freshUserData.office || '',
         status: freshUserData.status || '',
         is_active: freshUserData.is_active ?? true,
-        division: freshUserData.division || '',
+        division: Array.isArray(freshUserData.division)
+          ? freshUserData.division.filter(Boolean).join(' | ')
+          : freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
         commission_plan: freshUserData.commission_plan || '',
         role: freshUserData.role || '',
@@ -365,6 +367,11 @@ export default function ProfilePage({
       if (sanitized.join_date === '') sanitized.join_date = null as any
       if (sanitized.referring_agent_id === '') sanitized.referring_agent_id = null as any
       if (sanitized.referring_agent === '') sanitized.referring_agent = null as any
+      if (sanitized.status === '') sanitized.status = null as any
+      // Convert division string back to array for text[] column
+      sanitized.division = sanitized.division
+        ? (sanitized.division as string).split('|').map((d: string) => d.trim()).filter(Boolean) as any
+        : null as any
 
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
