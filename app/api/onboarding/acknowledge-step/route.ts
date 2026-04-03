@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
+import { getEmailLayout } from '@/lib/email/layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -48,13 +49,12 @@ export async function POST(request: NextRequest) {
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Action Required: Send W-9 Request — ${agentName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
-            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has acknowledged the W-9 step and is expecting a W-9 request.</p>
-            <p style="font-size:14px;color:#333;">Please send their W-9 request now via Track1099.</p>
-            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
-          </div>
-        `,
+        html: getEmailLayout(
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has acknowledged the W-9 step and is expecting a W-9 request.</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please send their W-9 request now via Track1099.</p>
+          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
+          { title: 'W-9 Request Needed', preheader: `Send W-9 to ${agentName}` }
+        ),
       }).catch(e => console.error('Failed to send W-9 notification:', e))
     }
 
@@ -64,13 +64,12 @@ export async function POST(request: NextRequest) {
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Action Required: Submit TREC Sponsorship — ${agentName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
-            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has completed all onboarding documents and is ready for TREC sponsorship.</p>
-            <p style="font-size:14px;color:#333;">Please submit their TREC sponsorship invitation now.</p>
-            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
-          </div>
-        `,
+        html: getEmailLayout(
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has completed all onboarding documents and is ready for TREC sponsorship.</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please submit their TREC sponsorship invitation now.</p>
+          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
+          { title: 'TREC Sponsorship Needed', preheader: `Submit TREC invite for ${agentName}` }
+        ),
       }).catch(e => console.error('Failed to send TREC notification:', e))
     }
 

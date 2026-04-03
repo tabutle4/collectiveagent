@@ -9,6 +9,7 @@ import {
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
+import { getEmailLayout, emailButton } from '@/lib/email/layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -158,15 +159,12 @@ export async function POST(request: NextRequest) {
         to: 'courtney@collectiverealtyco.com',
         replyTo: 'tarab@collectiverealtyco.com',
         subject: `Action Required: Co-sign ${docLabel} for ${agentName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
-            <p style="font-size:14px;color:#333;">${agentName} has signed their <strong>${docLabel}</strong> and is waiting for your co-signature.</p>
-            <p style="margin:24px 0;">
-              <a href="${signingUrl}" style="background-color:#C5A278;color:white;padding:12px 24px;text-decoration:none;border-radius:4px;font-size:14px;">Review &amp; Sign</a>
-            </p>
-            <p style="font-size:12px;color:#888;">Or copy this link: ${signingUrl}</p>
-          </div>
-        `,
+        html: getEmailLayout(
+          `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed their ${docLabel} and is waiting for your co-signature.</p>
+          ${emailButton('Review & Sign', signingUrl, true)}
+          <p style="font-size:12px;color:#888;margin:16px 0 0;">Or copy this link: ${signingUrl}</p>`,
+          { title: `Co-sign Required: ${docLabel}`, preheader: `${agentName} needs your co-signature` }
+        ),
       }).catch(e => console.error('Failed to send broker signing email:', e))
     }
 
@@ -176,18 +174,14 @@ export async function POST(request: NextRequest) {
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Policy Manual Signed — ${agentName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
-            <p style="font-size:14px;color:#333;"><strong>${agentName}</strong> has signed and acknowledged the Policy Manual.</p>
-            <p style="font-size:14px;color:#333;">They are now on Step 6 (W-9). Please send them their W-9 request via Track1099.</p>
-            <p style="font-size:12px;color:#888;">Agent email: ${prospect.email}</p>
-          </div>
-        `,
+        html: getEmailLayout(
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed and acknowledged the Policy Manual.</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">They are now on Step 6 (W-9). Please send their W-9 request via Track1099.</p>
+          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
+          { title: 'Policy Manual Signed', preheader: `${agentName} acknowledged the policy manual` }
+        ),
       }).catch(e => console.error('Failed to send policy manual notification:', e))
     }
-
-    // Notify office when agent reaches W-9 step (acknowledge-step handles step 6, but sign-document doesn't — this fires on policy manual completion which precedes W-9)
-    // W-9 and TREC notifications are sent from acknowledge-step route
 
     return NextResponse.json({ success: true, fileUrl })
   } catch (error: any) {

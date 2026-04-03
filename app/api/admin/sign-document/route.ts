@@ -6,6 +6,7 @@ import { getICAContent } from '@/lib/documents/ica-content'
 import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
 import { uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
+import { getEmailLayout } from '@/lib/email/layout'
 import fs from 'fs'
 import path from 'path'
 
@@ -118,19 +119,18 @@ export async function POST(request: NextRequest) {
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Action Required: Complete Admin Onboarding — ${agentFullName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;">
-            <p style="font-size:14px;color:#333;">Courtney has signed all agreements for <strong>${agentFullName}</strong>. The agent is now active in the system.</p>
-            <p style="font-size:14px;color:#333;">Please complete the following admin onboarding steps:</p>
-            <ol style="font-size:14px;color:#333;line-height:2;">
-              <li>Create Microsoft 365 / Outlook account</li>
-              <li>Create Brokermint account</li>
-              <li>Create Dotloop account</li>
-              <li>Send welcome and onboarding emails via Power Automate — <a href="https://forms.office.com" style="color:#C5A278;">New Agent Automated Onboarding Emails form</a></li>
-            </ol>
-            <p style="font-size:12px;color:#888;">Agent email: ${agent.email}</p>
-          </div>
-        `,
+        html: getEmailLayout(
+          `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has signed all agreements for <strong style="color:#1a1a1a;">${agentFullName}</strong>. The agent is now active in the system.</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please complete the following admin onboarding steps:</p>
+          <ol style="margin:0 0 16px;padding-left:20px;font-size:14px;color:#555;line-height:2.2;">
+            <li>Create Microsoft 365 / Outlook account</li>
+            <li>Create Brokermint account</li>
+            <li>Create Dotloop account</li>
+            <li>Send welcome and onboarding emails — complete the <strong>New Agent Automated Onboarding Emails</strong> form in Power Automate</li>
+          </ol>
+          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${agent.email}</p>`,
+          { title: 'Admin Onboarding Steps Needed', preheader: `Complete admin setup for ${agentFullName}` }
+        ),
       }).catch(e => console.error('Failed to send admin onboarding notification:', e))
     }
 
