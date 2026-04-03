@@ -98,7 +98,7 @@ function emptyAgentForm(agentUser?: any) {
   return {
     _id: uid(),
     agent_id: '',
-    agent_role: 'primary_agent',
+    agent_role: 'co_agent',
     commission_plan: agentUser ? defaultCommissionPlan(agentUser.commission_plan || '') : '',
     agent_gross: '',
     brokerage_split: '',
@@ -468,7 +468,7 @@ export default function CloseTransactionModal({
         await callAction('update_internal_agent', {
           internal_agent_id: a.id,
           updates: {
-            agent_role: af.agent_role || null,
+            agent_role: af.agent_role || a.agent_role || 'co_agent',
             commission_plan: af.commission_plan || null,
             agent_gross: parseNum(af.agent_gross),
             brokerage_split: parseNum(af.brokerage_split),
@@ -519,8 +519,8 @@ export default function CloseTransactionModal({
         await callAction('update_external_brokerage', {
           brokerage_id: b.id,
           updates: {
-            brokerage_name: bf.brokerage_name || null,
-            brokerage_role: bf.brokerage_role || null,
+            brokerage_name: bf.brokerage_name || b.brokerage_name,
+            brokerage_role: bf.brokerage_role || b.brokerage_role || 'other',
             agent_name: bf.agent_name || null,
             agent_email: bf.agent_email || null,
             agent_phone: bf.agent_phone || null,
