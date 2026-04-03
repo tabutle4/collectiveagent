@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { Resend } from 'resend'
-import { getEmailLayout } from '@/lib/email/layout'
-import { EMAIL_COLORS } from '@/lib/email/layout'
+import { getEmailLayout, EMAIL_COLORS } from '@/lib/email/layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
