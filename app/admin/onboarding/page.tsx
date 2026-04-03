@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search, ExternalLink } from 'lucide-react'
 
 interface Agent {
   id: string
@@ -50,14 +50,32 @@ interface AdminTaskCompletion {
   notes: string | null
 }
 
-type FilterStatus =
-  | 'all'
-  | 'locked'
-  | 'unlocked'
-  | 'ready'
-  | 'complete'
-  | 'pending_admin'
-  | 'incomplete'
+type StageFilter = 'all' | 'setup' | 'onboarding' | 'complete'
+
+const STAGE_LABELS: Record<string, { label: string; description: string; className: string }> = {
+  setup: {
+    label: 'Admin Setup',
+    description: 'Complete your tasks and grant access',
+    className: 'bg-orange-50 border-orange-200 text-orange-700',
+  },
+  onboarding: {
+    label: 'Agent Onboarding',
+    description: 'Agent is completing their checklist',
+    className: 'bg-blue-50 border-blue-200 text-blue-700',
+  },
+  complete: {
+    label: 'Complete',
+    description: 'All done',
+    className: 'bg-green-50 border-green-200 text-green-700',
+  },
+}
+
+const PRE_ACCESS_FIELDS = [
+  { field: 'onboarding_fee_paid', label: 'Onboarding Fee Paid' },
+  { field: 'accepted_trec', label: 'TREC Invitation Accepted' },
+  { field: 'independent_contractor_agreement_signed', label: 'ICA Signed' },
+  { field: 'w9_completed', label: 'W-9 Completed' },
+]
 
 export default function AdminOnboardingPage() {
   const router = useRouter()
@@ -66,44 +84,32 @@ export default function AdminOnboardingPage() {
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [completions, setCompletions] = useState<Record<string, Record<string, Completion>>>({})
   const [adminTasks, setAdminTasks] = useState<AdminTask[]>([])
-  const [adminCompletions, setAdminCompletions] = useState<
-    Record<string, Record<string, AdminTaskCompletion>>
-  >({})
+  const [adminCompletions, setAdminCompletions] = useState<Record<string, Record<string, AdminTaskCompletion>>>({})
   const [loading, setLoading] = useState(true)
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<FilterStatus>('all')
+  const [filter, setFilter] = useState<StageFilter>('all')
   const [toggling, setToggling] = useState<string | null>(null)
-  const [addingNote, setAddingNote] = useState<string | null>(null)
-  const [noteText, setNoteText] = useState('')
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const res = await fetch('/api/auth/me')
-        if (!res.ok) {
-          router.push('/auth/login')
-          return
-        }
+        if (!res.ok) { router.push('/auth/login'); return }
         const data = await res.json()
         setUser(data.user)
-      } catch {
-        router.push('/auth/login')
-      }
+      } catch { router.push('/auth/login') }
     }
     fetchUser()
   }, [router])
 
-  useEffect(() => {
-    if (!user) return
-    loadData()
-  }, [user])
+  useEffect(() => { if (user) loadData() }, [user])
 
   const loadData = async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/onboarding')
-      if (!res.ok) throw new Error('Failed to load onboarding data')
+      if (!res.ok) throw new Error('Failed to load')
       const data = await res.json()
 
       setAgents(data.users || [])
@@ -130,23 +136,12 @@ export default function AdminOnboardingPage() {
     }
   }
 
-  const preAccessComplete = (agent: Agent) =>
-    agent.onboarding_fee_paid &&
-    agent.accepted_trec &&
-    agent.independent_contractor_agreement_signed &&
-    agent.w9_completed
-
-  const getAgentStatus = (agent: Agent): FilterStatus => {
+  const getStage = (agent: Agent): 'setup' | 'onboarding' | 'complete' => {
     const agentCompletions = completions[agent.id] || {}
     const completedCount = Object.keys(agentCompletions).length
-    const adminTaskCount = Object.keys(adminCompletions[agent.id] || {}).length
-
     if (completedCount === items.length && items.length > 0) return 'complete'
-    if (!agent.full_nav_access && !preAccessComplete(agent)) return 'locked'
-    if (!agent.full_nav_access && preAccessComplete(agent)) return 'ready'
-    if (agent.full_nav_access && adminTaskCount < adminTasks.length) return 'pending_admin'
-    if (agent.full_nav_access && completedCount === 0) return 'unlocked'
-    return 'incomplete'
+    if (!agent.full_nav_access) return 'setup'
+    return 'onboarding'
   }
 
   const apiPost = async (action: string, payload: Record<string, any>) => {
@@ -159,42 +154,12 @@ export default function AdminOnboardingPage() {
     return res.json()
   }
 
-  const toggleItem = async (agentId: string, item: ChecklistItem) => {
-    const key = `${agentId}-${item.id}`
-    if (toggling === key) return
-    setToggling(key)
-    try {
-      const isCompleted = !!completions[agentId]?.[item.id]
-      await apiPost('toggle_checklist', {
-        user_id: agentId,
-        checklist_item_id: item.id,
-        completing: !isCompleted,
-      })
-      if (isCompleted) {
-        setCompletions(prev => {
-          const next = { ...prev, [agentId]: { ...prev[agentId] } }
-          delete next[agentId][item.id]
-          return next
-        })
-      } else {
-        setCompletions(prev => ({
-          ...prev,
-          [agentId]: {
-            ...prev[agentId],
-            [item.id]: {
-              user_id: agentId,
-              checklist_item_id: item.id,
-              completed_at: new Date().toISOString(),
-              completed_by: user.id,
-            },
-          },
-        }))
-      }
-    } catch (e) {
-      console.error('Error toggling item:', e)
-    } finally {
-      setToggling(null)
-    }
+  const togglePreAccess = async (agentId: string, field: string, current: boolean) => {
+    const updates: Record<string, any> = { [field]: !current }
+    if (field === 'onboarding_fee_paid' && !current)
+      updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
+    await apiPost('update_user', { user_id: agentId, updates })
+    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, [field]: !current } : a))
   }
 
   const toggleAdminTask = async (agentId: string, task: AdminTask) => {
@@ -203,11 +168,7 @@ export default function AdminOnboardingPage() {
     setToggling(key)
     try {
       const isCompleted = !!adminCompletions[agentId]?.[task.id]
-      await apiPost('toggle_admin_task', {
-        user_id: agentId,
-        task_id: task.id,
-        completing: !isCompleted,
-      })
+      await apiPost('toggle_admin_task', { user_id: agentId, task_id: task.id, completing: !isCompleted })
       if (isCompleted) {
         setAdminCompletions(prev => {
           const next = { ...prev, [agentId]: { ...prev[agentId] } }
@@ -217,103 +178,52 @@ export default function AdminOnboardingPage() {
       } else {
         setAdminCompletions(prev => ({
           ...prev,
-          [agentId]: {
-            ...prev[agentId],
-            [task.id]: {
-              user_id: agentId,
-              task_id: task.id,
-              completed_at: new Date().toISOString(),
-              completed_by: user.id,
-              notes: null,
-            },
-          },
+          [agentId]: { ...prev[agentId], [task.id]: { user_id: agentId, task_id: task.id, completed_at: new Date().toISOString(), completed_by: user.id, notes: null } },
         }))
       }
-    } catch (e) {
-      console.error('Error toggling admin task:', e)
-    } finally {
-      setToggling(null)
-    }
+    } catch (e) { console.error(e) } finally { setToggling(null) }
   }
 
-  const saveNote = async (agentId: string, taskId: string) => {
-    await apiPost('update_task_notes', { user_id: agentId, task_id: taskId, notes: noteText })
-    setAdminCompletions(prev => ({
-      ...prev,
-      [agentId]: { ...prev[agentId], [taskId]: { ...prev[agentId][taskId], notes: noteText } },
-    }))
-    setAddingNote(null)
-    setNoteText('')
-  }
-
-  const togglePreAccessStep = async (agentId: string, field: string, current: boolean) => {
-    const updates: Record<string, any> = { [field]: !current }
-    if (field === 'onboarding_fee_paid' && !current)
-      updates.onboarding_fee_paid_date = new Date().toISOString().split('T')[0]
-    await apiPost('update_user', { user_id: agentId, updates })
-    setAgents(prev => prev.map(a => (a.id === agentId ? { ...a, [field]: !current } : a)))
+  const toggleChecklistItem = async (agentId: string, item: ChecklistItem) => {
+    const key = `${agentId}-${item.id}`
+    if (toggling === key) return
+    setToggling(key)
+    try {
+      const isCompleted = !!completions[agentId]?.[item.id]
+      await apiPost('toggle_checklist', { user_id: agentId, checklist_item_id: item.id, completing: !isCompleted })
+      if (isCompleted) {
+        setCompletions(prev => { const next = { ...prev, [agentId]: { ...prev[agentId] } }; delete next[agentId][item.id]; return next })
+      } else {
+        setCompletions(prev => ({ ...prev, [agentId]: { ...prev[agentId], [item.id]: { user_id: agentId, checklist_item_id: item.id, completed_at: new Date().toISOString(), completed_by: user.id } } }))
+      }
+    } catch (e) { console.error(e) } finally { setToggling(null) }
   }
 
   const toggleNavAccess = async (agentId: string, current: boolean) => {
     await apiPost('toggle_nav_access', { user_id: agentId, current })
-    setAgents(prev => prev.map(a => (a.id === agentId ? { ...a, full_nav_access: !current } : a)))
+    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, full_nav_access: !current } : a))
   }
 
-  const toggleAgent = (id: string) => setExpandedAgents(prev => ({ ...prev, [id]: !prev[id] }))
+  const getName = (a: Agent) => `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`
 
-  const sections = items.reduce(
-    (acc, item) => {
-      if (!acc[item.section]) acc[item.section] = { title: item.section_title, items: [] }
-      acc[item.section].items.push(item)
-      return acc
-    },
-    {} as Record<string, { title: string; items: ChecklistItem[] }>
-  )
+  const sections = items.reduce((acc, item) => {
+    if (!acc[item.section]) acc[item.section] = { title: item.section_title, items: [] }
+    acc[item.section].items.push(item)
+    return acc
+  }, {} as Record<string, { title: string; items: ChecklistItem[] }>)
 
   const filtered = agents.filter(a => {
     if (search.trim()) {
       const q = search.toLowerCase()
-      const name =
-        `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
-      if (!name.includes(q) && !a.email.toLowerCase().includes(q)) return false
+      if (!getName(a).toLowerCase().includes(q) && !a.email.toLowerCase().includes(q)) return false
     }
-    if (filter === 'all') return true
-    return getAgentStatus(a) === filter
+    return filter === 'all' || getStage(a) === filter
   })
 
-  const filterOptions: { value: FilterStatus; label: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'locked', label: 'Locked' },
-    { value: 'ready', label: 'Ready to Unlock' },
-    { value: 'unlocked', label: 'Unlocked' },
-    { value: 'pending_admin', label: 'Pending Admin Setup' },
-    { value: 'incomplete', label: 'Incomplete' },
-    { value: 'complete', label: 'Complete' },
-  ]
-
-  const statusBadge: Record<FilterStatus, { label: string; className: string }> = {
-    all: { label: '', className: '' },
-    locked: { label: 'Locked', className: 'bg-gray-50 border-gray-200 text-gray-600' },
-    ready: {
-      label: 'Ready to Unlock',
-      className: 'bg-yellow-50 border-yellow-200 text-yellow-700',
-    },
-    unlocked: { label: 'Unlocked', className: 'bg-blue-50 border-blue-200 text-blue-700' },
-    pending_admin: {
-      label: 'Pending Admin Setup',
-      className: 'bg-orange-50 border-orange-200 text-orange-700',
-    },
-    incomplete: { label: 'In Progress', className: 'bg-blue-50 border-blue-200 text-blue-700' },
-    complete: { label: 'Complete', className: 'bg-green-50 border-green-200 text-green-700' },
-  }
-
-  const stats = {
-    total: agents.length,
-    complete: agents.filter(a => getAgentStatus(a) === 'complete').length,
-    inProgress: agents.filter(a =>
-      ['unlocked', 'incomplete', 'pending_admin'].includes(getAgentStatus(a))
-    ).length,
-    ready: agents.filter(a => getAgentStatus(a) === 'ready').length,
+  const counts = {
+    setup: agents.filter(a => getStage(a) === 'setup').length,
+    onboarding: agents.filter(a => getStage(a) === 'onboarding').length,
+    complete: agents.filter(a => getStage(a) === 'complete').length,
   }
 
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
@@ -322,31 +232,29 @@ export default function AdminOnboardingPage() {
     <div>
       <h1 className="page-title mb-6">ONBOARDING</h1>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Total</p>
-          <p className="text-2xl font-semibold text-luxury-accent">{stats.total}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Ready to Unlock</p>
-          <p className="text-2xl font-semibold text-yellow-600">{stats.ready}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">In Progress</p>
-          <p className="text-2xl font-semibold text-luxury-accent">{stats.inProgress}</p>
-        </div>
-        <div className="container-card text-center">
-          <p className="text-xs text-luxury-gray-3 mb-1">Complete</p>
-          <p className="text-2xl font-semibold text-green-600">{stats.complete}</p>
-        </div>
+      {/* Stage summary cards */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {(['setup', 'onboarding', 'complete'] as StageFilter[]).map(stage => {
+          if (stage === 'all') return null
+          const s = STAGE_LABELS[stage]
+          return (
+            <button
+              key={stage}
+              onClick={() => setFilter(filter === stage ? 'all' : stage)}
+              className={`container-card text-left transition-all ${filter === stage ? 'ring-2 ring-luxury-accent' : ''}`}
+            >
+              <p className="text-xs text-luxury-gray-3 mb-1">{s.label}</p>
+              <p className="text-2xl font-semibold text-luxury-gray-1">{counts[stage as keyof typeof counts]}</p>
+              <p className="text-xs text-luxury-gray-3 mt-1">{s.description}</p>
+            </button>
+          )
+        })}
       </div>
 
-      <div className="container-card mb-4 space-y-3">
+      {/* Search */}
+      <div className="container-card mb-4">
         <div className="relative">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3"
-          />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3" />
           <input
             type="text"
             placeholder="Search agents..."
@@ -355,254 +263,174 @@ export default function AdminOnboardingPage() {
             className="input-luxury pl-8"
           />
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {filterOptions.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setFilter(opt.value)}
-              className={`text-xs px-3 py-1.5 rounded border transition-colors ${filter === opt.value ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              {opt.label} (
-              {opt.value === 'all'
-                ? agents.length
-                : agents.filter(a => getAgentStatus(a) === opt.value).length}
-              )
-            </button>
-          ))}
-        </div>
       </div>
 
+      {/* Agent list */}
       <div className="space-y-3">
         {filtered.map(agent => {
+          const stage = getStage(agent)
+          const badge = STAGE_LABELS[stage]
           const agentCompletions = completions[agent.id] || {}
           const completedCount = Object.keys(agentCompletions).length
-          const progress = items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0
-          const isExpanded = expandedAgents[agent.id]
-          const name = `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
-          const agentStatus = getAgentStatus(agent)
-          const badge = statusBadge[agentStatus]
           const agentAdminCompletions = adminCompletions[agent.id] || {}
           const adminCompletedCount = Object.keys(agentAdminCompletions).length
+          const preAccessDone = PRE_ACCESS_FIELDS.every(f => !!(agent as any)[f.field])
+          const isExpanded = expandedAgents[agent.id]
 
           return (
             <div key={agent.id} className="container-card">
+              {/* Header row */}
               <div
                 className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleAgent(agent.id)}
+                onClick={() => setExpandedAgents(prev => ({ ...prev, [agent.id]: !prev[agent.id] }))}
               >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="flex-1">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
-                      <span className={`text-xs px-1.5 py-0.5 rounded border ${badge.className}`}>
-                        {badge.label}
-                      </span>
+                      <p className="text-sm font-semibold text-luxury-gray-1">{getName(agent)}</p>
+                      <span className={`text-xs px-1.5 py-0.5 rounded border ${badge.className}`}>{badge.label}</span>
                     </div>
-                    <p className="text-xs text-luxury-gray-3">{agent.email}</p>
+                    <p className="text-xs text-luxury-gray-3 truncate">{agent.email}</p>
                   </div>
-                  <div className="text-right flex-shrink-0 text-xs text-luxury-gray-3">
-                    <p>
-                      Checklist {completedCount}/{items.length}
-                    </p>
-                    <p>
-                      Admin {adminCompletedCount}/{adminTasks.length}
-                    </p>
+                  <div className="text-right flex-shrink-0 text-xs text-luxury-gray-3 hidden sm:block">
+                    {stage === 'setup' && <p>{adminCompletedCount + PRE_ACCESS_FIELDS.filter(f => !!(agent as any)[f.field]).length}/{adminTasks.length + PRE_ACCESS_FIELDS.length} tasks</p>}
+                    {stage !== 'setup' && <p>{completedCount}/{items.length} checklist</p>}
                   </div>
                 </div>
-                <div className="ml-4">
-                  {isExpanded ? (
-                    <ChevronUp size={16} className="text-luxury-gray-3" />
-                  ) : (
-                    <ChevronDown size={16} className="text-luxury-gray-3" />
-                  )}
+                <div className="ml-3 flex-shrink-0">
+                  {isExpanded ? <ChevronUp size={16} className="text-luxury-gray-3" /> : <ChevronDown size={16} className="text-luxury-gray-3" />}
                 </div>
               </div>
 
               {isExpanded && (
-                <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-4">
-                  <div className="progress-bar">
-                    <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
-                  </div>
+                <div className="mt-4 pt-4 border-t border-luxury-gray-5/50 space-y-5">
 
-                  <div className="inner-card">
-                    <p className="text-xs font-semibold text-luxury-gray-2 mb-3">
-                      Pre-Access Steps
-                    </p>
-                    <div className="space-y-2">
-                      {[
-                        { field: 'onboarding_fee_paid', label: 'Onboarding Fee Paid' },
-                        { field: 'accepted_trec', label: 'TREC Invitation Accepted' },
-                        { field: 'independent_contractor_agreement_signed', label: 'ICA Signed' },
-                        { field: 'w9_completed', label: 'W-9 Completed' },
-                      ].map(({ field, label }) => {
-                        const isComplete = !!(agent as any)[field]
-                        return (
-                          <div
-                            key={field}
-                            className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors"
-                            onClick={() => togglePreAccessStep(agent.id, field, isComplete)}
-                          >
-                            {isComplete ? (
-                              <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
-                            ) : (
-                              <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
-                            )}
-                            <span
-                              className={`text-xs ${isComplete ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
-                            >
-                              {label}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="inner-card">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-luxury-gray-2">Admin Setup Tasks</p>
-                      <span className="text-xs text-luxury-gray-3">
-                        {adminCompletedCount}/{adminTasks.length}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {adminTasks.map(task => {
-                        const completion = agentAdminCompletions[task.id]
-                        const isCompleted = !!completion
-                        const taskKey = `admin-${agent.id}-${task.id}`
-                        const isAddingNote = addingNote === taskKey
-                        return (
-                          <div key={task.id}>
-                            <div
-                              className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1 rounded transition-colors"
-                              onClick={() => toggleAdminTask(agent.id, task)}
-                            >
-                              {toggling === taskKey ? (
-                                <Circle
-                                  size={14}
-                                  className="text-luxury-gray-3 animate-pulse flex-shrink-0"
-                                />
-                              ) : isCompleted ? (
-                                <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
-                              ) : (
-                                <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
-                              )}
-                              <span
-                                className={`text-xs flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
-                              >
-                                {task.label}
-                              </span>
-                              {isCompleted && (
-                                <button
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    setAddingNote(isAddingNote ? null : taskKey)
-                                    setNoteText(completion.notes || '')
-                                  }}
-                                  className="text-xs text-luxury-accent hover:underline flex-shrink-0"
-                                >
-                                  {completion.notes ? 'Edit note' : 'Add note'}
-                                </button>
-                              )}
-                            </div>
-                            {isCompleted && completion.notes && !isAddingNote && (
-                              <p className="text-xs text-luxury-gray-3 ml-7 mt-0.5 italic">
-                                {completion.notes}
-                              </p>
-                            )}
-                            {isAddingNote && (
-                              <div className="ml-7 mt-1 flex gap-2">
-                                <input
-                                  type="text"
-                                  value={noteText}
-                                  onChange={e => setNoteText(e.target.value)}
-                                  placeholder="Add a note..."
-                                  className="input-luxury text-xs flex-1"
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => saveNote(agent.id, task.id)}
-                                  className="btn btn-primary text-xs"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => setAddingNote(null)}
-                                  className="btn btn-secondary text-xs"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-luxury-gray-3">App Navigation Access</p>
-                    <button
-                      onClick={() => toggleNavAccess(agent.id, agent.full_nav_access)}
-                      className={`text-xs px-3 py-1 rounded border transition-colors ${agent.full_nav_access ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' : 'btn-secondary'}`}
-                    >
-                      {agent.full_nav_access
-                        ? 'Full Access — Click to Restrict'
-                        : 'Restricted — Click to Grant Full Access'}
-                    </button>
-                  </div>
-
-                  {Object.entries(sections).map(([sectionKey, section]) => {
-                    const sectionCompleted = section.items.filter(
-                      i => agentCompletions[i.id]
-                    ).length
-                    return (
-                      <div key={sectionKey}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="text-xs font-semibold text-luxury-gray-2">
-                            {section.title}
-                          </p>
-                          <span className="text-xs text-luxury-gray-3">
-                            {sectionCompleted}/{section.items.length}
-                          </span>
-                        </div>
+                  {/* SETUP STAGE: your tasks + access toggle */}
+                  {stage === 'setup' && (
+                    <>
+                      <div>
+                        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Your Tasks</p>
                         <div className="space-y-1.5">
-                          {section.items.map(item => {
-                            const isCompleted = !!agentCompletions[item.id]
-                            const key = `${agent.id}-${item.id}`
+                          {/* Pre-access fields */}
+                          {PRE_ACCESS_FIELDS.map(({ field, label }) => {
+                            const isComplete = !!(agent as any)[field]
                             return (
                               <div
-                                key={item.id}
-                                className={`flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-luxury-light transition-colors ${isCompleted ? 'opacity-60' : ''}`}
-                                onClick={() => toggleItem(agent.id, item)}
+                                key={field}
+                                className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1.5 rounded transition-colors"
+                                onClick={() => togglePreAccess(agent.id, field, isComplete)}
                               >
-                                {toggling === key ? (
-                                  <Circle size={14} className="text-luxury-gray-3 animate-pulse" />
-                                ) : isCompleted ? (
-                                  <CheckCircle2
-                                    size={14}
-                                    className="text-green-600 flex-shrink-0"
-                                  />
-                                ) : (
-                                  <Circle size={14} className="text-luxury-gray-3 flex-shrink-0" />
-                                )}
-                                <span
-                                  className={`text-xs ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}
-                                >
-                                  {item.label}
-                                </span>
-                                {item.priority === 'high' && !isCompleted && (
-                                  <span className="text-xs px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 ml-auto">
-                                    Priority
-                                  </span>
-                                )}
+                                {isComplete
+                                  ? <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                                  : <Circle size={15} className="text-luxury-gray-3 flex-shrink-0" />}
+                                <span className={`text-sm ${isComplete ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{label}</span>
+                              </div>
+                            )
+                          })}
+                          {/* Admin tasks */}
+                          {adminTasks.map(task => {
+                            const isCompleted = !!agentAdminCompletions[task.id]
+                            const key = `admin-${agent.id}-${task.id}`
+                            return (
+                              <div
+                                key={task.id}
+                                className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1.5 rounded transition-colors"
+                                onClick={() => toggleAdminTask(agent.id, task)}
+                              >
+                                {toggling === key
+                                  ? <Circle size={15} className="text-luxury-gray-3 animate-pulse flex-shrink-0" />
+                                  : isCompleted
+                                    ? <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                                    : <Circle size={15} className="text-luxury-gray-3 flex-shrink-0" />}
+                                <span className={`text-sm ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{task.label}</span>
                               </div>
                             )
                           })}
                         </div>
                       </div>
-                    )
-                  })}
+
+                      <div className="flex items-center justify-between pt-3 border-t border-luxury-gray-5/30">
+                        <div>
+                          <p className="text-sm font-medium text-luxury-gray-1">Grant Full App Access</p>
+                          <p className="text-xs text-luxury-gray-3">Unlocks the agent's onboarding checklist</p>
+                        </div>
+                        <button
+                          onClick={() => toggleNavAccess(agent.id, agent.full_nav_access)}
+                          disabled={!preAccessDone || adminCompletedCount < adminTasks.length}
+                          className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                            agent.full_nav_access
+                              ? 'bg-green-50 border-green-200 text-green-700'
+                              : preAccessDone && adminCompletedCount >= adminTasks.length
+                                ? 'btn-primary'
+                                : 'opacity-40 cursor-not-allowed btn-secondary'
+                          }`}
+                        >
+                          {agent.full_nav_access ? 'Access Granted ✓' : 'Grant Access'}
+                        </button>
+                      </div>
+                      {(!preAccessDone || adminCompletedCount < adminTasks.length) && (
+                        <p className="text-xs text-luxury-gray-3 -mt-3">Complete all tasks above before granting access.</p>
+                      )}
+                    </>
+                  )}
+
+                  {/* ONBOARDING / COMPLETE STAGE: agent checklist + admin override toggle */}
+                  {stage !== 'setup' && (
+                    <>
+                      <div className="progress-bar mb-1">
+                        <div className="progress-bar-fill" style={{ width: `${items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0}%` }} />
+                      </div>
+                      <p className="text-xs text-luxury-gray-3 mb-3">{completedCount} of {items.length} checklist items complete</p>
+
+                      {Object.entries(sections).map(([sectionKey, section]) => (
+                        <div key={sectionKey}>
+                          <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">{section.title}</p>
+                          <div className="space-y-1.5">
+                            {section.items.map(item => {
+                              const isCompleted = !!agentCompletions[item.id]
+                              const key = `${agent.id}-${item.id}`
+                              return (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center gap-2 cursor-pointer hover:bg-luxury-light px-2 py-1.5 rounded transition-colors"
+                                  onClick={() => toggleChecklistItem(agent.id, item)}
+                                >
+                                  {toggling === key
+                                    ? <Circle size={15} className="text-luxury-gray-3 animate-pulse flex-shrink-0" />
+                                    : isCompleted
+                                      ? <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
+                                      : <Circle size={15} className="text-luxury-gray-3 flex-shrink-0" />}
+                                  <span className={`text-sm flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{item.label}</span>
+                                  {item.priority === 'high' && !isCompleted && (
+                                    <span className="text-xs px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">Priority</span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Link to agent profile */}
+                      <div className="pt-3 border-t border-luxury-gray-5/30 flex items-center justify-between">
+                        <a
+                          href={`/admin/users/${agent.id}`}
+                          className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <ExternalLink size={11} /> View Profile
+                        </a>
+                        {agent.full_nav_access && (
+                          <button
+                            onClick={() => toggleNavAccess(agent.id, agent.full_nav_access)}
+                            className="text-xs text-luxury-gray-3 hover:text-red-600 transition-colors"
+                          >
+                            Revoke Access
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

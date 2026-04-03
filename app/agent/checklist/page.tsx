@@ -366,6 +366,12 @@ export default function AgentChecklistPage() {
           confettiFired.current = true
           setShowComplete(true)
           fireConfetti()
+          // Notify office that agent completed their onboarding checklist
+          fetch('/api/checklist/send-completion-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          }).catch(e => console.error('Failed to send completion notification:', e))
         }
       }
     } catch (e) {
