@@ -43,34 +43,19 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id' }
     )
 
-    // Step 6 — agent acknowledged W-9: notify office to send W-9 request
+    // Step 6 — agent acknowledged W-9 and is moving to TREC: notify office to submit TREC invite
     if (step === 6) {
-      await resend.emails.send({
-        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
-        to: 'office@collectiverealtyco.com',
-        subject: `Action Required: Send W-9 Request — ${agentName}`,
-        html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has acknowledged the W-9 step and is expecting a W-9 request.</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please send their W-9 request now via Track1099.</p>
-          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
-          { title: 'W-9 Request Needed', preheader: `Send W-9 to ${agentName}` }
-        ),
-      }).catch(e => console.error('Failed to send W-9 notification:', e))
-    }
-
-    // Step 7 — agent reached TREC step: notify office to submit TREC invite
-    if (step === 7) {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Action Required: Submit TREC Sponsorship — ${agentName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has completed all onboarding documents and is ready for TREC sponsorship.</p>
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has completed all onboarding steps and is ready for TREC sponsorship.</p>
           <p style="margin:0 0 12px;font-size:14px;color:#555;">Please submit their TREC sponsorship invitation now.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
           { title: 'TREC Sponsorship Needed', preheader: `Submit TREC invite for ${agentName}` }
         ),
-      }).catch(e => console.error('Failed to send TREC notification:', e))
+      }).catch((e: unknown) => console.error('Failed to send TREC notification:', e))
     }
 
     return NextResponse.json({ success: true, next_step: nextStep })

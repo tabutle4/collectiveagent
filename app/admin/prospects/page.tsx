@@ -3,11 +3,26 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
+interface Prospect {
+  id: string
+  first_name: string
+  last_name: string
+  preferred_first_name: string
+  preferred_last_name: string
+  email: string
+  phone: string
+  location: string
+  prospect_status: string
+  created_at: string
+}
+
+
 export default function ProspectsPage() {
-  const [prospects, setProspects] = useState<any[]>([])
+  const [prospects, setProspects] = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>('all')
-
+  const [resending, setResending] = useState<string | null>(null)
+  const [resendResult, setResendResult] = useState<Record<string, 'sent' | 'error'>>({})
   useEffect(() => {
     fetchProspects()
   }, [])
@@ -24,16 +39,33 @@ export default function ProspectsPage() {
     }
   }
 
+  const resendLink = async (prospectId: string) => {
+    if (resending) return
+    setResending(prospectId)
+    try {
+      const res = await fetch('/api/prospects/resend-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prospect_id: prospectId }),
+      })
+      setResendResult((prev: Record<string, 'sent' | 'error'>) => ({ ...prev, [prospectId]: res.ok ? 'sent' : 'error' as const }))
+    } catch {
+      setResendResult((prev: Record<string, 'sent' | 'error'>) => ({ ...prev, [prospectId]: 'error' as const }))
+    } finally {
+      setResending(null)
+    }
+  }
+
   const filteredProspects =
-    filter === 'all' ? prospects : prospects.filter(p => p.prospect_status === filter)
+    filter === 'all' ? prospects : prospects.filter((p: Prospect) => p.prospect_status === filter)
 
   const statusCounts = {
     all: prospects.length,
-    new: prospects.filter(p => p.prospect_status === 'new').length,
-    contacted: prospects.filter(p => p.prospect_status === 'contacted').length,
-    scheduled: prospects.filter(p => p.prospect_status === 'scheduled').length,
-    joined: prospects.filter(p => p.prospect_status === 'joined').length,
-    not_interested: prospects.filter(p => p.prospect_status === 'not_interested').length,
+    new: prospects.filter((p: Prospect) => p.prospect_status === 'new').length,
+    contacted: prospects.filter((p: Prospect) => p.prospect_status === 'contacted').length,
+    scheduled: prospects.filter((p: Prospect) => p.prospect_status === 'scheduled').length,
+    joined: prospects.filter((p: Prospect) => p.prospect_status === 'joined').length,
+    not_interested: prospects.filter((p: Prospect) => p.prospect_status === 'not_interested').length,
   }
 
   const getStatusStyle = (status: string) => {
@@ -92,7 +124,7 @@ export default function ProspectsPage() {
           <>
             {/* Mobile Card View */}
             <div className="md:hidden space-y-3">
-              {filteredProspects.map(prospect => (
+              {filteredProspects.map((prospect: Prospect) => (
                 <div key={prospect.id} className="inner-card">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
@@ -127,13 +159,26 @@ export default function ProspectsPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-luxury-gray-5/30">
+                  <div className="mt-3 pt-3 border-t border-luxury-gray-5/30 flex items-center justify-between gap-3">
                     <Link
                       href={`/admin/prospects/${prospect.id}`}
                       className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors font-medium"
                     >
                       View Details
                     </Link>
+                    <button
+                      onClick={() => resendLink(prospect.id)}
+                      disabled={resending === prospect.id}
+                      className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors disabled:opacity-50"
+                    >
+                      {resending === prospect.id
+                        ? 'Sending...'
+                        : resendResult[prospect.id] === 'sent'
+                          ? '✓ Sent'
+                          : resendResult[prospect.id] === 'error'
+                            ? 'Error — retry'
+                            : 'Resend Link'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -163,7 +208,7 @@ export default function ProspectsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProspects.map(prospect => (
+                  {filteredProspects.map((prospect: Prospect) => (
                     <tr
                       key={prospect.id}
                       className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors"
@@ -189,12 +234,27 @@ export default function ProspectsPage() {
                         {new Date(prospect.created_at).toLocaleDateString()}
                       </td>
                       <td className="py-3 px-4">
-                        <Link
-                          href={`/admin/prospects/${prospect.id}`}
-                          className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
-                        >
-                          View
-                        </Link>
+                        <div className="flex items-center gap-4">
+                          <Link
+                            href={`/admin/prospects/${prospect.id}`}
+                            className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
+                          >
+                            View
+                          </Link>
+                          <button
+                            onClick={() => resendLink(prospect.id)}
+                            disabled={resending === prospect.id}
+                            className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors disabled:opacity-50"
+                          >
+                            {resending === prospect.id
+                              ? 'Sending...'
+                              : resendResult[prospect.id] === 'sent'
+                                ? '✓ Sent'
+                                : resendResult[prospect.id] === 'error'
+                                  ? 'Error — retry'
+                                  : 'Resend Link'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
