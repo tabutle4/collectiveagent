@@ -338,6 +338,8 @@ export default function CloseTransactionModal({
 
   // ── New agent rows ────────────────────────────────────────────────────────
   const [newAgentRows, setNewAgentRows] = useState<any[]>([])
+  const [agentSearch, setAgentSearch] = useState<Record<string, string>>({})
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState<Record<string, boolean>>({})
 
   // ── Existing external brokerage forms ─────────────────────────────────────
   const [externalForms, setExternalForms] = useState<Record<string, any>>({})
@@ -382,7 +384,13 @@ export default function CloseTransactionModal({
         }
         if (agentsRes.ok) {
           const data = await agentsRes.json()
-          const active = (data.users || []).filter((u: any) => u.is_active && u.status === 'active' && u.role?.toLowerCase() === 'agent')
+          const active = (data.users || [])
+            .filter((u: any) => u.is_active && u.status === 'active' && u.role?.toLowerCase() === 'agent')
+            .sort((a: any, b: any) => {
+              const nameA = `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.toLowerCase()
+              const nameB = `${b.preferred_first_name || b.first_name} ${b.preferred_last_name || b.last_name}`.toLowerCase()
+              return nameA.localeCompare(nameB)
+            })
           setAllAgents(active)
         }
       } finally {
@@ -420,11 +428,25 @@ export default function CloseTransactionModal({
   // When selecting an agent for a new row, auto-fill commission plan
   const handleNewAgentSelect = (rowId: string, agentId: string) => {
     const selectedUser = allAgents.find(u => u.id === agentId)
+    const name = selectedUser
+      ? `${selectedUser.preferred_first_name || selectedUser.first_name} ${selectedUser.preferred_last_name || selectedUser.last_name}`
+      : ''
     setNewAgentRows(p => p.map(r =>
       r._id === rowId
         ? { ...r, agent_id: agentId, commission_plan: defaultCommissionPlan(selectedUser?.commission_plan || '') }
         : r
     ))
+    setAgentSearch(p => ({ ...p, [rowId]: name }))
+    setAgentDropdownOpen(p => ({ ...p, [rowId]: false }))
+  }
+
+  const filteredAgentsForRow = (rowId: string) => {
+    const q = (agentSearch[rowId] || '').toLowerCase()
+    if (!q) return allAgents
+    return allAgents.filter(u => {
+      const name = `${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`.toLowerCase()
+      return name.includes(q)
+    })
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -809,14 +831,38 @@ export default function CloseTransactionModal({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <Field label="Agent *">
-                          <select className="select-luxury text-xs" value={row.agent_id} onChange={e => handleNewAgentSelect(row._id, e.target.value)}>
-                            <option value="">Select agent...</option>
-                            {allAgents.map(u => (
-                              <option key={u.id} value={u.id}>
-                                {`${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              className="input-luxury text-xs"
+                              value={agentSearch[row._id] || ''}
+                              onChange={e => {
+                                setAgentSearch(p => ({ ...p, [row._id]: e.target.value }))
+                                setAgentDropdownOpen(p => ({ ...p, [row._id]: true }))
+                                if (!e.target.value) setNewAgentF(row._id, 'agent_id', '')
+                              }}
+                              onFocus={() => setAgentDropdownOpen(p => ({ ...p, [row._id]: true }))}
+                              onBlur={() => setTimeout(() => setAgentDropdownOpen(p => ({ ...p, [row._id]: false })), 150)}
+                              placeholder="Search agents..."
+                            />
+                            {agentDropdownOpen[row._id] && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-48 overflow-y-auto">
+                                {filteredAgentsForRow(row._id).length === 0 ? (
+                                  <p className="px-3 py-2 text-xs text-luxury-gray-3">No agents found</p>
+                                ) : (
+                                  filteredAgentsForRow(row._id).map(u => (
+                                    <div
+                                      key={u.id}
+                                      onMouseDown={() => handleNewAgentSelect(row._id, u.id)}
+                                      className="px-3 py-2 text-xs text-luxury-gray-1 hover:bg-luxury-light cursor-pointer"
+                                    >
+                                      {`${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </Field>
                       </div>
                       <Field label="Role">
