@@ -128,6 +128,25 @@ export default function QuarterlyPresentationPage() {
   const [error, setError] = useState<string | null>(null)
   const [slide, setSlide] = useState(0)
   const [hoverZone, setHoverZone] = useState<'left' | 'right' | null>(null)
+
+  // ── Quarter selection ──────────────────────────────────────────────────────
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentQuarter = Math.ceil((now.getMonth() + 1) / 3)
+
+  // Build options: Q1–Q4 for current year and previous year
+  const quarterOptions = []
+  for (const yr of [currentYear, currentYear - 1]) {
+    for (const q of [1, 2, 3, 4]) {
+      // Don't show future quarters
+      if (yr === currentYear && q > currentQuarter) continue
+      quarterOptions.push({ year: yr, quarter: q, label: `Q${q} ${yr}` })
+    }
+  }
+  // Default to most recent completed quarter (previous quarter if we're early in Q1)
+  const defaultOption = quarterOptions[0]
+  const [selectedYear, setSelectedYear] = useState(defaultOption.year)
+  const [selectedQuarter, setSelectedQuarter] = useState(defaultOption.quarter)
   
   const slides = ['title', 'agenda', 'growth', 'volume', 'team1', 'team2', 'leases', 'sales', 'reveal', 'close']
   const totalSlides = slides.length
@@ -154,8 +173,11 @@ export default function QuarterlyPresentationPage() {
   // Fetch data
   useEffect(() => {
     async function fetchData() {
+      setLoading(true)
+      setError(null)
+      setSlide(0)
       try {
-        const res = await fetch('/api/reports/quarterly')
+        const res = await fetch(`/api/reports/quarterly?year=${selectedYear}&quarter=${selectedQuarter}`)
         if (!res.ok) {
           if (res.status === 403) {
             setError('Access denied. Only operations and broker roles can view reports.')
@@ -174,7 +196,7 @@ export default function QuarterlyPresentationPage() {
       }
     }
     fetchData()
-  }, [])
+  }, [selectedYear, selectedQuarter])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -211,22 +233,40 @@ export default function QuarterlyPresentationPage() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 sm:p-4 md:p-8">
-      {/* Logo - fixed in left margin area */}
+      {/* Logo - fixed bottom left, always visible */}
       <img 
         src="/logo-white.png" 
         alt="Collective Realty Co." 
-        className="fixed bottom-1/3 left-4 h-12 sm:h-16 lg:h-20 w-auto z-30 opacity-80 hidden lg:block"
+        className="fixed bottom-6 left-6 h-10 w-auto z-40 opacity-60 print:hidden"
       />
       
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-2 sm:mb-4 pb-2 sm:pb-4 border-b border-neutral-800 flex justify-between items-center print:hidden">
-        <button
-          onClick={() => router.push('/admin/reports')}
-          className="text-neutral-500 hover:text-white text-xs font-bold tracking-widest font-mono flex items-center gap-2"
-        >
-          <ArrowLeft size={14} />
-          <span className="hidden sm:inline">BACK</span>
-        </button>
+        <div className="flex items-center gap-3 sm:gap-5">
+          <button
+            onClick={() => router.push('/admin/reports')}
+            className="text-neutral-500 hover:text-white text-xs font-bold tracking-widest font-mono flex items-center gap-2"
+          >
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">BACK</span>
+          </button>
+          <select
+            value={`${selectedQuarter}-${selectedYear}`}
+            onChange={e => {
+              const [q, y] = e.target.value.split('-').map(Number)
+              setSelectedQuarter(q)
+              setSelectedYear(y)
+            }}
+            className="bg-neutral-900 border border-neutral-700 text-white text-xs font-mono font-bold tracking-widest px-3 py-2 cursor-pointer focus:outline-none"
+            style={{ color: GOLD }}
+          >
+            {quarterOptions.map(o => (
+              <option key={`${o.quarter}-${o.year}`} value={`${o.quarter}-${o.year}`} style={{ color: '#fff', background: '#111' }}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={toggleFullscreen}
