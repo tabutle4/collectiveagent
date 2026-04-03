@@ -132,6 +132,14 @@ export default function ProfilePage({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  // Normalize commission plan values — onboarding stores display strings, profile uses keys
+  const normalizeCommissionPlan = (val: string): string => {
+    if (val === 'New Agent Plan') return 'new_agent'
+    if (val === 'No Cap Plan') return 'no_cap'
+    if (val === 'Cap Plan') return 'cap'
+    return val // already normalized, custom plan, or empty
+  }
+
   useEffect(() => {
     loadProfile()
   }, [adminUserId, isAdmin])
@@ -225,8 +233,8 @@ export default function ProfilePage({
           ? freshUserData.division.join(', ')
           : freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
-        commission_plan: freshUserData.commission_plan || '',
-        role: freshUserData.role || '',
+        commission_plan: normalizeCommissionPlan(freshUserData.commission_plan || ''),
+        role: (freshUserData.role || '').toLowerCase(),
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
         special_commission_notes: freshUserData.special_commission_notes || '',
@@ -1221,7 +1229,8 @@ export default function ProfilePage({
                     >
                       <option value="">Select association...</option>
                       <option value="HAR">HAR</option>
-                      <option value="MetroTex">MetroTex</option>
+                      <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
+                      <option value="Both">Both</option>
                       <option value="CCAR">CCAR</option>
                       <option value="TAR">TAR</option>
                     </select>
