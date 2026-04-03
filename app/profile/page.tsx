@@ -112,20 +112,23 @@ export default function ProfilePage({
   const canEditLicense = canManageAgents && isAdmin
   const canEditBilling = canManageBilling && isAdmin
 
-  // Check if user is a licensed agent
-  const isLicensedAgent = user?.is_licensed_agent === true
+  // Show real estate sections for agents and brokers — role is the correct gate, not is_licensed_agent
+  const isAgent = ['agent', 'broker'].includes(user?.role?.toLowerCase() || '')
 
   const formatDateForInput = (dateStr: string | null | undefined): string => {
     if (!dateStr) return ''
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return ''
-    return date.toISOString().split('T')[0]
+    // Return YYYY-MM-DD directly — parsing with new Date() treats bare dates as UTC
+    // which shifts them back a day in Central Time
+    return dateStr.substring(0, 10)
   }
 
   const formatDateForDisplay = (value: string | null) => {
     if (!value) return ''
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return value
+    const parts = value.substring(0, 10).split('-')
+    if (parts.length !== 3) return value
+    const [year, month, day] = parts.map(Number)
+    if (!year || !month || !day) return value
+    const date = new Date(year, month - 1, day) // local time, no UTC shift
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
@@ -218,7 +221,9 @@ export default function ProfilePage({
         office: freshUserData.office || '',
         status: freshUserData.status || '',
         is_active: freshUserData.is_active ?? true,
-        division: freshUserData.division || '',
+        division: Array.isArray(freshUserData.division)
+          ? freshUserData.division.join(', ')
+          : freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
         commission_plan: freshUserData.commission_plan || '',
         role: freshUserData.role || '',
@@ -335,10 +340,19 @@ export default function ProfilePage({
     setRealEstateSuccess(null)
 
     try {
+      // division is a text[] array in Postgres — convert the display string back to array (or null)
+      const divisionRaw = String(realEstateForm.division || '').trim()
+      const updates = {
+        ...realEstateForm,
+        division: divisionRaw
+          ? divisionRaw.split(',').map((d: string) => d.trim()).filter(Boolean)
+          : null,
+      }
+
       const res = await fetch('/api/users/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, updates: realEstateForm }),
+        body: JSON.stringify({ id: user.id, updates }),
       })
 
       if (!res.ok) {
@@ -551,7 +565,7 @@ export default function ProfilePage({
       </h1>
 
       {/* Non-licensed user notice */}
-      {!isLicensedAgent && (
+      {!isAgent && (
         <div className="container-card mb-5">
           <div className="inner-card bg-gray-50">
             <p className="text-sm text-luxury-gray-2 text-center">
@@ -893,7 +907,7 @@ export default function ProfilePage({
       </div>
 
       {/* ========== LICENSED AGENT SECTIONS ONLY ========== */}
-      {isLicensedAgent && (
+      {isAgent && (
         <>
           {/* Real Estate Information */}
           <div className="container-card mb-5">
@@ -1083,7 +1097,11 @@ export default function ProfilePage({
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">{user.division || 'N/A'}</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">
+                      {Array.isArray(user.division)
+                        ? user.division.join(', ') || 'N/A'
+                        : user.division || 'N/A'}
+                    </p>
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Join Date</p>
