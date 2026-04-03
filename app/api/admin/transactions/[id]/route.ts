@@ -348,7 +348,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
       return NextResponse.json({ success: true })
     }
+    
+    // ── Add new internal agent row ────────────────────────────────────────────
+if (action === 'add_internal_agent') {
+  const { agent } = body
+  const { data, error } = await supabase
+    .from('transaction_internal_agents')
+    .insert({ ...agent, transaction_id: id })
+    .select()
+    .single()
+  if (error) throw error
+  return NextResponse.json({ agent: data })
+}
 
+// ── Add new external brokerage row ────────────────────────────────────────
+if (action === 'add_external_brokerage') {
+  const { brokerage } = body
+  const { data, error } = await supabase
+    .from('transaction_external_brokerages')
+    .insert({ ...brokerage, transaction_id: id })
+    .select()
+    .single()
+  if (error) throw error
+  return NextResponse.json({ brokerage: data })
+}
     // ── Mark agent PAID with full financial tracking ──────────────────────────
     if (action === 'mark_paid') {
       const {
