@@ -295,6 +295,8 @@ export default function CloseTransactionModal({
     check_clear_date: txn.check_clear_date?.substring(0, 10) || '',
     goal_paydate: txn.goal_paydate?.substring(0, 10) || '',
     sales_price: txn.sales_price != null ? String(txn.sales_price) : '',
+    monthly_rent: txn.monthly_rent != null ? String(txn.monthly_rent) : '',
+    sales_volume: txn.sales_volume != null ? String(txn.sales_volume) : '',
     gross_commission: txn.gross_commission != null ? String(txn.gross_commission) : '',
     gross_commission_type: txn.gross_commission_type || 'amount',
     office_gross: txn.office_gross != null ? String(txn.office_gross) : '',
@@ -441,6 +443,8 @@ export default function CloseTransactionModal({
         check_clear_date: form.check_clear_date || null,
         goal_paydate: form.goal_paydate || null,
         sales_price: parseNum(form.sales_price),
+        monthly_rent: parseNum(form.monthly_rent),
+        sales_volume: parseNum(form.sales_volume),
         gross_commission: parseNum(form.gross_commission),
         gross_commission_type: form.gross_commission_type,
         office_gross: parseNum(form.office_gross),
@@ -637,8 +641,16 @@ export default function CloseTransactionModal({
             <SectionHeader title="Final Commission" expanded={sections.commission} onToggle={() => toggle('commission')} />
             {sections.commission && (
               <div className="grid grid-cols-2 gap-3">
-                <Field label={isLease ? 'Monthly Rent' : 'Sales Price'}>
+                <Field label="Sales Price">
                   <input type="number" className="input-luxury text-xs" value={form.sales_price} onChange={e => setF('sales_price', e.target.value)} placeholder="0.00" step="0.01" min="0" />
+                </Field>
+                {isLease && (
+                  <Field label="Monthly Rent">
+                    <input type="number" className="input-luxury text-xs" value={form.monthly_rent} onChange={e => setF('monthly_rent', e.target.value)} placeholder="0.00" step="0.01" min="0" />
+                  </Field>
+                )}
+                <Field label="Sales Volume">
+                  <input type="number" className="input-luxury text-xs" value={form.sales_volume} onChange={e => setF('sales_volume', e.target.value)} placeholder="0.00" step="0.01" min="0" />
                 </Field>
                 <Field label="Gross Commission">
                   <div className="flex gap-2">
