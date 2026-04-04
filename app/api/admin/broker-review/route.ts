@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, preferred_first_name, preferred_last_name, email, commission_plan, onboarding_fee_paid, onboarding_fee_paid_date, ica_signed_at, commission_plan_agreement_signed_at, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip'
+        'id, first_name, last_name, preferred_first_name, preferred_last_name, email, commission_plan, onboarding_fee_paid, onboarding_fee_paid_date, ica_signed_at, commission_plan_agreement_signed_at, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, onedrive_folder_url'
       )
       .eq('id', userId)
       .single()
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const { data: session } = await supabaseAdmin
       .from('onboarding_sessions')
-      .select('step_2_completed_at, step_3_completed_at, step_4_completed_at')
+      .select('step_2_completed_at, step_3_completed_at, step_4_completed_at, agent_signature_url')
       .eq('user_id', userId)
       .single()
 
@@ -71,8 +71,12 @@ export async function GET(request: NextRequest) {
         onboardingFeePaidDate: agent.onboarding_fee_paid_date,
         icaSignedAt: agent.ica_signed_at,
         commissionPlanSignedAt: agent.commission_plan_agreement_signed_at,
+        onedriveUrl: agent.onedrive_folder_url,
       },
-      session,
+      session: {
+        ...session,
+        agentSignatureUrl: session?.agent_signature_url ?? null,
+      },
       documents: {
         ica: icaContent,
         commission_plan: commissionPlanContent,
