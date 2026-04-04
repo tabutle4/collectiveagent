@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { BarChart3, Trophy, FileText, Users } from 'lucide-react'
+import { BarChart3, Trophy, FileText, Users, Wallet } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 
 const REPORTS = [
@@ -11,6 +11,14 @@ const REPORTS = [
     title: 'Quarterly Sales Meeting',
     description: 'Slide presentation for team meetings',
     href: '/admin/reports/quarterly',
+    active: true,
+  },
+  {
+    id: 'payouts',
+    icon: Wallet,
+    title: 'Payouts Report',
+    description: 'Checks, agent payouts, and balance',
+    href: '/admin/reports/payouts',
     active: true,
   },
   {
