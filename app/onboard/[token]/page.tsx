@@ -33,6 +33,7 @@ function SignatureStep({
   documentType,
   title,
   description,
+  isCompleted = false,
   onComplete,
   onBack,
 }: {
@@ -40,6 +41,7 @@ function SignatureStep({
   documentType: 'ica' | 'commission_plan'
   title: string
   description: string
+  isCompleted?: boolean
   onComplete: () => void
   onBack: () => void
 }) {
@@ -141,8 +143,36 @@ function SignatureStep({
     }
   }
 
+  if (isCompleted) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 mb-2">
+          <button onClick={onBack} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+            &larr; Back
+          </button>
+        </div>
+        <div className="container-card flex items-center gap-3">
+          <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+          <p className="text-sm text-luxury-gray-2">{title} signed.</p>
+        </div>
+        <button
+          onClick={onComplete}
+          className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+        >
+          Continue &rarr;
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
+      <div className="flex items-center gap-3 mb-2">
+        <button onClick={onBack} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+          &larr; Back
+        </button>
+      </div>
+
       <div className="text-center mb-6">
         <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">{title}</h1>
         <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">{description}</p>
@@ -227,7 +257,7 @@ function SignatureStep({
 // Policy manual PDF URL — swap in the OneDrive sharing link once uploaded
 const POLICY_MANUAL_PDF_URL = '/BrokerPolicyManual.pdf'
 
-function PolicyManualStep({ token, onComplete, onBack }: { token: string; onComplete: () => void; onBack: () => void }) {
+function PolicyManualStep({ token, isCompleted = false, onComplete, onBack }: { token: string; isCompleted?: boolean; onComplete: () => void; onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
@@ -300,6 +330,28 @@ function PolicyManualStep({ token, onComplete, onBack }: { token: string; onComp
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (isCompleted) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-3 mb-2">
+          <button onClick={onBack} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+            &larr; Back
+          </button>
+        </div>
+        <div className="container-card flex items-center gap-3">
+          <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+          <p className="text-sm text-luxury-gray-2">Policy Manual acknowledged and signed.</p>
+        </div>
+        <button
+          onClick={onComplete}
+          className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+        >
+          Continue &rarr;
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -419,6 +471,7 @@ export default function OnboardingPage() {
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const [paymentPaid, setPaymentPaid] = useState(false)
+  const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
 
@@ -511,6 +564,7 @@ export default function OnboardingPage() {
         joining_team: p.joining_team || '',
       }))
       if (data.session?.current_step) setCurrentStep(data.session.current_step)
+      if (data.session?.current_step > 1) setStep1Completed(true)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
       const s = data.session || {}
       setCompletedSteps({
@@ -566,6 +620,7 @@ export default function OnboardingPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Submission failed')
+      setStep1Completed(true)
       setCurrentStep(2)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err: any) {
@@ -709,6 +764,17 @@ export default function OnboardingPage() {
         {/* ── STEP 1: Join Form ── */}
         {currentStep === 1 && (
           <form onSubmit={handleSubmitJoinForm} className="space-y-5">
+            {step1Completed && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className="text-xs text-luxury-accent hover:text-luxury-gray-1 transition-colors"
+                >
+                  Continue to Payment &rarr;
+                </button>
+              </div>
+            )}
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">
                 Welcome, {prospect?.preferred_first_name}.
@@ -1252,129 +1318,98 @@ export default function OnboardingPage() {
 
         {/* ── STEP 3: ICA ── */}
         {currentStep === 3 && (
-          completedSteps[3] ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-3 mb-2">
-                <button onClick={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
-              </div>
-              <div className="container-card flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                <p className="text-sm text-luxury-gray-2">Independent Contractor Agreement signed.</p>
-              </div>
-              <button onClick={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
-            </div>
-          ) : (
-            <SignatureStep
-              token={token}
-              documentType="ica"
-              title="Independent Contractor Agreement"
-              description="Please read the agreement below carefully and sign at the bottom to continue."
-              onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              onBack={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            />
-          )
+          <SignatureStep
+            token={token}
+            documentType="ica"
+            title="Independent Contractor Agreement"
+            description="Please read the agreement below carefully and sign at the bottom to continue."
+            isCompleted={!!completedSteps[3]}
+            onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
         )}
 
         {/* ── STEP 4: Commission Plan Agreement ── */}
         {currentStep === 4 && (
-          completedSteps[4] ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-3 mb-2">
-                <button onClick={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
-              </div>
-              <div className="container-card flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                <p className="text-sm text-luxury-gray-2">Commission Plan Agreement signed.</p>
-              </div>
-              <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
-            </div>
-          ) : (
-            <SignatureStep
-              token={token}
-              documentType="commission_plan"
-              title="Commission Plan Agreement"
-              description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
-              onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              onBack={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            />
-          )
+          <SignatureStep
+            token={token}
+            documentType="commission_plan"
+            title="Commission Plan Agreement"
+            description="Your commission plan agreement is shown below based on the plan you selected. Please review and sign."
+            isCompleted={!!completedSteps[4]}
+            onComplete={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
         )}
 
         {/* ── STEP 5: Policy Manual ── */}
         {currentStep === 5 && (
-          completedSteps[5] ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-3 mb-2">
-                <button onClick={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
-              </div>
-              <div className="container-card flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                <p className="text-sm text-luxury-gray-2">Policy Manual acknowledged and signed.</p>
-              </div>
-              <button onClick={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
-            </div>
-          ) : (
-            <PolicyManualStep
-              token={token}
-              onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            />
-          )
+          <PolicyManualStep
+            token={token}
+            isCompleted={!!completedSteps[5]}
+            onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          />
         )}
 
         {/* ── STEP 6: W-9 ── */}
         {currentStep === 6 && (
-          completedSteps[6] ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-3 mb-2">
-                <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">← Back</button>
-              </div>
-              <div className="container-card flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                <p className="text-sm text-luxury-gray-2">W-9 acknowledged.</p>
-              </div>
-              <button onClick={() => { setCurrentStep(7); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase">Continue →</button>
-            </div>
-          ) : (
           <div className="space-y-5">
             <div className="flex items-center gap-3 mb-2">
               <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
-                ← Back
+                &larr; Back
               </button>
             </div>
-            <div className="text-center mb-8">
-              <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Form</h1>
-              <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                Your W-9 will be sent to your email shortly for completion. Once you receive it, complete and return it to us.
-              </p>
-            </div>
-            <div className="container-card text-center space-y-4">
-              <p className="text-sm text-luxury-gray-2">
-                We use Track1099 to collect your W-9 securely. You will receive an email with a link to complete your form electronically.
-              </p>
-              <p className="text-sm text-luxury-gray-3">
-                If you have not received it within 24 hours, contact{' '}
-                <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
-                  office@collectiverealtyco.com
-                </a>
-              </p>
-            </div>
-            <button
-              onClick={async () => {
-                await fetch('/api/onboarding/acknowledge-step', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ token, step: 6 }),
-                })
-                setCurrentStep(7)
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-              className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
-            >
-              I Understand, Continue →
-            </button>
+
+            {completedSteps[6] ? (
+              <>
+                <div className="container-card flex items-center gap-3">
+                  <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                  <p className="text-sm text-luxury-gray-2">W-9 acknowledged.</p>
+                </div>
+                <button
+                  onClick={() => { setCurrentStep(7); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+                >
+                  Continue &rarr;
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-8">
+                  <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Form</h1>
+                  <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                    Your W-9 will be sent to your email shortly for completion. Once you receive it, complete and return it to us.
+                  </p>
+                </div>
+                <div className="container-card text-center space-y-4">
+                  <p className="text-sm text-luxury-gray-2">
+                    We use Track1099 to collect your W-9 securely. You will receive an email with a link to complete your form electronically.
+                  </p>
+                  <p className="text-sm text-luxury-gray-3">
+                    If you have not received it within 24 hours, contact{' '}
+                    <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
+                      office@collectiverealtyco.com
+                    </a>
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await fetch('/api/onboarding/acknowledge-step', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ token, step: 6 }),
+                    })
+                    setCurrentStep(7)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+                >
+                  I Understand, Continue &rarr;
+                </button>
+              </>
+            )}
           </div>
-          )
         )}
 
         {/* ── STEP 7: TREC ── */}
