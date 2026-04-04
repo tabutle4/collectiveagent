@@ -476,7 +476,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const userUpdate: any = {}
 
         if (brokerageSplit > 0) {
-          const isCapPlan = plan.includes('85') || plan.includes('100') || plan.includes('capped')
+          const isCapPlan = plan.includes('cap_plan') || plan === 'cap' || (plan.includes('cap') && !plan.includes('no'))
           if (isCapPlan) {
             const currentCapProgress = parseFloat(agentUser.cap_progress || 0)
             userUpdate.cap_progress = Math.round((currentCapProgress + brokerageSplit) * 100) / 100
