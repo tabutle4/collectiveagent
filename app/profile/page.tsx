@@ -1672,6 +1672,18 @@ export default function ProfilePage({
           >
             Open My Documents Folder
           </a>
+          {user.policy_ack_document_url && (
+            <div className="mt-3 pt-3 border-t border-luxury-gray-5/30">
+              <a
+                href={user.policy_ack_document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-luxury-accent hover:underline"
+              >
+                View Policy Manual Acknowledgment
+              </a>
+            </div>
+          )}
         </div>
       )}
 
@@ -1723,6 +1735,18 @@ export default function ProfilePage({
             <p className="text-xs text-red-600 mb-3">{uploadError}</p>
           )}
 
+          {user.policy_ack_document_url && (
+            <div className="mb-3 pb-3 border-b border-luxury-gray-5/30">
+              <a
+                href={user.policy_ack_document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-luxury-accent hover:underline"
+              >
+                View Policy Manual Acknowledgment
+              </a>
+            </div>
+          )}
           {!user.onedrive_folder_url ? (
             <p className="text-xs text-luxury-gray-3">No OneDrive folder yet. Create one to start uploading documents.</p>
           ) : documents.length === 0 ? (

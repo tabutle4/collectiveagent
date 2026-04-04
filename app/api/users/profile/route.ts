@@ -87,6 +87,13 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .order('first_name', { ascending: true })
 
+    // Policy acknowledgment doc URL from onboarding session
+    const { data: onboardingSession } = await supabaseAdmin
+      .from('onboarding_sessions')
+      .select('policy_ack_document_url')
+      .eq('user_id', id)
+      .maybeSingle()
+
     return NextResponse.json({ 
       user: { 
         ...safeData, 
@@ -94,6 +101,7 @@ export async function GET(request: NextRequest) {
         is_team_lead: isTeamLead,
         team_members: teamMembers,
         referred_agents: referredAgents || [],
+        policy_ack_document_url: onboardingSession?.policy_ack_document_url ?? null,
       } 
     })
   } catch (error) {
