@@ -132,10 +132,10 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
               {' '}{agent.preferredName} is now active in the system.
             </p>
             <button
-              onClick={() => router.push(`/admin/prospects/${sessionId}`)}
+              onClick={() => router.push(`/admin/users/${sessionId}`)}
               className="btn btn-primary text-sm px-6"
             >
-              View Prospect Profile
+              View Agent Profile
             </button>
           </div>
         ) : (
