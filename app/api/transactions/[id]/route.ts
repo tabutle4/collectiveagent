@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params
     const { searchParams } = new URL(request.url)
-    const section = searchParams.get('section')
+    const section = searchParams.get('section') // 'full' | 'checklist' | 'check'
 
     // ── Full transaction detail load ─────────────────────────────────────────
     if (!section || section === 'full') {
@@ -97,6 +97,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           supabase.from('team_agreements').select('*').eq('id', txn.team_agreement_id).single(),
           supabase.from('team_members').select('*').eq('team_agreement_id', txn.team_agreement_id),
         ])
+        // Get team lead name
         let teamLeadName = null
         if (agreement?.team_lead_id) {
           const { data: leadUser } = await supabase
@@ -110,6 +111,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
         teamInfo = { agreement, members: members || [], team_lead_name: teamLeadName }
       } else if (primaryAgent?.is_on_team && primaryAgent?.team_name) {
+        // Agent is on a team but agreement not linked to transaction yet
         const { data: agreement } = await supabase
           .from('team_agreements')
           .select('*')
@@ -173,6 +175,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         checklistItems = items || []
       }
 
+      // Merge completions into checklist items
       const completionMap = new Map((completions || []).map((c: any) => [c.checklist_item_id, c]))
       const checklist = checklistItems.map((item: any) => ({
         ...item,
@@ -194,18 +197,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })
     }
 
-    // ── External brokerages (used by close modal) ────────────────────────────
-    if (section === 'external_brokerages') {
-      const { data: externalBrokerages, error } = await supabase
-        .from('transaction_external_brokerages')
-        .select('*')
-        .eq('transaction_id', id)
-        .order('created_at', { ascending: true })
-      if (error) throw error
-      return NextResponse.json({ external_brokerages: externalBrokerages || [] })
-    }
-
-    // ── Checklist (legacy) ───────────────────────────────────────────────────
+    // ── Mark checklist item complete / incomplete ────────────────────────────
     if (section === 'checklist') {
       return NextResponse.json({ error: 'Use POST for checklist updates' }, { status: 405 })
     }
@@ -242,6 +234,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { checklist_item_id, completed_by, completing } = body
 
       if (completing) {
+        // Check if already completed
         const { data: existing } = await supabase
           .from('checklist_completions')
           .select('id')
@@ -327,7 +320,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
-    // ── Update internal agent ────────────────────────────────────────────────
+    // ── Update internal agent (payment status, payment date, agent_net, etc.) ─
     if (action === 'update_internal_agent') {
       const { internal_agent_id, updates } = body
       const { error } = await supabase
@@ -338,54 +331,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
-    // ── Update external brokerage ────────────────────────────────────────────
-    if (action === 'update_external_brokerage') {
-      const { brokerage_id, updates } = body
-      const { error } = await supabase
-        .from('transaction_external_brokerages')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', brokerage_id)
-      if (error) throw error
-      return NextResponse.json({ success: true })
-    }
-
-    // ── Add new internal agent row ────────────────────────────────────────────
-    if (action === 'add_internal_agent') {
-      const { agent } = body
-      const { data, error } = await supabase
-        .from('transaction_internal_agents')
-        .insert({ ...agent, transaction_id: id })
-        .select()
-        .single()
-      if (error) throw error
-      return NextResponse.json({ agent: data })
-    }
-
-    // ── Add new external brokerage row ────────────────────────────────────────
-    if (action === 'add_external_brokerage') {
-      const { brokerage } = body
-      const { data, error } = await supabase
-        .from('transaction_external_brokerages')
-        .insert({ ...brokerage, transaction_id: id })
-        .select()
-        .single()
-      if (error) throw error
-      return NextResponse.json({ brokerage: data })
-    }
-
-    // ── Mark agent PAID with full financial tracking ──────────────────────────
+    // ── Mark agent PAID with full financial tracking ─────────────────────────────
     if (action === 'mark_paid') {
-      const {
-        internal_agent_id,
+      const { 
+        internal_agent_id, 
         payment_date,
         payment_method,
         payment_reference,
         funding_source,
-        debts_to_apply,
-        agent_net_override,
-        counts_toward_progress,
+        debts_to_apply,  // Array of { debt_id, amount }
+        agent_net_override,  // Optional manual override
+        counts_toward_progress,  // Whether to update cap/qualifying count
       } = body
 
+      // 1. Get the internal agent record
       const { data: tia, error: tiaError } = await supabase
         .from('transaction_internal_agents')
         .select('*')
@@ -393,6 +352,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
       if (tiaError || !tia) throw new Error('Agent record not found')
 
+      // 2. Get the agent's user record (for cap tracking)
       const { data: agentUser, error: userError } = await supabase
         .from('users')
         .select('id, commission_plan, cap_progress, qualifying_transaction_count')
@@ -400,19 +360,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
       if (userError) throw userError
 
+      // 3. Calculate 1099 amount (agent_gross + btsa - fees, NOT minus debts — debt repayment is not taxable income reduction)
       const agentGross = parseFloat(tia.agent_gross || 0)
       const processingFee = parseFloat(tia.processing_fee || 0)
       const coachingFee = parseFloat(tia.coaching_fee || 0)
       const otherFees = parseFloat(tia.other_fees || 0)
       const brokerageSplit = parseFloat(tia.brokerage_split || 0)
+      const btsaAmount = parseFloat(tia.btsa_amount || 0)
+      const teamLeadCommission = parseFloat(tia.team_lead_commission || 0)
 
-      let amount1099: number
-      if (tia.agent_role === 'primary_agent') {
-        amount1099 = agentGross - processingFee - coachingFee - otherFees
-      } else {
-        amount1099 = parseFloat(tia.agent_net || 0)
-      }
+      // All roles: 1099 = gross + btsa - fees - team lead cut (no debt deduction)
+      const amount1099 = agentGross + btsaAmount - processingFee - coachingFee - otherFees - teamLeadCommission
 
+      // 4. Calculate debts deducted
       let totalDebtsDeducted = 0
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
@@ -420,11 +380,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      const agentNet =
-        agent_net_override != null
-          ? parseFloat(agent_net_override)
-          : amount1099 - totalDebtsDeducted
+      // 5. Calculate final agent_net
+      const agentNet = agent_net_override != null 
+        ? parseFloat(agent_net_override)
+        : amount1099 - totalDebtsDeducted
 
+      // 6. Update the transaction_internal_agents record
       const tiaUpdate: any = {
         payment_status: 'paid',
         payment_date,
@@ -443,21 +404,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (updateTiaError) throw updateTiaError
 
+      // 7. Apply debts (mark as paid/offset)
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
+          // Get current debt
           const { data: debt } = await supabase
             .from('agent_debts')
             .select('*')
             .eq('id', debtApp.debt_id)
             .single()
-
+          
           if (debt) {
             const amountRemaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
             const amountApplied = parseFloat(debtApp.amount || 0)
             const newRemaining = amountRemaining - amountApplied
-
+            
             const debtUpdate: any = {
-              amount_paid: parseFloat(debt.amount_paid || 0) + amountApplied,
+              amount_paid: (parseFloat(debt.amount_paid || 0) + amountApplied),
               offset_transaction_id: id,
               offset_transaction_agent_id: internal_agent_id,
             }
@@ -467,15 +430,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               debtUpdate.date_resolved = payment_date
             }
 
-            await supabase.from('agent_debts').update(debtUpdate).eq('id', debtApp.debt_id)
+            await supabase
+              .from('agent_debts')
+              .update(debtUpdate)
+              .eq('id', debtApp.debt_id)
           }
         }
       }
 
+      // 8. Update user's cap_progress (only if counts_toward_progress is true)
       if (counts_toward_progress !== false && tia.agent_role === 'primary_agent' && agentUser) {
         const plan = (agentUser.commission_plan || '').toLowerCase()
         const userUpdate: any = {}
 
+        // Cap progress (for 85/15 and capped plans)
         if (brokerageSplit > 0) {
           const isCapPlan = plan.includes('85') || plan.includes('100') || plan.includes('capped')
           if (isCapPlan) {
@@ -484,27 +452,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }
         }
 
+        // Qualifying transaction count (for New Agent Plan)
         const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
         if (isNewAgentPlan) {
-          userUpdate.qualifying_transaction_count =
-            (agentUser.qualifying_transaction_count || 0) + 1
+          userUpdate.qualifying_transaction_count = (agentUser.qualifying_transaction_count || 0) + 1
         }
 
         if (Object.keys(userUpdate).length > 0) {
-          await supabase.from('users').update(userUpdate).eq('id', tia.agent_id)
+          await supabase
+            .from('users')
+            .update(userUpdate)
+            .eq('id', tia.agent_id)
         }
       }
 
-      return NextResponse.json({
-        success: true,
+      return NextResponse.json({ 
+        success: true, 
         updates: {
           ...tiaUpdate,
           debts_applied: debts_to_apply?.length || 0,
-        },
+        }
       })
     }
 
-    // ── Get agent debts for mark paid modal ──────────────────────────────────
+    // ── Get agent debts for mark paid modal ──────────────────────────────────────
     if (action === 'get_agent_debts') {
       const { agent_id } = body
       const { data: debts, error } = await supabase
@@ -526,11 +497,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 function isLeaseType(txnType: string): boolean {
   const t = txnType.toLowerCase()
-  return (
-    t.includes('lease') ||
-    t.includes('apartment') ||
-    t.includes('rent') ||
-    t.includes('tenant') ||
-    t.includes('landlord')
-  )
+  return t.includes('lease') || t.includes('apartment') || t.includes('rent') || t.includes('tenant') || t.includes('landlord')
 }

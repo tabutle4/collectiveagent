@@ -60,12 +60,24 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 
 function computeAgentNet(form: any): number {
   return (
-    num(form.agent_gross) -
+    num(form.agent_gross) +
+    num(form.btsa_amount) -
     num(form.processing_fee) -
     num(form.coaching_fee) -
     num(form.other_fees) -
-    num(form.btsa_amount) -
     num(form.debts_deducted) -
+    num(form.team_lead_commission)
+  )
+}
+
+function compute1099(form: any): number {
+  // 1099 does not deduct debts — debt repayment is not a reduction in taxable income
+  return (
+    num(form.agent_gross) +
+    num(form.btsa_amount) -
+    num(form.processing_fee) -
+    num(form.coaching_fee) -
+    num(form.other_fees) -
     num(form.team_lead_commission)
   )
 }
@@ -148,6 +160,7 @@ function AgentFinancialFields({
   hasBtsa: boolean
 }) {
   const computedNet = computeAgentNet(form)
+  const computed1099 = compute1099(form)
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -191,7 +204,7 @@ function AgentFinancialFields({
             <input type="number" className="input-luxury text-xs" value={form.agent_net} onChange={e => setField('agent_net', e.target.value)} placeholder={computedNet.toFixed(2)} step="0.01" />
           </Field>
           <Field label="Amount 1099 Reportable">
-            <input type="number" className="input-luxury text-xs" value={form.amount_1099_reportable} onChange={e => setField('amount_1099_reportable', e.target.value)} placeholder={form.agent_net !== '' ? form.agent_net : computedNet.toFixed(2)} step="0.01" />
+            <input type="number" className="input-luxury text-xs" value={form.amount_1099_reportable} onChange={e => setField('amount_1099_reportable', e.target.value)} placeholder={form.amount_1099_reportable !== '' ? form.amount_1099_reportable : computed1099.toFixed(2)} step="0.01" />
           </Field>
         </div>
       </div>
@@ -486,7 +499,7 @@ export default function CloseTransactionModal({
         if (!af) continue
         const computedNet = computeAgentNet(af)
         const agentNet = af.agent_net !== '' ? parseFloat(af.agent_net) : computedNet
-        const amount1099 = af.amount_1099_reportable !== '' ? parseFloat(af.amount_1099_reportable) : agentNet
+        const amount1099 = af.amount_1099_reportable !== '' ? parseFloat(af.amount_1099_reportable) : compute1099(af)
         await callAction('update_internal_agent', {
           internal_agent_id: a.id,
           updates: {
@@ -512,7 +525,7 @@ export default function CloseTransactionModal({
         if (!row.agent_id) continue
         const computedNet = computeAgentNet(row)
         const agentNet = row.agent_net !== '' ? parseFloat(row.agent_net) : computedNet
-        const amount1099 = row.amount_1099_reportable !== '' ? parseFloat(row.amount_1099_reportable) : agentNet
+        const amount1099 = row.amount_1099_reportable !== '' ? parseFloat(row.amount_1099_reportable) : compute1099(row)
         await callAction('add_internal_agent', {
           agent: {
             agent_id: row.agent_id,
