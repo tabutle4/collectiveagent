@@ -5,6 +5,15 @@ import { useRouter } from 'next/navigation'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
 import { useAuth } from '@/lib/context/AuthContext'
 
+function normalizeCommissionPlan(plan: string): string {
+  if (!plan) return ''
+  const p = plan.toLowerCase()
+  if (p.includes('new_agent') || p.includes('new agent') || p.includes('70/30') || p === 'new_agent') return 'new_agent'
+  if (p.includes('no_cap') || p.includes('no cap') || p.includes('85/15') || p === 'no_cap') return 'no_cap'
+  if (p.includes('cap') && !p.includes('no')) return 'cap'
+  return plan
+}
+
 type ProfilePageProps = {
   userId?: string
   isAdmin?: boolean
@@ -243,7 +252,7 @@ export default function ProfilePage({
           ? freshUserData.division.filter(Boolean).join(' | ')
           : freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
-        commission_plan: freshUserData.commission_plan || '',
+        commission_plan: normalizeCommissionPlan(freshUserData.commission_plan || ''),
         role: freshUserData.role || '',
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
@@ -1193,7 +1202,11 @@ export default function ProfilePage({
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Commission Plan</p>
                     <p className="text-sm font-medium text-luxury-gray-1">
-                      {user.commission_plan || user.commission_plan_other || 'N/A'}
+                      {(() => {
+                        const plan = normalizeCommissionPlan(user.commission_plan || '')
+                        const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30' }
+                        return labels[plan] || user.commission_plan || user.commission_plan_other || 'N/A'
+                      })()}
                     </p>
                   </div>
                   <div className="inner-card">
