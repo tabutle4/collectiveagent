@@ -84,30 +84,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check if this is the first time step 1 is being submitted
+    const { data: existingSession } = await supabase
+      .from('onboarding_sessions')
+      .select('step_1_completed_at')
+      .eq('user_id', prospect.id)
+      .single()
+
+    const isFirstSubmission = !existingSession?.step_1_completed_at
+
     // Advance onboarding session to step 2
+    // Preserve step_1_completed_at if already set so re-submissions don't reset it
     await supabase.from('onboarding_sessions').upsert(
       {
         user_id: prospect.id,
         current_step: 2,
-        step_1_completed_at: new Date().toISOString(),
+        step_1_completed_at: existingSession?.step_1_completed_at ?? new Date().toISOString(),
       },
       { onConflict: 'user_id' }
     )
 
-    // Send next steps email (non-blocking)
-    const { data: userData } = await supabase
-      .from('users')
-      .select('preferred_first_name, first_name, email, campaign_token')
-      .eq('id', prospect.id)
-      .single()
+    // Send next steps email only on first submission — not on re-submissions from step 1
+    if (isFirstSubmission) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('preferred_first_name, first_name, email, campaign_token')
+        .eq('id', prospect.id)
+        .single()
 
-    if (userData?.email && userData?.campaign_token) {
-      sendOnboardingNextStepsEmail({
-        preferred_first_name: userData.preferred_first_name || '',
-        first_name: userData.first_name || '',
-        email: userData.email,
-        campaign_token: userData.campaign_token,
-      }).catch(err => console.error('Failed to send next steps email:', err))
+      if (userData?.email && userData?.campaign_token) {
+        sendOnboardingNextStepsEmail({
+          preferred_first_name: userData.preferred_first_name || '',
+          first_name: userData.first_name || '',
+          email: userData.email,
+          campaign_token: userData.campaign_token,
+        }).catch(err => console.error('Failed to send next steps email:', err))
+      }
     }
 
     return NextResponse.json({ success: true, next_step: 2 })
