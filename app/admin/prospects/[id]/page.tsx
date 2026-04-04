@@ -13,6 +13,9 @@ export default function ProspectDetailPage() {
   const [updating, setUpdating] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [convertModalOpen, setConvertModalOpen] = useState(false)
+  const [selectedSteps, setSelectedSteps] = useState<number[]>([])
+  const [resetting, setResetting] = useState(false)
+  const [resetResult, setResetResult] = useState<'success' | 'error' | null>(null)
 
   useEffect(() => {
     if (params.id) {
@@ -241,6 +244,79 @@ export default function ProspectDetailPage() {
               <p className="font-medium">{prospect.joining_team || 'N/A'}</p>
             </div>
           </div>
+        </div>
+
+        {/* ── Reset & Resend Steps ── */}
+        <div className="card-section">
+          <h3 className="text-lg font-medium mb-2 tracking-luxury">Reset &amp; Resend Steps</h3>
+          <p className="text-sm text-luxury-gray-2 mb-5">
+            Select steps to reset and send the agent an email to redo them.
+          </p>
+
+          <div className="space-y-2 mb-5">
+            {[
+              { step: 1, label: 'Step 1 — Your Information' },
+              { step: 2, label: 'Step 2 — Onboarding Payment' },
+              { step: 3, label: 'Step 3 — Independent Contractor Agreement' },
+              { step: 4, label: 'Step 4 — Commission Plan Agreement' },
+              { step: 5, label: 'Step 5 — Policy Manual' },
+              { step: 6, label: 'Step 6 — W-9' },
+            ].map(({ step, label }) => (
+              <label key={step} className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedSteps.includes(step)}
+                  onChange={() => {
+                    setSelectedSteps(prev =>
+                      prev.includes(step)
+                        ? prev.filter(s => s !== step)
+                        : [...prev, step]
+                    )
+                    setResetResult(null)
+                  }}
+                  className="w-4 h-4 accent-luxury-accent"
+                />
+                <span className="text-sm text-luxury-gray-1">{label}</span>
+              </label>
+            ))}
+          </div>
+
+          {resetResult === 'success' && (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded px-4 py-3 mb-4">
+              Steps reset and email sent successfully.
+            </div>
+          )}
+          {resetResult === 'error' && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3 mb-4">
+              Something went wrong. Please try again.
+            </div>
+          )}
+
+          <button
+            onClick={async () => {
+              if (selectedSteps.length === 0 || resetting) return
+              setResetting(true)
+              setResetResult(null)
+              try {
+                const res = await fetch('/api/prospects/reset-steps', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ prospect_id: params.id, steps: selectedSteps }),
+                })
+                if (!res.ok) throw new Error()
+                setResetResult('success')
+                setSelectedSteps([])
+              } catch {
+                setResetResult('error')
+              } finally {
+                setResetting(false)
+              }
+            }}
+            disabled={selectedSteps.length === 0 || resetting}
+            className="btn btn-primary text-sm px-6 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {resetting ? 'Resetting...' : `Reset & Send Email${selectedSteps.length > 0 ? ` (${selectedSteps.length})` : ''}`}
+          </button>
         </div>
       </div>
     </div>

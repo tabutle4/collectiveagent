@@ -432,3 +432,83 @@ export async function sendCourtneyFollowUpEmail(prospect: {
     html,
   })
 }
+
+// ─── RESET STEPS EMAIL ────────────────────────────────────────────────────────
+
+const STEP_DESCRIPTIONS: Record<number, { label: string; description: string }> = {
+  1: {
+    label: 'Step 1 — Your Information',
+    description: 'Please review and resubmit your personal and license information.',
+  },
+  2: {
+    label: 'Step 2 — Onboarding Payment',
+    description: 'Your invoice has been updated. Please complete your onboarding payment to continue.',
+  },
+  3: {
+    label: 'Step 3 — Independent Contractor Agreement',
+    description: 'Please review and sign your Independent Contractor Agreement.',
+  },
+  4: {
+    label: 'Step 4 — Commission Plan Agreement',
+    description: 'Please review and sign your Commission Plan Agreement.',
+  },
+  5: {
+    label: 'Step 5 — Policy Manual',
+    description: 'Please review and acknowledge the Brokerage Policy Manual.',
+  },
+  6: {
+    label: 'Step 6 — W-9',
+    description: 'Please complete your W-9. You will receive a new Track1099 invitation email.',
+  },
+}
+
+export async function sendOnboardingResetEmail(prospect: {
+  preferred_first_name: string
+  first_name: string
+  email: string
+  campaign_token: string
+  stepsReset: number[]
+}) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+  const onboardingUrl = `${appUrl}/onboard/${prospect.campaign_token}`
+  const firstName = prospect.preferred_first_name || prospect.first_name
+
+  const sortedSteps = [...prospect.stepsReset].sort((a, b) => a - b)
+
+  const stepSections = sortedSteps.map(step => {
+    const info = STEP_DESCRIPTIONS[step]
+    if (!info) return ''
+    return `
+      <div class="section-box">
+        <h2 class="section-title">${info.label}</h2>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">${info.description}</p>
+      </div>`
+  }).join('')
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hello ${firstName},`,
+    content: `
+      <p class="intro-text">We have updated your onboarding. Please log back in and complete the following step${sortedSteps.length > 1 ? 's' : ''} to continue your process with Collective Realty Co.</p>
+      ${stepSections}
+      <p class="intro-text">If you have any questions, please contact us at <a href="mailto:office@collectiverealtyco.com" style="color:#C5A278;">office@collectiverealtyco.com</a> or call <a href="tel:2816389407" style="color:#C5A278;">(281) 638-9407</a>.</p>
+    `,
+    darkSection: `
+      <h2 class="dark-section-title">Continue Your Onboarding</h2>
+      <div class="option-box">
+        <h3 class="option-title">Your Onboarding Portal</h3>
+        <p class="option-description">Your personalized link is below. Pick up right where you left off.</p>
+        <div style="text-align: center;"><a href="${onboardingUrl}" class="btn btn-white">Continue Onboarding</a></div>
+      </div>
+    `,
+    closing: ``,
+  })
+
+  return resend.emails.send({
+    from: FROM_EMAILS.onboarding,
+    to: prospect.email,
+    replyTo: 'office@collectiverealtyco.com',
+    cc: ADMIN_EMAIL,
+    subject: 'Action Required: Please Complete Your Onboarding Steps',
+    html,
+  })
+}
