@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin as supabase } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { type, data } = body
     console.log('Payload webhook received:', type, data?.id)
-
-    const supabase = createClient()
 
     // Invoice paid
     if (type === 'invoice.paid' && data?.customer_id) {
