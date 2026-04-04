@@ -1,204 +1,178 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { requirePermission } from '@/lib/api-auth'
 import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
 import { getICAContent } from '@/lib/documents/ica-content'
-import {
-  getCommissionPlanContent,
-  getCommissionPlanKey,
-} from '@/lib/documents/commission-plan-content'
-import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
-import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
+import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
+import { uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
-import { getEmailLayout, emailButton } from '@/lib/email/layout'
+import { getEmailLayout } from '@/lib/email/layout'
+import fs from 'fs'
+import path from 'path'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  try {
-    const { token, documentType, signatureDataUrl } = await request.json()
+  const auth = await requirePermission(request, 'can_manage_agents')
+  if (auth.error) return auth.error
 
-    if (!token || !documentType || !signatureDataUrl) {
-      return NextResponse.json(
-        { error: 'token, documentType, and signatureDataUrl are required' },
-        { status: 400 }
-      )
+  try {
+    const { userId, documentType, signBoth } = await request.json()
+
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
-    if (!['ica', 'commission_plan', 'policy_manual'].includes(documentType)) {
+    // signBoth signs ICA + commission plan in one call
+    // documentType still supported for backwards compatibility
+    const docsToSign: string[] = signBoth
+      ? ['ica', 'commission_plan']
+      : [documentType]
+
+    if (!signBoth && !['ica', 'commission_plan'].includes(documentType)) {
       return NextResponse.json({ error: 'Invalid documentType' }, { status: 400 })
     }
 
-    // Authenticate by campaign_token
-    const { data: prospect, error: prospectError } = await supabaseAdmin
+    const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip'
+        'id, first_name, last_name, email, commission_plan, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status'
       )
-      .eq('campaign_token', token)
-      .eq('status', 'prospect')
+      .eq('id', userId)
       .single()
 
-    if (prospectError || !prospect) {
-      return NextResponse.json({ error: 'Invalid or expired onboarding link' }, { status: 404 })
+    if (error || !agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    const agentName = `${prospect.first_name} ${prospect.last_name}`
+    const agentName = `${agent.first_name} ${agent.last_name}`
     const today = new Date()
-    const effectiveDate = `${String(today.getMonth() + 1).padStart(2, '0')} / ${String(today.getDate()).padStart(2, '0')} / ${today.getFullYear()}`
 
     const mailingParts = [
-      prospect.shipping_address_line1,
-      prospect.shipping_address_line2,
-      prospect.shipping_city,
-      prospect.shipping_state,
-      prospect.shipping_zip,
-    ]
-      .filter(Boolean)
-      .join(', ')
+      agent.shipping_address_line1,
+      agent.shipping_address_line2,
+      agent.shipping_city,
+      agent.shipping_state,
+      agent.shipping_zip,
+    ].filter(Boolean).join(', ')
 
-    // Create OneDrive folder if it doesn't exist yet
-    let folderPath = prospect.onedrive_folder_url
-    if (!folderPath || !folderPath.includes('Agent Documents')) {
-      const { folderPath: newFolderPath, sharingUrl } = await createAgentFolder(
-        prospect.first_name,
-        prospect.last_name,
-        prospect.id
-      )
-      folderPath = newFolderPath
-
-      await supabaseAdmin
-        .from('users')
-        .update({ onedrive_folder_url: sharingUrl })
-        .eq('id', prospect.id)
+    // Load broker signature from public folder
+    let brokerSignatureImageBytes: Uint8Array | undefined
+    try {
+      const sigPath = path.join(process.cwd(), 'public', 'courtney-signature.png')
+      brokerSignatureImageBytes = new Uint8Array(fs.readFileSync(sigPath))
+    } catch {
+      console.error('Could not load courtney-signature.png')
     }
 
-    // Generate PDF content
-    let pdfContent: any
-    let fileName: string
+    const fileUrls: Record<string, string> = {}
 
-    if (documentType === 'ica') {
-      pdfContent = getICAContent({
-        agentFirstName: prospect.first_name,
-        agentLastName: prospect.last_name,
-        effectiveDate,
-        mailingAddress: mailingParts,
-        email: prospect.email,
-      })
-      fileName = `ICA_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
-    } else if (documentType === 'commission_plan') {
-      const planKey = getCommissionPlanKey(prospect.commission_plan || '')
-      pdfContent = getCommissionPlanContent({
+    for (const docType of docsToSign) {
+      const signedAt = docType === 'ica'
+        ? agent.ica_signed_at
+        : agent.commission_plan_agreement_signed_at
+      const sigDate = signedAt ? new Date(signedAt) : today
+      const effectiveDate = `${String(sigDate.getMonth() + 1).padStart(2, '0')} / ${String(sigDate.getDate()).padStart(2, '0')} / ${sigDate.getFullYear()}`
+
+      let pdfContent: any
+      let fileName: string
+
+      if (docType === 'ica') {
+        pdfContent = getICAContent({
+          agentFirstName: agent.first_name,
+          agentLastName: agent.last_name,
+          effectiveDate,
+          mailingAddress: mailingParts,
+          email: agent.email,
+        })
+        fileName = `ICA_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
+      } else {
+        const planKey = getCommissionPlanKey(agent.commission_plan || '')
+        pdfContent = getCommissionPlanContent({ agentName, effectiveDate, plan: planKey })
+        fileName = `Commission_Plan_Agreement_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
+      }
+
+      const pdfBytes = await generateAgreementPDF({
+        title: pdfContent.title,
+        sections: pdfContent.sections,
         agentName,
         effectiveDate,
-        plan: planKey,
+        brokerSignatureImageBytes,
+        showAgencySignature: true,
       })
-      fileName = `Commission_Plan_Agreement_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
-    } else {
-      pdfContent = getPolicyAcknowledgmentContent({ agentName, effectiveDate })
-      fileName = `Policy_Acknowledgment_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
+
+      const sanitizedName = agentName.replace(/[/\\?%*:|"<>]/g, '-')
+      const folderPath = `Agent Documents/${sanitizedName}-${agent.id}`
+      const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
+      fileUrls[docType] = fileUrl
     }
 
-    // Generate PDF with signature
-    const pdfBytes = await generateAgreementPDF({
-      title: pdfContent.title,
-      sections: pdfContent.sections,
-      agentName,
-      agentSignatureDataUrl: signatureDataUrl,
-      effectiveDate,
-      showAgencySignature: documentType !== 'policy_manual',
-    })
+    // Persist document URLs and broker sign timestamp
+    const updateFields: Record<string, any> = { broker_signed_at: today.toISOString() }
+    if (fileUrls.ica) updateFields.ica_document_url = fileUrls.ica
+    if (fileUrls.commission_plan) updateFields.commission_plan_agreement_url = fileUrls.commission_plan
+    await supabaseAdmin.from('users').update(updateFields).eq('id', agent.id)
 
-    // Upload to OneDrive
-    const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
+    // Check if both docs are now fully co-signed — flip prospect to active
+    const { data: freshAgent } = await supabaseAdmin
+      .from('users')
+      .select('ica_document_url, commission_plan_agreement_url, ica_signed_at, commission_plan_agreement_signed_at, status')
+      .eq('id', agent.id)
+      .single()
 
-    const updateFields: Record<string, any> = {}
-    if (documentType === 'ica') {
-      updateFields.independent_contractor_agreement_signed = true
-      updateFields.ica_signed_at = today.toISOString()
-      updateFields.ica_document_url = fileUrl
-    } else if (documentType === 'commission_plan') {
-      updateFields.commission_plan_agreement_signed = true
-      updateFields.commission_plan_agreement_signed_at = today.toISOString()
-      updateFields.commission_plan_agreement_url = fileUrl
-    }
-    // policy_manual: tracked in onboarding_sessions only (policy_ack_document_url + step_5_completed_at)
+    const icaDone = !!(freshAgent?.ica_signed_at && (fileUrls.ica || freshAgent?.ica_document_url))
+    const commDone = !!(freshAgent?.commission_plan_agreement_signed_at && (fileUrls.commission_plan || freshAgent?.commission_plan_agreement_url))
 
-    if (Object.keys(updateFields).length > 0) {
-      await supabaseAdmin.from('users').update(updateFields).eq('id', prospect.id)
-    }
+    if (icaDone && commDone && freshAgent?.status === 'prospect') {
+      await supabaseAdmin.from('users').update({
+        status: 'active',
+        is_active: true,
+        is_licensed_agent: true,
+        role: 'agent',
+        join_date: today.toISOString().split('T')[0],
+      }).eq('id', agent.id)
 
-    // Advance the onboarding session step
-    const nextStep = documentType === 'ica' ? 4 : documentType === 'commission_plan' ? 5 : 6
-    const completedField =
-      documentType === 'ica'
-        ? 'step_3_completed_at'
-        : documentType === 'commission_plan'
-          ? 'step_4_completed_at'
-          : 'step_5_completed_at'
-
-    const sessionUpdate: Record<string, any> = {
-      user_id: prospect.id,
-      current_step: nextStep,
-      [completedField]: today.toISOString(),
-      updated_at: today.toISOString(),
-    }
-    if (documentType === 'policy_manual') {
-      sessionUpdate.policy_ack_document_url = fileUrl
-    }
-    // Save agent signature on first signing (ICA) for broker review page
-    if (documentType === 'ica') {
-      sessionUpdate.agent_signature_url = signatureDataUrl
-    }
-
-    await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
-
-    // Send ONE email to broker after commission plan is signed — by then both ICA
-    // and commission plan are agent-signed, so she can review and co-sign both at once.
-    if (documentType === 'commission_plan') {
-      const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}`
-
-      // Look up broker by role so this stays correct if email ever changes
-      const { data: broker } = await supabaseAdmin
-        .from('users')
-        .select('email')
-        .eq('role', 'broker')
-        .single()
-      const brokerEmail = broker?.email ?? 'office@collectiverealtyco.com'
-
-      await resend.emails.send({
-        from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
-        to: brokerEmail,
-        replyTo: 'tarab@collectiverealtyco.com',
-        subject: `Action Required: Review & Co-sign Agreements for ${agentName}`,
-        html: getEmailLayout(
-          `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed both their Independent Contractor Agreement and Commission Plan Agreement. Please review and co-sign both documents.</p>
-          ${emailButton('Review & Sign Both', signingUrl, true)}
-          <p style="font-size:12px;color:#888;margin:16px 0 0;">Or copy this link: ${signingUrl}</p>`,
-          { title: `Co-sign Required for ${agentName}`, preheader: `${agentName} needs your co-signature on both agreements` }
-        ),
-      }).catch((e: unknown) => console.error('Failed to send broker signing email:', e))
-    }
-
-    // Notify office when policy manual is signed
-    if (documentType === 'policy_manual') {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Policy Manual Signed for ${agentName}`,
+        subject: `Action Required: Create Accounts for ${agentName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed and acknowledged the Policy Manual.</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#555;">They are now on Step 6 (W-9). Please send their W-9 request via Track1099.</p>
-          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
-          { title: 'Policy Manual Signed', preheader: `${agentName} acknowledged the policy manual` }
+          `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentName}</strong>. Please complete the following before sending onboarding emails.</p>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Verify First</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship invitation has been accepted</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Onboarding payment received</p>
+          </div>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Create Accounts</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Outlook — create mailbox, add to groups, set permissions, enable MFA</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Dotloop — create account</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Transactions platform — create account</p>
+          </div>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Update Agent Profile in the App</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Set office email (new Outlook address)</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Set division</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration date, NRDS ID, and MLS ID</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Configure team and revenue share settings if applicable</p>
+          </div>
+
+          <p style="margin:0 0 14px;font-size:14px;color:#555;">Once all of the above is done, run the <strong style="color:#1a1a1a;">New Agent Automated Onboarding Emails</strong> flow in Power Automate.</p>
+          <p style="margin:0;font-size:12px;color:#888;">Agent personal email: ${agent.email}</p>`,
+          { title: 'Create Accounts for ' + agentName, preheader: `Action required — set up accounts for ${agentName}` }
         ),
-      }).catch((e: unknown) => console.error('Failed to send policy manual notification:', e))
+      }).catch((e: unknown) => console.error('Failed to send activation notification:', e))
     }
 
-    return NextResponse.json({ success: true, fileUrl })
+    return NextResponse.json({ success: true, fileUrls, activated: icaDone && commDone })
   } catch (error: any) {
-    console.error('Sign document error:', error)
-    return NextResponse.json({ error: error.message || 'Failed to generate document' }, { status: 500 })
+    console.error('Admin sign-document error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

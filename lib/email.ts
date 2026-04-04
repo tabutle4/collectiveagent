@@ -489,14 +489,16 @@ export async function sendOnboardingResetEmail(prospect: {
     greeting: `Hello ${firstName},`,
     content: `
       <p class="intro-text">We have updated your onboarding. Please log back in and complete the following step${sortedSteps.length > 1 ? 's' : ''} to continue your process with Collective Realty Co.</p>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="${onboardingUrl}" style="display:inline-block;padding:14px 32px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Continue Onboarding</a>
+      </div>
       ${stepSections}
       <p class="intro-text">If you have any questions, please contact us at <a href="mailto:office@collectiverealtyco.com" style="color:#C5A278;">office@collectiverealtyco.com</a> or call <a href="tel:2816389407" style="color:#C5A278;">(281) 638-9407</a>.</p>
     `,
     darkSection: `
-      <h2 class="dark-section-title">Continue Your Onboarding</h2>
+      <h2 class="dark-section-title">Your Onboarding Portal</h2>
       <div class="option-box">
-        <h3 class="option-title">Your Onboarding Portal</h3>
-        <p class="option-description">Your personalized link is below. Pick up right where you left off.</p>
+        <p class="option-description">Your personalized link is ready. Pick up right where you left off.</p>
         <div style="text-align: center;"><a href="${onboardingUrl}" class="btn btn-white">Continue Onboarding</a></div>
       </div>
     `,
