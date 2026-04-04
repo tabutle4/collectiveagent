@@ -136,18 +136,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
-      // Check linked to this transaction (for leases)
-      let check = null
-      if (txn.transaction_type && isLeaseType(txn.transaction_type)) {
-        const { data: checkData } = await supabase
-          .from('checks_received')
-          .select('*, check_payouts(*)')
-          .eq('transaction_id', id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-        check = checkData || null
-      }
+      // Check linked to this transaction (all transaction types)
+      const { data: checkData } = await supabase
+        .from('checks_received')
+        .select('*, check_payouts(*)')
+        .eq('transaction_id', id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const check = checkData || null
 
       // Checklist completions
       const { data: completions } = await supabase

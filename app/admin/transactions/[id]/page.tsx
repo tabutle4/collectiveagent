@@ -623,7 +623,7 @@ export default function AdminTransactionDetailPage() {
   const navTabs: { key: NavTab; label: string; show: boolean }[] = [
     { key: 'overview', label: 'Overview', show: true },
     { key: 'commissions', label: 'Commissions', show: true },
-    { key: 'check_payouts', label: 'Check & Payouts', show: leaseTransaction },
+    { key: 'check_payouts', label: 'Check & Payouts', show: true },
     { key: 'contacts', label: 'Contacts', show: true },
     { key: 'documents', label: 'Documents', show: true },
   ]
@@ -1116,7 +1116,7 @@ export default function AdminTransactionDetailPage() {
           )}
 
           {/* ── CHECK & PAYOUTS TAB ──────────────────────────────────────── */}
-          {activeTab === 'check_payouts' && leaseTransaction && (
+          {activeTab === 'check_payouts' && (
             <div className="space-y-4">
               <h1 className="page-title">CHECK & PAYOUTS</h1>
 
@@ -1301,6 +1301,41 @@ export default function AdminTransactionDetailPage() {
                             updateCheck({ brokerage_amount: editCheckData.brokerage_amount })
                           }
                         />
+                      </div>
+                    </div>
+
+                    {/* Payment Method + Status */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="field-label">Payment Type</label>
+                        <select
+                          className="select-luxury text-xs"
+                          value={editCheckData.payment_method || 'check'}
+                          onChange={e => {
+                            setEditCheckData((p: any) => ({ ...p, payment_method: e.target.value }))
+                            updateCheck({ payment_method: e.target.value })
+                          }}
+                        >
+                          <option value="check">Check</option>
+                          <option value="zelle">Zelle</option>
+                          <option value="payload">Payload</option>
+                          <option value="ecommission">eCommission</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label">Funds Status</label>
+                        <select
+                          className="select-luxury text-xs"
+                          value={editCheckData.status || 'received'}
+                          onChange={e => {
+                            setEditCheckData((p: any) => ({ ...p, status: e.target.value }))
+                            updateCheck({ status: e.target.value })
+                          }}
+                        >
+                          <option value="received">Pending</option>
+                          <option value="cleared">Cleared</option>
+                          <option value="deposited">Deposited</option>
+                        </select>
                       </div>
                     </div>
 

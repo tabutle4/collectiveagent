@@ -11,7 +11,6 @@ import { ShieldX } from 'lucide-react'
 // If a route is not listed, all authenticated admin/staff users can access it
 const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/pm': 'can_view_pm',
-  '/admin/checks': 'can_view_checks',
   '/admin/onboarding': 'can_view_onboarding',
   '/admin/billing': 'can_view_billing',
   '/admin/campaigns': 'can_view_campaigns',
