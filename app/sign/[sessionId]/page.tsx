@@ -242,6 +242,13 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                       {section.body && <p className="whitespace-pre-wrap">{section.body}</p>}
                     </div>
                   ))}
+                  {session?.agentSignatureUrl && (
+                    <div className="pt-3 border-t border-luxury-gray-5/30 mt-3">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Agent Signature</p>
+                      <img src={session.agentSignatureUrl} alt={agent.preferredName} className="h-10 object-contain" />
+                      <p className="text-xs text-luxury-gray-3 mt-1">{agent.preferredName}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -271,6 +278,13 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                       {section.body && <p className="whitespace-pre-wrap">{section.body}</p>}
                     </div>
                   ))}
+                  {session?.agentSignatureUrl && (
+                    <div className="pt-3 border-t border-luxury-gray-5/30 mt-3">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Agent Signature</p>
+                      <img src={session.agentSignatureUrl} alt={agent.preferredName} className="h-10 object-contain" />
+                      <p className="text-xs text-luxury-gray-3 mt-1">{agent.preferredName}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

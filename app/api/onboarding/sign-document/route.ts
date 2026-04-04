@@ -147,6 +147,10 @@ export async function POST(request: NextRequest) {
     if (documentType === 'policy_manual') {
       sessionUpdate.policy_ack_document_url = fileUrl
     }
+    // Save agent signature on first signing (ICA) for broker review page
+    if (documentType === 'ica') {
+      sessionUpdate.agent_signature_url = signatureDataUrl
+    }
 
     await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
 
