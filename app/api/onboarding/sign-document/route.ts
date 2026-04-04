@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         subject: `Action Required: Review & Co-sign Agreements for ${agentName}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed both their Independent Contractor Agreement and Commission Plan Agreement. Please review and co-sign both documents.</p>
-          ${emailButton('Review & Sign Both', signingUrl, true)}
+          ${emailButton('Review & Sign Both', signingUrl)}
           <p style="font-size:12px;color:#888;margin:16px 0 0;">Or copy this link: ${signingUrl}</p>`,
           { title: `Co-sign Required for ${agentName}`, preheader: `${agentName} needs your co-signature on both agreements` }
         ),
