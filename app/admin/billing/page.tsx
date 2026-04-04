@@ -51,6 +51,8 @@ export default function AdminBillingPage() {
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
   const [openDebtAgentIds, setOpenDebtAgentIds] = useState<string[]>([])
+  const [openMonthlyInvoiceAgentIds, setOpenMonthlyInvoiceAgentIds] = useState<string[]>([])
+  const [loadingMonthlyFilter, setLoadingMonthlyFilter] = useState(true)
   const [editingRecord, setEditingRecord] = useState<string | null>(null)
   const [editDesc, setEditDesc] = useState('')
   const [editAmount, setEditAmount] = useState('')
@@ -109,6 +111,19 @@ export default function AdminBillingPage() {
       console.error('Error loading agents:', e)
     } finally {
       setLoading(false)
+    }
+
+    // Load monthly invoice status in background (separate from main load — hits Payload for each agent)
+    try {
+      const res = await fetch('/api/payload/monthly-invoice-status')
+      if (res.ok) {
+        const data = await res.json()
+        setOpenMonthlyInvoiceAgentIds(data.agent_ids || [])
+      }
+    } catch (e) {
+      console.error('Error loading monthly invoice status:', e)
+    } finally {
+      setLoadingMonthlyFilter(false)
     }
   }
 
@@ -386,7 +401,7 @@ export default function AdminBillingPage() {
   const stats = {
     total: agents.length,
     openCustomInvoices,
-    monthlyOverdue: agents.filter(a => getMonthlyStatus(a) === 'overdue').length,
+    openMonthlyInvoice: openMonthlyInvoiceAgentIds.length,
     noPayloadAccount: agents.filter(a => !a.payload_payee_id).length,
   }
 
@@ -401,7 +416,7 @@ export default function AdminBillingPage() {
     const matchesFilter = (() => {
       if (!statusFilter) return true
       if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
-      if (statusFilter === 'monthlyOverdue') return getMonthlyStatus(a) === 'overdue'
+      if (statusFilter === 'openMonthlyInvoice') return openMonthlyInvoiceAgentIds.includes(a.id)
       if (statusFilter === 'noPayloadAccount') return !a.payload_payee_id
       return true
     })()
@@ -437,17 +452,19 @@ export default function AdminBillingPage() {
           )}
         </div>
         <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyOverdue' ? 'ring-2 ring-red-400' : ''}`}
-          onClick={() => toggleFilter('monthlyOverdue')}
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openMonthlyInvoice' ? 'ring-2 ring-yellow-400' : ''}`}
+          onClick={() => toggleFilter('openMonthlyInvoice')}
         >
-          <p className="text-xs text-luxury-gray-3 mb-1">Monthly Overdue</p>
-          <p className="text-2xl font-semibold text-red-500">{stats.monthlyOverdue}</p>
-          {statusFilter === 'monthlyOverdue' && (
-            <p className="text-xs text-red-400 mt-1">Filtering ✕</p>
+          <p className="text-xs text-luxury-gray-3 mb-1">Open Monthly Invoice</p>
+          <p className="text-2xl font-semibold text-yellow-500">
+            {loadingMonthlyFilter ? '...' : stats.openMonthlyInvoice}
+          </p>
+          {statusFilter === 'openMonthlyInvoice' && (
+            <p className="text-xs text-yellow-400 mt-1">Filtering ✕</p>
           )}
         </div>
         <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'monthlyUnpaid' ? 'ring-2 ring-luxury-accent' : ''}`}
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'noPayloadAccount' ? 'ring-2 ring-luxury-accent' : ''}`}
           onClick={() => toggleFilter('noPayloadAccount')}
         >
           <p className="text-xs text-luxury-gray-3 mb-1">No Payload Account</p>
