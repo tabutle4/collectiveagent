@@ -150,20 +150,29 @@ export async function POST(request: NextRequest) {
 
     await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
 
-    // Notify Courtney to co-sign ICA or commission plan
-    if (documentType === 'ica' || documentType === 'commission_plan') {
-      const docLabel = documentType === 'ica' ? 'Independent Contractor Agreement' : 'Commission Plan Agreement'
-      const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}?doc=${documentType}`
+    // Send ONE email to broker after commission plan is signed — by then both ICA
+    // and commission plan are agent-signed, so she can review and co-sign both at once.
+    if (documentType === 'commission_plan') {
+      const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}`
+
+      // Look up broker by role so this stays correct if email ever changes
+      const { data: broker } = await supabaseAdmin
+        .from('users')
+        .select('email')
+        .eq('role', 'broker')
+        .single()
+      const brokerEmail = broker?.email ?? 'office@collectiverealtyco.com'
+
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
-        to: 'courtney@collectiverealtyco.com',
+        to: brokerEmail,
         replyTo: 'tarab@collectiverealtyco.com',
-        subject: `Action Required: Co-sign ${docLabel} for ${agentName}`,
+        subject: `Action Required: Review & Co-sign Agreements for ${agentName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed their ${docLabel} and is waiting for your co-signature.</p>
-          ${emailButton('Review & Sign', signingUrl, true)}
+          `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed both their Independent Contractor Agreement and Commission Plan Agreement. Please review and co-sign both documents.</p>
+          ${emailButton('Review & Sign Both', signingUrl, true)}
           <p style="font-size:12px;color:#888;margin:16px 0 0;">Or copy this link: ${signingUrl}</p>`,
-          { title: `Co-sign Required: ${docLabel}`, preheader: `${agentName} needs your co-signature` }
+          { title: `Co-sign Required for ${agentName}`, preheader: `${agentName} needs your co-signature on both agreements` }
         ),
       }).catch((e: unknown) => console.error('Failed to send broker signing email:', e))
     }

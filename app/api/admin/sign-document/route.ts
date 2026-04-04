@@ -19,28 +19,36 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { userId, documentType } = await request.json()
+    const { userId, documentType, signBoth } = await request.json()
 
-    if (!userId || !documentType) {
-      return NextResponse.json({ error: 'userId and documentType are required' }, { status: 400 })
+    if (!userId) {
+      return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
-    if (!['ica', 'commission_plan'].includes(documentType)) {
+
+    // signBoth signs ICA + commission plan in one call
+    // documentType still supported for backwards compatibility
+    const docsToSign: string[] = signBoth
+      ? ['ica', 'commission_plan']
+      : [documentType]
+
+    if (!signBoth && !['ica', 'commission_plan'].includes(documentType)) {
       return NextResponse.json({ error: 'Invalid documentType' }, { status: 400 })
     }
 
     const { data: agent, error } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, commission_plan, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at')
+      .select(
+        'id, first_name, last_name, email, commission_plan, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status'
+      )
       .eq('id', userId)
       .single()
 
-    if (error || !agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    if (error || !agent) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
 
     const agentName = `${agent.first_name} ${agent.last_name}`
     const today = new Date()
-    const signedAt = documentType === 'ica' ? agent.ica_signed_at : agent.commission_plan_agreement_signed_at
-    const sigDate = signedAt ? new Date(signedAt) : today
-    const effectiveDate = `${String(sigDate.getMonth() + 1).padStart(2, '0')} / ${String(sigDate.getDate()).padStart(2, '0')} / ${sigDate.getFullYear()}`
 
     const mailingParts = [
       agent.shipping_address_line1,
@@ -59,76 +67,81 @@ export async function POST(request: NextRequest) {
       console.error('Could not load courtney-signature.png')
     }
 
-    let pdfContent: any
-    let fileName: string
+    const fileUrls: Record<string, string> = {}
 
-    if (documentType === 'ica') {
-      pdfContent = getICAContent({
-        agentFirstName: agent.first_name,
-        agentLastName: agent.last_name,
+    for (const docType of docsToSign) {
+      const signedAt = docType === 'ica'
+        ? agent.ica_signed_at
+        : agent.commission_plan_agreement_signed_at
+      const sigDate = signedAt ? new Date(signedAt) : today
+      const effectiveDate = `${String(sigDate.getMonth() + 1).padStart(2, '0')} / ${String(sigDate.getDate()).padStart(2, '0')} / ${sigDate.getFullYear()}`
+
+      let pdfContent: any
+      let fileName: string
+
+      if (docType === 'ica') {
+        pdfContent = getICAContent({
+          agentFirstName: agent.first_name,
+          agentLastName: agent.last_name,
+          effectiveDate,
+          mailingAddress: mailingParts,
+          email: agent.email,
+        })
+        fileName = `ICA_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
+      } else {
+        const planKey = getCommissionPlanKey(agent.commission_plan || '')
+        pdfContent = getCommissionPlanContent({ agentName, effectiveDate, plan: planKey })
+        fileName = `Commission_Plan_Agreement_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
+      }
+
+      const pdfBytes = await generateAgreementPDF({
+        title: pdfContent.title,
+        sections: pdfContent.sections,
+        agentName,
         effectiveDate,
-        mailingAddress: mailingParts,
-        email: agent.email,
+        brokerSignatureImageBytes,
+        showAgencySignature: true,
       })
-      fileName = `ICA_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
-    } else {
-      const planKey = getCommissionPlanKey(agent.commission_plan || '')
-      pdfContent = getCommissionPlanContent({ agentName, effectiveDate, plan: planKey })
-      fileName = `Commission_Plan_Agreement_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
+
+      const sanitizedName = agentName.replace(/[/\\?%*:|"<>]/g, '-')
+      const folderPath = `Agent Documents/${sanitizedName}-${agent.id}`
+      const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
+      fileUrls[docType] = fileUrl
     }
 
-    const pdfBytes = await generateAgreementPDF({
-      title: pdfContent.title,
-      sections: pdfContent.sections,
-      agentName,
-      effectiveDate,
-      brokerSignatureImageBytes,
-      showAgencySignature: true,
-    })
-
-    // Upload to the same deterministic folder path
-    const sanitizedName = `${agent.first_name} ${agent.last_name}`.replace(/[/\\?%*:|"<>]/g, '-')
-    const folderPath = `Agent Documents/${sanitizedName}-${agent.id}`
-    const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
-
+    // Persist document URLs and broker sign timestamp
     const updateFields: Record<string, any> = { broker_signed_at: today.toISOString() }
-    if (documentType === 'ica') {
-      updateFields.ica_document_url = fileUrl
-    } else {
-      updateFields.commission_plan_agreement_url = fileUrl
-    }
+    if (fileUrls.ica) updateFields.ica_document_url = fileUrls.ica
+    if (fileUrls.commission_plan) updateFields.commission_plan_agreement_url = fileUrls.commission_plan
     await supabaseAdmin.from('users').update(updateFields).eq('id', agent.id)
 
-    // Check if both ICA and commission plan are now broker-signed
+    // Check if both docs are now fully co-signed — flip prospect to active
     const { data: freshAgent } = await supabaseAdmin
       .from('users')
-      .select('ica_document_url, commission_plan_agreement_url, ica_signed_at, commission_plan_agreement_signed_at, first_name, last_name, email, status')
+      .select('ica_document_url, commission_plan_agreement_url, ica_signed_at, commission_plan_agreement_signed_at, status')
       .eq('id', agent.id)
       .single()
 
-    const icaDone = !!(freshAgent?.ica_signed_at && (documentType === 'ica' ? fileUrl : freshAgent?.ica_document_url))
-    const commDone = !!(freshAgent?.commission_plan_agreement_signed_at && (documentType === 'commission_plan' ? fileUrl : freshAgent?.commission_plan_agreement_url))
-    const agentFullName = `${agent.first_name} ${agent.last_name}`
+    const icaDone = !!(freshAgent?.ica_signed_at && (fileUrls.ica || freshAgent?.ica_document_url))
+    const commDone = !!(freshAgent?.commission_plan_agreement_signed_at && (fileUrls.commission_plan || freshAgent?.commission_plan_agreement_url))
 
     if (icaDone && commDone && freshAgent?.status === 'prospect') {
-      // Flip to active
       await supabaseAdmin.from('users').update({ status: 'active', is_active: true }).eq('id', agent.id)
 
-      // Simple notification — agent is active, admin setup can begin
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Courtney Signed All Agreements for ${agentFullName}`,
+        subject: `All Agreements Co-signed for ${agentName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 14px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentFullName}</strong>. The agent is now active in the system.</p>
-          <p style="margin:0 0 14px;font-size:14px;color:#555;">Head to the admin onboarding page to complete their setup. The Welcome &amp; Onboarding Emails step will be ready once TREC and W-9 are confirmed.</p>
+          `<p style="margin:0 0 14px;font-size:14px;color:#555;">Both agreements have been co-signed for <strong style="color:#1a1a1a;">${agentName}</strong>. The agent is now active in the system.</p>
+          <p style="margin:0 0 14px;font-size:14px;color:#555;">Head to the admin onboarding page to complete their setup.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent email: ${agent.email}</p>`,
-          { title: 'All Agreements Signed', preheader: `${agentFullName} is now active` }
+          { title: 'All Agreements Signed', preheader: `${agentName} is now active` }
         ),
       }).catch((e: unknown) => console.error('Failed to send activation notification:', e))
     }
 
-    return NextResponse.json({ success: true, fileUrl, activated: icaDone && commDone })
+    return NextResponse.json({ success: true, fileUrls, activated: icaDone && commDone })
   } catch (error: any) {
     console.error('Admin sign-document error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
