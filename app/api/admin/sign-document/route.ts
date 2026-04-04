@@ -47,6 +47,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
+    // Fetch agent signature from onboarding session
+    const { data: onboardingSession } = await supabaseAdmin
+      .from('onboarding_sessions')
+      .select('agent_signature_url')
+      .eq('user_id', userId)
+      .single()
+
     const agentName = `${agent.first_name} ${agent.last_name}`
     const today = new Date()
 
@@ -99,6 +106,7 @@ export async function POST(request: NextRequest) {
         sections: pdfContent.sections,
         agentName,
         effectiveDate,
+        agentSignatureDataUrl: onboardingSession?.agent_signature_url ?? undefined,
         brokerSignatureImageBytes,
         showAgencySignature: true,
       })

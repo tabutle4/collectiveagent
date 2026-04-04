@@ -218,7 +218,9 @@ export async function generateAgreementPDF(options: GeneratePDFOptions): Promise
     if (brokerSignatureImageBytes) {
       try {
         const brokerSigImage = await pdfDoc.embedPng(brokerSignatureImageBytes)
-        const brokerSigDims = brokerSigImage.scale(0.25)
+        const MAX_BROKER_HEIGHT = 48
+        const brokerScale = Math.min(0.25, MAX_BROKER_HEIGHT / brokerSigImage.height)
+        const brokerSigDims = brokerSigImage.scale(brokerScale)
         ctx.page.drawImage(brokerSigImage, {
           x: MARGIN,
           y: ctx.y - brokerSigDims.height,
@@ -261,7 +263,9 @@ export async function generateAgreementPDF(options: GeneratePDFOptions): Promise
       const base64Data = agentSignatureDataUrl.replace(/^data:image\/png;base64,/, '')
       const signatureBytes = Buffer.from(base64Data, 'base64')
       const signatureImage = await pdfDoc.embedPng(signatureBytes)
-      const imgDims = signatureImage.scale(0.3)
+      const MAX_AGENT_HEIGHT = 44
+      const agentScale = Math.min(0.3, MAX_AGENT_HEIGHT / signatureImage.height)
+      const imgDims = signatureImage.scale(agentScale)
 
       addPageIfNeeded(pdfDoc, ctx, imgDims.height + 20, regularFont, FONT_SIZE_BODY)
 
