@@ -34,6 +34,8 @@ export default function ProfilePage({
   const [savingRealEstate, setSavingRealEstate] = useState(false)
   const [savingLicense, setSavingLicense] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
+  const [reverting, setReverting] = useState(false)
+  const [revertResult, setRevertResult] = useState<'success' | 'error' | null>(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -596,6 +598,51 @@ export default function ProfilePage({
           ? `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
           : 'MY PROFILE'}
       </h1>
+
+      {/* Admin — Revert to Prospect */}
+      {isAdmin && user?.status !== 'prospect' && (
+        <div className="container-card mb-5 border border-red-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-luxury-gray-1">Revert to Prospect</p>
+              <p className="text-xs text-luxury-gray-3 mt-0.5">
+                Resets onboarding, clears signed documents, and returns this user to the prospect flow.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                if (reverting || !user?.id) return
+                setReverting(true)
+                setRevertResult(null)
+                try {
+                  const res = await fetch('/api/admin/revert-to-prospect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.id }),
+                  })
+                  if (!res.ok) throw new Error()
+                  setRevertResult('success')
+                  loadProfile()
+                } catch {
+                  setRevertResult('error')
+                } finally {
+                  setReverting(false)
+                }
+              }}
+              disabled={reverting}
+              className="text-xs px-4 py-2 rounded border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 flex-shrink-0 ml-4"
+            >
+              {reverting ? 'Reverting...' : 'Revert to Prospect'}
+            </button>
+          </div>
+          {revertResult === 'success' && (
+            <p className="text-xs text-green-700 mt-3">Done. User has been reverted to prospect.</p>
+          )}
+          {revertResult === 'error' && (
+            <p className="text-xs text-red-600 mt-3">Something went wrong. Please try again.</p>
+          )}
+        </div>
+      )}
 
       {/* Non-licensed user notice */}
       {!isLicensedAgent && (
