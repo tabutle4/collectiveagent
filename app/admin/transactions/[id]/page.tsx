@@ -1348,10 +1348,10 @@ export default function AdminTransactionDetailPage() {
                       </div>
                       <button
                         onClick={() => updateCheck({ crc_transferred: !check.crc_transferred })}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-5'}`}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                       >
                         <span
-                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${check.crc_transferred ? 'translate-x-5' : 'translate-x-0.5'}`}
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.crc_transferred ? 'translate-x-6' : 'translate-x-1'}`}
                         />
                       </button>
                     </div>
@@ -1366,10 +1366,10 @@ export default function AdminTransactionDetailPage() {
                       </div>
                       <button
                         onClick={() => updateCheck({ agents_paid: !check.agents_paid })}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-5'}`}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                       >
                         <span
-                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${check.agents_paid ? 'translate-x-5' : 'translate-x-0.5'}`}
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.agents_paid ? 'translate-x-6' : 'translate-x-1'}`}
                         />
                       </button>
                     </div>

@@ -84,7 +84,7 @@ function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' 
   const notes = cleanNotes(row.notes)
 
   return (
-    <div className="inner-card space-y-2 py-3">
+    <div className="container-card space-y-2 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           {row.transaction_id ? (
@@ -425,11 +425,16 @@ export default function PayoutsReportPage() {
         </button>
       </div>
 
-      <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" />
-      <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" />
+      <div className="flex flex-col">
 
-      {/* Also In Payouts */}
-      <div className="container-card mb-5">
+        <div className="order-2 lg:order-1">
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" />
+        </div>
+
+        {/* Also In Payouts */}
+        <div className="order-3 lg:order-2">
+          <div className="container-card mb-5">
         <button className="w-full flex items-center justify-between" onClick={() => setExpCollapsed(v => !v)}>
           <div className="flex items-center gap-3">
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Also In Payouts</h2>
@@ -491,10 +496,12 @@ export default function PayoutsReportPage() {
             )}
           </div>
         )}
-      </div>
+        </div>
+        </div>
 
-      {/* Bottom Line */}
-      <div className="container-card">
+        {/* Bottom Line — first on mobile, last on desktop */}
+        <div className="order-1 lg:order-3 mb-5">
+        <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
@@ -560,6 +567,9 @@ export default function PayoutsReportPage() {
             <span className="font-medium text-luxury-gray-1">{fmt(availableAfterPaidOut)}</span>
           </div>
         </div>
+        </div>
+        </div>
+
       </div>
     </div>
   )

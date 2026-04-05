@@ -303,6 +303,8 @@ export default function CloseTransactionModal({
 
   // ── Transaction form ──────────────────────────────────────────────────────
   const [form, setForm] = useState({
+    transaction_type: txn.transaction_type || '',
+    office_location: txn.office_location || '',
     closed_date: txn.closed_date?.substring(0, 10) || new Date().toISOString().split('T')[0],
     funding_status: txn.funding_status || '',
     check_clear_date: txn.check_clear_date?.substring(0, 10) || '',
@@ -471,6 +473,8 @@ export default function CloseTransactionModal({
       // 1 — Update transaction
       const txnUpdates: Record<string, any> = {
         status: 'closed',
+        transaction_type: form.transaction_type || null,
+        office_location: form.office_location || null,
         closed_date: form.closed_date,
         closed_at: new Date().toISOString(),
         closed_by: userId,
@@ -652,6 +656,27 @@ export default function CloseTransactionModal({
             <SectionHeader title="Close Details" expanded={sections.close} onToggle={() => toggle('close')} />
             {sections.close && (
               <div className="grid grid-cols-2 gap-3">
+                <Field label="Type">
+                  <select className="select-luxury text-xs" value={form.transaction_type} onChange={e => setF('transaction_type', e.target.value)}>
+                    <option value="">Select...</option>
+                    <option value="buyer_v2">Buyer</option>
+                    <option value="seller_v2">Seller</option>
+                    <option value="tenant_apt_v2">Tenant (apartment)</option>
+                    <option value="tenant_other_v2">Tenant (not apartment)</option>
+                    <option value="tenant_simplyhome_v2">Tenant (SimplyHome)</option>
+                    <option value="tenant_commercial_v2">Tenant (commercial)</option>
+                    <option value="landlord_v2">Landlord</option>
+                    <option value="new_construction_buyer_v2">New Construction Buyer</option>
+                    <option value="referred_out_v2">Referred Out</option>
+                  </select>
+                </Field>
+                <Field label="Office">
+                  <select className="select-luxury text-xs" value={form.office_location} onChange={e => setF('office_location', e.target.value)}>
+                    <option value="">Select...</option>
+                    <option value="Houston">Houston</option>
+                    <option value="Dallas">Dallas</option>
+                  </select>
+                </Field>
                 <Field label="Closed Date *">
                   <input type="date" className="input-luxury text-xs" value={form.closed_date} onChange={e => setF('closed_date', e.target.value)} />
                 </Field>
