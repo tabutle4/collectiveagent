@@ -21,6 +21,7 @@ import {
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from '@/components/transactions/CloseTransactionModal'
+import PayoutModal from '@/components/transactions/PayoutModal'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -218,6 +219,8 @@ export default function AdminTransactionDetailPage() {
   const [editCheckData, setEditCheckData] = useState<any>(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
+  const [showPayoutModal, setShowPayoutModal] = useState(false)
+  const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [newPayoutForm, setNewPayoutForm] = useState<any>(null)
@@ -286,6 +289,14 @@ export default function AdminTransactionDetailPage() {
   useEffect(() => {
     if (user) loadData()
   }, [user, loadData])
+
+  useEffect(() => {
+    if (activeTab !== 'check_payouts' || !id) return
+    fetch(`/api/admin/transactions/${id}?section=external_brokerages`)
+      .then(r => r.ok ? r.json() : { external_brokerages: [] })
+      .then(d => setPayoutBrokerages(d.external_brokerages || []))
+      .catch(() => {})
+  }, [activeTab, id])
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -569,7 +580,15 @@ export default function AdminTransactionDetailPage() {
   const settings = data?.company_settings
   const agents = data?.agents || []
 
-  const payByDate = check?.cleared_date ? addBusinessDays(new Date(check.cleared_date), 10) : null
+  const payByDate = (() => {
+    const received   = check?.received_date           ? new Date(check.received_date)           : null
+    const compliance = check?.compliance_complete_date ? new Date(check.compliance_complete_date) : null
+    if (!received && !compliance) return null
+    const base = received && compliance
+      ? (compliance > received ? compliance : received)
+      : (received || compliance)!
+    return addBusinessDays(base, 10)
+  })()
   const daysUntilPay = payByDate ? getDaysUntil(payByDate.toISOString()) : null
 
   const totalPayouts = (check?.check_payouts || []).reduce(
@@ -577,7 +596,10 @@ export default function AdminTransactionDetailPage() {
     0
   )
   const checkAmount = parseFloat(check?.check_amount || 0)
-  const payoutBalance = checkAmount - totalPayouts
+  const brokerageAmount = parseFloat(check?.brokerage_amount || 0)
+  const totalAgentNets = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
+  const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
+  const payoutBalance = checkAmount - brokerageAmount - totalAgentNets - totalExternalCommissions - totalPayouts
 
   const completedCount = checklist.filter((i: any) => i.completion).length
 
@@ -1171,7 +1193,7 @@ export default function AdminTransactionDetailPage() {
                             ? daysUntilPay <= 0
                               ? 'Overdue'
                               : `${daysUntilPay} business day${daysUntilPay !== 1 ? 's' : ''} remaining`
-                            : '10 business days from clear date'}
+                            : '10 business days from received or compliance complete (whichever is later)'}
                         </p>
                       </div>
                     </div>
@@ -1323,18 +1345,19 @@ export default function AdminTransactionDetailPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="field-label">Funds Status</label>
+                        <label className="field-label">Compliance Status</label>
                         <select
                           className="select-luxury text-xs"
-                          value={editCheckData.status || 'received'}
+                          value={editCheckData.status || 'not_requested'}
                           onChange={e => {
                             setEditCheckData((p: any) => ({ ...p, status: e.target.value }))
                             updateCheck({ status: e.target.value })
                           }}
                         >
-                          <option value="received">Pending</option>
-                          <option value="cleared">Cleared</option>
-                          <option value="deposited">Deposited</option>
+                          <option value="not_requested">Not Requested</option>
+                          <option value="pending_compliance">Pending</option>
+                          <option value="incomplete">Incomplete</option>
+                          <option value="compliance_complete">Complete</option>
                         </select>
                       </div>
                     </div>
@@ -1422,146 +1445,114 @@ export default function AdminTransactionDetailPage() {
                       </span>
                     </div>
 
-                    {(check.check_payouts || []).length === 0 && (
+                    {brokerageAmount > 0 && (
+                      <div className="inner-card flex justify-between items-center mb-2">
+                        <div>
+                          <p className="text-xs font-semibold text-luxury-gray-1">CRC Brokerage</p>
+                          <p className="text-xs text-luxury-gray-3">brokerage split</p>
+                        </div>
+                        <span className="text-xs font-semibold text-luxury-gray-1">{fmt$(brokerageAmount)}</span>
+                      </div>
+                    )}
+
+                    {/* Internal agents */}
+                    {agents.length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {agents.map((a: any) => {
+                          const name = a.user
+                            ? `${a.user.preferred_first_name || a.user.first_name} ${a.user.preferred_last_name || a.user.last_name}`
+                            : a.agent_id || 'Agent'
+                          return (
+                            <div key={a.id} className="inner-card flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-semibold text-luxury-gray-1">{name}</p>
+                                <p className="text-xs text-luxury-gray-3">
+                                  {a.agent_role?.replace(/_/g, ' ')} · {a.payment_status || 'pending'}
+                                </p>
+                                {a.payment_date && (
+                                  <p className="text-xs text-luxury-gray-3">{fmtDate(a.payment_date)}</p>
+                                )}
+                              </div>
+                              <span className="text-xs font-semibold text-luxury-gray-1">
+                                {fmt$(parseFloat(a.agent_net || 0))}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* External brokerages */}
+                    {payoutBrokerages.length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {payoutBrokerages.map((b: any) => (
+                          <div key={b.id} className="inner-card flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-semibold text-luxury-gray-1">{b.brokerage_name}</p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {b.brokerage_role?.replace(/_/g, ' ')} · {b.payment_status || 'pending'}
+                              </p>
+                              {b.payment_date && (
+                                <p className="text-xs text-luxury-gray-3">{fmtDate(b.payment_date)}</p>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold text-luxury-gray-1">
+                              {fmt$(parseFloat(b.commission_amount || 0))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Existing manual check_payouts */}
+                    {(check.check_payouts || []).length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {(check.check_payouts || []).map((p: any) => (
+                          <div
+                            key={p.id}
+                            className="inner-card flex items-center justify-between group"
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-luxury-gray-1">
+                                {p.payee_name || p.payee_type}
+                              </p>
+                              <p className="text-xs text-luxury-gray-3">
+                                {p.payee_type?.replace(/_/g, ' ')} · {p.payment_status}
+                              </p>
+                              {p.payment_date && (
+                                <p className="text-xs text-luxury-gray-3">
+                                  {fmtDate(p.payment_date)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-luxury-gray-1">
+                                {fmt$(p.amount)}
+                              </span>
+                              <button
+                                onClick={() => deletePayout(p.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {agents.length === 0 && payoutBrokerages.length === 0 && (check.check_payouts || []).length === 0 && (
                       <p className="text-xs text-luxury-gray-3 text-center py-3">
-                        No payouts added yet.
+                        No payouts recorded yet.
                       </p>
                     )}
 
-                    <div className="space-y-2 mb-3">
-                      {(check.check_payouts || []).map((p: any) => (
-                        <div
-                          key={p.id}
-                          className="inner-card flex items-center justify-between group"
-                        >
-                          <div>
-                            <p className="text-xs font-semibold text-luxury-gray-1">
-                              {p.payee_name || p.payee_type}
-                            </p>
-                            <p className="text-xs text-luxury-gray-3">
-                              {p.payee_type?.replace(/_/g, ' ')} · {p.payment_status}
-                            </p>
-                            {p.payment_date && (
-                              <p className="text-xs text-luxury-gray-3">
-                                {fmtDate(p.payment_date)}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-luxury-gray-1">
-                              {fmt$(p.amount)}
-                            </span>
-                            <button
-                              onClick={() => deletePayout(p.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600"
-                            >
-                              <X size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add payout form */}
-                    {newPayoutForm ? (
-                      <div className="inner-card space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="field-label">Payee Type</label>
-                            <select
-                              className="select-luxury text-xs"
-                              value={newPayoutForm.payee_type || ''}
-                              onChange={e =>
-                                setNewPayoutForm((p: any) => ({ ...p, payee_type: e.target.value }))
-                              }
-                            >
-                              <option value="">Select...</option>
-                              {[
-                                'agent',
-                                'team_lead',
-                                'referral_agent',
-                                'referral_brokerage',
-                                'rev_share_agent',
-                                'ecommission',
-                              ].map(t => (
-                                <option key={t} value={t}>
-                                  {t.replace(/_/g, ' ')}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="field-label">Payee Name</label>
-                            <input
-                              type="text"
-                              className="input-luxury text-xs"
-                              value={newPayoutForm.payee_name || ''}
-                              onChange={e =>
-                                setNewPayoutForm((p: any) => ({ ...p, payee_name: e.target.value }))
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="field-label">Amount ($)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className="input-luxury text-xs"
-                              value={newPayoutForm.amount || ''}
-                              onChange={e =>
-                                setNewPayoutForm((p: any) => ({ ...p, amount: e.target.value }))
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="field-label">Method</label>
-                            <select
-                              className="select-luxury text-xs"
-                              value={newPayoutForm.payment_method || ''}
-                              onChange={e =>
-                                setNewPayoutForm((p: any) => ({
-                                  ...p,
-                                  payment_method: e.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Select...</option>
-                              <option value="ach">ACH</option>
-                              <option value="zelle">Zelle</option>
-                              <option value="check">Check</option>
-                            </select>
-                          </div>
-                        </div>
-                        {parseFloat(newPayoutForm.amount || 0) >
-                          payoutBalance + parseFloat(newPayoutForm.amount || 0) && (
-                          <p className="text-xs text-red-500 flex items-center gap-1">
-                            <AlertCircle size={11} /> Amount exceeds remaining balance.
-                          </p>
-                        )}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={addPayout}
-                            className="btn btn-primary text-xs flex-1"
-                            disabled={!newPayoutForm.amount || !newPayoutForm.payee_type}
-                          >
-                            Add Payout
-                          </button>
-                          <button
-                            onClick={() => setNewPayoutForm(null)}
-                            className="btn btn-secondary text-xs"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setNewPayoutForm({ payment_status: 'pending' })}
-                        className="w-full text-xs text-luxury-accent hover:underline text-center py-1"
-                      >
-                        + Add Payout
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setShowPayoutModal(true)}
+                      className="w-full text-xs text-luxury-accent hover:underline text-center py-1"
+                    >
+                      + Add Payout
+                    </button>
                   </div>
 
                   {/* Checklist */}
@@ -2237,6 +2228,22 @@ export default function AdminTransactionDetailPage() {
           userId={user?.id || ''}
           onClose={() => setShowCloseModal(false)}
           onSaved={() => { setShowCloseModal(false); loadData() }}
+        />
+      )}
+
+      {showPayoutModal && (
+        <PayoutModal
+          transactionId={id}
+          agents={data.agents || []}
+          onClose={() => setShowPayoutModal(false)}
+          onSaved={() => {
+            setShowPayoutModal(false)
+            loadData()
+            fetch(`/api/admin/transactions/${id}?section=external_brokerages`)
+              .then(r => r.ok ? r.json() : { external_brokerages: [] })
+              .then(d => setPayoutBrokerages(d.external_brokerages || []))
+              .catch(() => {})
+          }}
         />
       )}
     </div>
