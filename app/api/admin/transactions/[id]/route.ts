@@ -44,9 +44,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               office_email, email, phone, office, commission_plan, license_number,
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
-              referring_agent_id, is_on_team, team_name, team_lead,
-              cap_progress, cap_year, qualifying_transaction_count,
-              waive_processing_fees, special_commission_notes, headshot_url
+              referring_agent_id, cap_progress, cap_year, qualifying_transaction_count,
+              waive_buyer_processing_fees, waive_seller_processing_fees,
+              special_commission_notes, headshot_url
             `
               )
               .in('id', agentIds)
@@ -109,11 +109,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           }
         }
         teamInfo = { agreement, members: members || [], team_lead_name: teamLeadName }
-      } else if (primaryAgent?.is_on_team && primaryAgent?.team_name) {
+      } else if ((primaryAgent as any)?.is_on_team && (primaryAgent as any)?.team_name) {
         const { data: agreement } = await supabase
           .from('team_agreements')
           .select('*')
-          .eq('team_name', primaryAgent.team_name)
+          .eq('team_name', (primaryAgent as any).team_name)
           .eq('status', 'active')
           .single()
         if (agreement) {

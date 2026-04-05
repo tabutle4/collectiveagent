@@ -1684,7 +1684,7 @@ export default function AdminTransactionDetailPage() {
                         value={primaryAgent.qualifying_transaction_count}
                       />
                     )}
-                    {primaryAgent.waive_processing_fees && (
+                    {(primaryAgent.waive_buyer_processing_fees || primaryAgent.waive_seller_processing_fees) && (
                       <FieldRow label="Processing Fees" value="Waived" />
                     )}
                     {primaryAgent.special_commission_notes && (
