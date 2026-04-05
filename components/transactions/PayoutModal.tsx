@@ -11,11 +11,12 @@ interface PayoutModalProps {
 }
 
 const AGENT_ROLES = [
-  { value: 'primary_agent',   label: 'Primary Agent' },
-  { value: 'co_agent',        label: 'Co-Agent' },
-  { value: 'listing_agent',   label: 'Listing Agent' },
-  { value: 'team_lead',       label: 'Team Lead' },
-  { value: 'referral_agent',  label: 'Referral Agent' },
+  { value: 'primary_agent',       label: 'Primary Agent' },
+  { value: 'co_agent',            label: 'Co-Agent' },
+  { value: 'listing_agent',       label: 'Listing Agent' },
+  { value: 'team_lead',           label: 'Team Lead' },
+  { value: 'referral_agent',      label: 'Referral Agent' },
+  { value: 'momentum_partner',    label: 'Momentum Partner' },
 ]
 
 const BROKERAGE_ROLES = [
