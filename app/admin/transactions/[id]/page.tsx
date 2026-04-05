@@ -1158,7 +1158,16 @@ export default function AdminTransactionDetailPage() {
           {/* ── CHECK & PAYOUTS TAB ──────────────────────────────────────── */}
           {activeTab === 'check_payouts' && (
             <div className="space-y-4">
-              <h1 className="page-title">CHECK & PAYOUTS</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="page-title">CHECK & PAYOUTS</h1>
+                <button
+                  onClick={addCheck}
+                  disabled={addingCheck}
+                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                >
+                  {addingCheck ? 'Adding...' : '+ Add Check'}
+                </button>
+              </div>
 
               {/* No check yet */}
               {!check && (
@@ -1366,19 +1375,18 @@ export default function AdminTransactionDetailPage() {
                         </select>
                       </div>
                       <div>
-                        <label className="field-label">Compliance Status</label>
+                        <label className="field-label">Funds Status</label>
                         <select
                           className="select-luxury text-xs"
-                          value={editCheckData.status || 'not_requested'}
+                          value={editCheckData.status || 'received'}
                           onChange={e => {
                             setEditCheckData((p: any) => ({ ...p, status: e.target.value }))
                             updateCheck(editCheckData?.id || check?.id, { status: e.target.value })
                           }}
                         >
-                          <option value="not_requested">Not Requested</option>
-                          <option value="pending_compliance">Pending</option>
-                          <option value="incomplete">Incomplete</option>
-                          <option value="compliance_complete">Complete</option>
+                          <option value="received">Received</option>
+                          <option value="deposited">Deposited</option>
+                          <option value="cleared">Cleared</option>
                         </select>
                       </div>
                     </div>
