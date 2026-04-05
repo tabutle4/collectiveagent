@@ -1356,8 +1356,8 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     </div>
 
-                    {/* Payment Method + Status */}
-                    <div className="grid grid-cols-2 gap-3 mb-3">
+                    {/* Payment Method + Funds Status + Compliance Status */}
+                    <div className="grid grid-cols-3 gap-3 mb-3">
                       <div>
                         <label className="field-label">Payment Type</label>
                         <select
@@ -1387,6 +1387,22 @@ export default function AdminTransactionDetailPage() {
                           <option value="received">Received</option>
                           <option value="deposited">Deposited</option>
                           <option value="cleared">Cleared</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="field-label">Compliance Status</label>
+                        <select
+                          className="select-luxury text-xs"
+                          value={editCheckData.compliance_status || 'not_submitted'}
+                          onChange={e => {
+                            setEditCheckData((p: any) => ({ ...p, compliance_status: e.target.value }))
+                            updateCheck(editCheckData?.id || check?.id, { compliance_status: e.target.value })
+                          }}
+                        >
+                          <option value="not_submitted">Not Requested</option>
+                          <option value="in_review">In Review</option>
+                          <option value="incomplete">Incomplete</option>
+                          <option value="complete">Complete</option>
                         </select>
                       </div>
                     </div>
