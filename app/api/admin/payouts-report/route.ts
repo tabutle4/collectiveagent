@@ -92,10 +92,19 @@ export async function GET(request: NextRequest) {
     // Build txn lookup
     const txnMap = Object.fromEntries(transactions.map(t => [t.id, t]))
 
+    // Role sort priority — primary agent first
+    const ROLE_PRIORITY: Record<string, number> = {
+      primary_agent: 0, listing_agent: 1, co_agent: 2,
+      referral_agent: 3, team_lead: 4,
+    }
+    const roleOrder = (r: string) => ROLE_PRIORITY[r] ?? 99
+
     // Assemble rows
     const rows = allChecks.map(check => {
       const txn = check.transaction_id ? txnMap[check.transaction_id] : null
-      const agents = internalAgents.filter(a => a.transaction_id === check.transaction_id)
+      const agents = internalAgents
+        .filter(a => a.transaction_id === check.transaction_id)
+        .sort((a, b) => roleOrder(a.agent_role) - roleOrder(b.agent_role))
       const externals = externalBrokerages.filter(e => e.transaction_id === check.transaction_id)
 
       const agentRows = agents.map(a => ({
@@ -153,7 +162,7 @@ export async function GET(request: NextRequest) {
 
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
     const pendingPayloadTotal = allChecks
-      .filter(c => c.payment_method === 'payload' && c.status !== 'cleared')
+      .filter(c => c.payment_method === 'payload' && !c.cleared_date)
       .reduce((sum, c) => sum + (c.check_amount || 0), 0)
 
     return NextResponse.json({

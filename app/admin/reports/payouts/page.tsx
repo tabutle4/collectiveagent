@@ -36,7 +36,7 @@ const fmt = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 
 const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'
+  d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'
 
 function complianceLabel(status: string): { label: string; cls: string } {
   const map: Record<string, { label: string; cls: string }> = {
@@ -80,6 +80,7 @@ function agentTotal(row: PayoutRow): number {
 function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
   const a1 = row.agents[0]
   const a2 = row.agents[1]
+  const a3 = row.agents[2]
   const ext = row.externals[0]
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
@@ -97,6 +98,7 @@ function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_da
       <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden md:table-cell">{row.crc_amount > 0 ? fmt(row.crc_amount) : '—'}</td>
       <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a1 ? fmt(a1.amount) : '—'}</td>
       <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a2 ? fmt(a2.amount) : '—'}</td>
+      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a3 ? fmt(a3.amount) : '—'}</td>
       <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{ext ? fmt(ext.amount) : '—'}</td>
       <td className="py-2 px-3 text-xs text-right font-medium text-luxury-gray-1">{agentTotal(row) > 0 ? fmt(agentTotal(row)) : '—'}</td>
       <td className="py-2 px-3 text-xs text-luxury-gray-2 hidden sm:table-cell">
@@ -147,6 +149,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
   const agentTot = rows.reduce((s, r) => s + agentTotal(r), 0)
   const a1Tot = rows.reduce((s, r) => s + (r.agents[0]?.amount || 0), 0)
   const a2Tot = rows.reduce((s, r) => s + (r.agents[1]?.amount || 0), 0)
+  const a3Tot = rows.reduce((s, r) => s + (r.agents[2]?.amount || 0), 0)
   const extTot = rows.reduce((s, r) => s + (r.externals[0]?.amount || 0), 0)
 
   return (
@@ -172,6 +175,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden md:table-cell">CRC</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 1</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 2</th>
+                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 3</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Other</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Total</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden sm:table-cell">Agents</th>
@@ -193,7 +197,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
             </thead>
             <tbody>
               {displayRows.length === 0 ? (
-                <tr><td colSpan={11} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
+                <tr><td colSpan={12} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
               ) : (
                 displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} />)
               )}
@@ -205,6 +209,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden md:table-cell">{fmt(crcTotal)}</td>
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a1Tot)}</td>
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a2Tot)}</td>
+                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{a3Tot > 0 ? fmt(a3Tot) : '—'}</td>
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(extTot)}</td>
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(agentTot)}</td>
                   <td colSpan={5} className="pt-2 pb-1 px-3 text-xs text-luxury-gray-3 hidden sm:table-cell">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
