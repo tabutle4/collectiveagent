@@ -218,6 +218,7 @@ export default function AdminTransactionDetailPage() {
 
   // Check & Payouts state
   const [editCheckData, setEditCheckData] = useState<any>(null)
+  const [addingCheck, setAddingCheck] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showPayoutModal, setShowPayoutModal] = useState(false)
@@ -316,19 +317,55 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
-  const updateCheck = async (updates: any) => {
-    if (!data?.check) return
+  const updateCheck = async (checkId: string, updates: any) => {
     setSaving(true)
     try {
       await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_check', check_id: data.check.id, updates }),
+        body: JSON.stringify({ action: 'update_check', check_id: checkId, updates }),
       })
-      setData((prev: any) => ({ ...prev, check: { ...prev.check, ...updates } }))
-      setEditCheckData((prev: any) => ({ ...prev, ...updates }))
+      setData((prev: any) => ({
+        ...prev,
+        checks: (prev.checks || []).map((c: any) => c.id === checkId ? { ...c, ...updates } : c),
+        check: prev.check?.id === checkId ? { ...prev.check, ...updates } : prev.check,
+      }))
+      setEditCheckData((prev: any) => (prev?.id === checkId ? { ...prev, ...updates } : prev))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const addCheck = async () => {
+    setAddingCheck(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_check',
+          check: {
+            transaction_id: id,
+            check_amount: 0,
+            payment_method: 'check',
+            status: 'received',
+            received_date: new Date().toISOString().split('T')[0],
+            crc_transferred: false,
+            agents_paid: false,
+          },
+        }),
+      })
+      if (res.ok) {
+        const { check: newCheck } = await res.json()
+        setData((prev: any) => ({
+          ...prev,
+          checks: [...(prev.checks || []), newCheck],
+          check: prev.check || newCheck,
+        }))
+        if (!editCheckData) setEditCheckData({ ...newCheck })
+      }
+    } finally {
+      setAddingCheck(false)
     }
   }
 
@@ -556,6 +593,7 @@ export default function AdminTransactionDetailPage() {
   const agentBilling = data?.agent_billing
   const teamInfo = data?.team_info
   const check = data?.check
+  const checks: any[] = data?.checks || (check ? [check] : [])
   const checklist = data?.checklist || []
   const settings = data?.company_settings
   const agents = data?.agents || []
@@ -1128,10 +1166,13 @@ export default function AdminTransactionDetailPage() {
                   <p className="text-sm text-luxury-gray-3 mb-3">
                     No check linked to this transaction yet.
                   </p>
-                  <p className="text-xs text-luxury-gray-3">
-                    Link a check from the Checks page or it will auto-link when a check is created
-                    for this address.
-                  </p>
+                  <button
+                    onClick={addCheck}
+                    disabled={addingCheck}
+                    className="btn btn-primary text-xs px-4 py-2 disabled:opacity-50"
+                  >
+                    {addingCheck ? 'Creating...' : '+ Create Check'}
+                  </button>
                 </div>
               )}
 
@@ -1202,7 +1243,7 @@ export default function AdminTransactionDetailPage() {
                           onChange={e =>
                             setEditCheckData((p: any) => ({ ...p, check_amount: e.target.value }))
                           }
-                          onBlur={() => updateCheck({ check_amount: editCheckData.check_amount })}
+                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_amount: editCheckData.check_amount })}
                         />
                       </div>
                       <div>
@@ -1214,7 +1255,7 @@ export default function AdminTransactionDetailPage() {
                           onChange={e =>
                             setEditCheckData((p: any) => ({ ...p, check_from: e.target.value }))
                           }
-                          onBlur={() => updateCheck({ check_from: editCheckData.check_from })}
+                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_from: editCheckData.check_from })}
                         />
                       </div>
                       <div>
@@ -1226,7 +1267,7 @@ export default function AdminTransactionDetailPage() {
                           onChange={e =>
                             setEditCheckData((p: any) => ({ ...p, check_number: e.target.value }))
                           }
-                          onBlur={() => updateCheck({ check_number: editCheckData.check_number })}
+                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_number: editCheckData.check_number })}
                         />
                       </div>
                       <div>
@@ -1238,7 +1279,7 @@ export default function AdminTransactionDetailPage() {
                           onChange={e =>
                             setEditCheckData((p: any) => ({ ...p, received_date: e.target.value }))
                           }
-                          onBlur={() => updateCheck({ received_date: editCheckData.received_date })}
+                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { received_date: editCheckData.received_date })}
                         />
                       </div>
                       <div>
@@ -1251,7 +1292,7 @@ export default function AdminTransactionDetailPage() {
                             setEditCheckData((p: any) => ({ ...p, deposited_date: e.target.value }))
                           }
                           onBlur={() =>
-                            updateCheck({ deposited_date: editCheckData.deposited_date })
+                            updateCheck(editCheckData?.id || check?.id, { deposited_date: editCheckData.deposited_date })
                           }
                         />
                       </div>
@@ -1264,7 +1305,7 @@ export default function AdminTransactionDetailPage() {
                           onChange={e =>
                             setEditCheckData((p: any) => ({ ...p, cleared_date: e.target.value }))
                           }
-                          onBlur={() => updateCheck({ cleared_date: editCheckData.cleared_date })}
+                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { cleared_date: editCheckData.cleared_date })}
                         />
                       </div>
                       <div>
@@ -1280,7 +1321,7 @@ export default function AdminTransactionDetailPage() {
                             }))
                           }
                           onBlur={() =>
-                            updateCheck({
+                            updateCheck(editCheckData?.id || check?.id, {
                               compliance_complete_date: editCheckData.compliance_complete_date,
                             })
                           }
@@ -1300,7 +1341,7 @@ export default function AdminTransactionDetailPage() {
                             }))
                           }
                           onBlur={() =>
-                            updateCheck({ brokerage_amount: editCheckData.brokerage_amount })
+                            updateCheck(editCheckData?.id || check?.id, { brokerage_amount: editCheckData.brokerage_amount })
                           }
                         />
                       </div>
@@ -1315,7 +1356,7 @@ export default function AdminTransactionDetailPage() {
                           value={editCheckData.payment_method || 'check'}
                           onChange={e => {
                             setEditCheckData((p: any) => ({ ...p, payment_method: e.target.value }))
-                            updateCheck({ payment_method: e.target.value })
+                            updateCheck(editCheckData?.id || check?.id, { payment_method: e.target.value })
                           }}
                         >
                           <option value="check">Check</option>
@@ -1331,7 +1372,7 @@ export default function AdminTransactionDetailPage() {
                           value={editCheckData.status || 'not_requested'}
                           onChange={e => {
                             setEditCheckData((p: any) => ({ ...p, status: e.target.value }))
-                            updateCheck({ status: e.target.value })
+                            updateCheck(editCheckData?.id || check?.id, { status: e.target.value })
                           }}
                         >
                           <option value="not_requested">Not Requested</option>
@@ -1351,7 +1392,7 @@ export default function AdminTransactionDetailPage() {
                         </p>
                       </div>
                       <button
-                        onClick={() => updateCheck({ crc_transferred: !check.crc_transferred })}
+                        onClick={() => updateCheck(editCheckData?.id || check?.id, { crc_transferred: !check.crc_transferred })}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                       >
                         <span
@@ -1369,7 +1410,7 @@ export default function AdminTransactionDetailPage() {
                         </p>
                       </div>
                       <button
-                        onClick={() => updateCheck({ agents_paid: !check.agents_paid })}
+                        onClick={() => updateCheck(editCheckData?.id || check?.id, { agents_paid: !check.agents_paid })}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
                       >
                         <span
@@ -1388,7 +1429,7 @@ export default function AdminTransactionDetailPage() {
                         onChange={e =>
                           setEditCheckData((p: any) => ({ ...p, notes: e.target.value }))
                         }
-                        onBlur={() => updateCheck({ notes: editCheckData.notes })}
+                        onBlur={() => updateCheck(editCheckData?.id || check?.id, { notes: editCheckData.notes })}
                       />
                     </div>
 
@@ -1398,7 +1439,7 @@ export default function AdminTransactionDetailPage() {
                         checkId={check.id}
                         existingUrl={check.check_image_url}
                         transactionFolderPath={txn.onedrive_folder_url}
-                        onUploaded={url => updateCheck({ check_image_url: url })}
+                        onUploaded={url => updateCheck(editCheckData?.id || check?.id, { check_image_url: url })}
                       />
                     </div>
                   </div>
