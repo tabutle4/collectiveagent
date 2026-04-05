@@ -485,7 +485,7 @@ export default function CloseTransactionModal({
         monthly_rent: parseNum(form.monthly_rent),
         sales_volume: parseNum(form.sales_volume),
         gross_commission: parseNum(form.gross_commission),
-        gross_commission_type: form.gross_commission_type,
+        gross_commission_type: 'amount',
         office_gross: parseNum(form.office_gross),
         title_company: form.title_company || null,
         title_officer_name: form.title_officer_name || null,
@@ -716,13 +716,7 @@ export default function CloseTransactionModal({
                   <input type="number" className="input-luxury text-xs" value={form.sales_volume} onChange={e => setF('sales_volume', e.target.value)} placeholder="0.00" step="0.01" min="0" />
                 </Field>
                 <Field label="Gross Commission">
-                  <div className="flex gap-2">
-                    <input type="number" className="input-luxury text-xs flex-1" value={form.gross_commission} onChange={e => setF('gross_commission', e.target.value)} placeholder="0.00" step="0.01" min="0" />
-                    <select className="select-luxury text-xs w-16" value={form.gross_commission_type} onChange={e => setF('gross_commission_type', e.target.value)}>
-                      <option value="amount">$</option>
-                      <option value="percent">%</option>
-                    </select>
-                  </div>
+                  <input type="number" className="input-luxury text-xs" value={form.gross_commission} onChange={e => setF('gross_commission', e.target.value)} placeholder="0.00" step="0.01" min="0" />
                 </Field>
                 <Field label="Office Gross">
                   <input type="number" className="input-luxury text-xs" value={form.office_gross} onChange={e => setF('office_gross', e.target.value)} placeholder="0.00" step="0.01" min="0" />

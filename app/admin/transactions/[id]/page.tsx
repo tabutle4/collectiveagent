@@ -258,6 +258,8 @@ export default function AdminTransactionDetailPage() {
     team: true,
     referrals: true,
   })
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({})
+  const toggleAgent = (id: string) => setExpandedAgents(p => ({ ...p, [id]: !p[id] }))
 
   // Auth
   useEffect(() => {
@@ -413,6 +415,7 @@ export default function AdminTransactionDetailPage() {
         body: JSON.stringify({
           action: 'mark_paid',
           internal_agent_id: agent.id,
+          transaction_type: txn?.transaction_type || null,
           payment_date: paymentDate,
           payment_method: paymentMethod,
           payment_reference: paymentReference,
@@ -1632,84 +1635,128 @@ export default function AdminTransactionDetailPage() {
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
-          {/* Agent Profile */}
-          {primaryAgent && (
-            <div className="container-card p-3">
-              <button
-                className="flex items-center justify-between w-full mb-2"
-                onClick={() => toggleSection('agent')}
-              >
-                <span className="section-title flex items-center gap-1.5">
-                  <User size={12} /> Agent
-                </span>
-                {expandedSections.agent ? (
-                  <ChevronUp size={12} className="text-luxury-gray-3" />
-                ) : (
-                  <ChevronDown size={12} className="text-luxury-gray-3" />
-                )}
-              </button>
-              {expandedSections.agent && (
-                <>
-                  {primaryAgent.headshot_url && (
-                    <img
-                      src={primaryAgent.headshot_url}
-                      alt=""
-                      className="w-12 h-12 rounded-full object-cover object-top mb-2 border border-luxury-gray-5"
-                    />
+          {/* Agents — one card per internal agent, same style as original */}
+          {agents.length > 0 && agents.map((a: any) => {
+            const u = a.user
+            const isExpanded = expandedAgents[a.id] !== false
+            const agentRoleLabel = (role: string) => {
+              const map: Record<string, string> = {
+                primary_agent: 'Primary Agent', co_agent: 'Co-Agent',
+                listing_agent: 'Listing Agent', team_lead: 'Team Lead',
+                referral_agent: 'Referral Agent',
+              }
+              return map[role] || role?.replace(/_/g, ' ') || 'Agent'
+            }
+            const hasSplits = a.agent_gross != null && a.agent_gross > 0
+            return (
+              <div key={a.id} className="container-card p-3">
+                <button
+                  className="flex items-center justify-between w-full mb-2"
+                  onClick={() => toggleAgent(a.id)}
+                >
+                  <span className="section-title flex items-center gap-1.5">
+                    <User size={12} /> {agentRoleLabel(a.agent_role)}
+                  </span>
+                  {isExpanded ? (
+                    <ChevronUp size={12} className="text-luxury-gray-3" />
+                  ) : (
+                    <ChevronDown size={12} className="text-luxury-gray-3" />
                   )}
-                  <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">
-                    {fmtName(primaryAgent)}
-                  </p>
-                  <p className="text-xs text-luxury-gray-3 mb-2">
-                    {primaryAgent.office_email || primaryAgent.email}
-                  </p>
-                  <div className="space-y-0">
-                    <FieldRow label="Office" value={primaryAgent.office} />
-                    <FieldRow label="Commission Plan" value={primaryAgent.commission_plan} />
-                    <FieldRow label="Division" value={primaryAgent.division} />
-                    <FieldRow label="License #" value={primaryAgent.license_number} />
-                    <FieldRow
-                      label="License Exp"
-                      value={fmtDate(primaryAgent.license_expiration)}
-                    />
-                    <FieldRow label="NRDS ID" value={primaryAgent.nrds_id} />
-                    <FieldRow label="MLS ID" value={primaryAgent.mls_id} />
-                    <FieldRow label="Join Date" value={fmtDate(primaryAgent.join_date)} />
-                    {primaryAgent.cap_progress > 0 && (
-                      <FieldRow label="Cap Progress" value={fmt$(primaryAgent.cap_progress)} />
-                    )}
-                    {primaryAgent.qualifying_transaction_count > 0 && (
-                      <FieldRow
-                        label="Qualifying Txns"
-                        value={primaryAgent.qualifying_transaction_count}
+                </button>
+                {isExpanded && (
+                  <>
+                    {u?.headshot_url && (
+                      <img
+                        src={u.headshot_url}
+                        alt=""
+                        className="w-12 h-12 rounded-full object-cover object-top mb-2 border border-luxury-gray-5"
                       />
                     )}
-                    {(primaryAgent.waive_buyer_processing_fees || primaryAgent.waive_seller_processing_fees) && (
-                      <FieldRow label="Processing Fees" value="Waived" />
-                    )}
-                    {primaryAgent.special_commission_notes && (
-                      <div className="mt-2 p-2 bg-orange-50 rounded text-xs text-orange-700">
-                        {primaryAgent.special_commission_notes}
+                    <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">
+                      {u ? fmtName(u) : (a.agent_id || 'Unknown Agent')}
+                    </p>
+                    <p className="text-xs text-luxury-gray-3 mb-2">
+                      {u?.office_email || u?.email || ''}
+                    </p>
+                    {u && (
+                      <div className="space-y-0">
+                        <FieldRow label="Office" value={u.office} />
+                        <FieldRow label="Commission Plan" value={u.commission_plan} />
+                        <FieldRow label="Division" value={u.division} />
+                        <FieldRow label="License #" value={u.license_number} />
+                        <FieldRow label="License Exp" value={fmtDate(u.license_expiration)} />
+                        <FieldRow label="NRDS ID" value={u.nrds_id} />
+                        <FieldRow label="MLS ID" value={u.mls_id} />
+                        <FieldRow label="Join Date" value={fmtDate(u.join_date)} />
+                        {u.cap_progress > 0 && (
+                          <FieldRow label="Cap Progress" value={fmt$(u.cap_progress)} />
+                        )}
+                        {u.qualifying_transaction_count > 0 && (
+                          <FieldRow label="Qualifying Txns" value={`${u.qualifying_transaction_count} / 5`} />
+                        )}
+                        {(u.waive_buyer_processing_fees || u.waive_seller_processing_fees) && (
+                          <FieldRow label="Processing Fees" value="Waived" />
+                        )}
+                        {u.special_commission_notes && (
+                          <div className="mt-2 p-2 bg-orange-50 rounded text-xs text-orange-700">
+                            {u.special_commission_notes}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                  {primaryAgent.revenue_share === 'yes' && (
-                    <div className="mt-2 p-2 bg-luxury-light rounded">
-                      <p className="text-xs font-semibold text-luxury-gray-2">Rev Share</p>
-                      <p className="text-xs text-luxury-gray-3">
-                        {primaryAgent.revenue_share_percentage
-                          ? `${primaryAgent.revenue_share_percentage}%`
-                          : 'Enrolled'}
-                      </p>
-                      {primaryAgent.referring_agent && (
-                        <p className="text-xs text-luxury-gray-3">{primaryAgent.referring_agent}</p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+
+                    {/* Team splits for this transaction */}
+                    {hasSplits && (
+                      <div className="mt-2 p-2 bg-luxury-light rounded">
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Transaction Splits</p>
+                        <div className="space-y-0">
+                          {a.agent_gross > 0 && <FieldRow label="Agent Gross" value={fmt$(a.agent_gross)} />}
+                          {a.brokerage_split > 0 && <FieldRow label="Brokerage Split" value={fmt$(a.brokerage_split)} />}
+                          {a.split_percentage > 0 && <FieldRow label="Split %" value={`${a.split_percentage}%`} />}
+                          {a.processing_fee > 0 && <FieldRow label="Processing Fee" value={fmt$(a.processing_fee)} />}
+                          {a.coaching_fee > 0 && <FieldRow label="Coaching Fee" value={fmt$(a.coaching_fee)} />}
+                          {a.other_fees > 0 && <FieldRow label="Other Fees" value={fmt$(a.other_fees)} />}
+                          {a.btsa_amount > 0 && <FieldRow label="BTSA" value={fmt$(a.btsa_amount)} />}
+                          {a.rebate_amount > 0 && <FieldRow label="Rebate" value={fmt$(a.rebate_amount)} />}
+                          {a.debts_deducted > 0 && <FieldRow label="Debts Deducted" value={fmt$(a.debts_deducted)} />}
+                          {a.agent_net != null && <FieldRow label="Agent Net" value={fmt$(a.agent_net)} />}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Rev share + referred by / referred */}
+                    {u && (u.revenue_share === 'yes' || u.referring_agent || (u.referred_agents && u.referred_agents.length > 0)) && (
+                      <div className="mt-2 p-2 bg-luxury-light rounded">
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Rev Share & Referrals</p>
+                        {u.revenue_share === 'yes' && (
+                          <p className="text-xs text-luxury-gray-3">
+                            Rev Share: {u.revenue_share_percentage ? `${u.revenue_share_percentage}%` : 'Enrolled'}
+                          </p>
+                        )}
+                        {u.referring_agent && (
+                          <p className="text-xs text-luxury-gray-3">Referred by: {u.referring_agent}</p>
+                        )}
+                        {u.referred_agents && u.referred_agents.length > 0 && (
+                          <p className="text-xs text-luxury-gray-3">
+                            Referred: {u.referred_agents.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {a.payment_status !== 'paid' && (
+                      <button
+                        onClick={() => openMarkPaidModal(a)}
+                        className="btn btn-primary text-xs w-full mt-2"
+                      >
+                        Mark Paid
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
 
           {/* Agent Billing */}
           {agentBilling && (
