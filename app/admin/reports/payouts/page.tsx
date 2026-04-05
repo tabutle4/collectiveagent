@@ -5,7 +5,7 @@ import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink } f
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 
 interface AgentRow { agent_id: string; name: string; amount: number }
 interface ExternalRow { name: string; amount: number }
@@ -30,7 +30,7 @@ interface PayoutRow {
 
 interface Expense { id: string; description: string; amount: number | null }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -40,11 +40,11 @@ const fmtDate = (d: string | null) =>
 
 function complianceLabel(status: string): { label: string; cls: string } {
   const map: Record<string, { label: string; cls: string }> = {
-    complete:      { label: 'complete',     cls: 'text-green-700' },
-    approved:      { label: 'complete',     cls: 'text-green-700' },
-    not_submitted: { label: 'not requested',cls: 'text-luxury-gray-3' },
-    in_review:     { label: 'in review',    cls: 'text-yellow-600' },
-    incomplete:    { label: 'incomplete',   cls: 'text-red-500' },
+    complete:      { label: 'complete',      cls: 'text-green-700' },
+    approved:      { label: 'complete',      cls: 'text-green-700' },
+    not_submitted: { label: 'not requested', cls: 'text-luxury-gray-3' },
+    in_review:     { label: 'in review',     cls: 'text-yellow-600' },
+    incomplete:    { label: 'incomplete',    cls: 'text-red-500' },
   }
   return map[status] || { label: status, cls: 'text-luxury-gray-3' }
 }
@@ -58,16 +58,16 @@ function agentNames(row: PayoutRow): string {
     const match = row.notes.match(/Agent\(s\):\s*([^;]+)/i)
     if (match) return match[1].trim()
   }
-  return '—'
+  return ''
 }
 
 function cleanNotes(notes: string | null): string {
-  if (!notes) return '—'
+  if (!notes) return ''
   return notes
     .replace(/Agent\(s\):[^;]*;?/gi, '')
     .replace(/Imported from Monday Meeting spreadsheet/gi, '')
     .replace(/;\s*$/g, '')
-    .trim() || '—'
+    .trim()
 }
 
 function agentTotal(row: PayoutRow): number {
@@ -75,7 +75,73 @@ function agentTotal(row: PayoutRow): number {
     row.externals.reduce((s, e) => s + (e.amount || 0), 0)
 }
 
-// ─── Table Row ────────────────────────────────────────────────────────────────
+// Mobile card — shows all data, stacked layout
+
+function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
+  const { label, cls } = complianceLabel(row.compliance_status)
+  const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
+  const total = agentTotal(row)
+  const notes = cleanNotes(row.notes)
+
+  return (
+    <div className="inner-card space-y-2 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          {row.transaction_id ? (
+            <Link
+              href={`/admin/transactions/${row.transaction_id}`}
+              className="text-xs font-semibold text-luxury-gray-1 hover:text-luxury-accent flex items-start gap-1"
+            >
+              <span>{row.address}</span>
+              <ExternalLink size={10} className="opacity-40 flex-shrink-0 mt-0.5" />
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold text-luxury-gray-1">{row.address}</span>
+          )}
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '—'}</p>
+          {row.crc_amount > 0 && (
+            <p className="text-xs text-luxury-gray-3">CRC: {fmt(row.crc_amount)}</p>
+          )}
+        </div>
+      </div>
+
+      {(row.agents.length > 0 || row.externals.length > 0) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {row.agents.map((a, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <span className="text-xs text-luxury-gray-3">{a.name.split(' ')[0]}</span>
+              <span className="text-xs font-medium text-luxury-gray-1">{fmt(a.amount)}</span>
+            </div>
+          ))}
+          {row.externals.map((e, i) => (
+            <div key={i} className="flex items-center gap-1">
+              <span className="text-xs text-luxury-gray-3">{e.name.split(' ')[0]}</span>
+              <span className="text-xs font-medium text-luxury-gray-1">{fmt(e.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {dateVal && (
+          <span className="text-xs text-luxury-gray-3">{fmtDate(dateVal)}</span>
+        )}
+        <span className={`text-xs ${cls}`}>{label}</span>
+        <span className={`text-xs font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
+          {row.crc_transferred ? 'transferred' : 'not transferred'}
+        </span>
+      </div>
+
+      {notes && (
+        <p className="text-xs text-luxury-gray-3">{notes}</p>
+      )}
+    </div>
+  )
+}
+
+// Desktop table row — all columns visible, table scrolls horizontally if needed
 
 function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
   const a1 = row.agents[0]
@@ -87,38 +153,38 @@ function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_da
 
   return (
     <tr className="border-b border-luxury-gray-5/30 hover:bg-luxury-gray-6/30">
-      <td className="py-2 px-3 text-xs text-luxury-gray-1 font-medium">
+      <td className="py-2 px-2 text-xs text-luxury-gray-1 font-medium max-w-[180px]">
         {row.transaction_id ? (
           <Link href={`/admin/transactions/${row.transaction_id}`} className="hover:text-luxury-accent flex items-center gap-1">
-            <span className="truncate max-w-[160px] block">{row.address}</span>
+            <span className="truncate block">{row.address}</span>
             <ExternalLink size={10} className="opacity-40 flex-shrink-0" />
           </Link>
-        ) : <span className="truncate max-w-[160px] block">{row.address}</span>}
+        ) : <span className="truncate block">{row.address}</span>}
       </td>
-      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden md:table-cell">{row.crc_amount > 0 ? fmt(row.crc_amount) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a1 ? fmt(a1.amount) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a2 ? fmt(a2.amount) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{a3 ? fmt(a3.amount) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-right text-luxury-gray-2 hidden lg:table-cell">{ext ? fmt(ext.amount) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-right font-medium text-luxury-gray-1">{agentTotal(row) > 0 ? fmt(agentTotal(row)) : '—'}</td>
-      <td className="py-2 px-3 text-xs text-luxury-gray-2 hidden sm:table-cell">
-        <span className="truncate max-w-[110px] block">{agentNames(row)}</span>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.crc_amount > 0 ? fmt(row.crc_amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a1 ? fmt(a1.amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a2 ? fmt(a2.amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a3 ? fmt(a3.amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{ext ? fmt(ext.amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right font-semibold text-luxury-gray-1 whitespace-nowrap">{agentTotal(row) > 0 ? fmt(agentTotal(row)) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
+        <span className="truncate block">{agentNames(row) || '—'}</span>
       </td>
-      <td className="py-2 px-3 text-xs text-luxury-gray-3 hidden sm:table-cell">{fmtDate(dateVal)}</td>
-      <td className={`py-2 px-3 text-xs hidden md:table-cell ${cls}`}>{label}</td>
-      <td className="py-2 px-3 text-xs">
+      <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(dateVal)}</td>
+      <td className={`py-2 px-2 text-xs whitespace-nowrap ${cls}`}>{label}</td>
+      <td className="py-2 px-2 text-xs whitespace-nowrap">
         <span className={`font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
           {row.crc_transferred ? 'yes' : 'no'}
         </span>
       </td>
-      <td className="py-2 px-3 text-xs text-luxury-gray-3 hidden lg:table-cell">
-        <span className="truncate max-w-[110px] block">{cleanNotes(row.notes)}</span>
+      <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[130px]">
+        <span className="truncate block">{cleanNotes(row.notes) || '—'}</span>
       </td>
     </tr>
   )
 }
 
-// ─── Section Table ────────────────────────────────────────────────────────────
+// Section component — cards on mobile, scrollable table on desktop
 
 type SortKey = 'date' | 'compliance' | null
 type SortDir = 'asc' | 'desc'
@@ -137,20 +203,19 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
 
   const sortedRows = [...rows].sort((a, b) => {
     if (!sortKey) return 0
-    let av: string = ''
-    let bv: string = ''
+    let av = '', bv = ''
     if (sortKey === 'date') { av = a.cleared_date || a.received_date || ''; bv = b.cleared_date || b.received_date || '' }
     else if (sortKey === 'compliance') { av = a.compliance_status || ''; bv = b.compliance_status || '' }
     return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
   })
 
   const displayRows = sortKey ? sortedRows : rows
-  const crcTotal = rows.reduce((s, r) => s + r.crc_amount, 0)
-  const agentTot = rows.reduce((s, r) => s + agentTotal(r), 0)
-  const a1Tot = rows.reduce((s, r) => s + (r.agents[0]?.amount || 0), 0)
-  const a2Tot = rows.reduce((s, r) => s + (r.agents[1]?.amount || 0), 0)
-  const a3Tot = rows.reduce((s, r) => s + (r.agents[2]?.amount || 0), 0)
-  const extTot = rows.reduce((s, r) => s + (r.externals[0]?.amount || 0), 0)
+  const crcTotal  = rows.reduce((s, r) => s + r.crc_amount, 0)
+  const agentTot  = rows.reduce((s, r) => s + agentTotal(r), 0)
+  const a1Tot     = rows.reduce((s, r) => s + (r.agents[0]?.amount || 0), 0)
+  const a2Tot     = rows.reduce((s, r) => s + (r.agents[1]?.amount || 0), 0)
+  const a3Tot     = rows.reduce((s, r) => s + (r.agents[2]?.amount || 0), 0)
+  const extTot    = rows.reduce((s, r) => s + (r.externals[0]?.amount || 0), 0)
 
   return (
     <div className="container-card mb-5">
@@ -168,62 +233,82 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
 
       {!collapsed && (
         <div className="mt-4">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-luxury-gray-5/50">
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Address</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden md:table-cell">CRC</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 1</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 2</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Agent 3</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right hidden lg:table-cell">Other</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Total</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden sm:table-cell">Agents</th>
-                <th
-                  className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden sm:table-cell cursor-pointer select-none hover:text-luxury-gray-1"
-                  onClick={() => toggleSort('date')}
-                >
-                  {dateLabel} {sortKey === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                </th>
-                <th
-                  className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden md:table-cell cursor-pointer select-none hover:text-luxury-gray-1"
-                  onClick={() => toggleSort('compliance')}
-                >
-                  Compliance {sortKey === 'compliance' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
-                </th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Transferred</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden lg:table-cell">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayRows.length === 0 ? (
-                <tr><td colSpan={12} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
-              ) : (
-                displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} />)
-              )}
-            </tbody>
-            {rows.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-luxury-gray-5/50 bg-luxury-gray-6/30">
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-luxury-gray-1">Total</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden md:table-cell">{fmt(crcTotal)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a1Tot)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a2Tot)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{a3Tot > 0 ? fmt(a3Tot) : '—'}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(extTot)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(agentTot)}</td>
-                  <td colSpan={5} className="pt-2 pb-1 px-3 text-xs text-luxury-gray-3 hidden sm:table-cell">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
-                </tr>
-              </tfoot>
+
+          {/* Mobile and tablet: card layout (below lg) */}
+          <div className="lg:hidden space-y-2">
+            {displayRows.length === 0 ? (
+              <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
+            ) : (
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} />)
             )}
-          </table>
+            {rows.length > 0 && (
+              <div className="inner-card flex items-center justify-between py-2 mt-1">
+                <span className="text-xs font-semibold text-luxury-gray-1">Total ({rows.length})</span>
+                <span className="text-xs font-semibold text-luxury-accent">{fmt(agentTot)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Desktop: full scrollable table (lg+) */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full" style={{ minWidth: '960px' }}>
+              <thead>
+                <tr className="border-b border-luxury-gray-5/50">
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Address</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">CRC</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 1</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 2</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 3</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Other</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Total</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Agents</th>
+                  <th
+                    className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1 whitespace-nowrap"
+                    onClick={() => toggleSort('date')}
+                  >
+                    {dateLabel} {sortKey === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                  </th>
+                  <th
+                    className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1"
+                    onClick={() => toggleSort('compliance')}
+                  >
+                    Compliance {sortKey === 'compliance' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                  </th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Transferred</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayRows.length === 0 ? (
+                  <tr><td colSpan={12} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
+                ) : (
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} />)
+                )}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-luxury-gray-5/50 bg-luxury-gray-6/30">
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-luxury-gray-1">Total</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(crcTotal)}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a1Tot)}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a2Tot)}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '—'}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(extTot)}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(agentTot)}</td>
+                    <td colSpan={5} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
         </div>
       )}
     </div>
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// Main
 
 export default function PayoutsReportPage() {
   const { user } = useAuth()
@@ -271,15 +356,15 @@ export default function PayoutsReportPage() {
   const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid)
   const holdRows = rows.filter(r => !r.crc_transferred)
 
-  const paidAgentTotal = paidRows.reduce((s, r) => s + agentTotal(r), 0)
-  const holdAgentTotal = holdRows.reduce((s, r) => s + agentTotal(r), 0)
-  const expensesTotal = expenses.reduce((s, e) => s + (e.amount || 0), 0)
-  const grandTotal = paidAgentTotal + holdAgentTotal + expensesTotal
+  const paidAgentTotal  = paidRows.reduce((s, r) => s + agentTotal(r), 0)
+  const holdAgentTotal  = holdRows.reduce((s, r) => s + agentTotal(r), 0)
+  const expensesTotal   = expenses.reduce((s, e) => s + (e.amount || 0), 0)
+  const grandTotal      = paidAgentTotal + holdAgentTotal + expensesTotal
 
-  const bank = parseFloat(bankBalance) || 0
-  const holdsAmt = parseFloat(holds) || 0
-  const payloadAmt = autoPayloadTotal
-  const difference = (bank + holdsAmt + payloadAmt) - grandTotal
+  const bank                  = parseFloat(bankBalance) || 0
+  const holdsAmt              = parseFloat(holds) || 0
+  const payloadAmt            = autoPayloadTotal
+  const difference            = (bank + holdsAmt + payloadAmt) - grandTotal
   const availableAfterPaidOut = bank - (paidAgentTotal + expensesTotal)
 
   const saveBalances = async () => {
@@ -411,7 +496,7 @@ export default function PayoutsReportPage() {
       {/* Bottom Line */}
       <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="field-label">Bank balance (payouts acct)</label>
             <div className="flex items-center gap-2">
