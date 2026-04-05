@@ -318,6 +318,7 @@ export default function CloseTransactionModal({
     gross_commission: txn.gross_commission != null ? String(txn.gross_commission) : '',
     gross_commission_type: txn.gross_commission_type || 'amount',
     office_gross: txn.office_gross != null ? String(txn.office_gross) : '',
+    office_net: txn.office_net != null ? String(txn.office_net) : '',
     title_company: txn.title_company || '',
     title_officer_name: txn.title_officer_name || '',
     title_company_email: txn.title_company_email || '',
@@ -490,6 +491,7 @@ export default function CloseTransactionModal({
         gross_commission: parseNum(form.gross_commission),
         gross_commission_type: 'amount',
         office_gross: parseNum(form.office_gross),
+        office_net: parseNum(form.office_net),
         title_company: form.title_company || null,
         title_officer_name: form.title_officer_name || null,
         title_company_email: form.title_company_email || null,
@@ -723,6 +725,9 @@ export default function CloseTransactionModal({
                 </Field>
                 <Field label="Office Gross">
                   <input type="number" className="input-luxury text-xs" value={form.office_gross} onChange={e => setF('office_gross', e.target.value)} placeholder="0.00" step="0.01" min="0" />
+                </Field>
+                <Field label="Office Net">
+                  <input type="number" className="input-luxury text-xs" value={form.office_net} onChange={e => setF('office_net', e.target.value)} placeholder="0.00" step="0.01" min="0" />
                 </Field>
               </div>
             )}
