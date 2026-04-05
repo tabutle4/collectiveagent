@@ -128,6 +128,7 @@ export default function AgentFeesPage() {
 
       window.Payload(tokenData.client_token)
       const checkout = new window.Payload.Checkout({
+        invoice_id: invoice.id,
         style: {
           default: {
             primaryColor: '#C5A278',
