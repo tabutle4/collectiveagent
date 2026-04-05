@@ -11,6 +11,7 @@ import { ShieldX } from 'lucide-react'
 // If a route is not listed, all authenticated admin/staff users can access it
 const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/pm': 'can_view_pm',
+  '/admin/checks': 'can_view_checks',
   '/admin/onboarding': 'can_view_onboarding',
   '/admin/billing': 'can_view_billing',
   '/admin/campaigns': 'can_view_campaigns',
@@ -24,6 +25,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/calendar': 'can_view_calendar',
   '/admin/form-responses': 'can_view_forms',
   '/admin/form-builder': 'can_manage_forms',
+  '/admin/reports/payouts': 'can_manage_checks',
+  '/admin/reports/all-payouts': 'can_manage_checks',
 }
 
 function AccessDenied() {

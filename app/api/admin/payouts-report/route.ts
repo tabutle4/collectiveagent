@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id, property_address, check_amount, brokerage_amount,
         received_date, cleared_date, deposited_date,
-        compliance_complete_date, crc_transferred, status, notes,
+        compliance_complete_date, crc_transferred, agents_paid, status, notes,
         transaction_id, agent_id, payment_method
       `)
       .not('transaction_id', 'is', null)
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id, property_address, check_amount, brokerage_amount,
         received_date, cleared_date, deposited_date,
-        compliance_complete_date, crc_transferred, status, notes,
+        compliance_complete_date, crc_transferred, agents_paid, status, notes,
         transaction_id, agent_id, payment_method
       `)
       .is('transaction_id', null)
@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
         received_date: check.received_date,
         compliance_status: complianceStatus,
         crc_transferred: check.crc_transferred || false,
+        agents_paid: check.agents_paid || false,
         status: check.status,
         notes: check.notes,
       }

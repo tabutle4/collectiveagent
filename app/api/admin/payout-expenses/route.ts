@@ -33,9 +33,11 @@ export async function DELETE(request: NextRequest) {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-    await supabaseAdmin.from('payout_expenses').delete().eq('id', id)
+    const { error } = await supabaseAdmin.from('payout_expenses').delete().eq('id', id)
+    if (error) throw error
     return NextResponse.json({ success: true })
   } catch (error: any) {
+    console.error('Payout expense delete error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

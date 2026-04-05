@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { BarChart3, Trophy, FileText, Users, Wallet } from 'lucide-react'
+import { BarChart3, Trophy, FileText, Users, Wallet, DollarSign } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 
 const REPORTS = [
@@ -19,6 +19,14 @@ const REPORTS = [
     title: 'Payouts Report',
     description: 'Checks, agent payouts, and balance',
     href: '/admin/reports/payouts',
+    active: true,
+  },
+  {
+    id: 'all-payouts',
+    icon: DollarSign,
+    title: 'All Payouts',
+    description: 'All agent and brokerage payments',
+    href: '/admin/reports/all-payouts',
     active: true,
   },
   {

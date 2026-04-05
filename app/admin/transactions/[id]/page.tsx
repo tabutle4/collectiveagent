@@ -1357,6 +1357,24 @@ export default function AdminTransactionDetailPage() {
                       </button>
                     </div>
 
+                    {/* Agents Paid toggle */}
+                    <div className="flex items-center justify-between inner-card mb-3">
+                      <div>
+                        <p className="text-xs font-semibold text-luxury-gray-1">Agents Paid</p>
+                        <p className="text-xs text-luxury-gray-3">
+                          All agents paid — removes from payouts report
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => updateCheck({ agents_paid: !check.agents_paid })}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-5'}`}
+                      >
+                        <span
+                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${check.agents_paid ? 'translate-x-5' : 'translate-x-0.5'}`}
+                        />
+                      </button>
+                    </div>
+
                     {/* Notes */}
                     <div>
                       <label className="field-label">Notes</label>

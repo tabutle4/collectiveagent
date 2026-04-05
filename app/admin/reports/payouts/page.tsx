@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import { useAuth } from '@/lib/context/AuthContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +23,7 @@ interface PayoutRow {
   received_date: string | null
   compliance_status: string
   crc_transferred: boolean
+  agents_paid: boolean
   status: string
   notes: string | null
 }
@@ -39,23 +40,20 @@ const fmtDate = (d: string | null) =>
 
 function complianceLabel(status: string): { label: string; cls: string } {
   const map: Record<string, { label: string; cls: string }> = {
-    complete: { label: 'complete', cls: 'text-green-700' },
-    approved: { label: 'complete', cls: 'text-green-700' },
-    not_submitted: { label: 'not requested', cls: 'text-luxury-gray-3' },
-    in_review: { label: 'in review', cls: 'text-yellow-600' },
-    incomplete: { label: 'incomplete', cls: 'text-red-500' },
+    complete:      { label: 'complete',     cls: 'text-green-700' },
+    approved:      { label: 'complete',     cls: 'text-green-700' },
+    not_submitted: { label: 'not requested',cls: 'text-luxury-gray-3' },
+    in_review:     { label: 'in review',    cls: 'text-yellow-600' },
+    incomplete:    { label: 'incomplete',   cls: 'text-red-500' },
   }
   return map[status] || { label: status, cls: 'text-luxury-gray-3' }
 }
 
 function agentNames(row: PayoutRow): string {
-  // Linked transaction — use internal agent first names
   const names = row.agents.map(a => a.name.split(' ')[0].toLowerCase())
   const ext = row.externals.map(e => e.name.split(' ')[0].toLowerCase())
   if (names.length || ext.length) return [...names, ...ext].join(' and ')
-  // Standalone agent linked
   if (row.standalone_agent) return row.standalone_agent
-  // Fallback: parse notes field (imported data has "Agent(s): larissa")
   if (row.notes) {
     const match = row.notes.match(/Agent\(s\):\s*([^;]+)/i)
     if (match) return match[1].trim()
@@ -65,7 +63,6 @@ function agentNames(row: PayoutRow): string {
 
 function cleanNotes(notes: string | null): string {
   if (!notes) return '—'
-  // Strip import artifacts
   return notes
     .replace(/Agent\(s\):[^;]*;?/gi, '')
     .replace(/Imported from Monday Meeting spreadsheet/gi, '')
@@ -138,20 +135,14 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
 
   const sortedRows = [...rows].sort((a, b) => {
     if (!sortKey) return 0
-    let av: string | number = 0
-    let bv: string | number = 0
-    if (sortKey === 'date') {
-      av = a.cleared_date || a.received_date || ''
-      bv = b.cleared_date || b.received_date || ''
-    } else if (sortKey === 'compliance') {
-      av = a.compliance_status || ''
-      bv = b.compliance_status || ''
-    }
+    let av: string = ''
+    let bv: string = ''
+    if (sortKey === 'date') { av = a.cleared_date || a.received_date || ''; bv = b.cleared_date || b.received_date || '' }
+    else if (sortKey === 'compliance') { av = a.compliance_status || ''; bv = b.compliance_status || '' }
     return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
   })
 
   const displayRows = sortKey ? sortedRows : rows
-
   const crcTotal = rows.reduce((s, r) => s + r.crc_amount, 0)
   const agentTot = rows.reduce((s, r) => s + agentTotal(r), 0)
   const a1Tot = rows.reduce((s, r) => s + (r.agents[0]?.amount || 0), 0)
@@ -211,12 +202,12 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
               <tfoot>
                 <tr className="border-t border-luxury-gray-5/50 bg-luxury-gray-6/30">
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-luxury-gray-1">Total</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(crcTotal)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(a1Tot)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(a2Tot)}</td>
-                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(extTot)}</td>
+                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden md:table-cell">{fmt(crcTotal)}</td>
+                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a1Tot)}</td>
+                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(a2Tot)}</td>
+                  <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1 hidden lg:table-cell">{fmt(extTot)}</td>
                   <td className="pt-2 pb-1 px-3 text-xs font-semibold text-right text-luxury-gray-1">{fmt(agentTot)}</td>
-                  <td colSpan={5} className="pt-2 pb-1 px-3 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
+                  <td colSpan={5} className="pt-2 pb-1 px-3 text-xs text-luxury-gray-3 hidden sm:table-cell">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
                 </tr>
               </tfoot>
             )}
@@ -230,54 +221,49 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function PayoutsReportPage() {
-  const router = useRouter()
+  const { user } = useAuth()
   const [rows, setRows] = useState<PayoutRow[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [paidCollapsed, setPaidCollapsed] = useState(false)
   const [holdCollapsed, setHoldCollapsed] = useState(false)
   const [expCollapsed, setExpCollapsed] = useState(false)
 
-  // Balance inputs
   const [bankBalance, setBankBalance] = useState('')
   const [holds, setHolds] = useState('')
-  const [payloadPending, setPayloadPending] = useState('')
-  const [autoPayloadTotal, setAutoPayloadTotal] = useState(0)
   const [savingBalances, setSavingBalances] = useState(false)
+  const [autoPayloadTotal, setAutoPayloadTotal] = useState(0)
 
-  // Expense form
   const [newDesc, setNewDesc] = useState('')
   const [newAmt, setNewAmt] = useState('')
   const [addingExp, setAddingExp] = useState(false)
 
-  const [authed, setAuthed] = useState(false)
-
-  // Auth — load data only after confirmed
-  useEffect(() => {
-    fetch('/api/auth/me').then(res => {
-      if (!res.ok) router.push('/auth/login')
-      else setAuthed(true)
-    }).catch(() => router.push('/auth/login'))
-  }, [router])
-
   const load = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/admin/payouts-report')
-    if (res.ok) {
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/payouts-report')
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error || `Error ${res.status}`)
+      }
       const json = await res.json()
       setRows(json.rows || [])
       setExpenses(json.expenses || [])
       setBankBalance(json.settings?.bank_balance?.toString() || '')
       setHolds(json.settings?.funds_on_hold?.toString() || '')
-      setPayloadPending(json.settings?.payload_pending_balance?.toString() || '')
       setAutoPayloadTotal(json.pending_payload_total || 0)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load payouts')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
-  useEffect(() => { if (authed) load() }, [authed, load])
+  useEffect(() => { if (user) load() }, [user, load])
 
-  const paidRows = rows.filter(r => r.crc_transferred)
+  const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid)
   const holdRows = rows.filter(r => !r.crc_transferred)
 
   const paidAgentTotal = paidRows.reduce((s, r) => s + agentTotal(r), 0)
@@ -296,7 +282,7 @@ export default function PayoutsReportPage() {
     await fetch('/api/admin/payouts-report', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bank_balance: bankBalance, funds_on_hold: holds, payload_pending_balance: payloadPending }),
+      body: JSON.stringify({ bank_balance: bankBalance, funds_on_hold: holds }),
     })
     setSavingBalances(false)
   }
@@ -330,6 +316,13 @@ export default function PayoutsReportPage() {
   if (loading) return (
     <div className="flex items-center justify-center py-24">
       <RefreshCw size={18} className="animate-spin text-luxury-gray-3" />
+    </div>
+  )
+
+  if (error) return (
+    <div className="container-card max-w-md mx-auto mt-12 text-center py-8">
+      <p className="text-sm text-red-500 mb-4">{error}</p>
+      <button onClick={load} className="btn btn-secondary text-xs">Try Again</button>
     </div>
   )
 
@@ -387,7 +380,6 @@ export default function PayoutsReportPage() {
                 <Plus size={12} /> Add
               </button>
             </div>
-
             {expenses.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No items. Add expenses above.</p>
             ) : (
@@ -414,8 +406,7 @@ export default function PayoutsReportPage() {
       {/* Bottom Line */}
       <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="field-label">Bank balance (payouts acct)</label>
             <div className="flex items-center gap-2">
@@ -430,19 +421,17 @@ export default function PayoutsReportPage() {
               <input type="number" step="0.01" value={holds} onChange={e => setHolds(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
             </div>
           </div>
-          <div>
-            <label className="field-label">Pending Payload</label>
-            <div className="inner-card flex items-center justify-between py-2">
-              <span className="text-xs text-luxury-gray-3">Auto-calculated from transactions</span>
-              <span className="text-sm font-semibold text-luxury-gray-1">{fmt(autoPayloadTotal)}</span>
-            </div>
-          </div>
         </div>
-
+        <div className="inner-card flex items-center justify-between mb-4">
+          <div>
+            <p className="field-label">Pending Payload</p>
+            <p className="text-xs text-luxury-gray-3 mt-0.5">Auto-calculated from transactions</p>
+          </div>
+          <span className="text-sm font-semibold text-luxury-accent">{fmt(autoPayloadTotal)}</span>
+        </div>
         <button onClick={saveBalances} disabled={savingBalances} className="btn btn-primary text-xs px-4 flex items-center gap-1.5 mb-5 disabled:opacity-50">
           <Save size={12} /> {savingBalances ? 'Saving...' : 'Save balances'}
         </button>
-
         <div className="border-t border-luxury-gray-5/50 pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-luxury-gray-2">Recently paid</span>
