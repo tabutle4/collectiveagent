@@ -203,7 +203,7 @@ export default function AllPayoutsPage() {
                 <SortTh label="Payee" col="payee" />
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden sm:table-cell">Payee Type</th>
                 <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Address</th>
-                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden md:table-cell">Txn Type</th>
+                <th className="pb-2 px-3 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left hidden md:table-cell">Type</th>
                 <SortTh label="Amount" col="amount" right />
                 <SortTh label="Status" col="payment_status" />
                 <SortTh label="Date Paid" col="payment_date" />
@@ -230,7 +230,7 @@ export default function AllPayoutsPage() {
                       <span className="truncate max-w-[160px] block">{row.address}</span>
                     )}
                   </td>
-                  <td className="py-2 px-3 text-xs text-luxury-gray-2 hidden md:table-cell capitalize">{row.transaction_type?.replace(/_/g, ' ') || '—'}</td>
+                  <td className="py-2 px-3 text-xs text-luxury-gray-2 hidden md:table-cell">{row.transaction_type || ''}</td>
                   <td className="py-2 px-3 text-xs text-right font-medium text-luxury-gray-1">{fmt(row.amount)}</td>
                   <td className={`py-2 px-3 text-xs font-medium ${statusCls(row.payment_status)}`}>{row.payment_status}</td>
                   <td className="py-2 px-3 text-xs text-luxury-gray-3">{fmtDate(row.payment_date)}</td>

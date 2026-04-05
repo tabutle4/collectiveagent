@@ -4,6 +4,35 @@ import { requirePermission } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
+const TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  'buyer_v2':                 'Buyer',
+  'seller_v2':                'Seller',
+  'tenant_apt_v2':            'Tenant (apartment)',
+  'tenant_other_v2':          'Tenant (not apartment)',
+  'tenant_simplyhome_v2':     'Tenant (SimplyHome)',
+  'tenant_commercial_v2':     'Tenant (commercial)',
+  'landlord_v2':              'Landlord',
+  'new_construction_buyer_v2':'New Construction Buyer',
+  'land_lot_buyer_v2':        'Land/Lot Buyer',
+  'commercial_buyer_v2':      'Commercial Buyer',
+  'land_lot_seller_v2':       'Land/Lot Seller',
+  'referred_out_v2':          'Referred Out',
+  'sale':                     'Sale',
+  'lease':                    'Lease',
+}
+
+function friendlyType(t: string | null): string {
+  if (!t) return ''
+  return TRANSACTION_TYPE_LABELS[t] || t.replace(/_/g, ' ')
+}
+
+function isLeaseType(t: string | null): boolean {
+  if (!t) return false
+  return ['lease', 'apartment', 'rent', 'tenant', 'landlord'].some(k =>
+    t.toLowerCase().includes(k)
+  )
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_checks')
   if (auth.error) return auth.error
@@ -12,8 +41,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')?.toLowerCase() || ''
     const status = searchParams.get('status') || ''
-    const from = searchParams.get('from') || ''
-    const to = searchParams.get('to') || ''
+    const from   = searchParams.get('from') || ''
+    const to     = searchParams.get('to') || ''
 
     // Internal agents
     const { data: internalAgents, error: iaError } = await supabaseAdmin
@@ -53,33 +82,45 @@ export async function GET(request: NextRequest) {
     }
 
     // Build unified rows
-    const internalRows = (internalAgents || []).map(a => ({
-      id: a.id,
-      type: 'agent' as const,
-      payee: agentNames[a.agent_id] || 'Unknown Agent',
-      payee_type: a.agent_role || 'agent',
-      address: (a.transactions as any)?.property_address || '—',
-      transaction_type: (a.transactions as any)?.transaction_type || '—',
-      amount: a.agent_net || 0,
-      payment_status: a.payment_status || 'pending',
-      payment_date: a.payment_date || null,
-      payment_method: a.payment_method || null,
-      transaction_id: a.transaction_id,
-    }))
+    const internalRows = (internalAgents || []).map(a => {
+      const txn = a.transactions as any
+      const txnType = txn?.transaction_type || null
+      const closedDate = txn?.closed_date || null
+      const lease = isLeaseType(txnType)
+      return {
+        id:               a.id,
+        type:             'agent' as const,
+        payee:            agentNames[a.agent_id] || 'Unknown Agent',
+        payee_type:       a.agent_role || 'agent',
+        address:          txn?.property_address || '',
+        transaction_type: friendlyType(txnType),
+        amount:           a.agent_net || 0,
+        payment_status:   a.payment_status || 'pending',
+        payment_date:     a.payment_date || closedDate,
+        payment_method:   a.payment_method || (lease ? 'ach' : 'wire'),
+        transaction_id:   a.transaction_id,
+      }
+    })
 
-    const externalRows = (externalBrokerages || []).map(e => ({
-      id: e.id,
-      type: 'external' as const,
-      payee: e.agent_name || e.brokerage_name || 'Unknown',
-      payee_type: e.brokerage_role || 'external',
-      address: (e.transactions as any)?.property_address || '—',
-      transaction_type: (e.transactions as any)?.transaction_type || '—',
-      amount: e.commission_amount || 0,
-      payment_status: e.payment_status || 'pending',
-      payment_date: e.payment_date || null,
-      payment_method: e.payment_method || null,
-      transaction_id: e.transaction_id,
-    }))
+    const externalRows = (externalBrokerages || []).map(e => {
+      const txn = e.transactions as any
+      const txnType = txn?.transaction_type || null
+      const closedDate = txn?.closed_date || null
+      const lease = isLeaseType(txnType)
+      return {
+        id:               e.id,
+        type:             'external' as const,
+        payee:            e.agent_name || e.brokerage_name || 'Unknown',
+        payee_type:       e.brokerage_role || 'external',
+        address:          txn?.property_address || '',
+        transaction_type: friendlyType(txnType),
+        amount:           e.commission_amount || 0,
+        payment_status:   e.payment_status || 'pending',
+        payment_date:     e.payment_date || closedDate,
+        payment_method:   e.payment_method || (lease ? 'ach' : 'wire'),
+        transaction_id:   e.transaction_id,
+      }
+    })
 
     let rows = [...internalRows, ...externalRows]
 
