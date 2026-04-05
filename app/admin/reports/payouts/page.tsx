@@ -75,67 +75,76 @@ function agentTotal(row: PayoutRow): number {
     row.externals.reduce((s, e) => s + (e.amount || 0), 0)
 }
 
-// Mobile card — shows all data, stacked layout
+// Mobile card — clean stacked layout
 
 function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
   const total = agentTotal(row)
   const notes = cleanNotes(row.notes)
+  const allAgents = [...row.agents, ...row.externals]
 
   return (
-    <div className="container-card space-y-2 py-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="card-luxury rounded-lg overflow-hidden">
+      {/* Header row — address + total */}
+      <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-2">
         <div className="flex-1 min-w-0">
           {row.transaction_id ? (
             <Link
               href={`/admin/transactions/${row.transaction_id}`}
-              className="text-xs font-semibold text-luxury-gray-1 hover:text-luxury-accent flex items-start gap-1"
+              className="text-xs font-semibold text-luxury-gray-1 hover:text-luxury-accent flex items-center gap-1 leading-snug"
             >
-              <span>{row.address}</span>
-              <ExternalLink size={10} className="opacity-40 flex-shrink-0 mt-0.5" />
+              <span className="leading-snug">{row.address}</span>
+              <ExternalLink size={10} className="opacity-40 flex-shrink-0" />
             </Link>
           ) : (
-            <span className="text-xs font-semibold text-luxury-gray-1">{row.address}</span>
+            <span className="text-xs font-semibold text-luxury-gray-1 leading-snug">{row.address}</span>
           )}
         </div>
-        <div className="text-right flex-shrink-0">
+        <div className="text-right flex-shrink-0 ml-2">
           <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '—'}</p>
           {row.crc_amount > 0 && (
-            <p className="text-xs text-luxury-gray-3">CRC: {fmt(row.crc_amount)}</p>
+            <p className="text-xs text-luxury-gray-3 mt-0.5">+{fmt(row.crc_amount)} CRC</p>
           )}
         </div>
       </div>
 
-      {(row.agents.length > 0 || row.externals.length > 0) && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {row.agents.map((a, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <span className="text-xs text-luxury-gray-3">{a.name.split(' ')[0]}</span>
-              <span className="text-xs font-medium text-luxury-gray-1">{fmt(a.amount)}</span>
-            </div>
-          ))}
-          {row.externals.map((e, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <span className="text-xs text-luxury-gray-3">{e.name.split(' ')[0]}</span>
-              <span className="text-xs font-medium text-luxury-gray-1">{fmt(e.amount)}</span>
+      {/* Agent payouts */}
+      {allAgents.length > 0 && (
+        <div className="px-4 pb-2 flex flex-col gap-0.5">
+          {allAgents.map((a, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <span className="text-xs text-luxury-gray-3 capitalize">
+                {a.name.split(' ').slice(0, 2).join(' ')}
+              </span>
+              <span className="text-xs font-medium text-luxury-gray-2 tabular-nums">
+                {fmt(a.amount)}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        {dateVal && (
-          <span className="text-xs text-luxury-gray-3">{fmtDate(dateVal)}</span>
-        )}
-        <span className={`text-xs ${cls}`}>{label}</span>
-        <span className={`text-xs font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
-          {row.crc_transferred ? 'transferred' : 'not transferred'}
+      {/* Footer — date, compliance, transferred */}
+      <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {dateVal && (
+            <span className="text-xs text-luxury-gray-3 tabular-nums">{fmtDate(dateVal)}</span>
+          )}
+          {label && (
+            <span className={`text-xs ${cls}`}>{label}</span>
+          )}
+        </div>
+        <span className={`text-xs font-medium flex-shrink-0 ${row.crc_transferred ? 'text-green-700' : 'text-red-400'}`}>
+          {row.crc_transferred ? '✓ transferred' : 'not transferred'}
         </span>
       </div>
 
+      {/* Notes — only if present */}
       {notes && (
-        <p className="text-xs text-luxury-gray-3">{notes}</p>
+        <div className="px-4 pb-2">
+          <p className="text-xs text-luxury-gray-3 italic">{notes}</p>
+        </div>
       )}
     </div>
   )
@@ -242,8 +251,8 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
               displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} />)
             )}
             {rows.length > 0 && (
-              <div className="inner-card flex items-center justify-between py-2 mt-1">
-                <span className="text-xs font-semibold text-luxury-gray-1">Total ({rows.length})</span>
+              <div className="card-luxury rounded-lg flex items-center justify-between px-4 py-2 mt-1">
+                <span className="text-xs font-semibold text-luxury-gray-1">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</span>
                 <span className="text-xs font-semibold text-luxury-accent">{fmt(agentTot)}</span>
               </div>
             )}
