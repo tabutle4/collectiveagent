@@ -221,7 +221,7 @@ export default function PayoutModal({
     setAgentForms(initAgents)
 
     load()
-  }, [transactionId, agents])
+  }, [transactionId])
 
   const setAgentF    = (id: string, field: string, value: any) =>
     setAgentForms(p => ({ ...p, [id]: { ...p[id], [field]: value } }))

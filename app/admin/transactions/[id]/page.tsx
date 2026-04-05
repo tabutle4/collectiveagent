@@ -223,7 +223,6 @@ export default function AdminTransactionDetailPage() {
   const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [newPayoutForm, setNewPayoutForm] = useState<any>(null)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
 
   // Mark Paid modal state
@@ -502,29 +501,6 @@ export default function AdminTransactionDetailPage() {
             : item
         ),
       }))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const addPayout = async () => {
-    if (!newPayoutForm || !data?.check) return
-    setSaving(true)
-    try {
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'add_payout',
-          payout: { ...newPayoutForm, check_id: data.check.id },
-        }),
-      })
-      const json = await res.json()
-      setData((prev: any) => ({
-        ...prev,
-        check: { ...prev.check, check_payouts: [...(prev.check.check_payouts || []), json.payout] },
-      }))
-      setNewPayoutForm(null)
     } finally {
       setSaving(false)
     }
