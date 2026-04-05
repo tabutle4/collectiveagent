@@ -94,6 +94,17 @@ export async function GET(request: NextRequest) {
       .eq('user_id', id)
       .maybeSingle()
 
+    // Compute sales volume and units live from closed TIA rows
+    const { data: productionData } = await supabaseAdmin
+      .from('transaction_internal_agents')
+      .select('sales_volume, units, transaction_id, transactions!inner(status)')
+      .eq('agent_id', id)
+      .in('agent_role', ['primary_agent', 'listing_agent'])
+      .eq('transactions.status', 'closed')
+
+    const total_sales_volume = (productionData || []).reduce((sum, r) => sum + (r.sales_volume || 0), 0)
+    const total_units_closed  = (productionData || []).reduce((sum, r) => sum + (r.units || 0), 0)
+
     return NextResponse.json({ 
       user: { 
         ...safeData, 
@@ -102,6 +113,8 @@ export async function GET(request: NextRequest) {
         team_members: teamMembers,
         referred_agents: referredAgents || [],
         policy_ack_document_url: onboardingSession?.policy_ack_document_url ?? null,
+        total_sales_volume,
+        total_units_closed,
       } 
     })
   } catch (error) {
