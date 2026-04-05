@@ -24,10 +24,11 @@ const AGENT_ROLES = [
 ]
 
 const COMMISSION_PLANS = [
-  { value: 'cap',    label: 'Cap Plan 70/30' },
-  { value: 'no_cap', label: 'No Cap 85/15' },
-  { value: 'leases', label: 'Lease Plan' },
-  { value: 'custom', label: 'Custom' },
+  { value: 'new_agent', label: 'New Agent 70/30' },
+  { value: 'cap',       label: 'Cap Plan 70/30' },
+  { value: 'no_cap',    label: 'No Cap 85/15' },
+  { value: 'leases',    label: 'Lease Plan' },
+  { value: 'custom',    label: 'Custom' },
 ]
 
 const BROKERAGE_ROLES = [
@@ -48,9 +49,11 @@ const FEDERAL_ID_TYPES = [
 function defaultCommissionPlan(userPlan: string): string {
   if (!userPlan) return ''
   const p = userPlan.toLowerCase()
+  if (p === 'new_agent' || p.includes('new')) return 'new_agent'
   if (p.includes('lease')) return 'leases'
-  if (p.includes('no_cap') || p.includes('85') || p.includes('no cap')) return 'no_cap'
-  return 'cap' // new_agent and cap both map to cap
+  if (p === 'no_cap' || p.includes('85') || p.includes('no cap')) return 'no_cap'
+  if (p === 'cap') return 'cap'
+  return ''
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
