@@ -57,6 +57,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
+      // Per-agent team memberships with splits
+      const { data: teamMemberships } = agentIds.length > 0
+        ? await supabase
+            .from('team_member_agreements')
+            .select(`
+              id, agent_id, agreement_document_url, firm_min_override,
+              team:teams!team_member_agreements_team_id_fkey(id, team_name),
+              splits:team_agreement_splits(id, plan_type, lead_source, agent_pct, team_lead_pct, firm_pct)
+            `)
+            .in('agent_id', agentIds)
+            .is('end_date', null)
+        : { data: [] }
+
+      // Build a map of agent_id -> membership
+      const membershipByAgent: Record<string, any> = {}
+      for (const m of teamMemberships || []) {
+        membershipByAgent[m.agent_id] = m
+      }
+
       // Agent billing (debts + credits)
       let agentBilling = null
       if (primaryAgentId) {
@@ -181,6 +200,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         agents: (agents || []).map((a: any) => ({
           ...a,
           user: (agentUsers || []).find((u: any) => u.id === a.agent_id) || null,
+          team_membership: membershipByAgent[a.agent_id] || null,
         })),
         primary_agent: primaryAgent || null,
         agent_billing: agentBilling,
@@ -469,7 +489,9 @@ if (action === 'add_external_brokerage') {
         }
       }
 
-      if (counts_toward_progress !== false && tia.agent_role === 'primary_agent' && agentUser) {
+      if (counts_toward_progress !== false &&
+          (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
+          agentUser) {
         const plan = (agentUser.commission_plan || '').toLowerCase().trim()
         const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
         const userUpdate: any = {}

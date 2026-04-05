@@ -1647,7 +1647,6 @@ export default function AdminTransactionDetailPage() {
               }
               return map[role] || role?.replace(/_/g, ' ') || 'Agent'
             }
-            const hasSplits = a.agent_gross != null && a.agent_gross > 0
             return (
               <div key={a.id} className="container-card p-3">
                 <button
@@ -1705,22 +1704,35 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {/* Team splits for this transaction */}
-                    {hasSplits && (
+                    {/* Per-agent team splits */}
+                    {a.team_membership?.splits?.length > 0 && (
                       <div className="mt-2 p-2 bg-luxury-light rounded">
-                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Transaction Splits</p>
-                        <div className="space-y-0">
-                          {a.agent_gross > 0 && <FieldRow label="Agent Gross" value={fmt$(a.agent_gross)} />}
-                          {a.brokerage_split > 0 && <FieldRow label="Brokerage Split" value={fmt$(a.brokerage_split)} />}
-                          {a.split_percentage > 0 && <FieldRow label="Split %" value={`${a.split_percentage}%`} />}
-                          {a.processing_fee > 0 && <FieldRow label="Processing Fee" value={fmt$(a.processing_fee)} />}
-                          {a.coaching_fee > 0 && <FieldRow label="Coaching Fee" value={fmt$(a.coaching_fee)} />}
-                          {a.other_fees > 0 && <FieldRow label="Other Fees" value={fmt$(a.other_fees)} />}
-                          {a.btsa_amount > 0 && <FieldRow label="BTSA" value={fmt$(a.btsa_amount)} />}
-                          {a.rebate_amount > 0 && <FieldRow label="Rebate" value={fmt$(a.rebate_amount)} />}
-                          {a.debts_deducted > 0 && <FieldRow label="Debts Deducted" value={fmt$(a.debts_deducted)} />}
-                          {a.agent_net != null && <FieldRow label="Agent Net" value={fmt$(a.agent_net)} />}
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1">
+                          Team Splits{a.team_membership.team?.team_name ? ` — ${a.team_membership.team.team_name}` : ''}
+                        </p>
+                        <div className="space-y-1">
+                          {a.team_membership.splits.map((s: any) => (
+                            <div key={s.id} className="text-xs text-luxury-gray-3">
+                              <span className="font-medium text-luxury-gray-2">
+                                {s.plan_type?.replace(/_/g, ' ')}
+                                {s.lead_source ? ` (${s.lead_source.replace(/_/g, ' ')})` : ''}:
+                              </span>{' '}
+                              Agent {s.agent_pct}%
+                              {s.team_lead_pct > 0 ? ` · Lead ${s.team_lead_pct}%` : ''}
+                              {' '}· Firm {s.firm_pct}%
+                            </div>
+                          ))}
                         </div>
+                        {a.team_membership.agreement_document_url && (
+                          <a
+                            href={a.team_membership.agreement_document_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-luxury-accent hover:underline text-xs mt-1.5"
+                          >
+                            <FileText size={11} /> Team Agreement
+                          </a>
+                        )}
                       </div>
                     )}
 
@@ -1742,15 +1754,6 @@ export default function AdminTransactionDetailPage() {
                           </p>
                         )}
                       </div>
-                    )}
-
-                    {a.payment_status !== 'paid' && (
-                      <button
-                        onClick={() => openMarkPaidModal(a)}
-                        className="btn btn-primary text-xs w-full mt-2"
-                      >
-                        Mark Paid
-                      </button>
                     )}
                   </>
                 )}

@@ -329,8 +329,8 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
             onBlur={() => setTimeout(() => setAgentDropdownOpen(p => ({ ...p, [rowId]: false })), 150)}
           />
           {agentDropdownOpen[rowId] && filteredUsers(rowId).length > 0 && (
-            <div className="absolute z-20 w-full bg-white border border-luxury-gray-5 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-              {filteredUsers(rowId).slice(0, 15).map(u => (
+            <div className="absolute z-20 w-full bg-white border border-luxury-gray-5 rounded-lg shadow-lg mt-1 max-h-52 overflow-y-auto">
+              {filteredUsers(rowId).map(u => (
                 <button
                   key={u.id}
                   type="button"

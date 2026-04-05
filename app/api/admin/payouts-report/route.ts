@@ -19,11 +19,12 @@ export async function GET(request: NextRequest) {
         transaction_id, agent_id, payment_method
       `)
       .not('transaction_id', 'is', null)
+      .eq('agents_paid', false)
       .order('cleared_date', { ascending: false })
 
     if (checksError) throw checksError
 
-    // Fetch standalone checks (no transaction) 
+    // Fetch standalone checks (no transaction)
     const { data: standaloneChecks } = await supabaseAdmin
       .from('checks_received')
       .select(`
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
         transaction_id, agent_id, payment_method
       `)
       .is('transaction_id', null)
+      .eq('agents_paid', false)
       .order('cleared_date', { ascending: false })
 
     const allChecks = [...(checks || []), ...(standaloneChecks || [])]

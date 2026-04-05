@@ -354,7 +354,7 @@ export default function PayoutsReportPage() {
   useEffect(() => { if (user) load() }, [user, load])
 
   const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid)
-  const holdRows = rows.filter(r => !r.crc_transferred)
+  const holdRows = rows.filter(r => !r.crc_transferred && !r.agents_paid)
 
   const paidAgentTotal  = paidRows.reduce((s, r) => s + agentTotal(r), 0)
   const holdAgentTotal  = holdRows.reduce((s, r) => s + agentTotal(r), 0)
