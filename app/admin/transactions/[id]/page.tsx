@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   ArrowLeft,
   ExternalLink,
@@ -1635,8 +1636,14 @@ export default function AdminTransactionDetailPage() {
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
-          {/* Agents — one card per internal agent, same style as original */}
-          {agents.length > 0 && agents.map((a: any) => {
+          {/* Agents — sorted: listing, primary, team lead, referral */}
+          {agents.length > 0 && [...agents].sort((a: any, b: any) => {
+            const order: Record<string, number> = {
+              listing_agent: 0, primary_agent: 1, team_lead: 2,
+              referral_agent: 3, co_agent: 4,
+            }
+            return (order[a.agent_role] ?? 9) - (order[b.agent_role] ?? 9)
+          }).map((a: any) => {
             const u = a.user
             const isExpanded = expandedAgents[a.id] !== false
             const agentRoleLabel = (role: string) => {
@@ -1704,36 +1711,17 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {/* Per-agent team splits */}
-                    {a.team_membership?.splits?.length > 0 && (
-                      <div className="mt-2 p-2 bg-luxury-light rounded">
-                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1">
-                          Team Splits{a.team_membership.team?.team_name ? ` — ${a.team_membership.team.team_name}` : ''}
-                        </p>
-                        <div className="space-y-1">
-                          {a.team_membership.splits.map((s: any) => (
-                            <div key={s.id} className="text-xs text-luxury-gray-3">
-                              <span className="font-medium text-luxury-gray-2">
-                                {s.plan_type?.replace(/_/g, ' ')}
-                                {s.lead_source ? ` (${s.lead_source.replace(/_/g, ' ')})` : ''}:
-                              </span>{' '}
-                              Agent {s.agent_pct}%
-                              {s.team_lead_pct > 0 ? ` · Lead ${s.team_lead_pct}%` : ''}
-                              {' '}· Firm {s.firm_pct}%
-                            </div>
-                          ))}
-                        </div>
-                        {a.team_membership.agreement_document_url && (
-                          <a
-                            href={a.team_membership.agreement_document_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-luxury-accent hover:underline text-xs mt-1.5"
-                          >
-                            <FileText size={11} /> Team Agreement
-                          </a>
-                        )}
-                      </div>
+                    {/* Link to team member agreement */}
+                    {a.team_membership?.team?.id && a.team_membership?.id && (
+                      <Link
+                        href={`/admin/teams/${a.team_membership.team.id}/agreements/${a.team_membership.id}`}
+                        className="flex items-center gap-1.5 text-luxury-accent hover:underline text-xs mt-2"
+                      >
+                        <FileText size={11} />
+                        {a.team_membership.team?.team_name
+                          ? `${a.team_membership.team.team_name} — Team Agreement`
+                          : 'Team Agreement'}
+                      </Link>
                     )}
 
                     {/* Rev share + referred by / referred */}

@@ -44,9 +44,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               office_email, email, phone, office, commission_plan, license_number,
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
-              referring_agent_id, cap_progress, cap_year, qualifying_transaction_count,
-              waive_buyer_processing_fees, waive_seller_processing_fees,
-              special_commission_notes, headshot_url
+              referring_agent_id, referred_agents, cap_progress, cap_year,
+              qualifying_transaction_count, waive_buyer_processing_fees,
+              waive_seller_processing_fees, special_commission_notes, headshot_url
             `
               )
               .in('id', agentIds)
@@ -56,6 +56,38 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const primaryAgentId = txn.submitted_by
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
+
+      // Per-agent team memberships
+      const { data: teamMemberships } = agentIds.length > 0
+        ? await supabase
+            .from('team_member_agreements')
+            .select(`
+              id, agent_id, agreement_document_url, firm_min_override,
+              team:teams!team_member_agreements_team_id_fkey(id, team_name)
+            `)
+            .in('agent_id', agentIds)
+            .is('end_date', null)
+        : { data: [] }
+
+      // Fetch splits separately per membership (same pattern as admin routes)
+      const membershipIds = (teamMemberships || []).map((m: any) => m.id).filter(Boolean)
+      const { data: allSplits } = membershipIds.length > 0
+        ? await supabase
+            .from('team_agreement_splits')
+            .select('id, agreement_id, plan_type, lead_source, agent_pct, team_lead_pct, firm_pct')
+            .in('agreement_id', membershipIds)
+            .order('plan_type')
+            .order('lead_source')
+        : { data: [] }
+
+      // Build a map of agent_id -> membership (with splits attached)
+      const membershipByAgent: Record<string, any> = {}
+      for (const m of teamMemberships || []) {
+        membershipByAgent[m.agent_id] = {
+          ...m,
+          splits: (allSplits || []).filter((s: any) => s.agreement_id === m.id),
+        }
+      }
 
       // Agent billing (debts + credits)
       let agentBilling = null
@@ -181,6 +213,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         agents: (agents || []).map((a: any) => ({
           ...a,
           user: (agentUsers || []).find((u: any) => u.id === a.agent_id) || null,
+          team_membership: membershipByAgent[a.agent_id] || null,
         })),
         primary_agent: primaryAgent || null,
         agent_billing: agentBilling,
@@ -373,6 +406,7 @@ if (action === 'add_external_brokerage') {
     if (action === 'mark_paid') {
       const {
         internal_agent_id,
+        transaction_type,
         payment_date,
         payment_method,
         payment_reference,
@@ -391,7 +425,7 @@ if (action === 'add_external_brokerage') {
 
       const { data: agentUser, error: userError } = await supabase
         .from('users')
-        .select('id, commission_plan, cap_progress, qualifying_transaction_count')
+        .select('id, commission_plan, cap_progress, cap_year, qualifying_transaction_count')
         .eq('id', tia.agent_id)
         .single()
       if (userError) throw userError
@@ -468,22 +502,31 @@ if (action === 'add_external_brokerage') {
         }
       }
 
-      if (counts_toward_progress !== false && tia.agent_role === 'primary_agent' && agentUser) {
-        const plan = (agentUser.commission_plan || '').toLowerCase()
+      if (counts_toward_progress !== false &&
+          (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
+          agentUser) {
+        const plan = (agentUser.commission_plan || '').toLowerCase().trim()
+        const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
         const userUpdate: any = {}
 
-        if (brokerageSplit > 0) {
-          const isCapPlan = plan.includes('85') || plan.includes('100') || plan.includes('capped')
-          if (isCapPlan) {
+        // Leases never count toward cap or qualifying transactions
+        if (!txnIsLease) {
+          // Cap plan ('cap') tracks brokerage split toward annual cap
+          const isCapPlan = plan === 'cap'
+          if (isCapPlan && brokerageSplit > 0) {
             const currentCapProgress = parseFloat(agentUser.cap_progress || 0)
             userUpdate.cap_progress = Math.round((currentCapProgress + brokerageSplit) * 100) / 100
+            if (!agentUser.cap_year) {
+              userUpdate.cap_year = new Date().getFullYear()
+            }
           }
-        }
 
-        const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
-        if (isNewAgentPlan) {
-          userUpdate.qualifying_transaction_count =
-            (agentUser.qualifying_transaction_count || 0) + 1
+          // New agent plan ('new_agent') counts toward 5-deal qualifying threshold
+          const isNewAgentPlan = plan === 'new_agent'
+          if (isNewAgentPlan) {
+            userUpdate.qualifying_transaction_count =
+              (agentUser.qualifying_transaction_count || 0) + 1
+          }
         }
 
         if (Object.keys(userUpdate).length > 0) {
