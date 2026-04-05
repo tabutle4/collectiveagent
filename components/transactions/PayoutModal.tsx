@@ -326,7 +326,10 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
               setAgentSearch(p => ({ ...p, [rowId]: e.target.value }))
               setAgentDropdownOpen(p => ({ ...p, [rowId]: true }))
             }}
-            onFocus={() => setAgentDropdownOpen(p => ({ ...p, [rowId]: true }))}
+            onFocus={() => {
+              setAgentSearch(p => ({ ...p, [rowId]: '' }))
+              setAgentDropdownOpen(p => ({ ...p, [rowId]: true }))
+            }}
             onBlur={() => setTimeout(() => setAgentDropdownOpen(p => ({ ...p, [rowId]: false })), 150)}
           />
           {agentDropdownOpen[rowId] && filteredUsers(rowId).length > 0 && (

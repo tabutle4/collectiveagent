@@ -338,6 +338,7 @@ export default function CloseTransactionModal({
     const init: Record<string, any> = {}
     for (const a of agents) {
       init[a.id] = {
+        agent_id: a.agent_id || '',
         agent_role: a.agent_role || '',
         commission_plan: a.commission_plan || defaultCommissionPlan(a.user?.commission_plan || ''),
         agent_gross: a.agent_gross != null ? String(a.agent_gross) : '',
@@ -826,15 +827,48 @@ export default function CloseTransactionModal({
                   const af = agentForms[a.id] || {}
                   return (
                     <div key={a.id} className="inner-card space-y-3">
-                      {/* Agent header */}
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-luxury-gray-1">{agentName(a)}</p>
-                          <p className="text-xs text-luxury-gray-3">
-                            {agentRoleLabel(af.agent_role || a.agent_role)} · {planLabel(af.commission_plan)}
-                          </p>
-                        </div>
-                        <p className="text-xs text-luxury-gray-3">{a.user?.office_email || a.user?.email || ''}</p>
+                      {/* Agent search — change which agent this row is assigned to */}
+                      <div className="relative">
+                        <label className="field-label">Agent</label>
+                        <input
+                          type="text"
+                          className="input-luxury text-xs"
+                          value={agentSearch[a.id] !== undefined ? agentSearch[a.id] : agentName(a)}
+                          onChange={e => {
+                            setAgentSearch(p => ({ ...p, [a.id]: e.target.value }))
+                            setAgentDropdownOpen(p => ({ ...p, [a.id]: true }))
+                          }}
+                          onFocus={() => {
+                            setAgentSearch(p => ({ ...p, [a.id]: '' }))
+                            setAgentDropdownOpen(p => ({ ...p, [a.id]: true }))
+                          }}
+                          onBlur={() => setTimeout(() => {
+                            setAgentDropdownOpen(p => ({ ...p, [a.id]: false }))
+                            setAgentSearch(p => ({ ...p, [a.id]: undefined as any }))
+                          }, 150)}
+                          placeholder="Search agents..."
+                        />
+                        {agentDropdownOpen[a.id] && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-luxury-gray-5 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {filteredAgentsForRow(a.id).length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-luxury-gray-3">No agents found</p>
+                            ) : (
+                              filteredAgentsForRow(a.id).map(u => (
+                                <div
+                                  key={u.id}
+                                  onMouseDown={() => {
+                                    setAgentF(a.id, 'agent_id', u.id)
+                                    setAgentSearch(p => ({ ...p, [a.id]: undefined as any }))
+                                    setAgentDropdownOpen(p => ({ ...p, [a.id]: false }))
+                                  }}
+                                  className="px-3 py-2 text-xs text-luxury-gray-1 hover:bg-luxury-light cursor-pointer"
+                                >
+                                  {`${u.preferred_first_name || u.first_name} ${u.preferred_last_name || u.last_name}`}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Role + Plan */}
