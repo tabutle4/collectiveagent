@@ -1457,7 +1457,7 @@ export default function ProfilePage({
                   <p className="text-xs text-luxury-gray-3 mb-1">Total Sales Volume</p>
                   <p className="text-lg font-semibold text-luxury-accent">
                     {user.total_sales_volume
-                      ? `$${Number(user.total_sales_volume).toLocaleString()}`
+                      ? `$${Math.round(Number(user.total_sales_volume)).toLocaleString()}`
                       : '$0'}
                   </p>
                 </div>
@@ -1470,7 +1470,7 @@ export default function ProfilePage({
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
                   <p className="text-lg font-semibold text-luxury-accent">
-                    {user.cap_progress ? `$${Number(user.cap_progress).toLocaleString()}` : '$0'}
+                    {user.cap_progress ? `$${Math.round(Number(user.cap_progress)).toLocaleString()}` : '$0'}
                   </p>
                 </div>
               </div>
