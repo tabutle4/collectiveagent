@@ -123,9 +123,9 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         type: 'client',
         intent: {
-          checkout_plugin: {
-            invoice_id: invoiceId,
-            description: 'Onboarding Invoice',
+  checkout_plugin: {
+    amount: 399 + proratedAmount,
+    description: 'Onboarding Invoice',
             conv_fee: true,
             auto_billing_toggle: true,
             keep_active_toggle: true,

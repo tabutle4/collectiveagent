@@ -645,8 +645,9 @@ export default function OnboardingPage() {
 
       // Open embedded checkout
       window.Payload(data.client_token)
-      const checkout = new window.Payload.Checkout({
-        style: {
+const checkout = new window.Payload.Checkout({
+  invoice_id: data.invoice_id,
+  style: {
           default: {
             primaryColor: '#C5A278',
             backgroundColor: '#ffffff',
