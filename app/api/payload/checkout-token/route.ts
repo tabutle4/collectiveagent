@@ -12,8 +12,8 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { invoice_id, description }: { invoice_id: string; description: string } =
-      await request.json()
+    const { invoice_id, amount, description }: { invoice_id: string; amount: number; description: string } =
+  await request.json()
 
     if (!invoice_id || !description) {
       return NextResponse.json(
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         type: 'client',
         intent: {
           checkout_plugin: {
-            invoice_id,
+            amount,
             description,
             // Pass processing fee to the agent
             conv_fee: true,

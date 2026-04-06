@@ -118,9 +118,10 @@ export default function AgentFeesPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_id: invoice.id,
-          description: invoice.description,
-        }),
+  invoice_id: invoice.id,
+  amount: invoice.amount_due ?? invoice.amount,
+  description: invoice.description,
+}),
       })
       const tokenData = await tokenRes.json()
       if (!tokenData.client_token)
