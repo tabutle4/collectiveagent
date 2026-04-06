@@ -1447,35 +1447,42 @@ export default function ProfilePage({
           </div>
 
           {/* Performance Stats */}
-          {(user.total_sales_volume || user.total_units_closed || user.cap_progress > 0) && (
-            <div className="container-card mb-5">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+          <div className="container-card mb-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
                 Performance
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Total Sales Volume</p>
-                  <p className="text-lg font-semibold text-luxury-accent">
-                    {user.total_sales_volume
-                      ? `$${Math.round(Number(user.total_sales_volume)).toLocaleString()}`
-                      : '$0'}
-                  </p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Units Closed</p>
-                  <p className="text-lg font-semibold text-luxury-accent">
-                    {user.total_units_closed || 0}
-                  </p>
-                </div>
+              <a href="/transactions" className="text-xs text-luxury-accent hover:underline">
+                View Transactions →
+              </a>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="inner-card">
+                <p className="text-xs text-luxury-gray-3 mb-1">Total Sales Volume</p>
+                <p className="text-lg font-semibold text-luxury-accent">
+                  {user.total_sales_volume
+                    ? `$${Math.round(Number(user.total_sales_volume)).toLocaleString()}`
+                    : '$0'}
+                </p>
+              </div>
+              <div className="inner-card">
+                <p className="text-xs text-luxury-gray-3 mb-1">Units Closed</p>
+                <p className="text-lg font-semibold text-luxury-accent">
+                  {user.total_units_closed || 0}
+                </p>
+              </div>
+              {normalizeCommissionPlan(user.commission_plan || '') === 'cap' && (
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
                   <p className="text-lg font-semibold text-luxury-accent">
-                    {user.cap_progress ? `$${Math.round(Number(user.cap_progress)).toLocaleString()}` : '$0'}
+                    {user.cap_progress
+                      ? `$${Math.round(Number(user.cap_progress)).toLocaleString()}`
+                      : '$0'}
                   </p>
                 </div>
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Billing */}
           <div className="container-card mb-5">
