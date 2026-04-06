@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
           item.type !== 'Onboarding Fee' &&
           item.type !== 'Monthly Fee' &&
           item.type !== 'Monthly Fee (Prorated)'
+          && item.type !== 'Late Fee'
       )
       if (hasCustomItem && data.id) {
         // Find matching debt by Payload invoice ID stored in notes
