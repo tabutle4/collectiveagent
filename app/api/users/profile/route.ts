@@ -94,16 +94,32 @@ export async function GET(request: NextRequest) {
       .eq('user_id', id)
       .maybeSingle()
 
-    // Compute sales volume and units live from closed TIA rows
+    // Compute YTD sales volume and units live from closed TIA rows
+    const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
     const { data: productionData } = await supabaseAdmin
       .from('transaction_internal_agents')
-      .select('sales_volume, units, transaction_id, transactions!inner(status)')
+      .select('sales_volume, units, transaction_id, transactions!inner(status, closing_date)')
       .eq('agent_id', id)
-      .in('agent_role', ['primary_agent', 'listing_agent'])
+      .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
       .eq('transactions.status', 'closed')
+      .gte('transactions.closing_date', ytdStart)
 
     const total_sales_volume = (productionData || []).reduce((sum, r) => sum + (r.sales_volume || 0), 0)
-    const total_units_closed  = (productionData || []).reduce((sum, r) => sum + (r.units || 0), 0)
+    const total_units_closed = Math.round((productionData || []).reduce((sum, r) => sum + (r.units || 0), 0))
+
+    // Cap progress: YTD live from brokerage_split, only rows that count toward progress
+    const { data: capData } = await supabaseAdmin
+      .from('transaction_internal_agents')
+      .select('brokerage_split, transaction_id, transactions!inner(status, closing_date)')
+      .eq('agent_id', id)
+      .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
+      .eq('counts_toward_progress', true)
+      .eq('transactions.status', 'closed')
+      .gte('transactions.closing_date', ytdStart)
+
+    const cap_progress = Math.round(
+      (capData || []).reduce((sum, r) => sum + parseFloat(r.brokerage_split || 0), 0)
+    )
 
     return NextResponse.json({ 
       user: { 
@@ -115,6 +131,7 @@ export async function GET(request: NextRequest) {
         policy_ack_document_url: onboardingSession?.policy_ack_document_url ?? null,
         total_sales_volume,
         total_units_closed,
+        cap_progress,
       } 
     })
   } catch (error) {
