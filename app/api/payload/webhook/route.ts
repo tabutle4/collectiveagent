@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 
+const authHeader = () =>
+  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -47,6 +50,65 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', user.id)
         console.log('Updated monthly fee paid through for user:', user.id)
+
+        // If agent saved a default payment method (enabled autopay), create billing schedule
+        try {
+          const pmRes = await fetch(
+            `https://api.payload.com/payment_methods/?customer_id=${data.customer_id}&limit=10`,
+            { headers: { Authorization: authHeader() } }
+          )
+          const pmData = await pmRes.json()
+          const defaultMethod = pmData.values?.find(
+            (pm: any) => pm.default_payment_method === true
+          )
+
+          if (defaultMethod) {
+            // Check if billing schedule already exists for this customer
+            const schedRes = await fetch(
+              `https://api.payload.com/billing_schedules/?customer_id=${data.customer_id}&limit=1`,
+              { headers: { Authorization: authHeader() } }
+            )
+            const schedData = await schedRes.json()
+            const hasSchedule = (schedData.values?.length ?? 0) > 0
+
+            if (!hasSchedule) {
+              const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+              const startDate = nextMonth.toISOString().split('T')[0]
+              const fiveYearsOut = new Date(now.getFullYear() + 5, now.getMonth(), 1)
+                .toISOString()
+                .split('T')[0]
+
+              const scheduleRes = await fetch('https://api.payload.com/billing_schedules/', {
+                method: 'POST',
+                headers: {
+                  Authorization: authHeader(),
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                  type: 'subscription',
+                  processing_id: process.env.PAYLOAD_PROCESSING_ID!,
+                  customer_id: data.customer_id,
+                  start_date: startDate,
+                  end_date: fiveYearsOut,
+                  recurring_frequency: 'monthly',
+                  'charges[0][type]': 'Monthly Fee',
+                  'charges[0][amount]': '50',
+                }),
+              })
+
+              if (scheduleRes.ok) {
+                console.log('Created billing schedule for customer:', data.customer_id)
+              } else {
+                const err = await scheduleRes.json()
+                console.error('Failed to create billing schedule:', err.message)
+              }
+            } else {
+              console.log('Billing schedule already exists for customer:', data.customer_id)
+            }
+          }
+        } catch (err) {
+          console.error('Error checking/creating billing schedule:', err)
+        }
       }
 
       // Check if this is a custom invoice — mark agent_debt resolved
@@ -80,8 +142,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Billing schedule charge paid (autopay) — always a monthly fee
-    if (type === 'billing_charge.paid' && data?.customer_id) {
+    // Automatic payment fired by billing schedule (autopay)
+    if (type === 'automatic_payment' && data?.customer_id) {
       const { data: user } = await supabase
         .from('users')
         .select('id')
