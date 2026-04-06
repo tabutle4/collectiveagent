@@ -411,7 +411,6 @@ export default function AdminDashboard() {
         if (isFuture && t.status === 'cancelled') return
       }
 
-      units++
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
       const txnType = t.transaction_type || ''
@@ -432,10 +431,14 @@ export default function AdminDashboard() {
       const office = t.office_location || 'Unknown'
 
       const txnAgentRows = agentRowsByTxn[t.id] || []
+      const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
+      const productionRows = txnAgentRows.filter(a => PRODUCTION_ROLES.includes(a.agent_role))
+      // Units = count of primary+listing TIA rows (each buyer, seller, tenant, landlord = 1 unit)
+      units += productionRows.length
       
-      // Sum sales_volume from agent rows
+      // Sum sales_volume from production roles only (primary + listing, not co_agent/team_lead/etc)
       let txnVolume = 0
-      txnAgentRows.forEach(a => {
+      productionRows.forEach(a => {
         txnVolume += parseFloat(a.sales_volume || 0)
       })
       volume += txnVolume
@@ -444,21 +447,25 @@ export default function AdminDashboard() {
         volByType[typeCategory] = (volByType[typeCategory] || 0) + txnVolume
       }
       
+      // agent_net uses all rows (full payout including co-agents, team leads, etc)
       txnAgentRows.forEach(a => {
         const aNet = parseFloat(a.agent_net || 0)
         agentNet += aNet
         const officeNetShare = parseFloat(t.office_net || 0) / txnAgentRows.length
-        const volumeShare = parseFloat(a.sales_volume || 0)
+        // Units and volume only for production roles
+        const isProduction = PRODUCTION_ROLES.includes(a.agent_role)
+        const volumeShare = isProduction ? parseFloat(a.sales_volume || 0) : 0
+        const unitShare = isProduction ? 1 : 0
 
         if (a.team_name) {
           // Agent is on a team - bucket by team (gold)
-          unitTeam[a.team_name] = (unitTeam[a.team_name] || 0) + 1
+          unitTeam[a.team_name] = (unitTeam[a.team_name] || 0) + unitShare
           agentTeam[a.team_name] = (agentTeam[a.team_name] || 0) + aNet
           officeTeam[a.team_name] = (officeTeam[a.team_name] || 0) + officeNetShare
           volTeam[a.team_name] = (volTeam[a.team_name] || 0) + volumeShare
         } else {
           // Agent not on a team - bucket by office (gray)
-          unitOffice[office] = (unitOffice[office] || 0) + 1
+          unitOffice[office] = (unitOffice[office] || 0) + unitShare
           agentOffice[office] = (agentOffice[office] || 0) + aNet
           officeOffice[office] = (officeOffice[office] || 0) + officeNetShare
           volOffice[office] = (volOffice[office] || 0) + volumeShare

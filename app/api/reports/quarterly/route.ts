@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
         .select(`
           transaction_id,
           agent_id,
+          agent_role,
           sales_volume,
           units,
           agent_net,
@@ -135,8 +136,8 @@ export async function GET(request: NextRequest) {
           let dateField: string | null = null
           
           if (isLease) {
-            dateField = t.move_in_date
-            // Lease counts if move_in_date is in range AND in the past
+            // Prefer move_in_date; fall back to closed_date/closing_date if not set
+            dateField = t.move_in_date || t.closed_date || t.closing_date
             if (!dateField) return false
             const moveInDate = new Date(dateField)
             if (moveInDate > now) return false
@@ -154,7 +155,11 @@ export async function GET(request: NextRequest) {
     )
 
     // Filter internal agents to only qualified transactions in range
-    const relevantAgentRows = internalAgents.filter(ia => qualifiedTransactionIds.has(ia.transaction_id))
+    const allRelevantRows = internalAgents.filter(ia => qualifiedTransactionIds.has(ia.transaction_id))
+    // Production roles only: primary_agent and listing_agent count for firm volume/units/top producers
+    // (co_agent, team_lead, referral_agent, momentum_partner do not add units or volume)
+    const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
+    const relevantAgentRows = allRelevantRows.filter(ia => PRODUCTION_ROLES.includes(ia.agent_role))
 
     // Build agent -> team lookup
     const agentTeamMap: Record<string, string> = {}
@@ -168,7 +173,10 @@ export async function GET(request: NextRequest) {
     let totalAgentNet = 0
     relevantAgentRows.forEach(row => {
       totalVolume += parseFloat(row.sales_volume || '0')
-      totalUnits += parseFloat(row.units || '0')
+      totalUnits += 1  // each TIA row = 1 unit (buyer, seller, tenant, landlord each count)
+    })
+    // Agent net includes all payees (co-agents, team leads, etc.)
+    allRelevantRows.forEach(row => {
       totalAgentNet += parseFloat(row.agent_net || '0')
     })
 
@@ -190,7 +198,10 @@ export async function GET(request: NextRequest) {
       office: string 
     }> = {}
 
-    relevantAgentRows.forEach(row => {
+    const PRODUCER_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
+    allRelevantRows.forEach(row => {
+      // Top producers: primary, listing, co_agent only
+      if (!PRODUCER_ROLES.includes(row.agent_role)) return
       const txn = transactions.find(t => t.id === row.transaction_id)
       if (!txn || !row.agent) return
       
@@ -207,7 +218,7 @@ export async function GET(request: NextRequest) {
       }
       
       const volume = parseFloat(row.sales_volume || '0')
-      const units = parseFloat(row.units || '0')
+      const units = 1  // each qualifying TIA row = 1 unit
       
       const isLease = isLeaseType(txn.transaction_type)
       
@@ -296,16 +307,18 @@ export async function GET(request: NextRequest) {
     // Calculate team production
     const teamStats: Record<string, { volume: number, units: number }> = {}
     
-    relevantAgentRows.forEach(row => {
+    allRelevantRows.forEach(row => {
       const teamId = agentTeamMap[row.agent_id]
       if (!teamId) return
+      // Team stats: primary + listing only (consistent with firm totals)
+      if (!PRODUCER_ROLES.includes(row.agent_role)) return
       
       if (!teamStats[teamId]) {
         teamStats[teamId] = { volume: 0, units: 0 }
       }
       
       teamStats[teamId].volume += parseFloat(row.sales_volume || '0')
-      teamStats[teamId].units += parseFloat(row.units || '0')
+      teamStats[teamId].units += 1  // each qualifying TIA row = 1 unit
     })
 
     // Get top 2 teams with their details
@@ -325,7 +338,7 @@ export async function GET(request: NextRequest) {
         // Get team members (excluding leads)
         const leadIds = activeLeads.map(l => l.agent?.id)
         const memberIds = teamMembers.filter(tm => tm.team_id === teamId).map(tm => tm.agent_id)
-        const memberAgents = relevantAgentRows
+        const memberAgents = allRelevantRows
           .filter(row => memberIds.includes(row.agent_id) && row.agent && !leadIds.includes((row.agent as any).id))
           .map(row => row.agent as any)
           .filter((agent: any, index: number, self: any[]) => 

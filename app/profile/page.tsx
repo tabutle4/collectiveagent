@@ -14,6 +14,15 @@ function normalizeCommissionPlan(plan: string): string {
   return plan
 }
 
+function isCapPlan(plan: string): boolean {
+  if (!plan) return false
+  const normalized = normalizeCommissionPlan(plan)
+  if (normalized === 'cap') return true
+  // Custom plans with cap type: "Custom - 80/20 Cap"
+  const p = plan.toLowerCase()
+  return p.startsWith('custom') && p.includes('cap') && !p.includes('no cap')
+}
+
 type ProfilePageProps = {
   userId?: string
   isAdmin?: boolean
@@ -1529,7 +1538,7 @@ export default function ProfilePage({
                   {user.total_units_closed || 0}
                 </p>
               </div>
-              {normalizeCommissionPlan(user.commission_plan || '') === 'cap' && (
+              {isCapPlan(user.commission_plan || '') && (
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
                   <p className="text-lg font-semibold text-luxury-accent">

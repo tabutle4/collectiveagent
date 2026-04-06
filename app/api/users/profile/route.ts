@@ -94,20 +94,63 @@ export async function GET(request: NextRequest) {
       .eq('user_id', id)
       .maybeSingle()
 
-    // Compute YTD sales volume and units live from closed TIA rows
+    // Compute YTD sales volume and units — two queries because sales use closing_date
+    // and leases use move_in_date
     const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
-    const { data: productionData } = await supabaseAdmin
+    const today = new Date().toISOString().split('T')[0]
+    const PRODUCTION_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
+
+    // Query 1: Sales — status must be closed, date by closing_date
+    const { data: salesData } = await supabaseAdmin
       .from('transaction_internal_agents')
-      .select('sales_volume, units, transaction_id, transactions!inner(status, closing_date)')
+      .select('sales_volume, units, transaction_id, transactions!inner(status, closing_date, transaction_type)')
       .eq('agent_id', id)
-      .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
+      .in('agent_role', PRODUCTION_ROLES)
       .eq('transactions.status', 'closed')
       .gte('transactions.closing_date', ytdStart)
+      .lte('transactions.closing_date', today)
 
-    const total_sales_volume = (productionData || []).reduce((sum, r) => sum + (r.sales_volume || 0), 0)
-    const total_units_closed = Math.round((productionData || []).reduce((sum, r) => sum + (r.units || 0), 0))
+    // Filter out lease types from sales query (leases may also have closing_date)
+    const salesRows = (salesData || []).filter((r: any) => {
+      const t = (r.transactions?.transaction_type || '').toLowerCase()
+      return !t.includes('tenant') && !t.includes('landlord') && !t.includes('lease')
+    })
 
-    // Cap progress: YTD live from brokerage_split, only rows that count toward progress
+    // Query 2a: Leases with move_in_date in YTD range
+    const { data: leaseMoveInData } = await supabaseAdmin
+      .from('transaction_internal_agents')
+      .select('sales_volume, transaction_id, transactions!inner(move_in_date, closing_date, transaction_type)')
+      .eq('agent_id', id)
+      .in('agent_role', PRODUCTION_ROLES)
+      .gte('transactions.move_in_date', ytdStart)
+      .lte('transactions.move_in_date', today)
+
+    // Query 2b: Leases with no move_in_date — fall back to closing_date
+    const { data: leaseClosingData } = await supabaseAdmin
+      .from('transaction_internal_agents')
+      .select('sales_volume, transaction_id, transactions!inner(move_in_date, closing_date, transaction_type)')
+      .eq('agent_id', id)
+      .in('agent_role', PRODUCTION_ROLES)
+      .is('transactions.move_in_date', null)
+      .gte('transactions.closing_date', ytdStart)
+      .lte('transactions.closing_date', today)
+
+    // Combine lease rows, deduplicate by transaction_id, filter to lease types only
+    const seenLeaseIds = new Set<string>()
+    const leaseRows = [...(leaseMoveInData || []), ...(leaseClosingData || [])].filter((r: any) => {
+      if (seenLeaseIds.has(r.transaction_id)) return false
+      seenLeaseIds.add(r.transaction_id)
+      const t = (r.transactions?.transaction_type || '').toLowerCase()
+      return t.includes('tenant') || t.includes('landlord') || t.includes('lease')
+    })
+
+    const allProductionRows = [...salesRows, ...leaseRows]
+    const total_sales_volume = allProductionRows.reduce((sum, r) => sum + (r.sales_volume || 0), 0)
+    // Count TIA rows — each qualifying row = 1 unit (buyer, seller, tenant, landlord each count)
+    const total_units_closed = allProductionRows.length
+
+    // Cap progress: YTD sales only (leases never count toward cap)
+    // Uses counts_toward_progress flag which is false for lease transaction types
     const { data: capData } = await supabaseAdmin
       .from('transaction_internal_agents')
       .select('brokerage_split, transaction_id, transactions!inner(status, closing_date)')
@@ -116,6 +159,7 @@ export async function GET(request: NextRequest) {
       .eq('counts_toward_progress', true)
       .eq('transactions.status', 'closed')
       .gte('transactions.closing_date', ytdStart)
+      .lte('transactions.closing_date', today)
 
     const cap_progress = Math.round(
       (capData || []).reduce((sum, r) => sum + parseFloat(r.brokerage_split || 0), 0)
