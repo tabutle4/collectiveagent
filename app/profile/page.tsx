@@ -91,6 +91,8 @@ export default function ProfilePage({
     division: '',
     join_date: '',
     commission_plan: '',
+    custom_split: '',
+    custom_plan_type: '',
     role: '',
     full_nav_access: false,
     is_licensed_agent: true,
@@ -254,7 +256,23 @@ export default function ProfilePage({
           ? freshUserData.division.filter(Boolean).join(' | ')
           : freshUserData.division || '',
         join_date: formatDateForInput(freshUserData.join_date),
-        commission_plan: normalizeCommissionPlan(freshUserData.commission_plan || ''),
+        commission_plan: (() => {
+          const raw = freshUserData.commission_plan || ''
+          if (raw.toLowerCase().startsWith('custom')) return 'custom'
+          return normalizeCommissionPlan(raw)
+        })(),
+        custom_split: (() => {
+          const raw = freshUserData.commission_plan || ''
+          if (!raw.toLowerCase().startsWith('custom')) return ''
+          const match = raw.match(/Custom - (\d+)\//)
+          return match ? match[1] : ''
+        })(),
+        custom_plan_type: (() => {
+          const raw = freshUserData.commission_plan || ''
+          if (!raw.toLowerCase().startsWith('custom')) return ''
+          const match = raw.match(/Custom - \d+\/\d+ (.+)/)
+          return match ? match[1] : ''
+        })(),
         role: freshUserData.role || '',
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
@@ -375,6 +393,14 @@ export default function ProfilePage({
     try {
       // Convert empty strings to null for date/nullable fields so Postgres doesn't choke
       const sanitized = { ...realEstateForm }
+      // Format custom plan into a stored string, then strip helper fields
+      if (sanitized.commission_plan === 'custom' && sanitized.custom_split && sanitized.custom_plan_type) {
+        const agentSplit = parseInt(sanitized.custom_split as string)
+        const brokSplit = 100 - agentSplit
+        sanitized.commission_plan = `Custom - ${agentSplit}/${brokSplit} ${sanitized.custom_plan_type}`
+      }
+      delete (sanitized as any).custom_split
+      delete (sanitized as any).custom_plan_type
       if (sanitized.join_date === '') sanitized.join_date = null as any
       if (sanitized.referring_agent_id === '') sanitized.referring_agent_id = null as any
       if (sanitized.referring_agent === '') sanitized.referring_agent = null as any
@@ -1064,7 +1090,39 @@ export default function ProfilePage({
                       <option value="new_agent">New Agent 70/30</option>
                       <option value="no_cap">No Cap 85/15</option>
                       <option value="cap">Cap 70/30</option>
+                      <option value="custom">Custom Plan</option>
                     </select>
+                    {realEstateForm.commission_plan === 'custom' && (
+                      <div className="mt-3 space-y-3 pt-3 border-t border-luxury-gray-5">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-luxury-gray-3 mb-1.5">Agent Split %</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="99"
+                              value={realEstateForm.custom_split}
+                              onChange={e => handleRealEstateChange('custom_split', e.target.value)}
+                              placeholder="e.g. 80"
+                              className="input-luxury"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-luxury-gray-3 mb-1.5">Plan Type</label>
+                            <select
+                              value={realEstateForm.custom_plan_type}
+                              onChange={e => handleRealEstateChange('custom_plan_type', e.target.value)}
+                              className="select-luxury"
+                            >
+                              <option value="">Select type</option>
+                              <option value="No Cap">No Cap</option>
+                              <option value="Cap">Cap ($18,000)</option>
+                              <option value="New Agent Base">New Agent Base</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Role</label>
