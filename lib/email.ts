@@ -153,6 +153,38 @@ export async function sendProspectWelcomeEmail(prospect: {
   })
 }
 
+// ─── NEW PROSPECT NOTIFICATION (internal) ────────────────────────────────────
+
+export async function sendNewProspectNotification(prospect: {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  location: string
+}) {
+  const adminUrl = `https://agent.collectiverealtyco.com/admin/prospects/${prospect.id}`
+  return resend.emails.send({
+    from: FROM_EMAILS.notifications,
+    to: ADMIN_EMAIL,
+    subject: `New Prospect: ${prospect.first_name} ${prospect.last_name}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px; background: #ffffff;">
+        <h2 style="margin: 0 0 24px; font-size: 18px; color: #1a1a1a;">New Prospective Agent</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #333;">
+          <tr><td style="padding: 8px 0; color: #888; width: 100px;">Name</td><td style="padding: 8px 0; font-weight: 600;">${prospect.first_name} ${prospect.last_name}</td></tr>
+          <tr><td style="padding: 8px 0; color: #888;">Email</td><td style="padding: 8px 0;">${prospect.email}</td></tr>
+          <tr><td style="padding: 8px 0; color: #888;">Phone</td><td style="padding: 8px 0;">${prospect.phone}</td></tr>
+          <tr><td style="padding: 8px 0; color: #888;">Location</td><td style="padding: 8px 0;">${prospect.location}</td></tr>
+        </table>
+        <div style="margin-top: 32px;">
+          <a href="${adminUrl}" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">View Prospect →</a>
+        </div>
+      </div>
+    `,
+  })
+}
+
 // ─── PASSWORD RESET (getEmailLayout) ─────────────────────────────────────────
 
 export async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
-import { sendProspectWelcomeEmail } from '@/lib/email'
+import { sendProspectWelcomeEmail, sendNewProspectNotification } from '@/lib/email'
 import { requirePermission } from '@/lib/api-auth'
 import crypto from 'crypto'
 
@@ -126,6 +126,19 @@ export async function POST(request: NextRequest) {
       })
     } catch (emailError) {
       console.error('Error sending prospect email:', emailError)
+    }
+
+    try {
+      await sendNewProspectNotification({
+        id: prospect.id,
+        first_name: prospect.first_name,
+        last_name: prospect.last_name,
+        email: prospect.email,
+        phone: prospect.phone,
+        location: prospect.location,
+      })
+    } catch (notifyError) {
+      console.error('Error sending prospect notification:', notifyError)
     }
 
     return NextResponse.json({
