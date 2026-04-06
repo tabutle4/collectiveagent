@@ -136,8 +136,8 @@ export async function GET(request: NextRequest) {
           let dateField: string | null = null
           
           if (isLease) {
-            // Prefer move_in_date; fall back to closed_date/closing_date if not set
-            dateField = t.move_in_date || t.closed_date || t.closing_date
+            // Use move_in_date; fall back to closing_date if not set (never use closed_date for leases)
+            dateField = t.move_in_date || t.closing_date
             if (!dateField) return false
             const moveInDate = new Date(dateField)
             if (moveInDate > now) return false
