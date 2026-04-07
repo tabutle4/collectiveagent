@@ -819,24 +819,28 @@ export default function AdminTransactionDetailPage() {
                       ))}
                     </select>
                   </div>
-                  <FieldRow
-                    label="Compliance"
-                    value={
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded ${
-                          txn.compliance_status === 'approved'
-                            ? 'bg-green-50 text-green-700'
-                            : txn.compliance_status === 'revision_requested'
-                              ? 'bg-orange-50 text-orange-700'
-                              : ['submitted', 'in_review'].includes(txn.compliance_status)
-                                ? 'bg-purple-50 text-purple-700'
-                                : 'bg-luxury-light text-luxury-gray-3'
-                        }`}
-                      >
-                        {txn.compliance_status?.replace(/_/g, ' ') || 'not requested'}
-                      </span>
-                    }
-                  />
+                  <div className="flex justify-between items-center py-1.5 border-b border-luxury-gray-5/30">
+                    <span className="field-label shrink-0">Compliance</span>
+                    <select
+                      value={txn.compliance_status || ''}
+                      onChange={e => updateTransaction({ compliance_status: e.target.value || null })}
+                      className={`text-xs px-2 py-0.5 rounded border-0 cursor-pointer ${
+                        txn.compliance_status === 'approved'
+                          ? 'bg-green-50 text-green-700'
+                          : txn.compliance_status === 'revision_requested'
+                            ? 'bg-orange-50 text-orange-700'
+                            : ['submitted', 'in_review'].includes(txn.compliance_status)
+                              ? 'bg-purple-50 text-purple-700'
+                              : 'bg-luxury-light text-luxury-gray-3'
+                      }`}
+                    >
+                      <option value="">Not requested</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="in_review">In review</option>
+                      <option value="revision_requested">Revision requested</option>
+                      <option value="approved">Approved</option>
+                    </select>
+                  </div>
                   <FieldRow
                     label="Representing"
                     value={txn.representation_type?.replace(/_/g, ' ')}
