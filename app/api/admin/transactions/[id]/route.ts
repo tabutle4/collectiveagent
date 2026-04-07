@@ -21,7 +21,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const [{ data: txn, error: txnError }, { data: agents }, { data: settings }] =
         await Promise.all([
           supabase.from('transactions').select('*').eq('id', id).single(),
-          supabase.from('transaction_internal_agents').select('*').eq('transaction_id', id),
+          supabase.from('transaction_internal_agents').select(`
+            *,
+            user:users!transaction_internal_agents_agent_id_fkey(
+              id, first_name, last_name, preferred_first_name, preferred_last_name,
+              office_email, email, phone, office, commission_plan, license_number,
+              license_expiration, nrds_id, mls_id, association, join_date,
+              division, revenue_share, revenue_share_percentage, referring_agent,
+              referring_agent_id, referred_agents, cap_year,
+              qualifying_transaction_count, waive_buyer_processing_fees,
+              waive_seller_processing_fees, special_commission_notes, headshot_url
+            )
+          `).eq('transaction_id', id),
           supabase
             .from('company_settings')
             .select('referral_tracking_url, crm_url, crm_name')
@@ -32,25 +43,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
       }
 
-      // Get agent user records
+      // Extract agent IDs for other lookups (team memberships, billing)
       const agentIds = (agents || []).map((a: any) => a.agent_id).filter(Boolean)
-      const { data: agentUsers } =
-        agentIds.length > 0
-          ? await supabase
-              .from('users')
-              .select(
-                `
-              id, first_name, last_name, preferred_first_name, preferred_last_name,
-              office_email, email, phone, office, commission_plan, license_number,
-              license_expiration, nrds_id, mls_id, association, join_date,
-              division, revenue_share, revenue_share_percentage, referring_agent,
-              referring_agent_id, referred_agents, cap_year,
-              qualifying_transaction_count, waive_buyer_processing_fees,
-              waive_seller_processing_fees, special_commission_notes, headshot_url
-            `
-              )
-              .in('id', agentIds)
-          : { data: [] }
+      const agentUsers = (agents || []).map((a: any) => a.user).filter(Boolean)
 
       // Primary agent (submitted_by)
       const primaryAgentId = txn.submitted_by
@@ -212,7 +207,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         transaction: txn,
         agents: (agents || []).map((a: any) => ({
           ...a,
-          user: (agentUsers || []).find((u: any) => u.id === a.agent_id) || null,
+          // user is already included from the relationship join
           team_membership: membershipByAgent[a.agent_id] || null,
         })),
         primary_agent: primaryAgent || null,
