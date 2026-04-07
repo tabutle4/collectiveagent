@@ -102,6 +102,8 @@ export default function ProfilePage({
     commission_plan: '',
     custom_split: '',
     custom_plan_type: '',
+    lease_commission_plan: '',
+    lease_custom_split: '',
     role: '',
     full_nav_access: false,
     is_licensed_agent: true,
@@ -214,15 +216,15 @@ export default function ProfilePage({
         }
       }
 
-      // Load team/split data — for agents always, for admins only when viewing a team lead
+      // Load team/split data — for agents always, for admins when viewing any agent
       if (!isAdmin) {
         const teamRes = await fetch('/api/agent/team')
         if (teamRes.ok) {
           const td = await teamRes.json()
           setTeamData(td)
         }
-      } else if (freshUserData.is_team_lead && freshUserData.id) {
-        // Admin viewing a team lead — fetch that lead's team data
+      } else if (freshUserData.id) {
+        // Admin viewing any agent — fetch their team data
         const teamRes = await fetch(`/api/agent/team?user_id=${freshUserData.id}`)
         if (teamRes.ok) {
           const td = await teamRes.json()
@@ -280,6 +282,17 @@ export default function ProfilePage({
           const raw = freshUserData.commission_plan || ''
           if (!raw.toLowerCase().startsWith('custom')) return ''
           const match = raw.match(/Custom - \d+\/\d+ (.+)/)
+          return match ? match[1] : ''
+        })(),
+        lease_commission_plan: (() => {
+          const raw = freshUserData.lease_commission_plan || ''
+          if (raw.toLowerCase().startsWith('custom lease')) return 'custom'
+          return raw || 'lease'
+        })(),
+        lease_custom_split: (() => {
+          const raw = freshUserData.lease_commission_plan || ''
+          if (!raw.toLowerCase().startsWith('custom lease')) return ''
+          const match = raw.match(/Custom Lease (\d+)\//)
           return match ? match[1] : ''
         })(),
         role: freshUserData.role || '',
@@ -410,6 +423,14 @@ export default function ProfilePage({
       }
       delete (sanitized as any).custom_split
       delete (sanitized as any).custom_plan_type
+      // Format custom lease plan similarly (just split, no cap type for leases)
+      if (sanitized.lease_commission_plan === 'custom' && sanitized.lease_custom_split) {
+        const agentSplit = parseInt(sanitized.lease_custom_split as string)
+        const brokSplit = 100 - agentSplit
+        sanitized.lease_commission_plan = `Custom Lease ${agentSplit}/${brokSplit}`
+      }
+      delete (sanitized as any).lease_custom_split
+      delete (sanitized as any).lease_custom_plan_type
       if (sanitized.join_date === '') sanitized.join_date = null as any
       if (sanitized.referring_agent_id === '') sanitized.referring_agent_id = null as any
       if (sanitized.referring_agent === '') sanitized.referring_agent = null as any
@@ -679,8 +700,8 @@ export default function ProfilePage({
         </div>
       )}
 
-      {/* Non-licensed user notice */}
-      {!isLicensedAgent && (
+      {/* Non-licensed user notice (only shown to the staff member themselves, not admin) */}
+      {!isLicensedAgent && !isAdmin && (
         <div className="container-card mb-5">
           <div className="inner-card bg-gray-50">
             <p className="text-sm text-luxury-gray-2 text-center">
@@ -1014,8 +1035,8 @@ export default function ProfilePage({
         </div>
       </div>
 
-      {/* ========== LICENSED AGENT SECTIONS ONLY ========== */}
-      {isLicensedAgent && (
+      {/* ========== LICENSED AGENT SECTIONS ONLY (or admin viewing any profile) ========== */}
+      {(isLicensedAgent || isAdmin) && (
         <>
           {/* Real Estate Information */}
           <div className="container-card mb-5">
@@ -1062,14 +1083,24 @@ export default function ProfilePage({
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Team</label>
-                    <p className="text-sm font-medium text-luxury-gray-1 py-2">
-                      {user.team_name ? (
-                        <>
-                          {user.team_name}
-                          {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
-                        </>
-                      ) : 'N/A'}
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-luxury-gray-1 py-2">
+                        {user.team_name ? (
+                          <>
+                            {user.team_name}
+                            {user.is_team_lead && <span className="ml-2 text-xs text-luxury-accent">(Team Lead)</span>}
+                          </>
+                        ) : 'N/A'}
+                      </p>
+                      {user.team_name && teamData?.membership && !user.is_team_lead && (
+                        <button
+                          onClick={() => setSplitModalMember({ member: teamData.membership, title: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name} — Splits` })}
+                          className="text-xs text-luxury-accent hover:underline"
+                        >
+                          View Splits
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Division(s)</label>
@@ -1129,6 +1160,33 @@ export default function ProfilePage({
                               <option value="New Agent Base">New Agent Base</option>
                             </select>
                           </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs text-luxury-gray-3 mb-1 block">Lease Commission Plan</label>
+                    <select
+                      className="select-luxury"
+                      value={realEstateForm.lease_commission_plan}
+                      onChange={e => handleRealEstateChange('lease_commission_plan', e.target.value)}
+                    >
+                      <option value="lease">Lease Plan 85/15</option>
+                      <option value="custom">Custom Plan</option>
+                    </select>
+                    {realEstateForm.lease_commission_plan === 'custom' && (
+                      <div className="mt-3 pt-3 border-t border-luxury-gray-5">
+                        <div className="w-1/2">
+                          <label className="block text-xs text-luxury-gray-3 mb-1.5">Agent Split %</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            value={realEstateForm.lease_custom_split}
+                            onChange={e => handleRealEstateChange('lease_custom_split', e.target.value)}
+                            placeholder="e.g. 80"
+                            className="input-luxury"
+                          />
                         </div>
                       </div>
                     )}
@@ -1320,6 +1378,17 @@ export default function ProfilePage({
                         const plan = normalizeCommissionPlan(user.commission_plan || '')
                         const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30' }
                         return labels[plan] || user.commission_plan || user.commission_plan_other || 'N/A'
+                      })()}
+                    </p>
+                  </div>
+                  <div className="inner-card">
+                    <p className="text-xs text-luxury-gray-3 mb-1">Lease Plan</p>
+                    <p className="text-sm font-medium text-luxury-gray-1">
+                      {(() => {
+                        const plan = user.lease_commission_plan || 'lease'
+                        if (plan === 'lease') return 'Lease Plan 85/15'
+                        if (plan.toLowerCase().startsWith('custom lease')) return plan
+                        return plan
                       })()}
                     </p>
                   </div>
