@@ -201,7 +201,9 @@ export default function AdminBillingPage() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    // Add noon time to date-only strings to prevent timezone shift
+    const d = dateStr.length === 10 ? dateStr + 'T12:00:00' : dateStr
+    return new Date(d).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

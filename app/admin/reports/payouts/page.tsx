@@ -77,7 +77,11 @@ function agentTotal(row: PayoutRow): number {
 
 // Mobile card — clean stacked layout
 
-function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
+function PayoutCard({ row, dateKey, onUpdateCompliance }: { 
+  row: PayoutRow; 
+  dateKey: 'cleared_date' | 'received_date'
+  onUpdateCompliance?: (checkId: string, status: string) => void
+}) {
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
   const total = agentTotal(row)
@@ -131,8 +135,20 @@ function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' 
           {dateVal && (
             <span className="text-xs text-luxury-gray-3 tabular-nums">{fmtDate(dateVal)}</span>
           )}
-          {label && (
-            <span className={`text-xs ${cls}`}>{label}</span>
+          {onUpdateCompliance ? (
+            <select
+              value={row.compliance_status || 'not_submitted'}
+              onChange={e => onUpdateCompliance(row.check_id, e.target.value)}
+              className={`text-xs border-0 bg-transparent p-0 pr-4 cursor-pointer focus:ring-0 ${cls}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <option value="not_submitted">not requested</option>
+              <option value="in_review">in review</option>
+              <option value="incomplete">incomplete</option>
+              <option value="complete">complete</option>
+            </select>
+          ) : (
+            label && <span className={`text-xs ${cls}`}>{label}</span>
           )}
         </div>
         <span className={`text-xs font-medium flex-shrink-0 ${row.crc_transferred ? 'text-green-700' : 'text-red-400'}`}>
@@ -152,7 +168,11 @@ function PayoutCard({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' 
 
 // Desktop table row — all columns visible, table scrolls horizontally if needed
 
-function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_date' | 'received_date' }) {
+function PayoutTableRow({ row, dateKey, onUpdateCompliance }: { 
+  row: PayoutRow; 
+  dateKey: 'cleared_date' | 'received_date'
+  onUpdateCompliance?: (checkId: string, status: string) => void
+}) {
   const a1 = row.agents[0]
   const a2 = row.agents[1]
   const a3 = row.agents[2]
@@ -180,7 +200,22 @@ function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_da
         <span className="truncate block">{agentNames(row) || '—'}</span>
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(dateVal)}</td>
-      <td className={`py-2 px-2 text-xs whitespace-nowrap ${cls}`}>{label}</td>
+      <td className="py-2 px-2 text-xs whitespace-nowrap">
+        {onUpdateCompliance ? (
+          <select
+            value={row.compliance_status || 'not_submitted'}
+            onChange={e => onUpdateCompliance(row.check_id, e.target.value)}
+            className={`text-xs border border-luxury-gray-5 rounded px-1 py-0.5 bg-white cursor-pointer focus:ring-1 focus:ring-luxury-accent ${cls}`}
+          >
+            <option value="not_submitted">not requested</option>
+            <option value="in_review">in review</option>
+            <option value="incomplete">incomplete</option>
+            <option value="complete">complete</option>
+          </select>
+        ) : (
+          <span className={cls}>{label}</span>
+        )}
+      </td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         <span className={`font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
           {row.crc_transferred ? 'yes' : 'no'}
@@ -198,9 +233,10 @@ function PayoutTableRow({ row, dateKey }: { row: PayoutRow; dateKey: 'cleared_da
 type SortKey = 'date' | 'compliance' | null
 type SortDir = 'asc' | 'desc'
 
-function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: {
+function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onUpdateCompliance }: {
   rows: PayoutRow[]; title: string; collapsed: boolean; onToggle: () => void
   dateLabel: string; dateKey: 'cleared_date' | 'received_date'
+  onUpdateCompliance?: (checkId: string, status: string) => void
 }) {
   const [sortKey, setSortKey] = useState<SortKey>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -248,7 +284,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
             {displayRows.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
             ) : (
-              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} />)
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} />)
             )}
             {rows.length > 0 && (
               <div className="card-luxury rounded-lg flex items-center justify-between px-4 py-2 mt-1">
@@ -291,7 +327,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey }: 
                 {displayRows.length === 0 ? (
                   <tr><td colSpan={12} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
                 ) : (
-                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} />)
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} />)
                 )}
               </tbody>
               {rows.length > 0 && (
@@ -412,6 +448,29 @@ export default function PayoutsReportPage() {
     })
   }
 
+  const updateCompliance = async (checkId: string, status: string) => {
+    // Optimistically update the UI
+    setRows(prev => prev.map(r => 
+      r.check_id === checkId ? { ...r, compliance_status: status } : r
+    ))
+    
+    // Send to server
+    try {
+      const res = await fetch('/api/admin/payouts-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ check_id: checkId, compliance_status: status }),
+      })
+      if (!res.ok) {
+        // Revert on error
+        load()
+      }
+    } catch {
+      // Revert on error
+      load()
+    }
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center py-24">
       <RefreshCw size={18} className="animate-spin text-luxury-gray-3" />
@@ -437,8 +496,8 @@ export default function PayoutsReportPage() {
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" />
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} />
         </div>
 
         {/* Also In Payouts */}

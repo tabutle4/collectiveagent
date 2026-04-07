@@ -172,7 +172,9 @@ export default function TeamDetailPage({
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
+    // Add noon time to date-only strings to prevent timezone shift
+    const d = dateString.length === 10 ? dateString + 'T12:00:00' : dateString
+    return new Date(d).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

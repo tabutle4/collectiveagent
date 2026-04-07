@@ -37,7 +37,9 @@ const fmt$ = (n: number | null | undefined) => {
 
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '--'
-  return new Date(d).toLocaleDateString('en-US', {
+  // Add noon time to date-only strings to prevent timezone shift
+  const dateStr = d.length === 10 ? d + 'T12:00:00' : d
+  return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

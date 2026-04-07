@@ -206,3 +206,55 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+// Update compliance status for a specific check
+export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_checks')
+  if (auth.error) return auth.error
+
+  try {
+    const { check_id, compliance_status } = await request.json()
+
+    if (!check_id) {
+      return NextResponse.json({ error: 'check_id is required' }, { status: 400 })
+    }
+
+    // Update the check's compliance status (stored on checks_received or via compliance_complete_date)
+    const updates: Record<string, any> = {}
+    
+    if (compliance_status === 'complete') {
+      updates.compliance_complete_date = new Date().toISOString().split('T')[0]
+    } else if (compliance_status === 'not_submitted') {
+      updates.compliance_complete_date = null
+    }
+    
+    // Also store the explicit status if there's a column for it
+    // For now, we'll use compliance_complete_date to indicate completion
+    // and null to indicate not submitted
+    
+    const { error } = await supabaseAdmin
+      .from('checks_received')
+      .update(updates)
+      .eq('id', check_id)
+
+    if (error) throw error
+
+    // If there's a linked transaction, update its compliance_status too
+    const { data: check } = await supabaseAdmin
+      .from('checks_received')
+      .select('transaction_id')
+      .eq('id', check_id)
+      .single()
+
+    if (check?.transaction_id) {
+      await supabaseAdmin
+        .from('transactions')
+        .update({ compliance_status })
+        .eq('id', check.transaction_id)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

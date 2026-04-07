@@ -375,28 +375,94 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     
     // ── Add new internal agent row ────────────────────────────────────────────
-if (action === 'add_internal_agent') {
-  const { agent } = body
-  const { data, error } = await supabase
-    .from('transaction_internal_agents')
-    .insert({ ...agent, transaction_id: id })
-    .select()
-    .single()
-  if (error) throw error
-  return NextResponse.json({ agent: data })
-}
+    if (action === 'add_internal_agent') {
+      const { agent } = body
+      
+      // Validate agent_id is a valid UUID (required field)
+      if (!agent.agent_id || agent.agent_id === '') {
+        return NextResponse.json({ error: 'agent_id is required' }, { status: 400 })
+      }
+      
+      // Build clean insert object - only include non-empty values
+      const insertData: Record<string, any> = {
+        transaction_id: id,
+        agent_id: agent.agent_id,
+        agent_role: agent.agent_role || 'co_agent',
+        payment_status: agent.payment_status || 'pending',
+      }
+      
+      // Only add optional fields if they have values
+      if (agent.commission_plan) insertData.commission_plan = agent.commission_plan
+      if (agent.agent_gross != null) insertData.agent_gross = agent.agent_gross
+      if (agent.brokerage_split != null) insertData.brokerage_split = agent.brokerage_split
+      if (agent.processing_fee != null) insertData.processing_fee = agent.processing_fee
+      if (agent.coaching_fee != null) insertData.coaching_fee = agent.coaching_fee
+      if (agent.other_fees != null) insertData.other_fees = agent.other_fees
+      if (agent.other_fees_description) insertData.other_fees_description = agent.other_fees_description
+      if (agent.btsa_amount != null) insertData.btsa_amount = agent.btsa_amount
+      if (agent.debts_deducted != null) insertData.debts_deducted = agent.debts_deducted
+      if (agent.team_lead_commission != null) insertData.team_lead_commission = agent.team_lead_commission
+      if (agent.agent_net != null) insertData.agent_net = agent.agent_net
+      if (agent.amount_1099_reportable != null) insertData.amount_1099_reportable = agent.amount_1099_reportable
+      if (agent.payment_date) insertData.payment_date = agent.payment_date
+      if (agent.payment_method) insertData.payment_method = agent.payment_method
+      if (agent.payment_reference) insertData.payment_reference = agent.payment_reference
+      
+      const { data, error } = await supabase
+        .from('transaction_internal_agents')
+        .insert(insertData)
+        .select(`
+          *,
+          user:users!transaction_internal_agents_agent_id_fkey(
+            id, first_name, last_name, preferred_first_name, preferred_last_name,
+            office_email, email, phone, office, commission_plan
+          )
+        `)
+        .single()
+      if (error) throw error
+      return NextResponse.json({ agent: data })
+    }
 
-// ── Add new external brokerage row ────────────────────────────────────────
-if (action === 'add_external_brokerage') {
-  const { brokerage } = body
-  const { data, error } = await supabase
-    .from('transaction_external_brokerages')
-    .insert({ ...brokerage, transaction_id: id })
-    .select()
-    .single()
-  if (error) throw error
-  return NextResponse.json({ brokerage: data })
-}
+    // ── Add new external brokerage row ────────────────────────────────────────
+    if (action === 'add_external_brokerage') {
+      const { brokerage } = body
+      
+      // Validate brokerage_name is required
+      if (!brokerage.brokerage_name || brokerage.brokerage_name === '') {
+        return NextResponse.json({ error: 'brokerage_name is required' }, { status: 400 })
+      }
+      
+      // Build clean insert object
+      const insertData: Record<string, any> = {
+        transaction_id: id,
+        brokerage_name: brokerage.brokerage_name,
+        brokerage_role: brokerage.brokerage_role || 'other',
+        payment_status: brokerage.payment_status || 'pending',
+      }
+      
+      // Only add optional fields if they have values
+      if (brokerage.agent_name) insertData.agent_name = brokerage.agent_name
+      if (brokerage.agent_email) insertData.agent_email = brokerage.agent_email
+      if (brokerage.agent_phone) insertData.agent_phone = brokerage.agent_phone
+      if (brokerage.broker_name) insertData.broker_name = brokerage.broker_name
+      if (brokerage.brokerage_ein) insertData.brokerage_ein = brokerage.brokerage_ein
+      if (brokerage.federal_id_type) insertData.federal_id_type = brokerage.federal_id_type
+      if (brokerage.federal_id_number) insertData.federal_id_number = brokerage.federal_id_number
+      if (brokerage.commission_amount != null) insertData.commission_amount = brokerage.commission_amount
+      if (brokerage.amount_1099_reportable != null) insertData.amount_1099_reportable = brokerage.amount_1099_reportable
+      if (brokerage.w9_on_file != null) insertData.w9_on_file = brokerage.w9_on_file
+      if (brokerage.payment_date) insertData.payment_date = brokerage.payment_date
+      if (brokerage.payment_method) insertData.payment_method = brokerage.payment_method
+      if (brokerage.payment_reference) insertData.payment_reference = brokerage.payment_reference
+      
+      const { data, error } = await supabase
+        .from('transaction_external_brokerages')
+        .insert(insertData)
+        .select()
+        .single()
+      if (error) throw error
+      return NextResponse.json({ brokerage: data })
+    }
     // ── Mark agent PAID with full financial tracking ──────────────────────────
     if (action === 'mark_paid') {
       const {
