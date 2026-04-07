@@ -71,7 +71,7 @@ export async function GET(
         transaction:transactions(*),
         agent:users(
           id, first_name, last_name, preferred_first_name, preferred_last_name,
-          commission_plan, office, cap_progress, qualifying_transaction_count
+          commission_plan, office, qualifying_transaction_count
         )
       `)
       .eq('id', internalAgentId)
@@ -104,6 +104,19 @@ export async function GET(
     const ytdVolume = (ytdData || []).reduce((s, r) => s + parseFloat(r.sales_volume || 0), 0)
     const ytdNet = (ytdData || []).reduce((s, r) => s + parseFloat(r.agent_net || 0), 0)
 
+    // Calculate YTD cap progress from TIA
+    const { data: capData } = await supabase
+      .from('transaction_internal_agents')
+      .select('brokerage_split, transactions!inner(status, closing_date)')
+      .eq('agent_id', tia.agent_id)
+      .eq('counts_toward_progress', true)
+      .eq('transactions.status', 'closed')
+      .gte('transactions.closing_date', `${currentYear}-01-01`)
+    
+    const calculatedCapProgress = (capData || []).reduce(
+      (sum, r) => sum + parseFloat(r.brokerage_split || 0), 0
+    )
+
     const { data: appliedDebts } = await supabase
       .from('agent_debts')
       .select('debt_type, description, amount_paid, date_incurred')
@@ -124,7 +137,7 @@ export async function GET(
 
     const showCapProgress = isCapPlan(plan)
     const showNewAgentProgress = isNewAgentPlan(plan)
-    const capProgress = parseFloat(agent?.cap_progress || 0)
+    const capProgress = calculatedCapProgress
     const capAmount = 18000
     const qualifyingCount = agent?.qualifying_transaction_count || 0
 

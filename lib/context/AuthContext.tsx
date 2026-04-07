@@ -18,7 +18,6 @@ interface User {
   headshot_url?: string
   headshot_crop?: any
   qualifying_transaction_count?: number
-  cap_progress?: number
   join_date?: string
   division?: string
   monthly_fee_paid_through?: string

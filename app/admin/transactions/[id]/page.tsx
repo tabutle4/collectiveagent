@@ -1759,9 +1759,6 @@ export default function AdminTransactionDetailPage() {
                         <FieldRow label="NRDS ID" value={u.nrds_id} />
                         <FieldRow label="MLS ID" value={u.mls_id} />
                         <FieldRow label="Join Date" value={fmtDate(u.join_date)} />
-                        {u.cap_progress > 0 && (
-                          <FieldRow label="Cap Progress" value={fmt$(u.cap_progress)} />
-                        )}
                         {u.qualifying_transaction_count > 0 && (
                           <FieldRow label="Qualifying Txns" value={`${u.qualifying_transaction_count} / 5`} />
                         )}
