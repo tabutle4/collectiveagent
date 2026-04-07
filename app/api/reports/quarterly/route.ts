@@ -144,8 +144,8 @@ export async function GET(request: NextRequest) {
           } else {
             // Sales require closed status
             if (t.status !== 'closed') return false
-            // For sales, prefer closed_date (actual) over closing_date (target)
-            dateField = t.closed_date || t.closing_date
+            // For sales, use closing_date only (never closed_date)
+            dateField = t.closing_date
           }
           
           if (!dateField) return false

@@ -30,14 +30,19 @@ export async function GET(request: NextRequest) {
         .order('closing_date', { ascending: false }),
       supabase
         .from('transaction_internal_agents')
-        .select('transaction_id, agent_net, sales_volume, units')
+        .select('transaction_id, agent_net, sales_volume, units, brokerage_split, counts_toward_progress')
         .eq('agent_id', userId),
     ])
 
     if (userRes.error) throw userRes.error
     const user = userRes.data
 
-    // Load commission plan if user has one
+    // Detect cap plan from string (handles custom plans like "Custom - 85/15 Cap")
+    const planStr = (user?.commission_plan || '').toLowerCase()
+    const hasCap = (planStr.includes('cap') && !planStr.includes('no cap')) || 
+                   (planStr.startsWith('custom') && planStr.includes('cap') && !planStr.includes('no cap'))
+    
+    // Load commission plan if user has one (for other plan details)
     let commissionPlan = null
     if (user?.commission_plan) {
       const { data: plan } = await supabase
@@ -50,12 +55,47 @@ export async function GET(request: NextRequest) {
         .single()
       commissionPlan = plan
     }
+    
+    // Calculate YTD cap progress from TIA (not stored value)
+    let capProgress = 0
+    if (hasCap) {
+      const currentYear = new Date().getFullYear()
+      const yearStart = `${currentYear}-01-01`
+      
+      // Get closed transaction IDs for this year
+      const { data: closedTxns } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('status', 'closed')
+        .gte('closing_date', yearStart)
+      
+      const closedIds = (closedTxns || []).map(t => t.id)
+      
+      // Sum brokerage_split from agent rows on those transactions
+      const agentRows = agentRowsRes.data || []
+      capProgress = agentRows
+        .filter((r: any) => 
+          closedIds.includes(r.transaction_id) && 
+          r.counts_toward_progress !== false
+        )
+        .reduce((sum: number, r: any) => sum + parseFloat(r.brokerage_split || 0), 0)
+    }
+    
+    // Override commission plan cap info for custom plans
+    if (hasCap && !commissionPlan?.has_cap) {
+      commissionPlan = {
+        ...commissionPlan,
+        has_cap: true,
+        cap_amount: 18000,
+      }
+    }
 
     return NextResponse.json({
       user,
       commissionPlan,
       transactions: txnRes.data || [],
       agentRows: agentRowsRes.data || [],
+      capProgress,
     })
   } catch (err: any) {
     console.error('Agent dashboard API error:', err)

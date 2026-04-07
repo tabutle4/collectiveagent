@@ -498,15 +498,9 @@ if (action === 'add_external_brokerage') {
 
         // Leases never count toward cap or qualifying transactions
         if (!txnIsLease) {
-          // Cap plan ('cap') tracks brokerage split toward annual cap
-          const isCapPlan = plan === 'cap'
-          if (isCapPlan && brokerageSplit > 0) {
-            const currentCapProgress = parseFloat(agentUser.cap_progress || 0)
-            userUpdate.cap_progress = Math.round((currentCapProgress + brokerageSplit) * 100) / 100
-            if (!agentUser.cap_year) {
-              userUpdate.cap_year = new Date().getFullYear()
-            }
-          }
+          // Cap progress is now calculated dynamically from TIA - no need to store it
+          // Keeping this commented for reference:
+          // const isCapPlan = plan.includes('cap') && !plan.includes('no cap')
 
           // New agent plan ('new_agent') counts toward 5-deal qualifying threshold
           const isNewAgentPlan = plan === 'new_agent'

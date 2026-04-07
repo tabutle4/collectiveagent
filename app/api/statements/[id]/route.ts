@@ -41,9 +41,9 @@ const formatType = (type: string | null): string => {
 const isCapPlan = (plan: string | null): boolean => {
   if (!plan) return false
   const lower = plan.toLowerCase()
-  return lower.includes('85/15') || lower.includes('85_15') || 
-         lower.includes('100%') || lower.includes('100_capped') ||
-         (lower.includes('85') && lower.includes('15'))
+  // Cap Plan or Custom cap plans (but not No Cap plans)
+  return (lower.includes('cap') && !lower.includes('no cap')) ||
+         (lower.startsWith('custom') && lower.includes('cap') && !lower.includes('no cap'))
 }
 
 const isNewAgentPlan = (plan: string | null): boolean => {

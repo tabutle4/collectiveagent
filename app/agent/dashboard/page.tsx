@@ -51,7 +51,7 @@ if (authUser?.role === 'agent') {
       }
       const data = await res.json()
 
-      const { user: freshUser, transactions, agentRows, commissionPlan } = data
+      const { user: freshUser, transactions, agentRows, commissionPlan, capProgress: capProgressFromApi } = data
       if (!freshUser) {
         router.push('/auth/login')
         return
@@ -126,7 +126,7 @@ if (authUser?.role === 'agent') {
         pendingCount,
         activeCount,
         complianceCount,
-        capProgress: freshUser.cap_progress || 0,
+        capProgress: capProgressFromApi || 0,
         capAmount,
         hasCap,
         qualifyingCount: freshUser.qualifying_transaction_count || 0,
