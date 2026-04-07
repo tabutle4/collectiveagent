@@ -169,6 +169,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('status', 'prospect')
       .order('created_at', { ascending: false })
+      .range(0, 9999)
 
     if (error) throw error
 

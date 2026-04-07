@@ -27,11 +27,13 @@ export async function GET(request: NextRequest) {
           'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date'
         )
         .eq('submitted_by', userId)
-        .order('closing_date', { ascending: false }),
+        .order('closing_date', { ascending: false })
+        .range(0, 9999),
       supabase
         .from('transaction_internal_agents')
         .select('transaction_id, agent_net, sales_volume, units, brokerage_split, counts_toward_progress')
-        .eq('agent_id', userId),
+        .eq('agent_id', userId)
+        .range(0, 9999),
     ])
 
     if (userRes.error) throw userRes.error

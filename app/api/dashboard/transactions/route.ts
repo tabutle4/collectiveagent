@@ -12,8 +12,9 @@ export async function GET(request: NextRequest) {
         .from('transactions')
         .select(
           'id, status, transaction_type, sales_price, monthly_rent, lease_term, closing_date, move_in_date, office_net, office_location'
-        ),
-      supabaseAdmin.from('transaction_internal_agents').select('transaction_id, agent_id, agent_role, agent_net, sales_volume'),
+        )
+        .range(0, 9999),
+      supabaseAdmin.from('transaction_internal_agents').select('transaction_id, agent_id, agent_role, agent_net, sales_volume').range(0, 9999),
       supabaseAdmin.from('processing_fee_types').select('name, is_lease').eq('is_active', true),
       supabaseAdmin
         .from('team_member_agreements')

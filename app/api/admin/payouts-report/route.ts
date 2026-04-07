@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       .not('transaction_id', 'is', null)
       .eq('agents_paid', false)
       .order('cleared_date', { ascending: false })
+      .range(0, 9999)
 
     if (checksError) throw checksError
 
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
       .is('transaction_id', null)
       .eq('agents_paid', false)
       .order('cleared_date', { ascending: false })
+      .range(0, 9999)
 
     const allChecks = [...(checks || []), ...(standaloneChecks || [])]
 
@@ -161,6 +163,7 @@ export async function GET(request: NextRequest) {
       .from('payout_expenses')
       .select('*')
       .order('created_at', { ascending: false })
+      .range(0, 9999)
 
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
     const pendingPayloadTotal = allChecks

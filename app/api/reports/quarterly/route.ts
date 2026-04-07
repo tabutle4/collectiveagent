@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
         .gte('join_date', startDateStr)
         .lte('join_date', endDateStr)
         .eq('is_licensed_agent', true)
-        .eq('is_active', true),
+        .eq('is_active', true)
+        .range(0, 9999),
       
       // All active agents by office
       supabaseAdmin
@@ -57,14 +58,16 @@ export async function GET(request: NextRequest) {
         .select('id, office')
         .eq('status', 'active')
         .eq('is_active', true)
-        .eq('is_licensed_agent', true),
+        .eq('is_licensed_agent', true)
+        .range(0, 9999),
       
       // Transactions - we'll filter by date and status in JS since we need different logic
       // for sales (require closed) vs leases (just need move_in_date in past)
       supabaseAdmin
         .from('transactions')
         .select('id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status')
-        .neq('status', 'cancelled'),
+        .neq('status', 'cancelled')
+        .range(0, 9999),
       
       // All internal agent records for closed transactions
       supabaseAdmin
@@ -85,13 +88,15 @@ export async function GET(request: NextRequest) {
             office,
             headshot_url
           )
-        `),
+        `)
+        .range(0, 9999),
       
       // Active team memberships
       supabaseAdmin
         .from('team_member_agreements')
         .select('agent_id, team_id')
-        .is('end_date', null),
+        .is('end_date', null)
+        .range(0, 9999),
       
       // Teams with leads
       supabaseAdmin
@@ -111,7 +116,8 @@ export async function GET(request: NextRequest) {
             )
           )
         `)
-        .eq('status', 'active'),
+        .eq('status', 'active')
+        .range(0, 9999),
     ])
 
     // Build lookup maps

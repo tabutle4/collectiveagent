@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       `
       )
       .order('created_at', { ascending: false })
+      .range(0, 9999)
 
     if (filter === 'active') {
       query = query.eq('is_active', true)

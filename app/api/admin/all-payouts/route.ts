@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
         transactions!inner(property_address, transaction_type, closed_date)
       `)
       .order('payment_date', { ascending: false, nullsFirst: false })
+      .range(0, 9999)
 
     if (iaError) throw iaError
 
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
         transactions!inner(property_address, transaction_type, closed_date)
       `)
       .order('payment_date', { ascending: false, nullsFirst: false })
+      .range(0, 9999)
 
     if (ebError) throw ebError
 

@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       `
       )
       .order('closing_date', { ascending: false })
-
+      .range(0, 9999)
     // Filter by user if they don't have can_view_all_transactions
     if (!canViewAll) {
       txnQuery = txnQuery.eq('submitted_by', userId)
