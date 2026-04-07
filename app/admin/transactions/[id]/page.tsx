@@ -278,7 +278,7 @@ export default function AdminTransactionDetailPage() {
     if (!id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/transactions/${id}`)
+      const res = await fetch(`/api/admin/transactions/${id}`, { cache: 'no-store' })
       if (!res.ok) throw new Error('Failed to load')
       const json = await res.json()
       setData(json)
@@ -297,7 +297,7 @@ export default function AdminTransactionDetailPage() {
 
   useEffect(() => {
     if (activeTab !== 'check_payouts' || !id) return
-    fetch(`/api/admin/transactions/${id}?section=external_brokerages`)
+    fetch(`/api/admin/transactions/${id}?section=external_brokerages`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { external_brokerages: [] })
       .then(d => setPayoutBrokerages(d.external_brokerages || []))
       .catch(() => {})

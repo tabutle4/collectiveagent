@@ -18,8 +18,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // ── Full transaction detail load ─────────────────────────────────────────
     if (!section || section === 'full') {
-      const [{ data: txn, error: txnError }, { data: agents }, { data: settings }] =
-        await Promise.all([
+      const [
+        { data: txn, error: txnError },
+        { data: agents, error: agentsError },
+        { data: settings }
+      ] = await Promise.all([
           supabase.from('transactions').select('*').eq('id', id).single(),
           supabase.from('transaction_internal_agents').select(`
             *,
@@ -38,6 +41,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             .select('referral_tracking_url, crm_url, crm_name')
             .single(),
         ])
+
+      // Debug logging
+      if (agentsError) {
+        console.error('TIA query error for transaction', id, ':', agentsError)
+      }
+      console.log('TIA query result for transaction', id, ':', agents?.length, 'agents')
 
       if (txnError || !txn) {
         return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
