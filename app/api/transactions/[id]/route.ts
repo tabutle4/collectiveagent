@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               office_email, email, phone, office, commission_plan, license_number,
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
-              referring_agent_id, referred_agents, cap_year,
+              referring_agent_id, referred_agents,
               qualifying_transaction_count, waive_buyer_processing_fees,
               waive_seller_processing_fees, special_commission_notes, headshot_url
             )
@@ -407,7 +407,7 @@ if (action === 'add_external_brokerage') {
 
       const { data: agentUser, error: userError } = await supabase
         .from('users')
-        .select('id, commission_plan, cap_year, qualifying_transaction_count')
+        .select('id, commission_plan, qualifying_transaction_count')
         .eq('id', tia.agent_id)
         .single()
       if (userError) throw userError
