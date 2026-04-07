@@ -403,9 +403,9 @@ export default function AdminDashboard() {
       // For leases: count if move_in_date is in the past (within range)
       // For sales: require closed status
       if (isLease) {
-        // Lease counts if move_in_date is in the past
-        if (txnDate > new Date()) return
-      } else {
+  const today = new Date().toISOString().split('T')[0]
+  if (dateStr > today) return
+} else {
         // Sales require closed status (unless looking at future projections)
         if (!isFuture && t.status !== 'closed') return
         if (isFuture && t.status === 'cancelled') return
