@@ -237,7 +237,7 @@ export default function ProspectDetailPage() {
             </div>
             <div>
               <p className="text-luxury-gray-2">Referring Agent</p>
-              <p className="font-medium">{prospect.referred_by_agent || 'N/A'}</p>
+              <p className="font-medium">{prospect.referring_agent || 'N/A'}</p>
             </div>
             <div>
               <p className="text-luxury-gray-2">Joining Team</p>
