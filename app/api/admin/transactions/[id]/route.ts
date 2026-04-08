@@ -123,46 +123,121 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // Team info
       let teamInfo = null
       if (txn.team_agreement_id) {
-        const [{ data: agreement }, { data: members }] = await Promise.all([
-          supabase.from('team_agreements').select('*').eq('id', txn.team_agreement_id).single(),
-          supabase.from('team_members').select('*').eq('team_agreement_id', txn.team_agreement_id),
-        ])
-        let teamLeadName = null
-        if (agreement?.team_lead_id) {
-          const { data: leadUser } = await supabase
-            .from('users')
-            .select('first_name, last_name, preferred_first_name, preferred_last_name')
-            .eq('id', agreement.team_lead_id)
-            .single()
-          if (leadUser) {
-            teamLeadName = `${leadUser.preferred_first_name || leadUser.first_name} ${leadUser.preferred_last_name || leadUser.last_name}`
+        // team_agreement_id references team_member_agreements
+        const { data: memberAgreement } = await supabase
+          .from('team_member_agreements')
+          .select(`
+            id, team_id, agent_id, effective_date, end_date, agreement_document_url, firm_min_override, notes,
+            team:teams!team_member_agreements_team_id_fkey(id, team_name, status)
+          `)
+          .eq('id', txn.team_agreement_id)
+          .single()
+
+        if (memberAgreement) {
+          const team = Array.isArray(memberAgreement.team) ? memberAgreement.team[0] : memberAgreement.team
+          
+          // Get team lead from team_leads table
+          let teamLeadName = null
+          let teamLeadId = null
+          if (team?.id) {
+            const { data: teamLeadRecord } = await supabase
+              .from('team_leads')
+              .select(`
+                agent_id,
+                agent:users!team_leads_agent_id_fkey(
+                  first_name, last_name, preferred_first_name, preferred_last_name
+                )
+              `)
+              .eq('team_id', team.id)
+              .is('end_date', null)
+              .single()
+
+            if (teamLeadRecord) {
+              teamLeadId = teamLeadRecord.agent_id
+              const leadUser = Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent
+              if (leadUser) {
+                teamLeadName = `${leadUser.preferred_first_name || leadUser.first_name} ${leadUser.preferred_last_name || leadUser.last_name}`
+              }
+            }
+          }
+
+          // Get all team members for this team
+          const { data: allMembers } = await supabase
+            .from('team_member_agreements')
+            .select(`
+              id, agent_id, effective_date, end_date,
+              agent:users!team_member_agreements_agent_id_fkey(
+                id, first_name, last_name, preferred_first_name, preferred_last_name
+              )
+            `)
+            .eq('team_id', team?.id)
+            .is('end_date', null)
+
+          teamInfo = {
+            agreement: {
+              ...memberAgreement,
+              team_name: team?.team_name,
+              team_lead_id: teamLeadId,
+            },
+            members: allMembers || [],
+            team_lead_name: teamLeadName,
           }
         }
-        teamInfo = { agreement, members: members || [], team_lead_name: teamLeadName }
       } else if ((primaryAgent as any)?.is_on_team && (primaryAgent as any)?.team_name) {
-        const { data: agreement } = await supabase
-          .from('team_agreements')
-          .select('*')
+        // Find team by name
+        const { data: team } = await supabase
+          .from('teams')
+          .select('id, team_name, status')
           .eq('team_name', (primaryAgent as any).team_name)
           .eq('status', 'active')
           .single()
-        if (agreement) {
-          const { data: members } = await supabase
-            .from('team_members')
-            .select('*')
-            .eq('team_agreement_id', agreement.id)
+
+        if (team) {
+          // Get team lead
           let teamLeadName = null
-          if (agreement.team_lead_id) {
-            const { data: leadUser } = await supabase
-              .from('users')
-              .select('first_name, last_name, preferred_first_name, preferred_last_name')
-              .eq('id', agreement.team_lead_id)
-              .single()
+          let teamLeadId = null
+          const { data: teamLeadRecord } = await supabase
+            .from('team_leads')
+            .select(`
+              agent_id,
+              agent:users!team_leads_agent_id_fkey(
+                first_name, last_name, preferred_first_name, preferred_last_name
+              )
+            `)
+            .eq('team_id', team.id)
+            .is('end_date', null)
+            .single()
+
+          if (teamLeadRecord) {
+            teamLeadId = teamLeadRecord.agent_id
+            const leadUser = Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent
             if (leadUser) {
               teamLeadName = `${leadUser.preferred_first_name || leadUser.first_name} ${leadUser.preferred_last_name || leadUser.last_name}`
             }
           }
-          teamInfo = { agreement, members: members || [], team_lead_name: teamLeadName }
+
+          // Get all team members
+          const { data: allMembers } = await supabase
+            .from('team_member_agreements')
+            .select(`
+              id, agent_id, effective_date, end_date,
+              agent:users!team_member_agreements_agent_id_fkey(
+                id, first_name, last_name, preferred_first_name, preferred_last_name
+              )
+            `)
+            .eq('team_id', team.id)
+            .is('end_date', null)
+
+          teamInfo = {
+            agreement: {
+              id: team.id,
+              team_name: team.team_name,
+              team_lead_id: teamLeadId,
+              status: team.status,
+            },
+            members: allMembers || [],
+            team_lead_name: teamLeadName,
+          }
         }
       }
 

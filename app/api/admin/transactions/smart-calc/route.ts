@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       { data: processingFeeTypes },
     ] = await Promise.all([
       supabase.from('commission_plans').select('*').order('name'),
-      supabase.from('processing_fee_types').select('*').order('type_code'),
+      supabase.from('processing_fee_types').select('*').order('code'),
     ])
 
     // If agent_id provided, fetch agent details with team membership and momentum partner
@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
         .from('users')
         .select(`
           id, first_name, last_name, preferred_first_name, preferred_last_name,
-          commission_plan, lease_commission_plan, lease_custom_split,
+          commission_plan, lease_commission_plan,
           office, office_email, email,
           referring_agent_id, revenue_share_percentage,
           waive_buyer_processing_fees, waive_seller_processing_fees,
-          qualifying_transaction_count, cap_year
+          qualifying_transaction_count
         `)
         .eq('id', agentId)
         .single()
@@ -57,24 +57,49 @@ export async function GET(request: NextRequest) {
           .select(`
             id, agent_id, firm_min_override,
             team:teams!team_member_agreements_team_id_fkey(
-              id, team_name, team_lead_id,
-              team_lead:users!teams_team_lead_id_fkey(
-                id, first_name, last_name, preferred_first_name, preferred_last_name
-              )
+              id, team_name
             )
           `)
           .eq('agent_id', agentId)
           .is('end_date', null)
           .single()
 
-        if (membership) {
+        if (membership && membership.team) {
+          // Get the team as a single object (Supabase returns array for joins)
+          const team = Array.isArray(membership.team) ? membership.team[0] : membership.team
+          
+          // Fetch current team lead from team_leads table
+          const { data: teamLeadRecord } = await supabase
+            .from('team_leads')
+            .select(`
+              id, agent_id,
+              agent:users!team_leads_agent_id_fkey(
+                id, first_name, last_name, preferred_first_name, preferred_last_name
+              )
+            `)
+            .eq('team_id', team.id)
+            .is('end_date', null)
+            .single()
+
           // Fetch splits for this membership
           const { data: splits } = await supabase
             .from('team_agreement_splits')
             .select('id, plan_type, lead_source, agent_pct, team_lead_pct, firm_pct')
             .eq('agreement_id', membership.id)
 
-          teamMembership = { ...membership, splits: splits || [] }
+          const teamLeadAgent = teamLeadRecord?.agent
+            ? (Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent)
+            : null
+
+          teamMembership = {
+            ...membership,
+            team: {
+              ...team,
+              team_lead_id: teamLeadRecord?.agent_id || null,
+              team_lead: teamLeadAgent,
+            },
+            splits: splits || [],
+          }
         }
 
         // Fetch momentum partner if exists
@@ -150,7 +175,7 @@ export async function POST(request: NextRequest) {
     const { data: agent } = await supabase
       .from('users')
       .select(`
-        id, commission_plan, lease_commission_plan, lease_custom_split,
+        id, commission_plan, lease_commission_plan,
         referring_agent_id, revenue_share_percentage,
         waive_buyer_processing_fees, waive_seller_processing_fees
       `)
@@ -162,29 +187,58 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch team membership if exists
-    const { data: teamMembership } = await supabase
+    const { data: membershipData } = await supabase
       .from('team_member_agreements')
       .select(`
         id, agent_id, firm_min_override,
         team:teams!team_member_agreements_team_id_fkey(
-          id, team_name, team_lead_id,
-          team_lead:users!teams_team_lead_id_fkey(
-            id, first_name, last_name, preferred_first_name, preferred_last_name
-          )
+          id, team_name
         )
       `)
       .eq('agent_id', agent_id)
       .is('end_date', null)
       .single()
 
+    let teamMembership: any = null
     let teamSplits: any[] = []
-    if (teamMembership) {
+    
+    if (membershipData && membershipData.team) {
+      // Get the team as a single object
+      const team = Array.isArray(membershipData.team) ? membershipData.team[0] : membershipData.team
+      
+      // Fetch current team lead from team_leads table
+      const { data: teamLeadRecord } = await supabase
+        .from('team_leads')
+        .select(`
+          id, agent_id,
+          agent:users!team_leads_agent_id_fkey(
+            id, first_name, last_name, preferred_first_name, preferred_last_name
+          )
+        `)
+        .eq('team_id', team.id)
+        .is('end_date', null)
+        .single()
+
+      const teamLeadAgent = teamLeadRecord?.agent
+        ? (Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent)
+        : null
+
+      // Fetch splits for this membership
       const { data: splits } = await supabase
         .from('team_agreement_splits')
         .select('plan_type, lead_source, agent_pct, team_lead_pct, firm_pct')
-        .eq('agreement_id', teamMembership.id)
+        .eq('agreement_id', membershipData.id)
 
       teamSplits = splits || []
+      
+      teamMembership = {
+        ...membershipData,
+        team: {
+          ...team,
+          team_lead_id: teamLeadRecord?.agent_id || null,
+          team_lead: teamLeadAgent,
+        },
+      }
     }
 
     // Determine agent's commission plan
@@ -204,7 +258,7 @@ export async function POST(request: NextRequest) {
     const { data: processingFeeType } = await supabase
       .from('processing_fee_types')
       .select('*')
-      .eq('type_code', transaction_type)
+      .eq('code', transaction_type)
       .single()
 
     // ─── Calculate splits ────────────────────────────────────────────────────
@@ -219,12 +273,6 @@ export async function POST(request: NextRequest) {
       agentSplitPct = commissionPlan.agent_split_percentage || 85
       firmSplitPct = commissionPlan.firm_split_percentage || 15
       coachingFee = commissionPlan.coaching_fee_amount || 0
-    }
-
-    // Handle custom lease split
-    if (is_lease && agent.lease_commission_plan === 'custom' && agent.lease_custom_split) {
-      agentSplitPct = agent.lease_custom_split
-      firmSplitPct = 100 - agent.lease_custom_split
     }
 
     // Apply team splits if team member
