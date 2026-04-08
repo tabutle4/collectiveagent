@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
 
+export const dynamic = 'force-dynamic'
+
 // GET - Get single disbursement
 export async function GET(
   request: NextRequest,
@@ -17,10 +19,14 @@ export async function GET(
     const { data: disbursement, error } = await supabase
       .from('landlord_disbursements')
       .select(`
-        *,
-        landlords(id, first_name, last_name, email, phone),
-        managed_properties(id, property_address, city),
-        pm_fee_payouts(id, payee_type, payee_name, amount, payment_status)
+        id, lease_id, landlord_id, gross_rent, management_fee, agent_fee, net_amount,
+        payment_status, payment_date, payment_method, payment_reference,
+        period_month, period_year, notes, payload_payout_id, created_at, updated_at,
+        landlords(id, first_name, last_name, email),
+        pm_leases(
+          id, monthly_rent,
+          managed_properties(id, property_address, unit, city, state)
+        )
       `)
       .eq('id', resolvedParams.id)
       .single()
@@ -38,7 +44,7 @@ export async function GET(
   }
 }
 
-// PATCH - Update disbursement (payment status, date, method)
+// PATCH - Update disbursement (mark as paid, update status, etc.)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } | Promise<{ id: string }> }
@@ -51,12 +57,11 @@ export async function PATCH(
     const supabase = createClient()
     const updates = await request.json()
 
+    // Allowed fields for update
     const allowedFields = [
-      'payment_status',
-      'payment_date',
-      'payment_method',
-      'payment_reference',
-      'notes',
+      'payment_status', 'payment_date', 'payment_method', 'payment_reference',
+      'gross_rent', 'management_fee', 'agent_fee', 'net_amount', 'notes',
+      'payload_payout_id',
     ]
 
     const filteredUpdates: Record<string, any> = { updated_at: new Date().toISOString() }
@@ -66,14 +71,16 @@ export async function PATCH(
       }
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('landlord_disbursements')
       .update(filteredUpdates)
       .eq('id', resolvedParams.id)
+      .select('id, payment_status, payment_date, payment_method, payment_reference, net_amount, updated_at')
+      .single()
 
     if (error) throw error
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, disbursement: data })
   } catch (error: any) {
     console.error('Error updating disbursement:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

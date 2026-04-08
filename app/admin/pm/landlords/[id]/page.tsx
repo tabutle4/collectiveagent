@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck, ExternalLink, Edit2, CheckCircle } from 'lucide-react'
+import Link from 'next/link'
 
 interface Landlord {
   id: string
@@ -428,6 +429,27 @@ export default function LandlordDetailPage() {
   const [saving, setSaving] = useState(false)
   const [savingAgreement, setSavingAgreement] = useState(false)
 
+  // Overview editing
+  const [editingOverview, setEditingOverview] = useState(false)
+  const [savingOverview, setSavingOverview] = useState(false)
+  const [overviewForm, setOverviewForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    mailing_address: '',
+    mailing_city: '',
+    mailing_state: 'TX',
+    mailing_zip: '',
+    status: 'onboarding',
+  })
+
+  // Mark Paid modal for disbursements
+  const [markPaidModal, setMarkPaidModal] = useState<Disbursement | null>(null)
+  const [markPaidDate, setMarkPaidDate] = useState('')
+  const [markPaidMethod, setMarkPaidMethod] = useState('ach')
+  const [markingPaid, setMarkingPaid] = useState(false)
+
   // Form states
   const [propertyForm, setPropertyForm] = useState({
     property_address: '',
@@ -505,6 +527,22 @@ export default function LandlordDetailPage() {
     }
   }
 
+  const startEditingOverview = () => {
+    if (!landlord) return
+    setOverviewForm({
+      first_name: landlord.first_name || '',
+      last_name: landlord.last_name || '',
+      email: landlord.email || '',
+      phone: landlord.phone || '',
+      mailing_address: landlord.mailing_address || '',
+      mailing_city: landlord.mailing_city || '',
+      mailing_state: landlord.mailing_state || 'TX',
+      mailing_zip: landlord.mailing_zip || '',
+      status: landlord.status || 'onboarding',
+    })
+    setEditingOverview(true)
+  }
+
   const updateLandlordStatus = async (field: 'w9_status' | 'bank_status', value: string) => {
     if (!landlord) return
     setUpdatingStatus(true)
@@ -526,6 +564,61 @@ export default function LandlordDetailPage() {
       setTimeout(() => setErrorMessage(''), 5000)
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const handleSaveOverview = async () => {
+    if (!landlord) return
+    setSavingOverview(true)
+    setErrorMessage('')
+    try {
+      const res = await fetch(`/api/pm/landlords/${landlordId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(overviewForm),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to save')
+      }
+      setSuccessMessage('Landlord updated')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      setEditingOverview(false)
+      loadLandlordData()
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to save landlord')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setSavingOverview(false)
+    }
+  }
+
+  const handleMarkPaid = async () => {
+    if (!markPaidModal || !markPaidDate) return
+    setMarkingPaid(true)
+    try {
+      const res = await fetch(`/api/pm/disbursements/${markPaidModal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_status: 'paid',
+          payment_date: markPaidDate,
+          payment_method: markPaidMethod,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to mark as paid')
+      }
+      setSuccessMessage('Disbursement marked as paid')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      setMarkPaidModal(null)
+      loadLandlordData()
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to mark as paid')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setMarkingPaid(false)
     }
   }
 
@@ -778,6 +871,14 @@ export default function LandlordDetailPage() {
           )}
           {sendingInvite ? 'Sending...' : 'Send Invite'}
         </button>
+        <Link
+          href={`/pm/landlord/dashboard?preview=${landlordId}`}
+          target="_blank"
+          className="btn btn-secondary flex items-center gap-2"
+        >
+          <ExternalLink size={14} />
+          Preview Portal
+        </Link>
         <span className={`text-xs font-medium ${
           landlord.status === 'active' ? 'text-green-600' : 'text-amber-600'
         }`}>
@@ -814,92 +915,216 @@ export default function LandlordDetailPage() {
         <div className="pt-5">
           {/* Overview Tab */}
           {activeTab === 'overview' && (
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-                  Contact Information
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-luxury-gray-3">Email</span>
-                    <span className="text-luxury-gray-1">{landlord.email}</span>
+            <div>
+              {/* Edit/Save buttons */}
+              <div className="flex justify-end mb-4">
+                {editingOverview ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingOverview(false)}
+                      className="btn btn-secondary text-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveOverview}
+                      disabled={savingOverview}
+                      className="btn btn-primary text-sm flex items-center gap-2"
+                    >
+                      {savingOverview ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                      {savingOverview ? 'Saving...' : 'Save Changes'}
+                    </button>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-luxury-gray-3">Phone</span>
-                    <span className="text-luxury-gray-1">{landlord.phone || 'Not provided'}</span>
-                  </div>
-                  {landlord.mailing_address && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-luxury-gray-3">Address</span>
-                      <span className="text-luxury-gray-1 text-right">
-                        {landlord.mailing_address}<br />
-                        {landlord.mailing_city}, {landlord.mailing_state} {landlord.mailing_zip}
-                      </span>
+                ) : (
+                  <button
+                    onClick={startEditingOverview}
+                    className="btn btn-secondary text-sm flex items-center gap-2"
+                  >
+                    <Edit2 size={14} /> Edit Landlord
+                  </button>
+                )}
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                    Contact Information
+                  </h3>
+                  {editingOverview ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="field-label">First Name</label>
+                          <input
+                            type="text"
+                            value={overviewForm.first_name}
+                            onChange={(e) => setOverviewForm(f => ({ ...f, first_name: e.target.value }))}
+                            className="input-luxury w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">Last Name</label>
+                          <input
+                            type="text"
+                            value={overviewForm.last_name}
+                            onChange={(e) => setOverviewForm(f => ({ ...f, last_name: e.target.value }))}
+                            className="input-luxury w-full"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="field-label">Email</label>
+                        <input
+                          type="email"
+                          value={overviewForm.email}
+                          onChange={(e) => setOverviewForm(f => ({ ...f, email: e.target.value }))}
+                          className="input-luxury w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Phone</label>
+                        <input
+                          type="tel"
+                          value={overviewForm.phone}
+                          onChange={(e) => setOverviewForm(f => ({ ...f, phone: e.target.value }))}
+                          className="input-luxury w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Mailing Address</label>
+                        <input
+                          type="text"
+                          value={overviewForm.mailing_address}
+                          onChange={(e) => setOverviewForm(f => ({ ...f, mailing_address: e.target.value }))}
+                          className="input-luxury w-full"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="field-label">City</label>
+                          <input
+                            type="text"
+                            value={overviewForm.mailing_city}
+                            onChange={(e) => setOverviewForm(f => ({ ...f, mailing_city: e.target.value }))}
+                            className="input-luxury w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">State</label>
+                          <input
+                            type="text"
+                            value={overviewForm.mailing_state}
+                            onChange={(e) => setOverviewForm(f => ({ ...f, mailing_state: e.target.value }))}
+                            className="input-luxury w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">ZIP</label>
+                          <input
+                            type="text"
+                            value={overviewForm.mailing_zip}
+                            onChange={(e) => setOverviewForm(f => ({ ...f, mailing_zip: e.target.value }))}
+                            className="input-luxury w-full"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="field-label">Status</label>
+                        <select
+                          value={overviewForm.status}
+                          onChange={(e) => setOverviewForm(f => ({ ...f, status: e.target.value }))}
+                          className="select-luxury w-full"
+                        >
+                          <option value="onboarding">Onboarding</option>
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-luxury-gray-3">Email</span>
+                        <span className="text-luxury-gray-1">{landlord.email}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-luxury-gray-3">Phone</span>
+                        <span className="text-luxury-gray-1">{landlord.phone || 'Not provided'}</span>
+                      </div>
+                      {landlord.mailing_address && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-luxury-gray-3">Address</span>
+                          <span className="text-luxury-gray-1 text-right">
+                            {landlord.mailing_address}<br />
+                            {landlord.mailing_city}, {landlord.mailing_state} {landlord.mailing_zip}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div>
-                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-                  Account Status
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-luxury-gray-3">W9 Form</span>
-                    <select
-                      value={landlord.w9_status || 'pending'}
-                      onChange={(e) => updateLandlordStatus('w9_status', e.target.value)}
-                      disabled={updatingStatus}
-                      className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
-                        landlord.w9_status === 'completed' ? 'text-green-700' : 'text-amber-600'
-                      }`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="requested">Requested</option>
-                      <option value="completed">Complete</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-luxury-gray-3">Bank Account</span>
-                    <select
-                      value={landlord.bank_status || 'pending'}
-                      onChange={(e) => updateLandlordStatus('bank_status', e.target.value)}
-                      disabled={updatingStatus}
-                      className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
-                        landlord.bank_status === 'connected' ? 'text-green-700' : 'text-amber-600'
-                      }`}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="invited">Invited</option>
-                      <option value="connected">Connected</option>
-                    </select>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-luxury-gray-3">Added</span>
-                    <span className="text-luxury-gray-1">{formatDate(landlord.created_at)}</span>
+                <div>
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                    Account Status
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-luxury-gray-3">W9 Form</span>
+                      <select
+                        value={landlord.w9_status || 'pending'}
+                        onChange={(e) => updateLandlordStatus('w9_status', e.target.value)}
+                        disabled={updatingStatus}
+                        className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
+                          landlord.w9_status === 'completed' ? 'text-green-700' : 'text-amber-600'
+                        }`}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="requested">Requested</option>
+                        <option value="completed">Complete</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-luxury-gray-3">Bank Account</span>
+                      <select
+                        value={landlord.bank_status || 'pending'}
+                        onChange={(e) => updateLandlordStatus('bank_status', e.target.value)}
+                        disabled={updatingStatus}
+                        className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
+                          landlord.bank_status === 'connected' ? 'text-green-700' : 'text-amber-600'
+                        }`}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="invited">Invited</option>
+                        <option value="connected">Connected</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-luxury-gray-3">Added</span>
+                      <span className="text-luxury-gray-1">{formatDate(landlord.created_at)}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="md:col-span-2">
-                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-                  Summary
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="inner-card text-center">
-                    <p className="text-2xl font-semibold text-luxury-accent">{properties.length}</p>
-                    <p className="text-xs text-luxury-gray-3">Properties</p>
-                  </div>
-                  <div className="inner-card text-center">
-                    <p className="text-2xl font-semibold text-luxury-accent">{leases.filter(l => l.status === 'active').length}</p>
-                    <p className="text-xs text-luxury-gray-3">Active Leases</p>
-                  </div>
-                  <div className="inner-card text-center">
-                    <p className="text-2xl font-semibold text-luxury-accent">
-                      {formatCurrency(disbursements.filter(d => d.payment_status === 'pending').reduce((sum, d) => sum + d.net_amount, 0))}
-                    </p>
-                    <p className="text-xs text-luxury-gray-3">Pending Disbursements</p>
+                <div className="md:col-span-2">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                    Summary
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="inner-card text-center">
+                      <p className="text-2xl font-semibold text-luxury-accent">{properties.length}</p>
+                      <p className="text-xs text-luxury-gray-3">Properties</p>
+                    </div>
+                    <div className="inner-card text-center">
+                      <p className="text-2xl font-semibold text-luxury-accent">{leases.filter(l => l.status === 'active').length}</p>
+                      <p className="text-xs text-luxury-gray-3">Active Leases</p>
+                    </div>
+                    <div className="inner-card text-center">
+                      <p className="text-2xl font-semibold text-luxury-accent">
+                        {formatCurrency(disbursements.filter(d => d.payment_status === 'pending').reduce((sum, d) => sum + d.net_amount, 0))}
+                      </p>
+                      <p className="text-xs text-luxury-gray-3">Pending Disbursements</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -955,15 +1180,23 @@ export default function LandlordDetailPage() {
                             {property.city}, {property.state} {property.zip}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
                           <span className={`text-xs font-medium ${
                             property.status === 'active' ? 'text-green-600' : 'text-luxury-gray-3'
                           }`}>
                             {property.status}
                           </span>
+                          <Link
+                            href={`/admin/pm/properties/${property.id}`}
+                            className="text-luxury-gray-3 hover:text-luxury-accent"
+                            title="Edit Property"
+                          >
+                            <Edit2 size={14} />
+                          </Link>
                           <button
                             onClick={() => handleDeleteProperty(property.id)}
                             className="text-red-500 hover:text-red-700"
+                            title="Delete Property"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1018,6 +1251,13 @@ export default function LandlordDetailPage() {
                           }`}>
                             {lease.status}
                           </span>
+                          <Link
+                            href={`/admin/pm/leases/${lease.id}`}
+                            className="text-luxury-gray-3 hover:text-luxury-accent"
+                            title="Edit Lease"
+                          >
+                            <Edit2 size={14} />
+                          </Link>
                         </div>
                       </div>
                     </div>
@@ -1054,13 +1294,27 @@ export default function LandlordDetailPage() {
                             )}
                           </div>
                           {disb.payment_status === 'pending' ? (
-                            <button
-                              onClick={() => handleProcessDisbursement(disb.id)}
-                              className="btn btn-primary text-xs flex items-center gap-1"
-                              disabled={landlord.bank_status !== 'connected'}
-                            >
-                              <Send size={12} /> Process
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleProcessDisbursement(disb.id)}
+                                className="btn btn-primary text-xs flex items-center gap-1"
+                                disabled={landlord.bank_status !== 'connected'}
+                                title={landlord.bank_status !== 'connected' ? 'Bank not connected' : 'Process via ACH'}
+                              >
+                                <Send size={12} /> Process
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setMarkPaidModal(disb)
+                                  setMarkPaidDate(new Date().toISOString().split('T')[0])
+                                  setMarkPaidMethod('ach')
+                                }}
+                                className="btn btn-secondary text-xs flex items-center gap-1"
+                                title="Mark as manually paid"
+                              >
+                                <CheckCircle size={12} /> Mark Paid
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-xs text-green-600 font-medium">
                               {disb.payment_status}
@@ -1290,6 +1544,64 @@ export default function LandlordDetailPage() {
                 </button>
                 <button onClick={handleSaveTenant} disabled={saving} className="flex-1 btn btn-primary">
                   {saving ? 'Saving...' : 'Save Tenant'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Paid Modal */}
+      {markPaidModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="container-card max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Mark Disbursement as Paid</h2>
+              <button onClick={() => setMarkPaidModal(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="inner-card">
+                <p className="text-sm font-medium text-luxury-gray-1">
+                  {getMonthName(markPaidModal.period_month)} {markPaidModal.period_year}
+                </p>
+                <p className="text-lg font-semibold text-green-700">{formatCurrency(markPaidModal.net_amount)}</p>
+              </div>
+              <div>
+                <label className="field-label">Payment Date</label>
+                <input
+                  type="date"
+                  className="input-luxury w-full"
+                  value={markPaidDate}
+                  onChange={e => setMarkPaidDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="field-label">Payment Method</label>
+                <select
+                  className="select-luxury w-full"
+                  value={markPaidMethod}
+                  onChange={e => setMarkPaidMethod(e.target.value)}
+                >
+                  <option value="ach">ACH</option>
+                  <option value="check">Check</option>
+                  <option value="wire">Wire Transfer</option>
+                  <option value="zelle">Zelle</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setMarkPaidModal(null)} className="flex-1 btn btn-secondary">
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleMarkPaid} 
+                  disabled={markingPaid || !markPaidDate}
+                  className="flex-1 btn btn-primary flex items-center justify-center gap-2"
+                >
+                  {markingPaid ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  {markingPaid ? 'Saving...' : 'Mark as Paid'}
                 </button>
               </div>
             </div>
