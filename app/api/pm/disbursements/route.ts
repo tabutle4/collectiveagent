@@ -106,7 +106,8 @@ export async function POST(request: NextRequest) {
     const feePayouts: any[] = []
     if (mgmtFee > 0) {
       const agentFeePct = agreement?.agent_fee_pct || 0
-      const agentAmount = mgmtFee * (agentFeePct / 100)
+      // Agent fee is % of gross rent, not % of management fee
+      const agentAmount = gross_rent * (agentFeePct / 100)
       const brokerageAmount = mgmtFee - agentAmount
 
       // Agent payout (if there's a referring agent with a fee percentage)

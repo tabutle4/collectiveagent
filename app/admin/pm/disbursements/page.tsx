@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Banknote, Search, ArrowLeft, Send, CheckCircle, Clock, AlertCircle, Building2 } from 'lucide-react'
+import { Banknote, Search, ArrowLeft, Send, CheckCircle, Clock, AlertCircle, Building2, Plus, X } from 'lucide-react'
 
 interface Disbursement {
   id: string
@@ -39,6 +39,25 @@ interface Disbursement {
   }
 }
 
+interface Landlord {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  bank_status: string
+  managed_properties?: {
+    id: string
+    property_address: string
+    city: string
+    status: string
+  }[]
+  pm_agreements?: {
+    id: string
+    status: string
+    management_fee_pct: number
+  }[]
+}
+
 interface Stats {
   pending: number
   processing: number
@@ -60,6 +79,23 @@ export default function DisbursementsPage() {
     completed: 0,
     failed: 0,
     totalPending: 0
+  })
+
+  // Create modal state
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [landlords, setLandlords] = useState<Landlord[]>([])
+  const [loadingLandlords, setLoadingLandlords] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    landlord_id: '',
+    property_id: '',
+    gross_rent: '',
+    management_fee: '',
+    other_deductions: '',
+    other_deductions_description: '',
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+    notes: '',
   })
 
   useEffect(() => {
@@ -92,6 +128,21 @@ export default function DisbursementsPage() {
       console.error('Failed to load disbursements:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadLandlords = async () => {
+    setLoadingLandlords(true)
+    try {
+      const res = await fetch('/api/pm/landlords')
+      if (res.ok) {
+        const data = await res.json()
+        setLandlords(data.landlords || [])
+      }
+    } catch (err) {
+      console.error('Failed to load landlords:', err)
+    } finally {
+      setLoadingLandlords(false)
     }
   }
 
@@ -200,14 +251,134 @@ export default function DisbursementsPage() {
     )
   }
 
+  const openCreateModal = () => {
+    setCreateForm({
+      landlord_id: '',
+      property_id: '',
+      gross_rent: '',
+      management_fee: '',
+      other_deductions: '',
+      other_deductions_description: '',
+      period_month: new Date().getMonth() + 1,
+      period_year: new Date().getFullYear(),
+      notes: '',
+    })
+    setShowCreateModal(true)
+    loadLandlords()
+  }
+
+  const handleLandlordChange = (landlordId: string) => {
+    setCreateForm(prev => ({
+      ...prev,
+      landlord_id: landlordId,
+      property_id: '',
+      management_fee: '',
+    }))
+
+    // Auto-set management fee percentage if agreement exists
+    const landlord = landlords.find(l => l.id === landlordId)
+    if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
+      const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
+      if (activeAgreement && createForm.gross_rent) {
+        const fee = (parseFloat(createForm.gross_rent) * activeAgreement.management_fee_pct / 100).toFixed(2)
+        setCreateForm(prev => ({ ...prev, landlord_id: landlordId, property_id: '', management_fee: fee }))
+      }
+    }
+  }
+
+  const handleGrossRentChange = (value: string) => {
+    setCreateForm(prev => ({ ...prev, gross_rent: value }))
+    
+    // Auto-calculate management fee if landlord selected
+    if (createForm.landlord_id) {
+      const landlord = landlords.find(l => l.id === createForm.landlord_id)
+      if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
+        const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
+        if (activeAgreement && value) {
+          const fee = (parseFloat(value) * activeAgreement.management_fee_pct / 100).toFixed(2)
+          setCreateForm(prev => ({ ...prev, gross_rent: value, management_fee: fee }))
+          return
+        }
+      }
+    }
+  }
+
+  const calculateNetAmount = () => {
+    const gross = parseFloat(createForm.gross_rent) || 0
+    const mgmtFee = parseFloat(createForm.management_fee) || 0
+    const other = parseFloat(createForm.other_deductions) || 0
+    return gross - mgmtFee - other
+  }
+
+  const handleCreateDisbursement = async () => {
+    if (!createForm.landlord_id || !createForm.property_id || !createForm.gross_rent) {
+      alert('Please fill in landlord, property, and gross rent')
+      return
+    }
+
+    const netAmount = calculateNetAmount()
+    if (netAmount < 0) {
+      alert('Net amount cannot be negative')
+      return
+    }
+
+    setCreating(true)
+    try {
+      const res = await fetch('/api/pm/disbursements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          landlord_id: createForm.landlord_id,
+          property_id: createForm.property_id,
+          gross_rent: parseFloat(createForm.gross_rent),
+          management_fee: parseFloat(createForm.management_fee) || 0,
+          other_deductions: parseFloat(createForm.other_deductions) || 0,
+          other_deductions_description: createForm.other_deductions_description || null,
+          period_month: createForm.period_month,
+          period_year: createForm.period_year,
+          notes: createForm.notes || null,
+        })
+      })
+
+      if (res.ok) {
+        setShowCreateModal(false)
+        loadDisbursements()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to create disbursement')
+      }
+    } catch (err) {
+      console.error('Failed to create disbursement:', err)
+      alert('Failed to create disbursement')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const selectedLandlord = landlords.find(l => l.id === createForm.landlord_id)
+  const availableProperties = selectedLandlord?.managed_properties?.filter(p => p.status === 'active') || []
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
-          <ArrowLeft size={20} />
-        </Link>
-        <Banknote size={24} className="text-luxury-accent" />
-        <h1 className="page-title">Disbursements</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
+            <ArrowLeft size={20} />
+          </Link>
+          <div>
+            <h1 className="page-title flex items-center gap-2">
+              <Banknote size={24} />
+              Disbursements
+            </h1>
+          </div>
+        </div>
+        <button
+          onClick={openCreateModal}
+          className="btn btn-primary inline-flex items-center gap-2"
+        >
+          <Plus size={16} />
+          Create Disbursement
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -320,7 +491,7 @@ export default function DisbursementsPage() {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-luxury-gray-3">—</span>
+                        <span className="text-luxury-gray-3">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -408,15 +579,215 @@ export default function DisbursementsPage() {
             <div>
               <h3 className="font-semibold text-luxury-gray-1 mb-1">How Disbursements Work</h3>
               <ul className="text-sm text-luxury-gray-3 space-y-1">
-                <li>• Disbursements are auto-created when a tenant pays rent</li>
-                <li>• Management fee is automatically deducted from gross rent</li>
-                <li>• Landlords must connect their bank before receiving ACH payouts</li>
-                <li>• Processing typically takes 1-3 business days</li>
+                <li>Disbursements are auto-created when a tenant pays rent</li>
+                <li>Management fee is automatically deducted from gross rent</li>
+                <li>Landlords must connect their bank before receiving ACH payouts</li>
+                <li>Processing typically takes 1-3 business days</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Create Disbursement Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">Create Disbursement</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {loadingLandlords ? (
+                <div className="text-center py-4 text-luxury-gray-3">Loading landlords...</div>
+              ) : (
+                <>
+                  {/* Landlord */}
+                  <div>
+                    <label className="field-label">Landlord</label>
+                    <select
+                      value={createForm.landlord_id}
+                      onChange={(e) => handleLandlordChange(e.target.value)}
+                      className="select-luxury w-full"
+                    >
+                      <option value="">Select landlord...</option>
+                      {landlords.map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.first_name} {l.last_name}
+                          {l.bank_status !== 'connected' && ' (Bank not connected)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Property */}
+                  <div>
+                    <label className="field-label">Property</label>
+                    <select
+                      value={createForm.property_id}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, property_id: e.target.value }))}
+                      className="select-luxury w-full"
+                      disabled={!createForm.landlord_id}
+                    >
+                      <option value="">Select property...</option>
+                      {availableProperties.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.property_address}, {p.city}
+                        </option>
+                      ))}
+                    </select>
+                    {createForm.landlord_id && availableProperties.length === 0 && (
+                      <p className="text-xs text-red-500 mt-1">No active properties for this landlord</p>
+                    )}
+                  </div>
+
+                  {/* Period */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Period Month</label>
+                      <select
+                        value={createForm.period_month}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, period_month: parseInt(e.target.value) }))}
+                        className="select-luxury w-full"
+                      >
+                        {[...Array(12)].map((_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' })}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">Period Year</label>
+                      <select
+                        value={createForm.period_year}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, period_year: parseInt(e.target.value) }))}
+                        className="select-luxury w-full"
+                      >
+                        {[2024, 2025, 2026, 2027].map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Gross Rent */}
+                  <div>
+                    <label className="field-label">Gross Rent Collected</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={createForm.gross_rent}
+                        onChange={(e) => handleGrossRentChange(e.target.value)}
+                        className="input-luxury w-full pl-7"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Management Fee */}
+                  <div>
+                    <label className="field-label">
+                      Management Fee
+                      {selectedLandlord?.pm_agreements?.find(a => a.status === 'active') && (
+                        <span className="text-luxury-gray-3 font-normal ml-1">
+                          ({selectedLandlord?.pm_agreements?.find(a => a.status === 'active')?.management_fee_pct}% of gross)
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={createForm.management_fee}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, management_fee: e.target.value }))}
+                        className="input-luxury w-full pl-7"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Other Deductions */}
+                  <div>
+                    <label className="field-label">Other Deductions (optional)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={createForm.other_deductions}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions: e.target.value }))}
+                        className="input-luxury w-full pl-7"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {parseFloat(createForm.other_deductions) > 0 && (
+                    <div>
+                      <label className="field-label">Deduction Description</label>
+                      <input
+                        type="text"
+                        value={createForm.other_deductions_description}
+                        onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions_description: e.target.value }))}
+                        className="input-luxury w-full"
+                        placeholder="e.g., Repair expense, HOA fee"
+                      />
+                    </div>
+                  )}
+
+                  {/* Net Amount Preview */}
+                  {createForm.gross_rent && (
+                    <div className="inner-card">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-luxury-gray-3">Net Amount to Landlord</span>
+                        <span className={`text-xl font-bold ${calculateNetAmount() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatMoney(calculateNetAmount())}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  <div>
+                    <label className="field-label">Notes (optional)</label>
+                    <textarea
+                      value={createForm.notes}
+                      onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
+                      className="input-luxury w-full"
+                      rows={2}
+                      placeholder="Any additional notes..."
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="btn btn-secondary"
+                disabled={creating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateDisbursement}
+                className="btn btn-primary"
+                disabled={creating || !createForm.landlord_id || !createForm.property_id || !createForm.gross_rent}
+              >
+                {creating ? 'Creating...' : 'Create Disbursement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

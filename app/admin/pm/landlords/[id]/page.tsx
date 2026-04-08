@@ -335,7 +335,7 @@ function AgreementEditor({
             </select>
           </div>
           <div>
-            <label className="field-label">Agent Fee (% of Mgmt Fee)</label>
+            <label className="field-label">Agent Fee (% of Rent)</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -355,8 +355,8 @@ function AgreementEditor({
           <div className="inner-card mt-3">
             <p className="text-xs text-luxury-gray-3">
               On $1,000 rent with {mgmtFeePct}% mgmt fee (${(mgmtFeePct * 10).toFixed(0)}):
-              Agent gets <span className="font-medium text-luxury-accent">${((mgmtFeePct * 10) * (agentFeePct / 100)).toFixed(2)}</span>,
-              CRC keeps <span className="font-medium text-luxury-gray-1">${((mgmtFeePct * 10) * (brokerageShare / 100)).toFixed(2)}</span>
+              Agent gets <span className="font-medium text-luxury-accent">${(agentFeePct * 10).toFixed(2)}</span>,
+              CRC keeps <span className="font-medium text-luxury-gray-1">${((mgmtFeePct * 10) - (agentFeePct * 10)).toFixed(2)}</span>
             </p>
           </div>
         )}
