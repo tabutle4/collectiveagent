@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || ''
     const from   = searchParams.get('from') || ''
     const to     = searchParams.get('to') || ''
+    const year   = searchParams.get('year') || ''
+    const typeFilter = searchParams.get('type') || ''
 
     // Internal agents
     const { data: internalAgents, error: iaError } = await supabaseAdmin
@@ -70,21 +72,36 @@ export async function GET(request: NextRequest) {
 
     if (ebError) throw ebError
 
-    // PM fee payouts
+    // PM fee payouts - agent rows only (no brokerage)
     const { data: pmFeePayouts, error: pmError } = await supabaseAdmin
       .from('pm_fee_payouts')
       .select(`
         id, payee_type, payee_id, payee_name, amount,
-        payment_status, payment_date, payment_method,
+        payment_status, payment_date, payment_method, created_at,
         landlord_disbursements!inner(
           id, period_month, period_year,
-          managed_properties(property_address)
+          managed_properties(property_address, city)
         )
       `)
+      .eq('payee_type', 'agent')
       .order('created_at', { ascending: false })
       .range(0, 9999)
 
     if (pmError) throw pmError
+
+    // Landlord disbursements
+    const { data: landlordDisbursements, error: ldError } = await supabaseAdmin
+      .from('landlord_disbursements')
+      .select(`
+        id, net_amount, payment_status, payment_date, payment_method,
+        period_month, period_year, created_at,
+        landlords(id, first_name, last_name),
+        managed_properties(property_address, city)
+      `)
+      .order('created_at', { ascending: false })
+      .range(0, 9999)
+
+    if (ldError) throw ldError
 
     // Get agent names for internal agents
     const agentIds = [...new Set((internalAgents || []).map(a => a.agent_id).filter(Boolean))]
@@ -117,6 +134,7 @@ export async function GET(request: NextRequest) {
         payment_date:     a.payment_date || closedDate,
         payment_method:   a.payment_method || (lease ? 'ach' : 'wire'),
         transaction_id:   a.transaction_id,
+        created_at:       closedDate,
       }
     })
 
@@ -137,30 +155,58 @@ export async function GET(request: NextRequest) {
         payment_date:     e.payment_date || closedDate,
         payment_method:   e.payment_method || (lease ? 'ach' : 'wire'),
         transaction_id:   e.transaction_id,
+        created_at:       closedDate,
       }
     })
 
-    // PM fee payout rows
+    // PM fee payout rows (agent referrals only)
     const pmRows = (pmFeePayouts || []).map(p => {
       const disb = p.landlord_disbursements as any
       const prop = disb?.managed_properties as any
       const periodLabel = disb ? `${disb.period_month}/${disb.period_year}` : ''
+      const fullAddress = [prop?.property_address, prop?.city].filter(Boolean).join(', ')
       return {
         id:               p.id,
         type:             'pm_fee' as const,
         payee:            p.payee_name,
-        payee_type:       p.payee_type === 'agent' ? 'pm_referral' : 'pm_brokerage',
-        address:          prop?.property_address || '',
+        payee_type:       'pm_referral',
+        address:          fullAddress,
         transaction_type: `PM Fee ${periodLabel}`,
         amount:           p.amount || 0,
         payment_status:   p.payment_status || 'pending',
         payment_date:     p.payment_date || null,
         payment_method:   p.payment_method || 'ach',
-        transaction_id:   null, // PM payouts don't link to transactions
+        transaction_id:   null,
+        created_at:       p.created_at,
       }
     })
 
-    let rows = [...internalRows, ...externalRows, ...pmRows]
+    // Landlord disbursement rows
+    const landlordRows = (landlordDisbursements || []).map(d => {
+      const landlord = d.landlords as any
+      const prop = d.managed_properties as any
+      const periodLabel = `${d.period_month}/${d.period_year}`
+      const fullAddress = [prop?.property_address, prop?.city].filter(Boolean).join(', ')
+      const landlordName = landlord 
+        ? `${landlord.first_name} ${landlord.last_name}`.trim()
+        : 'Unknown Landlord'
+      return {
+        id:               d.id,
+        type:             'landlord' as const,
+        payee:            landlordName,
+        payee_type:       'landlord',
+        address:          fullAddress,
+        transaction_type: `Landlord ${periodLabel}`,
+        amount:           d.net_amount || 0,
+        payment_status:   d.payment_status || 'pending',
+        payment_date:     d.payment_date || null,
+        payment_method:   d.payment_method || 'ach',
+        transaction_id:   null,
+        created_at:       d.created_at,
+      }
+    })
+
+    let rows = [...internalRows, ...externalRows, ...pmRows, ...landlordRows]
 
     // Apply filters
     if (search) {
@@ -170,6 +216,19 @@ export async function GET(request: NextRequest) {
       )
     }
     if (status) rows = rows.filter(r => r.payment_status === status)
+    if (typeFilter) rows = rows.filter(r => r.type === typeFilter)
+    
+    // Year filter - use payment_date or created_at
+    if (year) {
+      const yearNum = parseInt(year)
+      rows = rows.filter(r => {
+        const dateStr = r.payment_date || r.created_at
+        if (!dateStr) return false
+        const rowYear = new Date(dateStr).getFullYear()
+        return rowYear === yearNum
+      })
+    }
+    
     if (from) rows = rows.filter(r => r.payment_date && r.payment_date >= from)
     if (to) rows = rows.filter(r => r.payment_date && r.payment_date <= to)
 
@@ -181,7 +240,37 @@ export async function GET(request: NextRequest) {
       return b.payment_date.localeCompare(a.payment_date)
     })
 
-    return NextResponse.json({ rows })
+    // Calculate pending totals by type (before filtering by type, but after other filters)
+    const allRowsBeforeTypeFilter = [...internalRows, ...externalRows, ...pmRows, ...landlordRows]
+      .filter(r => {
+        if (search && !(r.address.toLowerCase().includes(search) || r.payee.toLowerCase().includes(search))) return false
+        if (status && r.payment_status !== status) return false
+        if (year) {
+          const dateStr = r.payment_date || r.created_at
+          if (!dateStr) return false
+          const rowYear = new Date(dateStr).getFullYear()
+          if (rowYear !== parseInt(year)) return false
+        }
+        if (from && r.payment_date && r.payment_date < from) return false
+        if (to && r.payment_date && r.payment_date > to) return false
+        return true
+      })
+
+    const pendingByType = {
+      agent: allRowsBeforeTypeFilter.filter(r => r.type === 'agent' && r.payment_status === 'pending').reduce((s, r) => s + r.amount, 0),
+      external: allRowsBeforeTypeFilter.filter(r => r.type === 'external' && r.payment_status === 'pending').reduce((s, r) => s + r.amount, 0),
+      pm_fee: allRowsBeforeTypeFilter.filter(r => r.type === 'pm_fee' && r.payment_status === 'pending').reduce((s, r) => s + r.amount, 0),
+      landlord: allRowsBeforeTypeFilter.filter(r => r.type === 'landlord' && r.payment_status === 'pending').reduce((s, r) => s + r.amount, 0),
+    }
+
+    const countByType = {
+      agent: allRowsBeforeTypeFilter.filter(r => r.type === 'agent' && r.payment_status === 'pending').length,
+      external: allRowsBeforeTypeFilter.filter(r => r.type === 'external' && r.payment_status === 'pending').length,
+      pm_fee: allRowsBeforeTypeFilter.filter(r => r.type === 'pm_fee' && r.payment_status === 'pending').length,
+      landlord: allRowsBeforeTypeFilter.filter(r => r.type === 'landlord' && r.payment_status === 'pending').length,
+    }
+
+    return NextResponse.json({ rows, pendingByType, countByType })
   } catch (error: any) {
     console.error('All payouts error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

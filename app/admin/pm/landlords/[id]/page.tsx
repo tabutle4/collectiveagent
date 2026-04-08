@@ -419,6 +419,7 @@ export default function LandlordDetailPage() {
   const [sendingInvite, setSendingInvite] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [updatingStatus, setUpdatingStatus] = useState(false)
 
   // Modal states
   const [showPropertyModal, setShowPropertyModal] = useState(false)
@@ -501,6 +502,30 @@ export default function LandlordDetailPage() {
       setAgents(data.agents || [])
     } catch (err) {
       console.error('Error loading agents:', err)
+    }
+  }
+
+  const updateLandlordStatus = async (field: 'w9_status' | 'bank_status', value: string) => {
+    if (!landlord) return
+    setUpdatingStatus(true)
+    try {
+      const res = await fetch(`/api/pm/landlords/${landlordId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to update')
+      }
+      setLandlord(prev => prev ? { ...prev, [field]: value } : null)
+      setSuccessMessage(`${field === 'w9_status' ? 'W9' : 'Bank'} status updated`)
+      setTimeout(() => setSuccessMessage(''), 3000)
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to update status')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setUpdatingStatus(false)
     }
   }
 
@@ -820,17 +845,35 @@ export default function LandlordDetailPage() {
                   Account Status
                 </h3>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-luxury-gray-3">W9 Form</span>
-                    <span className={landlord.w9_status === 'completed' ? 'text-green-700 font-medium' : 'text-amber-600'}>
-                      {landlord.w9_status === 'completed' ? 'Complete' : 'Pending'}
-                    </span>
+                    <select
+                      value={landlord.w9_status || 'pending'}
+                      onChange={(e) => updateLandlordStatus('w9_status', e.target.value)}
+                      disabled={updatingStatus}
+                      className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
+                        landlord.w9_status === 'completed' ? 'text-green-700' : 'text-amber-600'
+                      }`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="requested">Requested</option>
+                      <option value="completed">Complete</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-luxury-gray-3">Bank Account</span>
-                    <span className={landlord.bank_status === 'connected' ? 'text-green-700 font-medium' : 'text-amber-600'}>
-                      {landlord.bank_status === 'connected' ? 'Connected' : 'Not Connected'}
-                    </span>
+                    <select
+                      value={landlord.bank_status || 'pending'}
+                      onChange={(e) => updateLandlordStatus('bank_status', e.target.value)}
+                      disabled={updatingStatus}
+                      className={`text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-white cursor-pointer ${
+                        landlord.bank_status === 'connected' ? 'text-green-700' : 'text-amber-600'
+                      }`}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="invited">Invited</option>
+                      <option value="connected">Connected</option>
+                    </select>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-luxury-gray-3">Added</span>

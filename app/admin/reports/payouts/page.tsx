@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -29,6 +29,29 @@ interface PayoutRow {
 }
 
 interface Expense { id: string; description: string; amount: number | null }
+
+interface PMFee {
+  id: string
+  payee_name: string
+  payee_id: string
+  amount: number
+  address: string
+  period: string
+  payment_status: string
+  payment_date: string | null
+  payment_method: string | null
+}
+
+interface LandlordPayout {
+  id: string
+  payee_name: string
+  amount: number
+  address: string
+  period: string
+  payment_status: string
+  payment_date: string | null
+  payment_method: string | null
+}
 
 // Helpers
 
@@ -359,11 +382,15 @@ export default function PayoutsReportPage() {
   const { user } = useAuth()
   const [rows, setRows] = useState<PayoutRow[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [pmFees, setPmFees] = useState<PMFee[]>([])
+  const [landlordPayouts, setLandlordPayouts] = useState<LandlordPayout[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [paidCollapsed, setPaidCollapsed] = useState(false)
   const [holdCollapsed, setHoldCollapsed] = useState(false)
   const [expCollapsed, setExpCollapsed] = useState(false)
+  const [pmFeesCollapsed, setPmFeesCollapsed] = useState(false)
+  const [landlordCollapsed, setLandlordCollapsed] = useState(false)
 
   const [bankBalance, setBankBalance] = useState('')
   const [holds, setHolds] = useState('')
@@ -373,6 +400,13 @@ export default function PayoutsReportPage() {
   const [newDesc, setNewDesc] = useState('')
   const [newAmt, setNewAmt] = useState('')
   const [addingExp, setAddingExp] = useState(false)
+
+  // Mark Paid Modal
+  const [markPaidType, setMarkPaidType] = useState<'pm_fee' | 'landlord' | null>(null)
+  const [markPaidItem, setMarkPaidItem] = useState<PMFee | LandlordPayout | null>(null)
+  const [markPaidDate, setMarkPaidDate] = useState('')
+  const [markPaidMethod, setMarkPaidMethod] = useState('ach')
+  const [markPaidSaving, setMarkPaidSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -386,6 +420,8 @@ export default function PayoutsReportPage() {
       const json = await res.json()
       setRows(json.rows || [])
       setExpenses(json.expenses || [])
+      setPmFees(json.pm_fees || [])
+      setLandlordPayouts(json.landlord_payouts || [])
       setBankBalance(json.settings?.bank_balance?.toString() || '')
       setHolds(json.settings?.funds_on_hold?.toString() || '')
       setAutoPayloadTotal(json.pending_payload_total || 0)
@@ -401,16 +437,18 @@ export default function PayoutsReportPage() {
   const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid)
   const holdRows = rows.filter(r => !r.crc_transferred && !r.agents_paid)
 
-  const paidAgentTotal  = paidRows.reduce((s, r) => s + agentTotal(r), 0)
-  const holdAgentTotal  = holdRows.reduce((s, r) => s + agentTotal(r), 0)
-  const expensesTotal   = expenses.reduce((s, e) => s + (e.amount || 0), 0)
-  const grandTotal      = paidAgentTotal + holdAgentTotal + expensesTotal
+  const paidAgentTotal   = paidRows.reduce((s, r) => s + agentTotal(r), 0)
+  const holdAgentTotal   = holdRows.reduce((s, r) => s + agentTotal(r), 0)
+  const expensesTotal    = expenses.reduce((s, e) => s + (e.amount || 0), 0)
+  const pmFeesTotal      = pmFees.reduce((s, f) => s + f.amount, 0)
+  const landlordTotal    = landlordPayouts.reduce((s, l) => s + l.amount, 0)
+  const grandTotal       = paidAgentTotal + holdAgentTotal + expensesTotal + pmFeesTotal + landlordTotal
 
   const bank                  = parseFloat(bankBalance) || 0
   const holdsAmt              = parseFloat(holds) || 0
   const payloadAmt            = autoPayloadTotal
   const difference            = (bank + holdsAmt + payloadAmt) - grandTotal
-  const availableAfterPaidOut = bank - (paidAgentTotal + expensesTotal)
+  const availableAfterPaidOut = bank - (paidAgentTotal + expensesTotal + pmFeesTotal + landlordTotal)
 
   const saveBalances = async () => {
     setSavingBalances(true)
@@ -449,25 +487,72 @@ export default function PayoutsReportPage() {
   }
 
   const updateCompliance = async (checkId: string, status: string) => {
-    // Optimistically update the UI
     setRows(prev => prev.map(r => 
       r.check_id === checkId ? { ...r, compliance_status: status } : r
     ))
     
-    // Send to server
     try {
       const res = await fetch('/api/admin/payouts-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ check_id: checkId, compliance_status: status }),
       })
-      if (!res.ok) {
-        // Revert on error
-        load()
-      }
+      if (!res.ok) load()
     } catch {
-      // Revert on error
       load()
+    }
+  }
+
+  // Mark paid handlers
+  const openMarkPaid = (type: 'pm_fee' | 'landlord', item: PMFee | LandlordPayout) => {
+    setMarkPaidType(type)
+    setMarkPaidItem(item)
+    setMarkPaidDate(new Date().toISOString().split('T')[0])
+    setMarkPaidMethod(item.payment_method || 'ach')
+  }
+
+  const closeMarkPaid = () => {
+    setMarkPaidType(null)
+    setMarkPaidItem(null)
+    setMarkPaidDate('')
+    setMarkPaidMethod('ach')
+  }
+
+  const handleMarkPaid = async () => {
+    if (!markPaidItem || !markPaidDate || !markPaidType) return
+
+    setMarkPaidSaving(true)
+    try {
+      const endpoint = markPaidType === 'pm_fee'
+        ? `/api/pm/fee-payouts/${markPaidItem.id}`
+        : `/api/pm/disbursements/${markPaidItem.id}`
+
+      const res = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payment_status: 'paid',
+          payment_date: markPaidDate,
+          payment_method: markPaidMethod,
+        }),
+      })
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error || 'Failed to update')
+      }
+
+      // Remove from pending list
+      if (markPaidType === 'pm_fee') {
+        setPmFees(prev => prev.filter(f => f.id !== markPaidItem.id))
+      } else {
+        setLandlordPayouts(prev => prev.filter(l => l.id !== markPaidItem.id))
+      }
+      closeMarkPaid()
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark as paid')
+    } finally {
+      setMarkPaidSaving(false)
     }
   }
 
@@ -500,8 +585,100 @@ export default function PayoutsReportPage() {
           <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} />
         </div>
 
-        {/* Also In Payouts */}
+        {/* Landlord Disbursements */}
         <div className="order-3 lg:order-2">
+          <div className="container-card mb-5">
+            <button className="w-full flex items-center justify-between" onClick={() => setLandlordCollapsed(v => !v)}>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Landlord Disbursements</h2>
+                <span className="text-xs text-luxury-gray-3">({landlordPayouts.length})</span>
+              </div>
+              <div className="flex items-center gap-4">
+                {landlordTotal > 0 && (
+                  <span className="text-xs text-luxury-gray-2">Total: <span className="font-semibold text-luxury-gray-1">{fmt(landlordTotal)}</span></span>
+                )}
+                {landlordCollapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
+              </div>
+            </button>
+
+            {!landlordCollapsed && (
+              <div className="mt-4">
+                {landlordPayouts.length === 0 ? (
+                  <p className="text-xs text-luxury-gray-3 text-center py-4">No pending landlord disbursements</p>
+                ) : (
+                  <div className="space-y-1">
+                    {landlordPayouts.map(item => (
+                      <div key={item.id} className="inner-card flex items-center justify-between py-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-luxury-gray-1 font-medium">{item.payee_name}</p>
+                          <p className="text-xs text-luxury-gray-3">{item.address} - {item.period}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-sm font-medium text-luxury-gray-1">{fmt(item.amount)}</span>
+                          <button
+                            onClick={() => openMarkPaid('landlord', item)}
+                            className="text-xs text-yellow-600 hover:text-green-700 font-medium"
+                          >
+                            pending
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* PM Referral Fees */}
+        <div className="order-4 lg:order-3">
+          <div className="container-card mb-5">
+            <button className="w-full flex items-center justify-between" onClick={() => setPmFeesCollapsed(v => !v)}>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">PM Referral Fees</h2>
+                <span className="text-xs text-luxury-gray-3">({pmFees.length})</span>
+              </div>
+              <div className="flex items-center gap-4">
+                {pmFeesTotal > 0 && (
+                  <span className="text-xs text-luxury-gray-2">Total: <span className="font-semibold text-luxury-gray-1">{fmt(pmFeesTotal)}</span></span>
+                )}
+                {pmFeesCollapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
+              </div>
+            </button>
+
+            {!pmFeesCollapsed && (
+              <div className="mt-4">
+                {pmFees.length === 0 ? (
+                  <p className="text-xs text-luxury-gray-3 text-center py-4">No pending PM referral fees</p>
+                ) : (
+                  <div className="space-y-1">
+                    {pmFees.map(fee => (
+                      <div key={fee.id} className="inner-card flex items-center justify-between py-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-luxury-gray-1 font-medium">{fee.payee_name}</p>
+                          <p className="text-xs text-luxury-gray-3">{fee.address} - PM Fee {fee.period}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-sm font-medium text-luxury-gray-1">{fmt(fee.amount)}</span>
+                          <button
+                            onClick={() => openMarkPaid('pm_fee', fee)}
+                            className="text-xs text-yellow-600 hover:text-green-700 font-medium"
+                          >
+                            pending
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Also In Payouts */}
+        <div className="order-5 lg:order-4">
           <div className="container-card mb-5">
         <button className="w-full flex items-center justify-between" onClick={() => setExpCollapsed(v => !v)}>
           <div className="flex items-center gap-3">
@@ -568,7 +745,7 @@ export default function PayoutsReportPage() {
         </div>
 
         {/* Bottom Line — first on mobile, last on desktop */}
-        <div className="order-1 lg:order-3 mb-5">
+        <div className="order-1 lg:order-5 mb-5">
         <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -607,6 +784,14 @@ export default function PayoutsReportPage() {
             <span className="font-medium text-luxury-gray-1">{fmt(holdAgentTotal)}</span>
           </div>
           <div className="flex justify-between text-sm">
+            <span className="text-luxury-gray-2">Landlord disbursements</span>
+            <span className="font-medium text-luxury-gray-1">{fmt(landlordTotal)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-luxury-gray-2">PM referral fees</span>
+            <span className="font-medium text-luxury-gray-1">{fmt(pmFeesTotal)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
             <span className="text-luxury-gray-2">Also in payouts</span>
             <span className="font-medium text-luxury-gray-1">{fmt(expensesTotal)}</span>
           </div>
@@ -639,6 +824,66 @@ export default function PayoutsReportPage() {
         </div>
 
       </div>
+
+      {/* Mark Paid Modal */}
+      {markPaidItem && markPaidType && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">
+                Mark {markPaidType === 'landlord' ? 'Landlord Disbursement' : 'PM Fee'} as Paid
+              </h2>
+              <p className="text-sm text-luxury-gray-3 mt-1">{markPaidItem.payee_name} - {fmt(markPaidItem.amount)}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="field-label">Payment Date *</label>
+                <input
+                  type="date"
+                  value={markPaidDate}
+                  onChange={e => setMarkPaidDate(e.target.value)}
+                  className="input-luxury w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label className="field-label">Payment Method</label>
+                <select
+                  value={markPaidMethod}
+                  onChange={e => setMarkPaidMethod(e.target.value)}
+                  className="select-luxury w-full"
+                >
+                  <option value="ach">ACH</option>
+                  <option value="check">Check</option>
+                  <option value="wire">Wire</option>
+                  <option value="zelle">Zelle</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={closeMarkPaid}
+                className="btn btn-secondary"
+                disabled={markPaidSaving}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkPaid}
+                disabled={markPaidSaving || !markPaidDate}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                {markPaidSaving ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Check size={14} />
+                )}
+                Mark as Paid
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

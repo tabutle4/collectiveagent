@@ -170,11 +170,86 @@ export async function GET(request: NextRequest) {
       .filter(c => c.payment_method === 'payload' && !c.cleared_date)
       .reduce((sum, c) => sum + (c.check_amount || 0), 0)
 
+    // PM Fee Payouts (agent referrals only, pending)
+    const { data: pmFeePayouts, error: pmError } = await supabaseAdmin
+      .from('pm_fee_payouts')
+      .select(`
+        id, payee_type, payee_id, payee_name, amount,
+        payment_status, payment_date, payment_method,
+        landlord_disbursements!inner(
+          id, period_month, period_year,
+          managed_properties(property_address, city)
+        )
+      `)
+      .eq('payee_type', 'agent')
+      .eq('payment_status', 'pending')
+      .order('created_at', { ascending: false })
+      .range(0, 9999)
+
+    if (pmError) console.error('PM fee payouts error:', pmError)
+
+    // Format PM fee payouts
+    const pmFees = (pmFeePayouts || []).map(p => {
+      const disb = p.landlord_disbursements as any
+      const prop = disb?.managed_properties as any
+      const periodLabel = disb ? `${disb.period_month}/${disb.period_year}` : ''
+      const fullAddress = [prop?.property_address, prop?.city].filter(Boolean).join(', ')
+      return {
+        id: p.id,
+        payee_name: p.payee_name,
+        payee_id: p.payee_id,
+        amount: p.amount || 0,
+        address: fullAddress,
+        period: periodLabel,
+        payment_status: p.payment_status,
+        payment_date: p.payment_date,
+        payment_method: p.payment_method,
+      }
+    })
+
+    // Landlord Disbursements (pending)
+    const { data: landlordDisbursements, error: ldError } = await supabaseAdmin
+      .from('landlord_disbursements')
+      .select(`
+        id, net_amount, payment_status, payment_date, payment_method,
+        period_month, period_year,
+        landlords(id, first_name, last_name),
+        managed_properties(property_address, city)
+      `)
+      .eq('payment_status', 'pending')
+      .order('created_at', { ascending: false })
+      .range(0, 9999)
+
+    if (ldError) console.error('Landlord disbursements error:', ldError)
+
+    // Format landlord disbursements
+    const landlordPayouts = (landlordDisbursements || []).map(d => {
+      const landlord = d.landlords as any
+      const prop = d.managed_properties as any
+      const periodLabel = `${d.period_month}/${d.period_year}`
+      const fullAddress = [prop?.property_address, prop?.city].filter(Boolean).join(', ')
+      const landlordName = landlord 
+        ? `${landlord.first_name} ${landlord.last_name}`.trim()
+        : 'Unknown Landlord'
+      return {
+        id: d.id,
+        payee_name: landlordName,
+        amount: d.net_amount || 0,
+        address: fullAddress,
+        period: periodLabel,
+        payment_status: d.payment_status,
+        payment_date: d.payment_date,
+        payment_method: d.payment_method,
+      }
+    })
+
     return NextResponse.json({
       rows,
       settings: settings || {},
       expenses: expenses || [],
       pending_payload_total: pendingPayloadTotal,
+      pm_fees: pmFees,
+      landlord_payouts: landlordPayouts,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)
@@ -219,7 +294,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'check_id is required' }, { status: 400 })
     }
 
-    // Update the check's compliance status (stored on checks_received or via compliance_complete_date)
     const updates: Record<string, any> = {}
     
     if (compliance_status === 'complete') {
@@ -227,10 +301,6 @@ export async function POST(request: NextRequest) {
     } else if (compliance_status === 'not_submitted') {
       updates.compliance_complete_date = null
     }
-    
-    // Also store the explicit status if there's a column for it
-    // For now, we'll use compliance_complete_date to indicate completion
-    // and null to indicate not submitted
     
     const { error } = await supabaseAdmin
       .from('checks_received')
