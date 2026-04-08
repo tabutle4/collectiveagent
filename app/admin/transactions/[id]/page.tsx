@@ -19,7 +19,6 @@ import {
   ClipboardList,
   Send,
   Trash2,
-  Zap,
   Phone,
   Mail,
   Edit,
@@ -1211,23 +1210,22 @@ export default function AdminTransactionDetailPage() {
                   <div className="flex justify-between items-center py-1.5 border-b border-luxury-gray-5/30">
                     <span className="field-label shrink-0">Compliance</span>
                     <select
-                      value={txn.compliance_status || ''}
-                      onChange={e => updateTransaction({ compliance_status: e.target.value || null })}
+                      value={txn.compliance_status || 'not_submitted'}
+                      onChange={e => updateTransaction({ compliance_status: e.target.value })}
                       className={`text-xs px-2 py-0.5 rounded border-0 cursor-pointer ${
-                        txn.compliance_status === 'approved'
+                        txn.compliance_status === 'complete'
                           ? 'bg-green-50 text-green-700'
-                          : txn.compliance_status === 'revision_requested'
-                            ? 'bg-orange-50 text-orange-700'
-                            : ['submitted', 'in_review'].includes(txn.compliance_status)
+                          : txn.compliance_status === 'incomplete'
+                            ? 'bg-red-50 text-red-600'
+                            : txn.compliance_status === 'in_review'
                               ? 'bg-purple-50 text-purple-700'
                               : 'bg-luxury-light text-luxury-gray-3'
                       }`}
                     >
-                      <option value="">Not requested</option>
-                      <option value="submitted">Submitted</option>
+                      <option value="not_submitted">Not requested</option>
                       <option value="in_review">In review</option>
-                      <option value="revision_requested">Revision requested</option>
-                      <option value="approved">Approved</option>
+                      <option value="incomplete">Incomplete</option>
+                      <option value="complete">Complete</option>
                     </select>
                   </div>
                   <FieldRow
@@ -1508,16 +1506,6 @@ export default function AdminTransactionDetailPage() {
                   + Add Agent
                 </button>
               </div>
-
-              {/* Smart calc info banner */}
-              {txn.office_gross && parseFloat(txn.office_gross) > 0 && (
-                <div className="inner-card bg-blue-50/50 border border-blue-200 flex items-center gap-2">
-                  <Zap size={14} className="text-blue-600" />
-                  <p className="text-xs text-blue-700">
-                    Smart calc available. Click the calculator icon on any agent to auto-fill splits based on their plan.
-                  </p>
-                </div>
-              )}
 
               {/* Summary cards */}
               <div className="container-card">
@@ -1987,10 +1975,23 @@ export default function AdminTransactionDetailPage() {
                         <label className="field-label">Compliance Status</label>
                         <select
                           className="select-luxury text-xs"
-                          value={editCheckData.compliance_status || 'not_submitted'}
-                          onChange={e => {
-                            setEditCheckData((p: any) => ({ ...p, compliance_status: e.target.value }))
-                            updateCheck(editCheckData?.id || check?.id, { compliance_status: e.target.value })
+                          value={txn.compliance_status || 'not_submitted'}
+                          onChange={async e => {
+                            const status = e.target.value
+                            // Update transaction compliance_status
+                            await updateTransaction({ compliance_status: status })
+                            // Also update check's compliance_complete_date like payouts report does
+                            if (check?.id) {
+                              const updates: any = {}
+                              if (status === 'complete') {
+                                updates.compliance_complete_date = new Date().toISOString().split('T')[0]
+                              } else if (status === 'not_submitted') {
+                                updates.compliance_complete_date = null
+                              }
+                              if (Object.keys(updates).length > 0) {
+                                await updateCheck(check.id, updates)
+                              }
+                            }
                           }}
                         >
                           <option value="not_submitted">Not Requested</option>
