@@ -42,7 +42,7 @@ export default function ReferralCollectiveInformationPage() {
               Referral-Only Brokerage · Texas
             </p>
             <p className="text-sm text-luxury-gray-2 max-w-xl mx-auto">
-              A referral-only brokerage. You refer clients — that's it. No showings, no contracts, no exceptions. 
+              A referral-only brokerage. You refer clients. That's it. No showings, no contracts, no exceptions. 
               Keep your license active and earn referral income with zero overhead.
             </p>
           </div>
@@ -53,7 +53,7 @@ export default function ReferralCollectiveInformationPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="inner-card">
                 <p className="text-sm font-semibold text-luxury-gray-1 mb-1">No MLS Fees</p>
-                <p className="text-xs text-luxury-gray-3">Referral agents don't need MLS access — so you don't pay for it.</p>
+                <p className="text-xs text-luxury-gray-3">Referral agents don't need MLS access, so you don't pay for it.</p>
               </div>
               <div className="inner-card">
                 <p className="text-sm font-semibold text-luxury-gray-1 mb-1">No Association Dues</p>
@@ -69,7 +69,7 @@ export default function ReferralCollectiveInformationPage() {
               </div>
               <div className="inner-card">
                 <p className="text-sm font-semibold text-luxury-gray-1 mb-1">In-House Referral Network</p>
-                <p className="text-xs text-luxury-gray-3">Referrals route to Collective Realty Co. agents — you earn the fee.</p>
+                <p className="text-xs text-luxury-gray-3">Referrals route to Collective Realty Co. agents and you earn the fee.</p>
               </div>
               <div className="inner-card">
                 <p className="text-sm font-semibold text-luxury-gray-1 mb-1">Agent Profile Listing</p>
@@ -82,13 +82,9 @@ export default function ReferralCollectiveInformationPage() {
           <div className="container-card mb-4">
             <p className="section-title">Commission Splits</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              {/* Apartment Referrals - Highlighted */}
-              <div className="inner-card border-2 border-luxury-accent bg-chart-gold-1">
-                <div className="flex justify-center mb-2">
-                  <span className="text-xs font-semibold text-white bg-luxury-accent px-3 py-1 rounded-full uppercase tracking-wider">
-                    Apartment Referrals
-                  </span>
-                </div>
+              {/* Apartment Referrals */}
+              <div className="inner-card">
+                <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-2 mt-2">Apartment Referrals</p>
                 <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-1">To CRC Agents</p>
                 <p className="text-4xl font-bold text-luxury-gray-1 text-center">85%</p>
                 <p className="text-xs text-luxury-gray-3 text-center mb-1">to you</p>
@@ -128,13 +124,13 @@ export default function ReferralCollectiveInformationPage() {
               <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-yellow-800 uppercase tracking-wider mb-2">
-                  Referral-Only — No Exceptions
+                  Referral-Only: No Exceptions
                 </p>
                 <p className="text-sm text-luxury-gray-1">
                   Agents under The Referral Collective may <strong className="text-yellow-800">only</strong> refer clients to other agents. 
                   You cannot show properties, write contracts, negotiate deals, represent clients, or perform any other real estate activity. 
                   Violating these restrictions results in immediate termination and potential TREC action. 
-                  If you want to do more than refer, this is not the right fit — consider Collective Realty Co. instead.
+                  If you want to do more than refer, this is not the right fit. Consider Collective Realty Co. instead.
                 </p>
               </div>
             </div>
