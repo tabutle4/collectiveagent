@@ -530,6 +530,35 @@ export default function LandlordDetailPage() {
     }
   }
 
+  const handleCreateAgreement = async () => {
+    setSavingAgreement(true)
+    setErrorMessage('')
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const res = await fetch('/api/pm/agreements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          landlord_id: landlordId,
+          commencement_date: today,
+          management_fee_pct: 10,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to create agreement')
+      }
+      setSuccessMessage('Agreement created')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      loadLandlordData()
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to create agreement')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setSavingAgreement(false)
+    }
+  }
+
   const sendInvite = async () => {
     if (!landlord) return
     setErrorMessage('')
@@ -840,7 +869,13 @@ export default function LandlordDetailPage() {
               {!agreement ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-luxury-gray-3 mb-4">No agreement found for this landlord</p>
-                  <p className="text-xs text-luxury-gray-4">Create an agreement in Brokermint first</p>
+                  <button
+                    onClick={handleCreateAgreement}
+                    disabled={savingAgreement}
+                    className="btn btn-primary text-sm"
+                  >
+                    {savingAgreement ? 'Creating...' : 'Create Agreement'}
+                  </button>
                 </div>
               ) : (
                 <AgreementEditor
