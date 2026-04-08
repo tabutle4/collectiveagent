@@ -421,6 +421,103 @@ export default function CloseTransactionModal({
     load()
   }, [transactionId])
 
+  // Smart calc state
+  const [agentCalcData, setAgentCalcData] = useState<Record<string, any>>({})
+  const [agentLeadSources, setAgentLeadSources] = useState<Record<string, string>>({})
+  const [autoCalcApplied, setAutoCalcApplied] = useState<Set<string>>(new Set())
+
+  // On-close options
+  const [closeOptions, setCloseOptions] = useState({
+    generateStatements: true,
+    generateCda: false,
+    sendEmails: false,
+  })
+
+  // Auto-calculate and auto-fill agent splits when office_gross changes
+  useEffect(() => {
+    const officeGross = parseFloat(form.office_gross || '0')
+    if (officeGross <= 0) return
+
+    // Calculate for each existing agent that doesn't have values yet
+    agents.forEach(async (a: any) => {
+      // Skip if already auto-filled or has values
+      if (autoCalcApplied.has(a.id)) return
+      const af = agentForms[a.id]
+      if (af && parseFloat(af.agent_gross || '0') > 0) return
+
+      try {
+        const res = await fetch('/api/admin/transactions/smart-calc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent_id: a.agent_id,
+            office_gross: officeGross,
+            transaction_type: form.transaction_type,
+            lead_source: agentLeadSources[a.agent_id] || 'own',
+            is_lease: isLease,
+          }),
+        })
+        if (res.ok) {
+          const result = await res.json()
+          setAgentCalcData(prev => ({ ...prev, [a.agent_id]: result }))
+          
+          // Auto-fill the form
+          setAgentForms(prev => ({
+            ...prev,
+            [a.id]: {
+              ...prev[a.id],
+              agent_gross: String(result.agent_gross?.toFixed(2) || ''),
+              brokerage_split: String(result.brokerage_split?.toFixed(2) || ''),
+              processing_fee: String(result.processing_fee?.toFixed(2) || ''),
+              coaching_fee: String(result.coaching_fee?.toFixed(2) || ''),
+              team_lead_commission: String(result.team_lead_payout?.toFixed(2) || ''),
+              agent_net: String(result.agent_net?.toFixed(2) || ''),
+            }
+          }))
+          setAutoCalcApplied(prev => new Set([...prev, a.id]))
+        }
+      } catch {}
+    })
+  }, [form.office_gross, form.transaction_type, agents, agentForms, agentLeadSources, isLease, autoCalcApplied])
+
+  // Recalculate when lead source changes
+  const recalculateForAgent = async (agentId: string, internalAgentId: string, leadSource: string) => {
+    const officeGross = parseFloat(form.office_gross || '0')
+    if (officeGross <= 0) return
+
+    try {
+      const res = await fetch('/api/admin/transactions/smart-calc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_id: agentId,
+          office_gross: officeGross,
+          transaction_type: form.transaction_type,
+          lead_source: leadSource,
+          is_lease: isLease,
+        }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setAgentCalcData(prev => ({ ...prev, [agentId]: result }))
+        
+        // Update the form
+        setAgentForms(prev => ({
+          ...prev,
+          [internalAgentId]: {
+            ...prev[internalAgentId],
+            agent_gross: String(result.agent_gross?.toFixed(2) || ''),
+            brokerage_split: String(result.brokerage_split?.toFixed(2) || ''),
+            processing_fee: String(result.processing_fee?.toFixed(2) || ''),
+            coaching_fee: String(result.coaching_fee?.toFixed(2) || ''),
+            team_lead_commission: String(result.team_lead_payout?.toFixed(2) || ''),
+            agent_net: String(result.agent_net?.toFixed(2) || ''),
+          }
+        }))
+      }
+    } catch {}
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   const setF = (field: string, value: any) => setForm(p => ({ ...p, [field]: value }))
   const setAgentF = (id: string, field: string, value: any) => setAgentForms(p => ({ ...p, [id]: { ...p[id], [field]: value } }))
@@ -887,6 +984,53 @@ export default function CloseTransactionModal({
                         </Field>
                       </div>
 
+                      {/* Lead Source Picker - for team members */}
+                      {agentCalcData[a.agent_id]?.is_team_member && (
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                          <p className="text-xs font-semibold text-purple-800 mb-1">Lead Source</p>
+                          <p className="text-xs text-purple-600 mb-2">
+                            {agentCalcData[a.agent_id]?.team_name || 'Team'} member - who sourced this lead?
+                          </p>
+                          <div className="flex gap-2">
+                            {(['team_lead', 'own', 'firm'] as const).map(src => (
+                              <button
+                                key={src}
+                                type="button"
+                                onClick={() => {
+                                  setAgentLeadSources(prev => ({ ...prev, [a.agent_id]: src }))
+                                  recalculateForAgent(a.agent_id, a.id, src)
+                                }}
+                                className={`flex-1 text-xs py-2 px-3 rounded-md border transition-colors ${
+                                  (agentLeadSources[a.agent_id] || 'own') === src
+                                    ? 'bg-purple-600 text-white border-purple-600'
+                                    : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-50'
+                                }`}
+                              >
+                                {src === 'team_lead' ? 'Team Lead' : src === 'own' ? "Agent's Own" : 'Firm Lead'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Momentum Partner - if applicable */}
+                      {agentCalcData[a.agent_id]?.momentum_partner_name && agentCalcData[a.agent_id]?.momentum_partner_payout > 0 && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-semibold text-green-800">Momentum Partner</p>
+                              <p className="text-xs text-green-600">
+                                {agentCalcData[a.agent_id].momentum_partner_name} earns {agentCalcData[a.agent_id].momentum_partner_pct}%
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-green-700">
+                              {fmt$(agentCalcData[a.agent_id].momentum_partner_payout)}
+                            </p>
+                          </div>
+                          <p className="text-xs text-green-600 mt-1 italic">From brokerage side</p>
+                        </div>
+                      )}
+
                       <AgentFinancialFields
                         form={af}
                         setField={(field, value) => setAgentF(a.id, field, value)}
@@ -1072,6 +1216,100 @@ export default function CloseTransactionModal({
                 )}
               </div>
             )}
+          </div>
+
+          {/* ── Summary ─────────────────────────────────────────────────────── */}
+          {(() => {
+            const officeGross = num(form.office_gross)
+            const totalAgentPayouts = agents.reduce((sum, a) => {
+              const af = agentForms[a.id]
+              return sum + (af ? num(af.agent_net) || computeAgentNet(af) : 0)
+            }, 0) + newAgentRows.reduce((sum, row) => sum + (num(row.agent_net) || computeAgentNet(row)), 0)
+            const totalMomentumPartner = agents.reduce((sum, a) => {
+              const calc = agentCalcData[a.agent_id]
+              return sum + (calc?.momentum_partner_payout || 0)
+            }, 0)
+            const totalTeamLead = agents.reduce((sum, a) => {
+              const af = agentForms[a.id]
+              return sum + num(af?.team_lead_commission)
+            }, 0) + newAgentRows.reduce((sum, row) => sum + num(row.team_lead_commission), 0)
+            const totalExternalBrokerages = externalBrokerages.reduce((sum, b) => {
+              const bf = externalForms[b.id]
+              return sum + num(bf?.commission_amount)
+            }, 0) + newBrokerageRows.reduce((sum, row) => sum + num(row.commission_amount), 0)
+            const brokerageNet = officeGross - totalAgentPayouts - totalMomentumPartner - totalExternalBrokerages
+
+            return (
+              <div className="bg-luxury-gray-5/30 rounded-lg p-4 space-y-2">
+                <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Summary</p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">Office Gross</span>
+                  <span className="font-medium text-luxury-gray-1">{fmt$(officeGross)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">Agent Payouts ({agents.length + newAgentRows.length})</span>
+                  <span className="text-luxury-gray-1">-{fmt$(totalAgentPayouts)}</span>
+                </div>
+                {totalTeamLead > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-luxury-gray-3 pl-3">Includes team lead commission</span>
+                    <span className="text-luxury-gray-3">{fmt$(totalTeamLead)}</span>
+                  </div>
+                )}
+                {totalMomentumPartner > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-luxury-gray-3">Momentum Partner</span>
+                    <span className="text-luxury-gray-1">-{fmt$(totalMomentumPartner)}</span>
+                  </div>
+                )}
+                {totalExternalBrokerages > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-luxury-gray-3">External Brokerages</span>
+                    <span className="text-luxury-gray-1">-{fmt$(totalExternalBrokerages)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm pt-2 border-t border-luxury-gray-4">
+                  <span className="font-semibold text-luxury-gray-1">Brokerage Net</span>
+                  <span className={`font-bold ${brokerageNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {fmt$(brokerageNet)}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* ── On Close Options ────────────────────────────────────────────── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">On Close</p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={closeOptions.generateStatements}
+                onChange={e => setCloseOptions(p => ({ ...p, generateStatements: e.target.checked }))}
+                className="w-4 h-4 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+              />
+              <span className="text-xs text-luxury-gray-2">Generate commission statements</span>
+            </label>
+            {!isLease && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={closeOptions.generateCda}
+                  onChange={e => setCloseOptions(p => ({ ...p, generateCda: e.target.checked }))}
+                  className="w-4 h-4 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+                />
+                <span className="text-xs text-luxury-gray-2">Generate CDA</span>
+              </label>
+            )}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={closeOptions.sendEmails}
+                onChange={e => setCloseOptions(p => ({ ...p, sendEmails: e.target.checked }))}
+                className="w-4 h-4 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+              />
+              <span className="text-xs text-luxury-gray-2">Send commission emails to agents</span>
+            </label>
           </div>
 
           {error && (

@@ -233,6 +233,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ external_brokerages: externalBrokerages || [] })
     }
 
+    // ── Contacts ──────────────────────────────────────────────────────────────
+    if (section === 'contacts') {
+      const { data: contacts, error } = await supabase
+        .from('transaction_contacts')
+        .select('*')
+        .eq('transaction_id', id)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      return NextResponse.json({ contacts: contacts || [] })
+    }
+
     // ── Checklist (legacy) ───────────────────────────────────────────────────
     if (section === 'checklist') {
       return NextResponse.json({ error: 'Use POST for checklist updates' }, { status: 405 })
@@ -361,6 +372,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { error } = await supabase
         .from('transaction_internal_agents')
         .update(updates)
+        .eq('id', internal_agent_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Delete internal agent ─────────────────────────────────────────────────
+    if (action === 'delete_internal_agent') {
+      const { internal_agent_id } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+      // Verify the agent belongs to this transaction
+      const { data: existing } = await supabase
+        .from('transaction_internal_agents')
+        .select('id')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!existing) {
+        return NextResponse.json({ error: 'Agent not found on this transaction' }, { status: 404 })
+      }
+      const { error } = await supabase
+        .from('transaction_internal_agents')
+        .delete()
         .eq('id', internal_agent_id)
       if (error) throw error
       return NextResponse.json({ success: true })
@@ -610,6 +645,51 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .order('date_incurred', { ascending: true })
       if (error) throw error
       return NextResponse.json({ debts: debts || [] })
+    }
+
+    // ── Create contact ────────────────────────────────────────────────────────
+    if (action === 'create_contact') {
+      const { contact } = body
+      const { data, error } = await supabase
+        .from('transaction_contacts')
+        .insert({
+          transaction_id: id,
+          contact_type: contact.contact_type,
+          contact_type_other: contact.contact_type_other || null,
+          name: contact.name || null,
+          phone: contact.phone || null,
+          email: contact.email || null,
+          company: contact.company || null,
+          notes: contact.notes || null,
+        })
+        .select()
+        .single()
+      if (error) throw error
+      return NextResponse.json({ success: true, contact: data })
+    }
+
+    // ── Update contact ────────────────────────────────────────────────────────
+    if (action === 'update_contact') {
+      const { contact_id, updates } = body
+      const { error } = await supabase
+        .from('transaction_contacts')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', contact_id)
+        .eq('transaction_id', id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Delete contact ────────────────────────────────────────────────────────
+    if (action === 'delete_contact') {
+      const { contact_id } = body
+      const { error } = await supabase
+        .from('transaction_contacts')
+        .delete()
+        .eq('id', contact_id)
+        .eq('transaction_id', id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

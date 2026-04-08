@@ -18,6 +18,13 @@ import {
   FileText,
   ClipboardList,
   Send,
+  Trash2,
+  Zap,
+  Phone,
+  Mail,
+  Edit,
+  Plus,
+  Pencil,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
@@ -50,6 +57,22 @@ const fmtName = (u: any) =>
   u
     ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
     : ''
+
+const CONTACT_TYPES = [
+  { value: 'buyer', label: 'Buyer' },
+  { value: 'seller', label: 'Seller' },
+  { value: 'tenant', label: 'Tenant' },
+  { value: 'landlord', label: 'Landlord' },
+  { value: 'title_company', label: 'Title Company' },
+  { value: 'lender', label: 'Lender' },
+  { value: 'attorney', label: 'Attorney' },
+  { value: 'inspector', label: 'Inspector' },
+  { value: 'appraiser', label: 'Appraiser' },
+  { value: 'hoa', label: 'HOA' },
+  { value: 'property_manager', label: 'Property Manager' },
+  { value: 'coop_agent', label: 'Co-op Agent' },
+  { value: 'other', label: 'Other' },
+]
 
 const isLease = (txnType: string | null) => {
   if (!txnType) return false
@@ -113,6 +136,90 @@ function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex justify-between items-start gap-4 py-1.5 border-b border-luxury-gray-5/30 last:border-0">
       <span className="field-label shrink-0">{label}</span>
       <span className="text-xs text-luxury-gray-1 text-right">{value}</span>
+    </div>
+  )
+}
+
+function EditableFieldRow({
+  label,
+  value,
+  field,
+  type = 'text',
+  options,
+  onSave,
+}: {
+  label: string
+  value: string | number | null | undefined
+  field: string
+  type?: 'text' | 'date' | 'select' | 'number'
+  options?: { value: string; label: string }[]
+  onSave: (field: string, value: string | number | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [localValue, setLocalValue] = useState(value ?? '')
+
+  const handleSave = () => {
+    const newValue = type === 'number' ? (localValue ? parseFloat(String(localValue)) : null) : (localValue || null)
+    onSave(field, newValue)
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSave()
+    if (e.key === 'Escape') {
+      setLocalValue(value ?? '')
+      setEditing(false)
+    }
+  }
+
+  const displayValue = type === 'date' && value
+    ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : type === 'select' && options
+      ? options.find(o => o.value === value)?.label || value
+      : value
+
+  return (
+    <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30 last:border-0 group">
+      <span className="field-label shrink-0">{label}</span>
+      {editing ? (
+        <div className="flex items-center gap-1">
+          {type === 'select' && options ? (
+            <select
+              value={String(localValue)}
+              onChange={e => setLocalValue(e.target.value)}
+              onBlur={handleSave}
+              autoFocus
+              className="text-xs bg-white border border-luxury-gray-4 rounded px-2 py-1 text-luxury-gray-1"
+            >
+              <option value="">Select...</option>
+              {options.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type={type}
+              value={String(localValue)}
+              onChange={e => setLocalValue(e.target.value)}
+              onBlur={handleSave}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              className="text-xs bg-white border border-luxury-gray-4 rounded px-2 py-1 text-luxury-gray-1 w-40 text-right"
+            />
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-luxury-gray-1 text-right">{displayValue || '--'}</span>
+          <button
+            onClick={() => { setLocalValue(value ?? ''); setEditing(true) }}
+            className="opacity-0 group-hover:opacity-100 text-luxury-gray-4 hover:text-luxury-accent transition-opacity"
+            title="Edit"
+          >
+            <Pencil size={11} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -265,6 +372,31 @@ export default function AdminTransactionDetailPage() {
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({})
   const toggleAgent = (id: string) => setExpandedAgents(p => ({ ...p, [id]: !p[id] }))
 
+  // Smart calc state (Commissions tab)
+  const [smartCalcData, setSmartCalcData] = useState<{
+    commission_plans: any[]
+    processing_fee_types: any[]
+  } | null>(null)
+  const [agentCalcData, setAgentCalcData] = useState<Record<string, any>>({}) // agent_id -> calc result
+  const [agentLeadSources, setAgentLeadSources] = useState<Record<string, string>>({}) // agent_id -> lead_source
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [autoCalcApplied, setAutoCalcApplied] = useState<Set<string>>(new Set()) // Track which agents have had auto-calc applied
+
+  // Contacts state
+  const [contacts, setContacts] = useState<any[]>([])
+  const [loadingContacts, setLoadingContacts] = useState(false)
+  const [contactModal, setContactModal] = useState<{ open: boolean; editing: any | null }>({ open: false, editing: null })
+  const [contactForm, setContactForm] = useState({
+    contact_type: '',
+    contact_type_other: '',
+    name: '',
+    phone: '',
+    email: '',
+    company: '',
+    notes: '',
+  })
+  const [savingContact, setSavingContact] = useState(false)
+
   // Auth
   useEffect(() => {
     fetch('/api/auth/me')
@@ -303,7 +435,148 @@ export default function AdminTransactionDetailPage() {
       .catch(() => {})
   }, [activeTab, id])
 
+  // Load contacts when switching to contacts tab
+  useEffect(() => {
+    if (activeTab !== 'contacts' || !id) return
+    setLoadingContacts(true)
+    fetch(`/api/admin/transactions/${id}?section=contacts`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { contacts: [] })
+      .then(d => setContacts(d.contacts || []))
+      .catch(() => {})
+      .finally(() => setLoadingContacts(false))
+  }, [activeTab, id])
+
+  // Fetch smart calc reference data on mount
+  useEffect(() => {
+    fetch('/api/admin/transactions/smart-calc')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) setSmartCalcData({ commission_plans: d.commission_plans, processing_fee_types: d.processing_fee_types })
+      })
+      .catch(() => {})
+  }, [])
+
+  // Auto-calculate and auto-apply agent splits when data loads and office_gross exists
+  useEffect(() => {
+    if (!data?.transaction?.office_gross || !data?.agents?.length) return
+    const agentsList = data.agents || []
+    const txn = data.transaction
+    const officeGross = parseFloat(txn.office_gross || 0)
+    if (officeGross <= 0) return
+
+    // Calculate and apply for each agent that doesn't have values yet
+    agentsList.forEach(async (a: any) => {
+      // Skip if already applied or has values saved
+      if (autoCalcApplied.has(a.id) || parseFloat(a.agent_gross || 0) > 0) return
+      // Skip if already paid
+      if (a.payment_status === 'paid') return
+
+      try {
+        const res = await fetch('/api/admin/transactions/smart-calc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent_id: a.agent_id,
+            office_gross: officeGross,
+            transaction_type: txn.transaction_type,
+            lead_source: agentLeadSources[a.agent_id] || 'own',
+            is_lease: isLease(txn.transaction_type),
+          }),
+        })
+        if (res.ok) {
+          const result = await res.json()
+          setAgentCalcData(prev => ({ ...prev, [a.agent_id]: result }))
+          
+          // Auto-apply the values to the database
+          await fetch(`/api/admin/transactions/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update_internal_agent',
+              internal_agent_id: a.id,
+              updates: {
+                agent_gross: result.agent_gross,
+                brokerage_split: result.brokerage_split,
+                processing_fee: result.processing_fee,
+                coaching_fee: result.coaching_fee,
+                team_lead_commission: result.team_lead_payout || 0,
+                agent_net: result.agent_net,
+                split_percentage: result.agent_split_pct,
+              },
+            }),
+          })
+          setAutoCalcApplied(prev => new Set([...prev, a.id]))
+        }
+      } catch {}
+    })
+  }, [data?.transaction?.office_gross, data?.agents, agentLeadSources, id, autoCalcApplied])
+
   // ── Actions ─────────────────────────────────────────────────────────────────
+
+  // Recalculate and apply agent split (called when lead source changes)
+  const recalculateAgentSplit = async (agentId: string, internalAgentId: string) => {
+    const txn = data?.transaction
+    if (!txn?.office_gross) return
+
+    try {
+      const res = await fetch('/api/admin/transactions/smart-calc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_id: agentId,
+          office_gross: parseFloat(txn.office_gross || 0),
+          transaction_type: txn.transaction_type,
+          lead_source: agentLeadSources[agentId] || 'own',
+          is_lease: isLease(txn.transaction_type),
+        }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setAgentCalcData(prev => ({ ...prev, [agentId]: result }))
+        
+        // Auto-apply the values
+        await fetch(`/api/admin/transactions/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_internal_agent',
+            internal_agent_id: internalAgentId,
+            updates: {
+              agent_gross: result.agent_gross,
+              brokerage_split: result.brokerage_split,
+              processing_fee: result.processing_fee,
+              coaching_fee: result.coaching_fee,
+              team_lead_commission: result.team_lead_payout || 0,
+              agent_net: result.agent_net,
+              split_percentage: result.agent_split_pct,
+            },
+          }),
+        })
+        // Reload data to show updated values
+        loadData()
+      }
+    } catch {}
+  }
+
+  const deleteInternalAgent = async (internalAgentId: string) => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_internal_agent', internal_agent_id: internalAgentId }),
+      })
+      if (res.ok) {
+        setData((prev: any) => ({
+          ...prev,
+          agents: prev.agents.filter((a: any) => a.id !== internalAgentId),
+        }))
+        setDeleteConfirm(null)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const updateTransaction = async (updates: any) => {
     setSaving(true)
@@ -588,6 +861,95 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  // ── Contact functions ─────────────────────────────────────────────────────────
+
+  const openAddContact = () => {
+    setContactForm({
+      contact_type: '',
+      contact_type_other: '',
+      name: '',
+      phone: '',
+      email: '',
+      company: '',
+      notes: '',
+    })
+    setContactModal({ open: true, editing: null })
+  }
+
+  const openEditContact = (contact: any) => {
+    setContactForm({
+      contact_type: contact.contact_type || '',
+      contact_type_other: contact.contact_type_other || '',
+      name: contact.name || '',
+      phone: Array.isArray(contact.phone) ? contact.phone.join(', ') : (contact.phone || ''),
+      email: Array.isArray(contact.email) ? contact.email.join(', ') : (contact.email || ''),
+      company: contact.company || '',
+      notes: contact.notes || '',
+    })
+    setContactModal({ open: true, editing: contact })
+  }
+
+  const saveContact = async () => {
+    if (!contactForm.contact_type) {
+      alert('Please select a contact type.')
+      return
+    }
+    setSavingContact(true)
+    try {
+      const phoneArr = contactForm.phone ? contactForm.phone.split(',').map(p => p.trim()).filter(Boolean) : null
+      const emailArr = contactForm.email ? contactForm.email.split(',').map(e => e.trim()).filter(Boolean) : null
+      
+      const payload = {
+        contact_type: contactForm.contact_type,
+        contact_type_other: contactForm.contact_type === 'other' ? contactForm.contact_type_other : null,
+        name: contactForm.name || null,
+        phone: phoneArr,
+        email: emailArr,
+        company: contactForm.company || null,
+        notes: contactForm.notes || null,
+      }
+
+      if (contactModal.editing) {
+        await fetch(`/api/admin/transactions/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update_contact', contact_id: contactModal.editing.id, updates: payload }),
+        })
+        setContacts(prev => prev.map(c => c.id === contactModal.editing.id ? { ...c, ...payload } : c))
+      } else {
+        const res = await fetch(`/api/admin/transactions/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create_contact', contact: payload }),
+        })
+        const result = await res.json()
+        if (result.contact) {
+          setContacts(prev => [...prev, result.contact])
+        }
+      }
+      setContactModal({ open: false, editing: null })
+    } catch {
+      alert('Failed to save contact.')
+    } finally {
+      setSavingContact(false)
+    }
+  }
+
+  const deleteContact = async (contactId: string) => {
+    if (!confirm('Delete this contact?')) return
+    setSaving(true)
+    try {
+      await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_contact', contact_id: contactId }),
+      })
+      setContacts(prev => prev.filter(c => c.id !== contactId))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ── Computed values ──────────────────────────────────────────────────────────
 
   const txn = data?.transaction
@@ -807,8 +1169,33 @@ export default function AdminTransactionDetailPage() {
               <div className="container-card">
                 <SectionHeader>Transaction</SectionHeader>
                 <div className="space-y-0">
-                  <FieldRow label="Property" value={txn.property_address} />
-                  <FieldRow label="Type" value={formatTransactionType(txn.transaction_type)} />
+                  <EditableFieldRow
+                    label="Property"
+                    value={txn.property_address}
+                    field="property_address"
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
+                  <EditableFieldRow
+                    label="Type"
+                    value={txn.transaction_type}
+                    field="transaction_type"
+                    type="select"
+                    options={[
+                      { value: 'buyer_v2', label: 'Buyer' },
+                      { value: 'seller_v2', label: 'Seller' },
+                      { value: 'nc_buyer_v2', label: 'New Construction Buyer' },
+                      { value: 'land_buyer_v2', label: 'Land Buyer' },
+                      { value: 'land_seller_v2', label: 'Land Seller' },
+                      { value: 'commercial_buyer_v2', label: 'Commercial Buyer' },
+                      { value: 'tenant_apt_v2', label: 'Tenant (Apartment)' },
+                      { value: 'tenant_non_apt_v2', label: 'Tenant (Non-Apartment)' },
+                      { value: 'tenant_simplyhome_v2', label: 'Tenant (SimplyHome)' },
+                      { value: 'tenant_commercial_v2', label: 'Tenant (Commercial)' },
+                      { value: 'landlord_v2', label: 'Landlord' },
+                      { value: 'referred_out_v2', label: 'Referred Out' },
+                    ]}
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
                   <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
                     <span className="field-label shrink-0">Status</span>
                     <select
@@ -848,7 +1235,17 @@ export default function AdminTransactionDetailPage() {
                     value={txn.representation_type?.replace(/_/g, ' ')}
                   />
                   <FieldRow label="Lead Source" value={txn.lead_source?.replace(/_/g, ' ')} />
-                  <FieldRow label="Office" value={txn.office_location} />
+                  <EditableFieldRow
+                    label="Office"
+                    value={txn.office_location}
+                    field="office_location"
+                    type="select"
+                    options={[
+                      { value: 'Houston', label: 'Houston' },
+                      { value: 'Dallas', label: 'Dallas' },
+                    ]}
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
                   {txn.mls_link && (
                     <FieldRow
                       label="MLS Link"
@@ -873,26 +1270,95 @@ export default function AdminTransactionDetailPage() {
                 <div className="space-y-0">
                   {leaseTransaction ? (
                     <>
-                      <FieldRow label="Monthly Rent" value={fmt$(txn.monthly_rent)} />
-                      <FieldRow
-                        label="Lease Term"
-                        value={txn.lease_term ? `${txn.lease_term} months` : null}
+                      <EditableFieldRow
+                        label="Monthly Rent"
+                        value={txn.monthly_rent}
+                        field="monthly_rent"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
-                      <FieldRow label="Move-In Date" value={fmtDate(txn.move_in_date)} />
-                      <FieldRow label="Sales Volume" value={fmt$(txn.sales_volume)} />
+                      <EditableFieldRow
+                        label="Lease Term"
+                        value={txn.lease_term}
+                        field="lease_term"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
+                        label="Move-In Date"
+                        value={txn.move_in_date}
+                        field="move_in_date"
+                        type="date"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
+                        label="Sales Volume"
+                        value={txn.sales_volume}
+                        field="sales_volume"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
                     </>
                   ) : (
                     <>
-                      <FieldRow label="Sales Price" value={fmt$(txn.sales_price)} />
-                      <FieldRow label="Sales Volume" value={fmt$(txn.sales_volume)} />
-                      <FieldRow label="Closing Date" value={fmtDate(txn.closing_date)} />
-                      <FieldRow label="Closed Date" value={fmtDate(txn.closed_date)} />
+                      <EditableFieldRow
+                        label="Sales Price"
+                        value={txn.sales_price}
+                        field="sales_price"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
+                        label="Sales Volume"
+                        value={txn.sales_volume}
+                        field="sales_volume"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
+                        label="Closing Date"
+                        value={txn.closing_date}
+                        field="closing_date"
+                        type="date"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
+                        label="Closed Date"
+                        value={txn.closed_date}
+                        field="closed_date"
+                        type="date"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
                     </>
                   )}
-                  <FieldRow label="Gross Commission" value={fmt$(txn.gross_commission)} />
-                  <FieldRow label="Listing Side" value={fmt$(txn.listing_side_commission)} />
-                  <FieldRow label="Buying Side" value={fmt$(txn.buying_side_commission)} />
-                  <FieldRow label="Office Gross" value={fmt$(txn.office_gross)} />
+                  <EditableFieldRow
+                    label="Gross Commission"
+                    value={txn.gross_commission}
+                    field="gross_commission"
+                    type="number"
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
+                  <EditableFieldRow
+                    label="Listing Side"
+                    value={txn.listing_side_commission}
+                    field="listing_side_commission"
+                    type="number"
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
+                  <EditableFieldRow
+                    label="Buying Side"
+                    value={txn.buying_side_commission}
+                    field="buying_side_commission"
+                    type="number"
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
+                  <EditableFieldRow
+                    label="Office Gross"
+                    value={txn.office_gross}
+                    field="office_gross"
+                    type="number"
+                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                  />
                   <FieldRow
                     label="Office Net"
                     value={
@@ -1033,7 +1499,27 @@ export default function AdminTransactionDetailPage() {
           {/* ── COMMISSIONS TAB ──────────────────────────────────────────── */}
           {activeTab === 'commissions' && (
             <div className="space-y-4">
-              <h1 className="page-title">COMMISSIONS</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="page-title">COMMISSIONS</h1>
+                <button
+                  onClick={() => setShowCloseModal(true)}
+                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                >
+                  + Add Agent
+                </button>
+              </div>
+
+              {/* Smart calc info banner */}
+              {txn.office_gross && parseFloat(txn.office_gross) > 0 && (
+                <div className="inner-card bg-blue-50/50 border border-blue-200 flex items-center gap-2">
+                  <Zap size={14} className="text-blue-600" />
+                  <p className="text-xs text-blue-700">
+                    Smart calc available. Click the calculator icon on any agent to auto-fill splits based on their plan.
+                  </p>
+                </div>
+              )}
+
+              {/* Summary cards */}
               <div className="container-card">
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="inner-card text-center">
@@ -1043,7 +1529,7 @@ export default function AdminTransactionDetailPage() {
                     </p>
                   </div>
                   <div className="inner-card text-center">
-                    <p className="text-xs text-luxury-gray-3 mb-0.5">Total Paid Out</p>
+                    <p className="text-xs text-luxury-gray-3 mb-0.5">Total Agent Payouts</p>
                     <p className="text-sm font-semibold text-luxury-gray-1">
                       {fmt$(
                         agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
@@ -1051,67 +1537,152 @@ export default function AdminTransactionDetailPage() {
                     </p>
                   </div>
                   <div className="inner-card text-center">
-                    <p className="text-xs text-luxury-gray-3 mb-0.5">Office Net</p>
+                    <p className="text-xs text-luxury-gray-3 mb-0.5">Brokerage Net</p>
                     <p className="text-sm font-semibold text-green-600">{fmt$(txn.office_net)}</p>
                   </div>
                 </div>
 
                 {agents.length === 0 ? (
                   <p className="text-xs text-luxury-gray-3 text-center py-4">
-                    No agents on this transaction.
+                    No agents on this transaction. Click "Add Agent" to add one.
                   </p>
                 ) : (
                   <div className="space-y-3">
                     {agents.map((a: any) => {
                       const isPaid = a.payment_status === 'paid'
-                      const agentGross = parseFloat(a.agent_gross || 0)
-                      const processingFee = parseFloat(a.processing_fee || 0)
-                      const coachingFee = parseFloat(a.coaching_fee || 0)
+                      const calc = agentCalcData[a.agent_id]
+                      const agentGross = parseFloat(a.agent_gross || calc?.agent_gross || 0)
+                      const processingFee = parseFloat(a.processing_fee || calc?.processing_fee || 0)
+                      const coachingFee = parseFloat(a.coaching_fee || calc?.coaching_fee || 0)
                       const otherFees = parseFloat(a.other_fees || 0)
-                      const totalFees = processingFee + coachingFee + otherFees
-                      const brokerageSplit = parseFloat(a.brokerage_split || 0)
+                      const brokerageSplit = parseFloat(a.brokerage_split || calc?.brokerage_split || 0)
+                      const teamLeadComm = parseFloat(a.team_lead_commission || calc?.team_lead_payout || 0)
                       const debtsDeducted = parseFloat(a.debts_deducted || 0)
-                      const amount1099 = a.amount_1099_reportable || (agentGross - totalFees)
+                      const agentNet = parseFloat(a.agent_net || calc?.agent_net || 0)
+                      const amount1099 = a.amount_1099_reportable || (agentGross - processingFee - coachingFee - otherFees)
+                      const isDeleting = deleteConfirm === a.id
 
                       return (
                         <div key={a.id} className="inner-card">
-                          {/* Header */}
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <p className="text-sm font-semibold text-luxury-gray-1">
-                                {fmtName(a.user)}
-                              </p>
-                              <p className="text-xs text-luxury-gray-3">
-                                {a.agent_role?.replace(/_/g, ' ')} · {a.commission_plan || '--'}
-                              </p>
+                          {/* Header with actions */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              {a.user?.headshot_url && (
+                                <img
+                                  src={a.user.headshot_url}
+                                  alt=""
+                                  className="w-10 h-10 rounded-full object-cover object-top border border-luxury-gray-5"
+                                />
+                              )}
+                              <div>
+                                <p className="text-sm font-semibold text-luxury-gray-1">
+                                  {fmtName(a.user)}
+                                </p>
+                                <p className="text-xs text-luxury-gray-3">
+                                  {a.agent_role?.replace(/_/g, ' ')} · {a.user?.commission_plan || a.commission_plan || '--'}
+                                </p>
+                              </div>
                             </div>
-                            {isPaid ? (
-                              <div className="text-right">
+                            <div className="flex items-center gap-2">
+                              {/* Delete button */}
+                              {!isPaid && (
+                                <button
+                                  onClick={() => setDeleteConfirm(a.id)}
+                                  className="p-1.5 rounded border border-luxury-gray-5 hover:border-red-300 hover:bg-red-50 transition-colors"
+                                  title="Remove agent"
+                                >
+                                  <Trash2 size={14} className="text-luxury-gray-3 hover:text-red-500" />
+                                </button>
+                              )}
+                              {/* Payment status */}
+                              {isPaid ? (
                                 <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
                                   Paid
                                 </span>
-                                <p className="text-xs text-luxury-gray-3 mt-1">
-                                  {fmtDate(a.payment_date)}
-                                </p>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => openMarkPaidModal(a)}
-                                className="btn-primary text-xs px-3 py-1"
-                              >
-                                Mark Paid
-                              </button>
-                            )}
+                              ) : (
+                                <button
+                                  onClick={() => openMarkPaidModal(a)}
+                                  className="btn-primary text-xs px-3 py-1"
+                                >
+                                  Mark Paid
+                                </button>
+                              )}
+                            </div>
                           </div>
+
+                          {/* Delete confirmation */}
+                          {isDeleting && (
+                            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                              <p className="text-xs text-red-700 mb-2">
+                                Remove {fmtName(a.user)} from this transaction?
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => deleteInternalAgent(a.id)}
+                                  disabled={saving}
+                                  className="btn text-xs px-3 py-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  {saving ? 'Removing...' : 'Remove'}
+                                </button>
+                                <button
+                                  onClick={() => setDeleteConfirm(null)}
+                                  className="btn btn-secondary text-xs px-3 py-1"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Team member lead source picker */}
+                          {calc?.is_team_member && !isPaid && (
+                            <div className="mb-3 p-3 bg-purple-50/50 border border-purple-200 rounded-lg">
+                              <p className="text-xs text-purple-700 mb-2">
+                                {fmtName(a.user)} is on {calc.team_lead_name ? `${calc.team_lead_name}'s team` : 'a team'}. Who sourced this lead?
+                              </p>
+                              <div className="flex gap-2">
+                                {['team_lead', 'own', 'firm'].map(src => (
+                                  <button
+                                    key={src}
+                                    onClick={() => {
+                                      setAgentLeadSources(p => ({ ...p, [a.agent_id]: src }))
+                                      // Recalculate and apply with new lead source
+                                      setTimeout(() => recalculateAgentSplit(a.agent_id, a.id), 100)
+                                    }}
+                                    className={`flex-1 text-xs px-3 py-1.5 rounded border transition-colors ${
+                                      (agentLeadSources[a.agent_id] || 'own') === src
+                                        ? 'bg-purple-600 text-white border-purple-600'
+                                        : 'border-purple-300 text-purple-700 hover:bg-purple-100'
+                                    }`}
+                                  >
+                                    {src === 'team_lead' ? 'Team Lead' : src === 'own' ? "Agent's Own" : 'Firm Lead'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Momentum partner display */}
+                          {calc?.momentum_partner_name && calc.momentum_partner_payout > 0 && (
+                            <div className="mb-3 p-3 bg-green-50/50 border border-green-200 rounded-lg">
+                              <p className="text-xs text-green-700">
+                                <span className="font-semibold">{calc.momentum_partner_name}</span> earns {calc.momentum_partner_pct}% momentum partner fee: {fmt$(calc.momentum_partner_payout)}
+                                <span className="text-green-600 ml-1">(from brokerage side)</span>
+                              </p>
+                            </div>
+                          )}
 
                           {/* Financial breakdown */}
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            <FieldRow label="Basis (100%)" value={fmt$(a.agent_basis)} />
-                            <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : null} />
+                            <FieldRow label="Office Gross (100%)" value={fmt$(txn.office_gross)} />
+                            <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : (calc?.agent_split_pct ? `${calc.agent_split_pct}%` : null)} />
                             <FieldRow label="Agent Gross" value={fmt$(agentGross)} />
                             <FieldRow label="Brokerage Split" value={brokerageSplit > 0 ? fmt$(brokerageSplit) : null} />
                             <FieldRow label="Processing Fee" value={processingFee > 0 ? `-${fmt$(processingFee)}` : null} />
                             <FieldRow label="Coaching Fee" value={coachingFee > 0 ? `-${fmt$(coachingFee)}` : null} />
+                            {teamLeadComm > 0 && (
+                              <FieldRow label="Team Lead Comm" value={`-${fmt$(teamLeadComm)}`} />
+                            )}
                             <FieldRow label="Other Fees" value={otherFees > 0 ? `-${fmt$(otherFees)}` : null} />
                             <FieldRow label="Rebate" value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null} />
                             <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
@@ -1131,13 +1702,14 @@ export default function AdminTransactionDetailPage() {
                             )}
                             <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
                               <span className="text-xs font-semibold text-luxury-gray-2">Agent Net</span>
-                              <span className="text-sm font-bold text-luxury-accent">{fmt$(a.agent_net)}</span>
+                              <span className="text-sm font-bold text-luxury-accent">{fmt$(agentNet)}</span>
                             </div>
                           </div>
 
                           {/* Payment details (if paid) */}
                           {isPaid && (
                             <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 text-xs text-luxury-gray-3 space-y-0.5">
+                              {a.payment_date && <p>Paid: {fmtDate(a.payment_date)}</p>}
                               {a.payment_method && <p>Method: {a.payment_method}</p>}
                               {a.payment_reference && <p>Reference: {a.payment_reference}</p>}
                               {a.funding_source && a.funding_source !== 'crc' && (
@@ -1155,6 +1727,22 @@ export default function AdminTransactionDetailPage() {
                         </div>
                       )
                     })}
+                  </div>
+                )}
+
+                {/* Document generation buttons */}
+                {agents.length > 0 && (
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-luxury-gray-5/50">
+                    <button className="btn btn-secondary text-xs flex items-center gap-1.5">
+                      <FileText size={12} />
+                      Commission Statement
+                    </button>
+                    {!leaseTransaction && (
+                      <button className="btn btn-secondary text-xs flex items-center gap-1.5">
+                        <FileText size={12} />
+                        Generate CDA
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1671,12 +2259,199 @@ export default function AdminTransactionDetailPage() {
           {/* ── CONTACTS TAB ─────────────────────────────────────────────── */}
           {activeTab === 'contacts' && (
             <div className="space-y-4">
-              <h1 className="page-title">CONTACTS</h1>
-              <div className="container-card">
-                <p className="text-xs text-luxury-gray-3 text-center py-6">
-                  Contact management coming soon.
-                </p>
+              <div className="flex items-center justify-between">
+                <h1 className="page-title">CONTACTS</h1>
+                <button onClick={openAddContact} className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+                  <Plus size={13} /> Add Contact
+                </button>
               </div>
+
+              {loadingContacts ? (
+                <div className="container-card text-center py-6">
+                  <p className="text-xs text-luxury-gray-3">Loading contacts...</p>
+                </div>
+              ) : contacts.length === 0 ? (
+                <div className="container-card text-center py-6">
+                  <p className="text-xs text-luxury-gray-3 mb-3">No contacts added yet.</p>
+                  <button onClick={openAddContact} className="btn btn-primary text-xs px-4 py-2">
+                    <Plus size={13} className="inline mr-1" /> Add First Contact
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {contacts.map((contact: any) => (
+                    <div key={contact.id} className="container-card">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-luxury-gray-1">
+                              {contact.name || 'Unnamed'}
+                            </span>
+                            <span className="text-xs bg-luxury-gray-5 text-luxury-gray-2 px-2 py-0.5 rounded">
+                              {contact.contact_type === 'other' ? contact.contact_type_other : contact.contact_type?.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          {contact.company && (
+                            <p className="text-xs text-luxury-gray-3 mb-1">{contact.company}</p>
+                          )}
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                            {contact.email && (Array.isArray(contact.email) ? contact.email : [contact.email]).map((e: string, i: number) => (
+                              <a key={i} href={`mailto:${e}`} className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
+                                <Mail size={11} /> {e}
+                              </a>
+                            ))}
+                            {contact.phone && (Array.isArray(contact.phone) ? contact.phone : [contact.phone]).map((p: string, i: number) => (
+                              <a key={i} href={`tel:${p}`} className="text-xs text-luxury-accent hover:underline flex items-center gap-1">
+                                <Phone size={11} /> {p}
+                              </a>
+                            ))}
+                          </div>
+                          {contact.notes && (
+                            <p className="text-xs text-luxury-gray-3 mt-2 italic">{contact.notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 ml-3">
+                          <button
+                            onClick={() => openEditContact(contact)}
+                            className="text-luxury-gray-3 hover:text-luxury-accent transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => deleteContact(contact.id)}
+                            className="text-luxury-gray-3 hover:text-red-500 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Contact Modal */}
+              {contactModal.open && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                    <div className="flex items-center justify-between p-4 border-b border-luxury-gray-5">
+                      <h2 className="text-sm font-semibold text-luxury-gray-1">
+                        {contactModal.editing ? 'Edit Contact' : 'Add Contact'}
+                      </h2>
+                      <button onClick={() => setContactModal({ open: false, editing: null })} className="text-luxury-gray-3 hover:text-luxury-gray-1">
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      <div>
+                        <label className="field-label">Contact Type *</label>
+                        <select
+                          className="select-luxury text-xs"
+                          value={contactForm.contact_type}
+                          onChange={e => setContactForm(p => ({ ...p, contact_type: e.target.value }))}
+                        >
+                          <option value="">Select...</option>
+                          <option value="buyer">Buyer</option>
+                          <option value="seller">Seller</option>
+                          <option value="tenant">Tenant</option>
+                          <option value="landlord">Landlord</option>
+                          <option value="title_company">Title Company</option>
+                          <option value="title_officer">Title Officer</option>
+                          <option value="lender">Lender</option>
+                          <option value="loan_officer">Loan Officer</option>
+                          <option value="attorney">Attorney</option>
+                          <option value="inspector">Inspector</option>
+                          <option value="appraiser">Appraiser</option>
+                          <option value="cooperating_agent">Cooperating Agent</option>
+                          <option value="property_manager">Property Manager</option>
+                          <option value="hoa">HOA</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      {contactForm.contact_type === 'other' && (
+                        <div>
+                          <label className="field-label">Specify Type</label>
+                          <input
+                            type="text"
+                            className="input-luxury text-xs"
+                            value={contactForm.contact_type_other}
+                            onChange={e => setContactForm(p => ({ ...p, contact_type_other: e.target.value }))}
+                            placeholder="e.g. Surveyor"
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label className="field-label">Name</label>
+                        <input
+                          type="text"
+                          className="input-luxury text-xs"
+                          value={contactForm.name}
+                          onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))}
+                          placeholder="Contact name"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Company</label>
+                        <input
+                          type="text"
+                          className="input-luxury text-xs"
+                          value={contactForm.company}
+                          onChange={e => setContactForm(p => ({ ...p, company: e.target.value }))}
+                          placeholder="Company name"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Email(s)</label>
+                        <input
+                          type="text"
+                          className="input-luxury text-xs"
+                          value={contactForm.email}
+                          onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))}
+                          placeholder="email@example.com (comma-separated for multiple)"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Phone(s)</label>
+                        <input
+                          type="text"
+                          className="input-luxury text-xs"
+                          value={contactForm.phone}
+                          onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))}
+                          placeholder="(555) 123-4567 (comma-separated for multiple)"
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label">Notes</label>
+                        <textarea
+                          className="input-luxury text-xs"
+                          rows={2}
+                          value={contactForm.notes}
+                          onChange={e => setContactForm(p => ({ ...p, notes: e.target.value }))}
+                          placeholder="Additional notes..."
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
+                      <button
+                        onClick={saveContact}
+                        disabled={savingContact}
+                        className="btn btn-primary text-xs flex-1 disabled:opacity-50"
+                      >
+                        {savingContact ? 'Saving...' : contactModal.editing ? 'Update Contact' : 'Add Contact'}
+                      </button>
+                      <button
+                        onClick={() => setContactModal({ open: false, editing: null })}
+                        disabled={savingContact}
+                        className="btn btn-secondary text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
