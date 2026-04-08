@@ -32,22 +32,24 @@ interface Completion {
   completed_at: string
 }
 
-const HAR_NEW = [
-  'Visit the HAR Join Page at har.com/joinhar',
+type Step = string | { text: string; url: string }
+
+const HAR_NEW: Step[] = [
+  { text: 'Visit the HAR Join Page', url: 'https://har.com/joinhar' },
   'Click "Apply Now"',
   'Complete the Application Form',
   'Check your email for login credentials from HAR',
   'Pay any required fees',
   'Mark complete once approved and you have HAR access',
 ]
-const HAR_TRANSFER = [
-  'Complete the HAR Transfer Form at app.hellosign.com/s/RGGuWyKz',
+const HAR_TRANSFER: Step[] = [
+  { text: 'Complete the HAR Transfer Form', url: 'https://app.hellosign.com/s/62GzWyXz' },
   'Check your email for confirmation from HAR',
   'Pay any required fees',
   'Mark complete once you receive confirmation',
 ]
-const METRO_NEW = [
-  'Visit mymetrotex.com',
+const METRO_NEW: Step[] = [
+  { text: 'Visit mymetrotex.com', url: 'https://mymetrotex.com' },
   'Click "Join Today"',
   'Complete the Member Application',
   'Fill out all required information and submit',
@@ -55,8 +57,8 @@ const METRO_NEW = [
   'Pay any required fees',
   'Mark complete once approved and you have MetroTex access',
 ]
-const METRO_TRANSFER = [
-  'Visit mymetrotex.com',
+const METRO_TRANSFER: Step[] = [
+  { text: 'Visit mymetrotex.com', url: 'https://mymetrotex.com' },
   'Click "Manage My Membership"',
   'Log in with your existing MetroTex credentials',
   'Complete the Transfer Form',
@@ -222,7 +224,11 @@ function MLSSetupCard({
               <ol className="list-decimal list-inside space-y-1">
                 {(metroStatus === 'new' ? METRO_NEW : METRO_TRANSFER).map((step, i) => (
                   <li key={i} className="text-xs text-luxury-gray-2">
-                    {step}
+                    {typeof step === 'string' ? step : (
+                      <a href={step.url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent underline underline-offset-2 hover:opacity-80">
+                        {step.text}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -235,7 +241,11 @@ function MLSSetupCard({
               <ol className="list-decimal list-inside space-y-1">
                 {(harStatus === 'new' ? HAR_NEW : HAR_TRANSFER).map((step, i) => (
                   <li key={i} className="text-xs text-luxury-gray-2">
-                    {step}
+                    {typeof step === 'string' ? step : (
+                      <a href={step.url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent underline underline-offset-2 hover:opacity-80">
+                        {step.text}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ol>
