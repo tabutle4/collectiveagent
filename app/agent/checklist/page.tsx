@@ -82,7 +82,7 @@ function MLSSetupCard({
   const [metroStatus, setMetroStatus] = useState<string | null>(null)
 
   const showHAR = mls === 'HAR' || mls === 'Both'
-  const showMetro = mls === 'MetroTex' || mls === 'Both'
+  const showMetro = mls === 'MetroTex | NTREIS' || mls === 'Both'
 
   return (
     <div className={`inner-card transition-colors ${isCompleted ? 'opacity-70' : ''}`}>
