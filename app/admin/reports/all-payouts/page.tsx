@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/context/AuthContext'
 
 interface PayoutRow {
   id: string
-  type: 'agent' | 'external'
+  type: 'agent' | 'external' | 'pm_fee'
   payee: string
   payee_type: string
   address: string

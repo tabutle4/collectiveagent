@@ -22,7 +22,17 @@ export async function GET(
           id, property_address, unit, city, state, zip, unit_count, status,
           pm_leases(id, tenant_id, lease_start, lease_end, monthly_rent, status)
         ),
-        pm_agreements(id, commencement_date, expiration_date, management_fee_pct, status),
+        pm_agreements(
+          id, commencement_date, expiration_date, status,
+          management_fee_pct, management_fee_minimum,
+          maintenance_coord_fee_pct, renewal_fee_pct, renewal_fee_flat,
+          eviction_fee, repair_limit_without_approval,
+          agreement_pdf_url, notes,
+          referring_agent_id, agent_fee_pct,
+          referring_agent:users!pm_agreements_referring_agent_id_fkey(
+            id, preferred_first_name, first_name, preferred_last_name, last_name
+          )
+        ),
         landlord_disbursements(
           id, gross_rent, management_fee, net_amount, payment_status, payment_date, period_month, period_year
         )

@@ -70,6 +70,22 @@ export async function GET(request: NextRequest) {
 
     if (ebError) throw ebError
 
+    // PM fee payouts
+    const { data: pmFeePayouts, error: pmError } = await supabaseAdmin
+      .from('pm_fee_payouts')
+      .select(`
+        id, payee_type, payee_id, payee_name, amount,
+        payment_status, payment_date, payment_method,
+        landlord_disbursements!inner(
+          id, period_month, period_year,
+          managed_properties(property_address)
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .range(0, 9999)
+
+    if (pmError) throw pmError
+
     // Get agent names for internal agents
     const agentIds = [...new Set((internalAgents || []).map(a => a.agent_id).filter(Boolean))]
     let agentNames: Record<string, string> = {}
@@ -124,7 +140,27 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    let rows = [...internalRows, ...externalRows]
+    // PM fee payout rows
+    const pmRows = (pmFeePayouts || []).map(p => {
+      const disb = p.landlord_disbursements as any
+      const prop = disb?.managed_properties as any
+      const periodLabel = disb ? `${disb.period_month}/${disb.period_year}` : ''
+      return {
+        id:               p.id,
+        type:             'pm_fee' as const,
+        payee:            p.payee_name,
+        payee_type:       p.payee_type === 'agent' ? 'pm_referral' : 'pm_brokerage',
+        address:          prop?.property_address || '',
+        transaction_type: `PM Fee ${periodLabel}`,
+        amount:           p.amount || 0,
+        payment_status:   p.payment_status || 'pending',
+        payment_date:     p.payment_date || null,
+        payment_method:   p.payment_method || 'ach',
+        transaction_id:   null, // PM payouts don't link to transactions
+      }
+    })
+
+    let rows = [...internalRows, ...externalRows, ...pmRows]
 
     // Apply filters
     if (search) {

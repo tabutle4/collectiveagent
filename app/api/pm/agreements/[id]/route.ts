@@ -19,7 +19,8 @@ export async function GET(
       .select(`
         *,
         landlords(id, first_name, last_name, email, phone),
-        managed_properties(id, property_address, city, status)
+        managed_properties(id, property_address, city, status),
+        referring_agent:users!pm_agreements_referring_agent_id_fkey(id, preferred_first_name, first_name, preferred_last_name, last_name)
       `)
       .eq('id', resolvedParams.id)
       .single()
@@ -60,6 +61,7 @@ export async function PATCH(
       'lease_term_min_months', 'lease_term_max_months',
       'coop_broker_fee_pct', 'agreement_pdf_url',
       'status', 'notes',
+      'referring_agent_id', 'agent_fee_pct',
     ]
 
     const filteredUpdates: Record<string, any> = { updated_at: new Date().toISOString() }

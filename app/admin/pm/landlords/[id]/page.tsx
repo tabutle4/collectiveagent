@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck } from 'lucide-react'
 
 interface Landlord {
   id: string
@@ -63,7 +63,344 @@ interface Disbursement {
   managed_properties?: Property
 }
 
-type TabType = 'overview' | 'properties' | 'leases' | 'disbursements'
+interface Agreement {
+  id: string
+  commencement_date: string | null
+  expiration_date: string | null
+  management_fee_pct: number
+  management_fee_minimum: number | null
+  maintenance_coord_fee_pct: number | null
+  renewal_fee_pct: number | null
+  renewal_fee_flat: number | null
+  eviction_fee: number | null
+  repair_limit_without_approval: number | null
+  agreement_pdf_url: string | null
+  notes: string | null
+  status: string
+  referring_agent_id: string | null
+  agent_fee_pct: number
+  referring_agent?: {
+    id: string
+    preferred_first_name: string | null
+    first_name: string
+    preferred_last_name: string | null
+    last_name: string
+  } | null
+}
+
+interface Agent {
+  id: string
+  name: string
+  displayName: string
+}
+
+type TabType = 'overview' | 'properties' | 'leases' | 'disbursements' | 'agreement'
+
+// Agreement Editor Component
+function AgreementEditor({
+  agreement,
+  agents,
+  saving,
+  onSave,
+}: {
+  agreement: Agreement
+  agents: Agent[]
+  saving: boolean
+  onSave: (updates: Record<string, any>) => void
+}) {
+  // Form state
+  const [form, setForm] = useState({
+    status: agreement.status || 'active',
+    commencement_date: agreement.commencement_date || '',
+    expiration_date: agreement.expiration_date || '',
+    management_fee_pct: agreement.management_fee_pct || 10,
+    maintenance_coord_fee_pct: agreement.maintenance_coord_fee_pct || '',
+    renewal_fee_pct: agreement.renewal_fee_pct || '',
+    renewal_fee_flat: agreement.renewal_fee_flat || '',
+    eviction_fee: agreement.eviction_fee || '',
+    repair_limit_without_approval: agreement.repair_limit_without_approval || '',
+    agreement_pdf_url: agreement.agreement_pdf_url || '',
+    notes: agreement.notes || '',
+    referring_agent_id: agreement.referring_agent_id || '',
+    agent_fee_pct: agreement.agent_fee_pct || 0,
+  })
+  const [hasChanges, setHasChanges] = useState(false)
+
+  const updateField = (field: string, value: any) => {
+    setForm(prev => ({ ...prev, [field]: value }))
+    setHasChanges(true)
+    // Reset agent fee if no agent selected
+    if (field === 'referring_agent_id' && !value) {
+      setForm(prev => ({ ...prev, agent_fee_pct: 0 }))
+    }
+  }
+
+  const handleSave = () => {
+    const updates: Record<string, any> = {
+      status: form.status,
+      commencement_date: form.commencement_date || null,
+      expiration_date: form.expiration_date || null,
+      management_fee_pct: parseFloat(String(form.management_fee_pct)) || 10,
+      maintenance_coord_fee_pct: form.maintenance_coord_fee_pct ? parseFloat(String(form.maintenance_coord_fee_pct)) : null,
+      renewal_fee_pct: form.renewal_fee_pct ? parseFloat(String(form.renewal_fee_pct)) : null,
+      renewal_fee_flat: form.renewal_fee_flat ? parseFloat(String(form.renewal_fee_flat)) : null,
+      eviction_fee: form.eviction_fee ? parseFloat(String(form.eviction_fee)) : null,
+      repair_limit_without_approval: form.repair_limit_without_approval ? parseFloat(String(form.repair_limit_without_approval)) : null,
+      agreement_pdf_url: form.agreement_pdf_url || null,
+      notes: form.notes || null,
+      referring_agent_id: form.referring_agent_id || null,
+      agent_fee_pct: parseFloat(String(form.agent_fee_pct)) || 0,
+    }
+    onSave(updates)
+    setHasChanges(false)
+  }
+
+  const getAgentName = (agent: Agent | Agreement['referring_agent']) => {
+    if (!agent) return ''
+    if ('name' in agent) return agent.name
+    return `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`.trim()
+  }
+
+  // Fee split preview
+  const mgmtFeePct = parseFloat(String(form.management_fee_pct)) || 0
+  const agentFeePct = parseFloat(String(form.agent_fee_pct)) || 0
+  const brokerageShare = 100 - agentFeePct
+
+  return (
+    <div className="space-y-6">
+      {/* Row 1: Status + Dates */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <div>
+          <label className="field-label">Status</label>
+          <select
+            className="select-luxury"
+            value={form.status}
+            onChange={e => updateField('status', e.target.value)}
+          >
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="terminated">Terminated</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
+        <div>
+          <label className="field-label">Commencement Date</label>
+          <input
+            type="date"
+            className="input-luxury"
+            value={form.commencement_date}
+            onChange={e => updateField('commencement_date', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="field-label">Expiration Date</label>
+          <input
+            type="date"
+            className="input-luxury"
+            value={form.expiration_date}
+            onChange={e => updateField('expiration_date', e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Row 2: Fees */}
+      <div>
+        <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          Fee Structure
+        </h3>
+        <div className="grid md:grid-cols-4 gap-4">
+          <div>
+            <label className="field-label">Management Fee %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.management_fee_pct}
+                onChange={e => updateField('management_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="0.5"
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Maint. Coord. Fee %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.maintenance_coord_fee_pct}
+                onChange={e => updateField('maintenance_coord_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder="0"
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Renewal Fee %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.renewal_fee_pct}
+                onChange={e => updateField('renewal_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder="0"
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Renewal Fee Flat</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.renewal_fee_flat}
+                onChange={e => updateField('renewal_fee_flat', e.target.value)}
+                min="0"
+                step="25"
+                placeholder="0"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Limits */}
+      <div>
+        <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          Limits &amp; Other Fees
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="field-label">Repair Limit (without approval)</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.repair_limit_without_approval}
+                onChange={e => updateField('repair_limit_without_approval', e.target.value)}
+                min="0"
+                step="50"
+                placeholder="250"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Eviction Fee</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.eviction_fee}
+                onChange={e => updateField('eviction_fee', e.target.value)}
+                min="0"
+                step="50"
+                placeholder="350"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 4: Agent Referral */}
+      <div>
+        <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          Agent Referral Fee
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="field-label">Referring Agent</label>
+            <select
+              className="select-luxury"
+              value={form.referring_agent_id}
+              onChange={e => updateField('referring_agent_id', e.target.value)}
+            >
+              <option value="">No agent</option>
+              {agents.map(agent => (
+                <option key={agent.id} value={agent.id}>
+                  {getAgentName(agent)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Agent Fee (% of Mgmt Fee)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury w-24"
+                value={form.agent_fee_pct}
+                onChange={e => updateField('agent_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="5"
+                disabled={!form.referring_agent_id}
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+        </div>
+        {form.referring_agent_id && agentFeePct > 0 && (
+          <div className="inner-card mt-3">
+            <p className="text-xs text-luxury-gray-3">
+              On $1,000 rent with {mgmtFeePct}% mgmt fee (${(mgmtFeePct * 10).toFixed(0)}):
+              Agent gets <span className="font-medium text-luxury-accent">${((mgmtFeePct * 10) * (agentFeePct / 100)).toFixed(2)}</span>,
+              CRC keeps <span className="font-medium text-luxury-gray-1">${((mgmtFeePct * 10) * (brokerageShare / 100)).toFixed(2)}</span>
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Row 5: Agreement URL + Notes */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="field-label">Agreement PDF URL</label>
+          <input
+            type="url"
+            className="input-luxury"
+            value={form.agreement_pdf_url}
+            onChange={e => updateField('agreement_pdf_url', e.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+        <div>
+          <label className="field-label">Notes</label>
+          <input
+            type="text"
+            className="input-luxury"
+            value={form.notes}
+            onChange={e => updateField('notes', e.target.value)}
+            placeholder="Internal notes..."
+          />
+        </div>
+      </div>
+
+      {/* Save Button */}
+      {hasChanges && (
+        <div className="pt-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn btn-primary text-sm"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function LandlordDetailPage() {
   const params = useParams()
@@ -77,6 +414,8 @@ export default function LandlordDetailPage() {
   const [leases, setLeases] = useState<Lease[]>([])
   const [disbursements, setDisbursements] = useState<Disbursement[]>([])
   const [allTenants, setAllTenants] = useState<Tenant[]>([])
+  const [agreement, setAgreement] = useState<Agreement | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
   const [sendingInvite, setSendingInvite] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
@@ -86,6 +425,7 @@ export default function LandlordDetailPage() {
   const [showLeaseModal, setShowLeaseModal] = useState(false)
   const [showTenantModal, setShowTenantModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [savingAgreement, setSavingAgreement] = useState(false)
 
   // Form states
   const [propertyForm, setPropertyForm] = useState({
@@ -114,6 +454,7 @@ export default function LandlordDetailPage() {
   useEffect(() => {
     loadLandlordData()
     loadAllTenants()
+    loadAgents()
   }, [landlordId])
 
   const loadLandlordData = async () => {
@@ -126,6 +467,10 @@ export default function LandlordDetailPage() {
         // Data is nested in landlord object from API
         setProperties(data.landlord.managed_properties || [])
         setDisbursements(data.landlord.landlord_disbursements || [])
+        // Get first active agreement (there should only be one)
+        const agreements = data.landlord.pm_agreements || []
+        const activeAgreement = agreements.find((a: Agreement) => a.status === 'active') || agreements[0] || null
+        setAgreement(activeAgreement)
       }
 
       // Fetch leases separately to get tenant info
@@ -146,6 +491,42 @@ export default function LandlordDetailPage() {
       setAllTenants(data.tenants || [])
     } catch (err) {
       console.error('Error loading tenants:', err)
+    }
+  }
+
+  const loadAgents = async () => {
+    try {
+      const res = await fetch('/api/agents/list')
+      const data = await res.json()
+      setAgents(data.agents || [])
+    } catch (err) {
+      console.error('Error loading agents:', err)
+    }
+  }
+
+  const handleSaveAgreement = async (updates: Record<string, any>) => {
+    if (!agreement) return
+    setSavingAgreement(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+    try {
+      const res = await fetch(`/api/pm/agreements/${agreement.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to save agreement')
+      }
+      setSuccessMessage('Agreement updated')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      loadLandlordData()
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to save agreement')
+      setTimeout(() => setErrorMessage(''), 5000)
+    } finally {
+      setSavingAgreement(false)
     }
   }
 
@@ -311,6 +692,7 @@ export default function LandlordDetailPage() {
 
   const TABS: { key: TabType; label: string; icon: any }[] = [
     { key: 'overview', label: 'Overview', icon: Users },
+    { key: 'agreement', label: 'Agreement', icon: ClipboardCheck },
     { key: 'properties', label: `Properties (${properties.length})`, icon: Home },
     { key: 'leases', label: `Leases (${leases.length})`, icon: FileText },
     { key: 'disbursements', label: `Disbursements (${disbursements.length})`, icon: DollarSign },
@@ -449,6 +831,25 @@ export default function LandlordDetailPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Agreement Tab */}
+          {activeTab === 'agreement' && (
+            <div>
+              {!agreement ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-luxury-gray-3 mb-4">No agreement found for this landlord</p>
+                  <p className="text-xs text-luxury-gray-4">Create an agreement in Brokermint first</p>
+                </div>
+              ) : (
+                <AgreementEditor
+                  agreement={agreement}
+                  agents={agents}
+                  saving={savingAgreement}
+                  onSave={handleSaveAgreement}
+                />
+              )}
             </div>
           )}
 
