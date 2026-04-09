@@ -449,7 +449,7 @@ function PolicyManualStep({ token, isCompleted = false, onComplete, onBack }: { 
   )
 }
 
-const STEPS = [
+const STEPS_STANDARD = [
   { id: 1, label: 'Your Info' },
   { id: 2, label: 'Payment' },
   { id: 3, label: 'ICA' },
@@ -457,6 +457,15 @@ const STEPS = [
   { id: 5, label: 'Policy Manual' },
   { id: 6, label: 'W-9' },
   { id: 7, label: 'TREC' },
+]
+
+const STEPS_REFERRAL = [
+  { id: 1, label: 'Your Info' },
+  { id: 2, label: 'Payment' },
+  { id: 3, label: 'ICA' },
+  { id: 4, label: 'Policy Manual' },
+  { id: 5, label: 'W-9' },
+  { id: 6, label: 'TREC' },
 ]
 
 export default function OnboardingPage() {
@@ -471,9 +480,19 @@ export default function OnboardingPage() {
   const [paying, setPaying] = useState(false)
   const [error, setError] = useState('')
   const [paymentPaid, setPaymentPaid] = useState(false)
+  const [paymentWaived, setPaymentWaived] = useState(false)
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
+  
+  // Referral settings from company_settings
+  const [referralSettings, setReferralSettings] = useState({
+    annual_fee: 299,
+    split_apartment: 85,
+    split_internal: 90,
+    split_external: 88,
+    brokerage_name: 'Referral Collective',
+  })
 
   const [joinForm, setJoinForm] = useState<JoinFormData>({
     first_name: '',
@@ -506,6 +525,21 @@ export default function OnboardingPage() {
     referring_agent: '',
     joining_team: '',
   })
+
+  // Determine if this is a referral agent based on mls_choice
+  const isReferralAgent = prospect?.mls_choice === 'Referral Collective (No MLS)'
+  const STEPS = isReferralAgent ? STEPS_REFERRAL : STEPS_STANDARD
+  const brokerageName = isReferralAgent ? referralSettings.brokerage_name : 'Collective Realty Co.'
+
+  // Fetch referral settings
+  useEffect(() => {
+    fetch('/api/settings/referral')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings) setReferralSettings(data.settings)
+      })
+      .catch(() => {})
+  }, [])
 
   // Load Payload.js for step 2
   useEffect(() => {
@@ -566,6 +600,7 @@ export default function OnboardingPage() {
       if (data.session?.current_step) setCurrentStep(data.session.current_step)
       if (data.session?.current_step > 1) setStep1Completed(true)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
+      if (data.session?.payment_waived) setPaymentWaived(true)
       const s = data.session || {}
       setCompletedSteps({
         2: !!s.step_2_completed_at,
@@ -796,7 +831,7 @@ const checkout = new window.Payload.Checkout({
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Personal Information
               </h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">
                     Legal First Name *
@@ -952,12 +987,113 @@ const checkout = new window.Payload.Checkout({
               </div>
             </div>
 
-            {/* License & MLS */}
-            <div className="container-card">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
-                License & MLS
-              </h2>
-              <div className="grid grid-cols-2 gap-4">
+            {/* License & MLS (Standard agents only) */}
+            {!isReferralAgent && (
+              <div className="container-card">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                  License & MLS
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      Texas Real Estate License Number *
+                    </label>
+                    <input
+                      name="license_number"
+                      value={joinForm.license_number}
+                      onChange={handleChange}
+                      required
+                      className="input-luxury"
+                      placeholder="e.g. 0123456"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS ID *</label>
+                    <input
+                      name="mls_id"
+                      value={joinForm.mls_id}
+                      onChange={handleChange}
+                      required
+                      className="input-luxury"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      NRDS ID
+                      {joinForm.association_status_on_join === 'previous_member' && (
+                        <a
+                          href="https://login.connect.realtor/#!/forgotmember"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-2 text-luxury-accent hover:underline"
+                        >
+                          Look up NRDS ID
+                        </a>
+                      )}
+                    </label>
+                    {joinForm.association_status_on_join === 'previous_member' ? (
+                      <input
+                        name="nrds_id"
+                        value={joinForm.nrds_id}
+                        onChange={handleChange}
+                        className="input-luxury"
+                      />
+                    ) : (
+                      <p className="text-xs text-luxury-gray-3 py-2">Not applicable for new agents</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">Association *</label>
+                    <select
+                      name="association"
+                      value={joinForm.association}
+                      onChange={handleChange}
+                      required
+                      className="select-luxury"
+                    >
+                      <option value="">Select</option>
+                      <option value="HAR">HAR</option>
+                      <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
+                      <option value="Both">Both</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs text-luxury-gray-3 mb-2">
+                      Association Status *
+                    </label>
+                    <div className="space-y-2">
+                      {[
+                        { value: 'new_agent', label: 'I am a brand new licensed agent' },
+                        {
+                          value: 'previous_member',
+                          label: 'I was previously a member with another brokerage',
+                        },
+                      ].map(opt => (
+                        <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="association_status_on_join"
+                            value={opt.value}
+                            checked={joinForm.association_status_on_join === opt.value}
+                            onChange={handleChange}
+                            required
+                            className="mt-0.5"
+                          />
+                          <span className="text-sm text-luxury-gray-1">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* License Number for Referral Agents */}
+            {isReferralAgent && (
+              <div className="container-card">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                  License Information
+                </h2>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1.5">
                     Texas Real Estate License Number *
@@ -971,171 +1107,125 @@ const checkout = new window.Payload.Checkout({
                     placeholder="e.g. 0123456"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS ID *</label>
-                  <input
-                    name="mls_id"
-                    value={joinForm.mls_id}
-                    onChange={handleChange}
-                    required
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                    NRDS ID
-                    {joinForm.association_status_on_join === 'previous_member' && (
-                      <a
-                        href="https://login.connect.realtor/#!/forgotmember"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-2 text-luxury-accent hover:underline"
-                      >
-                        Look up NRDS ID
-                      </a>
-                    )}
-                  </label>
-                  {joinForm.association_status_on_join === 'previous_member' ? (
-                    <input
-                      name="nrds_id"
-                      value={joinForm.nrds_id}
-                      onChange={handleChange}
-                      className="input-luxury"
-                    />
-                  ) : (
-                    <p className="text-xs text-luxury-gray-3 py-2">Not applicable for new agents</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Association *</label>
-                  <select
-                    name="association"
-                    value={joinForm.association}
-                    onChange={handleChange}
-                    required
-                    className="select-luxury"
-                  >
-                    <option value="">Select</option>
-                    <option value="HAR">HAR</option>
-                    <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
-                    <option value="Both">Both</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs text-luxury-gray-3 mb-2">
-                    Association Status *
-                  </label>
-                  <div className="space-y-2">
-                    {[
-                      { value: 'new_agent', label: 'I am a brand new licensed agent' },
-                      {
-                        value: 'previous_member',
-                        label: 'I was previously a member with another brokerage',
-                      },
-                    ].map(opt => (
-                      <label key={opt.value} className="flex items-start gap-2.5 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="association_status_on_join"
-                          value={opt.value}
-                          checked={joinForm.association_status_on_join === opt.value}
-                          onChange={handleChange}
-                          required
-                          className="mt-0.5"
-                        />
-                        <span className="text-sm text-luxury-gray-1">{opt.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
               </div>
-            </div>
+            )}
 
-            {/* Commission Plan */}
-            <div className="container-card">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
-                Commission Plan *
-              </h2>
-              <div className="space-y-2.5">
-                {['New Agent Plan', 'No Cap Plan', 'Cap Plan', 'Custom Plan'].map(plan => (
-                  <label
-                    key={plan}
-                    className="flex items-center gap-2.5 cursor-pointer inner-card hover:border-luxury-black transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="commission_plan"
-                      value={plan}
-                      checked={joinForm.commission_plan === plan}
-                      onChange={handleChange}
-                      required
-                    />
-                    <span className="text-sm text-luxury-gray-1 font-medium">{plan}</span>
-                  </label>
-                ))}
-              </div>
-
-              {joinForm.commission_plan === 'Custom Plan' && (
-                <div className="mt-4 space-y-3 pt-4 border-t border-luxury-gray-5">
-                  <p className="text-xs text-luxury-gray-3">
-                    Enter the split and plan type offered to you by the broker.
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        Your Split % (Agent) *
-                      </label>
+            {/* Commission Plan - Different for standard vs referral agents */}
+            {!isReferralAgent ? (
+              <div className="container-card">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                  Commission Plan *
+                </h2>
+                <div className="space-y-2.5">
+                  {['New Agent Plan', 'No Cap Plan', 'Cap Plan', 'Custom Plan'].map(plan => (
+                    <label
+                      key={plan}
+                      className="flex items-center gap-2.5 cursor-pointer inner-card hover:border-luxury-black transition-colors"
+                    >
                       <input
-                        name="custom_split"
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={joinForm.custom_split}
+                        type="radio"
+                        name="commission_plan"
+                        value={plan}
+                        checked={joinForm.commission_plan === plan}
                         onChange={handleChange}
-                        placeholder="e.g. 80"
-                        required={joinForm.commission_plan === 'Custom Plan'}
-                        className="input-luxury"
+                        required
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        Plan Type *
-                      </label>
-                      <select
-                        name="custom_plan_type"
-                        value={joinForm.custom_plan_type}
-                        onChange={handleChange}
-                        required={joinForm.commission_plan === 'Custom Plan'}
-                        className="select-luxury"
-                      >
-                        <option value="">Select type</option>
-                        <option value="No Cap">No Cap</option>
-                        <option value="Cap">Cap ($18,000)</option>
-                        <option value="New Agent Base">New Agent Base</option>
-                      </select>
+                      <span className="text-sm text-luxury-gray-1 font-medium">{plan}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {joinForm.commission_plan === 'Custom Plan' && (
+                  <div className="mt-4 space-y-3 pt-4 border-t border-luxury-gray-5">
+                    <p className="text-xs text-luxury-gray-3">
+                      Enter the split and plan type offered to you by the broker.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Your Split % (Agent) *
+                        </label>
+                        <input
+                          name="custom_split"
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={joinForm.custom_split}
+                          onChange={handleChange}
+                          placeholder="e.g. 80"
+                          required={joinForm.commission_plan === 'Custom Plan'}
+                          className="input-luxury"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Plan Type *
+                        </label>
+                        <select
+                          name="custom_plan_type"
+                          value={joinForm.custom_plan_type}
+                          onChange={handleChange}
+                          required={joinForm.commission_plan === 'Custom Plan'}
+                          className="select-luxury"
+                        >
+                          <option value="">Select type</option>
+                          <option value="No Cap">No Cap</option>
+                          <option value="Cap">Cap ($18,000)</option>
+                          <option value="New Agent Base">New Agent Base</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <p className="text-xs text-luxury-gray-3 mt-3">
-                Select the plan offered to you. Questions? Contact{' '}
-                <a
-                  href="mailto:office@collectiverealtyco.com"
-                  className="text-luxury-accent hover:underline"
-                >
-                  office@collectiverealtyco.com
-                </a>
-                .
-              </p>
-            </div>
+                <p className="text-xs text-luxury-gray-3 mt-3">
+                  Select the plan offered to you. Questions? Contact{' '}
+                  <a
+                    href="mailto:office@collectiverealtyco.com"
+                    className="text-luxury-accent hover:underline"
+                  >
+                    office@collectiverealtyco.com
+                  </a>
+                  .
+                </p>
+              </div>
+            ) : (
+              <div className="container-card">
+                <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
+                  Referral Commission Splits
+                </h2>
+                <p className="text-xs text-luxury-gray-3 mb-4">
+                  As a referral agent, you earn the following splits on closed referrals:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="inner-card text-center p-4">
+                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">Apartment Referrals</p>
+                    <p className="text-2xl font-bold text-luxury-gray-1">{referralSettings.split_apartment}%</p>
+                    <p className="text-xs text-luxury-gray-3">to you / {100 - referralSettings.split_apartment}% brokerage</p>
+                  </div>
+                  <div className="inner-card text-center p-4">
+                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">Buyer / Seller / Tenant</p>
+                    <p className="text-2xl font-bold text-luxury-gray-1">{referralSettings.split_internal}%</p>
+                    <p className="text-xs text-luxury-gray-3">to you / {100 - referralSettings.split_internal}% brokerage</p>
+                  </div>
+                  <div className="inner-card text-center p-4">
+                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">External Referrals</p>
+                    <p className="text-2xl font-bold text-luxury-gray-1">{referralSettings.split_external}%</p>
+                    <p className="text-xs text-luxury-gray-3">to you / {100 - referralSettings.split_external}% brokerage</p>
+                  </div>
+                </div>
+                <p className="text-xs text-luxury-gray-3 mt-4">
+                  External referrals are out-of-state or in-state to other brokerages.
+                </p>
+              </div>
+            )}
 
             {/* Social Media */}
             <div className="container-card">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
                 Social Media
               </h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { name: 'instagram_handle', label: 'Instagram', placeholder: '@handle' },
                   { name: 'tiktok_handle', label: 'TikTok', placeholder: '@handle' },
@@ -1209,14 +1299,21 @@ const checkout = new window.Payload.Checkout({
             {paymentPaid ? (
               <>
                 <div className="text-center mb-8">
-                  <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">Payment Complete</h1>
+                  <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">
+                    {paymentWaived ? 'Fee Waived' : 'Payment Complete'}
+                  </h1>
                   <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                    Your onboarding payment has been received. Continue to review and sign your agreements.
+                    {paymentWaived 
+                      ? 'Your onboarding fee has been waived as part of the CRC agent conversion offer. Continue to review and sign your agreements.'
+                      : 'Your onboarding payment has been received. Continue to review and sign your agreements.'
+                    }
                   </p>
                 </div>
                 <div className="container-card flex items-center gap-3">
                   <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                  <p className="text-sm text-luxury-gray-2">Onboarding invoice paid.</p>
+                  <p className="text-sm text-luxury-gray-2">
+                    {paymentWaived ? 'Onboarding fee waived.' : 'Onboarding invoice paid.'}
+                  </p>
                 </div>
                 <button
                   onClick={() => { setCurrentStep(3); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
@@ -1245,44 +1342,59 @@ const checkout = new window.Payload.Checkout({
                 What's Included
               </h2>
               <div className="space-y-3">
-                <div className="inner-card flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-luxury-gray-1">Onboarding Fee</p>
-                    <p className="text-xs text-luxury-gray-3">
-                      One-time fee to join Collective Realty Co.
-                    </p>
+                {isReferralAgent ? (
+                  <div className="inner-card flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-luxury-gray-1">Annual Membership</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        One-year membership to {referralSettings.brokerage_name}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-luxury-gray-1">${referralSettings.annual_fee.toFixed(2)}</p>
                   </div>
-                  <p className="text-sm font-semibold text-luxury-gray-1">$399.00</p>
-                </div>
-                <div className="inner-card flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-luxury-gray-1">Prorated Monthly Fee</p>
-                    <p className="text-xs text-luxury-gray-3">
-                      {(() => {
-                        const now = new Date()
-                        const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-                        const p = (n: number) => String(n).padStart(2, '0')
-                        const yy = String(now.getFullYear()).slice(2)
-                        const start = `${p(now.getMonth() + 1)}/${p(now.getDate())}/${yy}`
-                        const end = `${p(now.getMonth() + 1)}/${p(dim)}/${yy}`
-                        return `${start} to ${end}`
-                      })()}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-luxury-gray-1">
-                    {(() => {
-                      const now = new Date()
-                      const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-                      const remaining = dim - now.getDate() + 1
-                      return `$${(Math.round((50 / dim) * remaining * 100) / 100).toFixed(2)}`
-                    })()}
-                  </p>
-                </div>
+                ) : (
+                  <>
+                    <div className="inner-card flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-luxury-gray-1">Onboarding Fee</p>
+                        <p className="text-xs text-luxury-gray-3">
+                          One-time fee to join Collective Realty Co.
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-luxury-gray-1">$399.00</p>
+                    </div>
+                    <div className="inner-card flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-luxury-gray-1">Prorated Monthly Fee</p>
+                        <p className="text-xs text-luxury-gray-3">
+                          {(() => {
+                            const now = new Date()
+                            const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                            const p = (n: number) => String(n).padStart(2, '0')
+                            const yy = String(now.getFullYear()).slice(2)
+                            const start = `${p(now.getMonth() + 1)}/${p(now.getDate())}/${yy}`
+                            const end = `${p(now.getMonth() + 1)}/${p(dim)}/${yy}`
+                            return `${start} to ${end}`
+                          })()}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-luxury-gray-1">
+                        {(() => {
+                          const now = new Date()
+                          const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                          const remaining = dim - now.getDate() + 1
+                          return `$${(Math.round((50 / dim) * remaining * 100) / 100).toFixed(2)}`
+                        })()}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="mt-4 pt-4 border-t border-luxury-gray-5/50">
                 <p className="text-xs text-luxury-gray-3">
-                  Processing fees are passed to the payer. Monthly fees of $50 are due by the 5th of
-                  each month thereafter.
+                  {isReferralAgent 
+                    ? 'Processing fees are passed to the payer. Annual membership renews each year.'
+                    : 'Processing fees are passed to the payer. Monthly fees of $50 are due by the 5th of each month thereafter.'}
                 </p>
               </div>
             </div>
@@ -1322,7 +1434,7 @@ const checkout = new window.Payload.Checkout({
           <SignatureStep
             token={token}
             documentType="ica"
-            title="Independent Contractor Agreement"
+            title={isReferralAgent ? "Referral Agent Independent Contractor Agreement" : "Independent Contractor Agreement"}
             description="Please read the agreement below carefully and sign at the bottom to continue."
             isCompleted={!!completedSteps[3]}
             onComplete={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
@@ -1330,8 +1442,8 @@ const checkout = new window.Payload.Checkout({
           />
         )}
 
-        {/* ── STEP 4: Commission Plan Agreement ── */}
-        {currentStep === 4 && (
+        {/* ── STEP 4: Commission Plan Agreement (Standard only) ── */}
+        {!isReferralAgent && currentStep === 4 && (
           <SignatureStep
             token={token}
             documentType="commission_plan"
@@ -1343,33 +1455,48 @@ const checkout = new window.Payload.Checkout({
           />
         )}
 
-        {/* ── STEP 5: Policy Manual ── */}
-        {currentStep === 5 && (
+        {/* ── Policy Manual (Step 5 for standard, Step 4 for referral) ── */}
+        {((isReferralAgent && currentStep === 4) || (!isReferralAgent && currentStep === 5)) && (
           <PolicyManualStep
             token={token}
-            isCompleted={!!completedSteps[5]}
-            onComplete={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-            onBack={() => { setCurrentStep(4); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            isCompleted={!!completedSteps[isReferralAgent ? 4 : 5]}
+            onComplete={() => { 
+              setCurrentStep(isReferralAgent ? 5 : 6)
+              window.scrollTo({ top: 0, behavior: 'smooth' }) 
+            }}
+            onBack={() => { 
+              setCurrentStep(isReferralAgent ? 3 : 4)
+              window.scrollTo({ top: 0, behavior: 'smooth' }) 
+            }}
           />
         )}
 
-        {/* ── STEP 6: W-9 ── */}
-        {currentStep === 6 && (
+        {/* ── W-9 Step (Step 6 for standard, Step 5 for referral) ── */}
+        {((isReferralAgent && currentStep === 5) || (!isReferralAgent && currentStep === 6)) && (
           <div className="space-y-5">
             <div className="flex items-center gap-3 mb-2">
-              <button onClick={() => { setCurrentStep(5); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+              <button 
+                onClick={() => { 
+                  setCurrentStep(isReferralAgent ? 4 : 5)
+                  window.scrollTo({ top: 0, behavior: 'smooth' }) 
+                }} 
+                className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+              >
                 &larr; Back
               </button>
             </div>
 
-            {completedSteps[6] ? (
+            {completedSteps[isReferralAgent ? 5 : 6] ? (
               <>
                 <div className="container-card flex items-center gap-3">
                   <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
                   <p className="text-sm text-luxury-gray-2">W-9 acknowledged.</p>
                 </div>
                 <button
-                  onClick={() => { setCurrentStep(7); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  onClick={() => { 
+                    setCurrentStep(isReferralAgent ? 6 : 7)
+                    window.scrollTo({ top: 0, behavior: 'smooth' }) 
+                  }}
                   className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
                 >
                   Continue &rarr;
@@ -1399,9 +1526,9 @@ const checkout = new window.Payload.Checkout({
                     await fetch('/api/onboarding/acknowledge-step', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ token, step: 6 }),
+                      body: JSON.stringify({ token, step: isReferralAgent ? 5 : 6 }),
                     })
-                    setCurrentStep(7)
+                    setCurrentStep(isReferralAgent ? 6 : 7)
                     window.scrollTo({ top: 0, behavior: 'smooth' })
                   }}
                   className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
@@ -1413,11 +1540,17 @@ const checkout = new window.Payload.Checkout({
           </div>
         )}
 
-        {/* ── STEP 7: TREC ── */}
-        {currentStep === 7 && (
+        {/* ── TREC Step (Step 7 for standard, Step 6 for referral) ── */}
+        {((isReferralAgent && currentStep === 6) || (!isReferralAgent && currentStep === 7)) && (
           <div className="text-center py-12 space-y-6">
             <div className="flex items-center gap-3 mb-2">
-              <button onClick={() => { setCurrentStep(6); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors">
+              <button 
+                onClick={() => { 
+                  setCurrentStep(isReferralAgent ? 5 : 6)
+                  window.scrollTo({ top: 0, behavior: 'smooth' }) 
+                }} 
+                className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+              >
                 ← Back
               </button>
             </div>

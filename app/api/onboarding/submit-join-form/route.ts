@@ -87,18 +87,22 @@ export async function POST(request: NextRequest) {
     // Check if this is the first time step 1 is being submitted
     const { data: existingSession } = await supabase
       .from('onboarding_sessions')
-      .select('step_1_completed_at')
+      .select('step_1_completed_at, step_2_completed_at')
       .eq('user_id', prospect.id)
       .single()
 
     const isFirstSubmission = !existingSession?.step_1_completed_at
+    const paymentAlreadyDone = !!existingSession?.step_2_completed_at
 
-    // Advance onboarding session to step 2
+    // Determine next step - skip payment if already completed (free conversion promo)
+    const nextStep = paymentAlreadyDone ? 3 : 2
+
+    // Advance onboarding session
     // Preserve step_1_completed_at if already set so re-submissions don't reset it
     await supabase.from('onboarding_sessions').upsert(
       {
         user_id: prospect.id,
-        current_step: 2,
+        current_step: nextStep,
         step_1_completed_at: existingSession?.step_1_completed_at ?? new Date().toISOString(),
       },
       { onConflict: 'user_id' }
@@ -108,7 +112,7 @@ export async function POST(request: NextRequest) {
     if (isFirstSubmission) {
       const { data: userData } = await supabase
         .from('users')
-        .select('preferred_first_name, first_name, email, campaign_token')
+        .select('preferred_first_name, first_name, email, campaign_token, mls_choice')
         .eq('id', prospect.id)
         .single()
 
@@ -118,11 +122,12 @@ export async function POST(request: NextRequest) {
           first_name: userData.first_name || '',
           email: userData.email,
           campaign_token: userData.campaign_token,
+          mls_choice: userData.mls_choice || '',
         }).catch(err => console.error('Failed to send next steps email:', err))
       }
     }
 
-    return NextResponse.json({ success: true, next_step: 2 })
+    return NextResponse.json({ success: true, next_step: nextStep })
   } catch (error: any) {
     console.error('Submit join form error:', error)
     return NextResponse.json({ error: error.message || 'Failed to submit' }, { status: 500 })
