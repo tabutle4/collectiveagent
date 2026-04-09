@@ -112,6 +112,27 @@ const getDaysUntil = (dateStr: string | null) => {
   return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
+// Count business days (M-F) between now and target date
+const getBusinessDaysUntil = (dateStr: string | null) => {
+  if (!dateStr) return null
+  const target = new Date(dateStr)
+  const now = new Date()
+  // Reset to start of day for accurate counting
+  now.setHours(0, 0, 0, 0)
+  target.setHours(0, 0, 0, 0)
+  
+  if (target <= now) return 0
+  
+  let count = 0
+  const current = new Date(now)
+  while (current < target) {
+    current.setDate(current.getDate() + 1)
+    const dow = current.getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 const addBusinessDays = (date: Date, days: number) => {
   let d = new Date(date)
   let added = 0
@@ -325,7 +346,8 @@ export default function AdminTransactionDetailPage() {
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
 
   // Check & Payouts state
-  const [editCheckData, setEditCheckData] = useState<any>(null)
+  const [editChecksData, setEditChecksData] = useState<Record<string, any>>({}) // checkId -> edit state
+  const [expandedChecks, setExpandedChecks] = useState<Record<string, boolean>>({}) // checkId -> expanded
   const [addingCheck, setAddingCheck] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
@@ -413,8 +435,17 @@ export default function AdminTransactionDetailPage() {
       if (!res.ok) throw new Error('Failed to load')
       const json = await res.json()
       setData(json)
-      // Init check edit state
-      if (json.check) setEditCheckData({ ...json.check })
+      // Init check edit state for all checks
+      if (json.checks?.length > 0) {
+        const editStates: Record<string, any> = {}
+        const expandStates: Record<string, boolean> = {}
+        json.checks.forEach((c: any, i: number) => {
+          editStates[c.id] = { ...c }
+          expandStates[c.id] = i === 0 // First check expanded by default
+        })
+        setEditChecksData(editStates)
+        setExpandedChecks(expandStates)
+      }
     } catch {
       alert('Failed to load transaction')
     } finally {
@@ -602,9 +633,11 @@ export default function AdminTransactionDetailPage() {
       setData((prev: any) => ({
         ...prev,
         checks: (prev.checks || []).map((c: any) => c.id === checkId ? { ...c, ...updates } : c),
-        check: prev.check?.id === checkId ? { ...prev.check, ...updates } : prev.check,
       }))
-      setEditCheckData((prev: any) => (prev?.id === checkId ? { ...prev, ...updates } : prev))
+      setEditChecksData((prev) => ({
+        ...prev,
+        [checkId]: { ...prev[checkId], ...updates },
+      }))
     } finally {
       setSaving(false)
     }
@@ -634,9 +667,15 @@ export default function AdminTransactionDetailPage() {
         setData((prev: any) => ({
           ...prev,
           checks: [...(prev.checks || []), newCheck],
-          check: prev.check || newCheck,
         }))
-        if (!editCheckData) setEditCheckData({ ...newCheck })
+        setEditChecksData((prev) => ({
+          ...prev,
+          [newCheck.id]: { ...newCheck },
+        }))
+        setExpandedChecks((prev) => ({
+          ...prev,
+          [newCheck.id]: true, // Expand the new check
+        }))
       }
     } finally {
       setAddingCheck(false)
@@ -830,12 +869,13 @@ export default function AdminTransactionDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete_payout', payout_id: payoutId }),
       })
+      // Find and update the check that contains this payout
       setData((prev: any) => ({
         ...prev,
-        check: {
-          ...prev.check,
-          check_payouts: prev.check.check_payouts.filter((p: any) => p.id !== payoutId),
-        },
+        checks: (prev.checks || []).map((c: any) => ({
+          ...c,
+          check_payouts: (c.check_payouts || []).filter((p: any) => p.id !== payoutId),
+        })),
       }))
     } finally {
       setSaving(false)
@@ -845,10 +885,12 @@ export default function AdminTransactionDetailPage() {
   const sendEmailAgent = async () => {
     setSendingEmail(true)
     try {
+      // Use first check for email (or could be enhanced to select specific check)
+      const firstCheck = data?.checks?.[0]
       const res = await fetch('/api/checks/notify-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ check_id: data?.check?.id, ...emailDraft }),
+        body: JSON.stringify({ check_id: firstCheck?.id, ...emailDraft }),
       })
       if (!res.ok) throw new Error()
       setShowEmailModal(false)
@@ -955,36 +997,59 @@ export default function AdminTransactionDetailPage() {
   const primaryAgent = data?.primary_agent
   const agentBilling = data?.agent_billing
   const teamInfo = data?.team_info
-  const check = data?.check
-  const checks: any[] = data?.checks || (check ? [check] : [])
+  const checks: any[] = data?.checks || []
   const checklist = data?.checklist || []
   const settings = data?.company_settings
   const agents = data?.agents || []
 
+  // Pay-by date calculation - requires BOTH received date and compliance complete date
   const payByDate = (() => {
-    const received   = check?.received_date           ? new Date(check.received_date)           : null
-    const compliance = check?.compliance_complete_date ? new Date(check.compliance_complete_date) : null
-    if (!received && !compliance) return null
-    const base = received && compliance
-      ? (compliance > received ? compliance : received)
-      : (received || compliance)!
+    if (checks.length === 0) return null
+    let latestReceived: Date | null = null
+    let latestCompliance: Date | null = null
+    for (const c of checks) {
+      if (c.received_date) {
+        const d = new Date(c.received_date)
+        if (!latestReceived || d > latestReceived) latestReceived = d
+      }
+      if (c.compliance_complete_date) {
+        const d = new Date(c.compliance_complete_date)
+        if (!latestCompliance || d > latestCompliance) latestCompliance = d
+      }
+    }
+    // Must have BOTH dates to calculate pay-by
+    if (!latestReceived || !latestCompliance) return null
+    const base = latestCompliance > latestReceived ? latestCompliance : latestReceived
     return addBusinessDays(base, 10)
   })()
-  const daysUntilPay = payByDate ? getDaysUntil(payByDate.toISOString()) : null
+  const daysUntilPay = payByDate ? getBusinessDaysUntil(payByDate.toISOString()) : null
 
-  const totalPayouts = (check?.check_payouts || []).reduce(
-    (s: number, p: any) => s + parseFloat(p.amount || 0),
+  // Sum totals across all checks
+  const totalCheckPayouts = checks.reduce(
+    (s: number, c: any) => s + (c.check_payouts || []).reduce((ps: number, p: any) => ps + parseFloat(p.amount || 0), 0),
     0
   )
-  const checkAmount = parseFloat(check?.check_amount || 0)
-  const brokerageAmount = parseFloat(check?.brokerage_amount || 0)
+  const totalCheckAmount = checks.reduce((s: number, c: any) => s + parseFloat(c.check_amount || 0), 0)
+  const totalBrokerageAmount = checks.reduce((s: number, c: any) => s + parseFloat(c.brokerage_amount || 0), 0)
   const totalAgentNets = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
   const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
-  const payoutBalance = checkAmount - brokerageAmount - totalAgentNets - totalExternalCommissions - totalPayouts
+  const payoutBalance = totalCheckAmount - totalBrokerageAmount - totalAgentNets - totalExternalCommissions - totalCheckPayouts
 
   const completedCount = checklist.filter((i: any) => i.completion).length
 
   const leaseTransaction = txn ? isLease(txn.transaction_type) : false
+
+  // Helper functions for multi-check editing
+  const getCheckEditData = (checkId: string) => editChecksData[checkId] || {}
+  const updateCheckField = (checkId: string, field: string, value: any) => {
+    setEditChecksData(prev => ({
+      ...prev,
+      [checkId]: { ...prev[checkId], [field]: value },
+    }))
+  }
+  const toggleCheckExpanded = (checkId: string) => {
+    setExpandedChecks(prev => ({ ...prev, [checkId]: !prev[checkId] }))
+  }
 
   // Pre-fill email draft when modal opens
   const openEmailModal = () => {
@@ -1141,12 +1206,12 @@ export default function AdminTransactionDetailPage() {
                   }`}
                 >
                   {tab.label}
-                  {tab.key === 'check_payouts' && check && (
+                  {tab.key === 'check_payouts' && checks.length > 0 && (
                     <span className="ml-1 text-xs opacity-70">
-                      ({(check.check_payouts || []).length})
+                      ({checks.length} check{checks.length !== 1 ? 's' : ''})
                     </span>
                   )}
-                  {tab.key === 'check_payouts' && !check && (
+                  {tab.key === 'check_payouts' && checks.length === 0 && (
                     <span className="ml-1 text-xs opacity-50">(no check)</span>
                   )}
                 </button>
@@ -1751,8 +1816,8 @@ export default function AdminTransactionDetailPage() {
                 </button>
               </div>
 
-              {/* No check yet */}
-              {!check && (
+              {/* No checks yet */}
+              {checks.length === 0 && (
                 <div className="container-card text-center py-8">
                   <p className="text-sm text-luxury-gray-3 mb-3">
                     No check linked to this transaction yet.
@@ -1767,8 +1832,8 @@ export default function AdminTransactionDetailPage() {
                 </div>
               )}
 
-              {/* Check exists */}
-              {check && editCheckData && (
+              {/* Checks exist */}
+              {checks.length > 0 && (
                 <>
                   {/* Pay-by countdown */}
                   {payByDate && (
@@ -1805,263 +1870,256 @@ export default function AdminTransactionDetailPage() {
                             ? daysUntilPay <= 0
                               ? 'Overdue'
                               : `${daysUntilPay} business day${daysUntilPay !== 1 ? 's' : ''} remaining`
-                            : '10 business days from received or compliance complete (whichever is later)'}
+                            : '10 business days from received date or compliance complete (whichever is later)'}
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Check info */}
-                  <div className="container-card">
-                    <div className="flex items-center justify-between mb-3">
-                      <SectionHeader>Check Details</SectionHeader>
-                      <button
-                        onClick={openEmailModal}
-                        className="btn btn-secondary text-xs flex items-center gap-1"
-                      >
-                        <Send size={11} /> Email Agent
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="field-label">Check Amount</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="input-luxury text-xs"
-                          value={editCheckData.check_amount || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, check_amount: e.target.value }))
-                          }
-                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_amount: editCheckData.check_amount })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Check From</label>
-                        <input
-                          type="text"
-                          className="input-luxury text-xs"
-                          value={editCheckData.check_from || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, check_from: e.target.value }))
-                          }
-                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_from: editCheckData.check_from })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Check #</label>
-                        <input
-                          type="text"
-                          className="input-luxury text-xs"
-                          value={editCheckData.check_number || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, check_number: e.target.value }))
-                          }
-                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { check_number: editCheckData.check_number })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Received</label>
-                        <input
-                          type="date"
-                          className="input-luxury text-xs"
-                          value={editCheckData.received_date || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, received_date: e.target.value }))
-                          }
-                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { received_date: editCheckData.received_date })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Deposited</label>
-                        <input
-                          type="date"
-                          className="input-luxury text-xs"
-                          value={editCheckData.deposited_date || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, deposited_date: e.target.value }))
-                          }
-                          onBlur={() =>
-                            updateCheck(editCheckData?.id || check?.id, { deposited_date: editCheckData.deposited_date })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Cleared</label>
-                        <input
-                          type="date"
-                          className="input-luxury text-xs"
-                          value={editCheckData.cleared_date || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({ ...p, cleared_date: e.target.value }))
-                          }
-                          onBlur={() => updateCheck(editCheckData?.id || check?.id, { cleared_date: editCheckData.cleared_date })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Compliance Complete</label>
-                        <input
-                          type="date"
-                          className="input-luxury text-xs"
-                          value={editCheckData.compliance_complete_date || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({
-                              ...p,
-                              compliance_complete_date: e.target.value,
-                            }))
-                          }
-                          onBlur={() =>
-                            updateCheck(editCheckData?.id || check?.id, {
-                              compliance_complete_date: editCheckData.compliance_complete_date,
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Brokerage Amount</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="input-luxury text-xs"
-                          value={editCheckData.brokerage_amount || ''}
-                          onChange={e =>
-                            setEditCheckData((p: any) => ({
-                              ...p,
-                              brokerage_amount: e.target.value,
-                            }))
-                          }
-                          onBlur={() =>
-                            updateCheck(editCheckData?.id || check?.id, { brokerage_amount: editCheckData.brokerage_amount })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    {/* Payment Method + Funds Status + Compliance Status */}
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      <div>
-                        <label className="field-label">Payment Type</label>
-                        <select
-                          className="select-luxury text-xs"
-                          value={editCheckData.payment_method || 'check'}
-                          onChange={e => {
-                            setEditCheckData((p: any) => ({ ...p, payment_method: e.target.value }))
-                            updateCheck(editCheckData?.id || check?.id, { payment_method: e.target.value })
-                          }}
+                  {/* Check cards */}
+                  {checks.map((check, checkIndex) => {
+                    const checkEdit = getCheckEditData(check.id)
+                    const isExpanded = expandedChecks[check.id] ?? (checkIndex === 0)
+                    const checkAmount = parseFloat(check.check_amount || 0)
+                    
+                    return (
+                      <div key={check.id} className="container-card">
+                        {/* Collapsible header */}
+                        <button
+                          onClick={() => toggleCheckExpanded(check.id)}
+                          className="flex items-center justify-between w-full mb-3"
                         >
-                          <option value="check">Check</option>
-                          <option value="zelle">Zelle</option>
-                          <option value="payload">Payload</option>
-                          <option value="ecommission">eCommission</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="field-label">Funds Status</label>
-                        <select
-                          className="select-luxury text-xs"
-                          value={editCheckData.status || 'received'}
-                          onChange={e => {
-                            setEditCheckData((p: any) => ({ ...p, status: e.target.value }))
-                            updateCheck(editCheckData?.id || check?.id, { status: e.target.value })
-                          }}
-                        >
-                          <option value="received">Received</option>
-                          <option value="deposited">Deposited</option>
-                          <option value="cleared">Cleared</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="field-label">Compliance Status</label>
-                        <select
-                          className="select-luxury text-xs"
-                          value={txn.compliance_status || 'not_submitted'}
-                          onChange={async e => {
-                            const status = e.target.value
-                            // Update transaction compliance_status
-                            await updateTransaction({ compliance_status: status })
-                            // Also update check's compliance_complete_date like payouts report does
-                            if (check?.id) {
-                              const updates: any = {}
-                              if (status === 'complete') {
-                                updates.compliance_complete_date = new Date().toISOString().split('T')[0]
-                              } else if (status === 'not_submitted') {
-                                updates.compliance_complete_date = null
-                              }
-                              if (Object.keys(updates).length > 0) {
-                                await updateCheck(check.id, updates)
-                              }
-                            }
-                          }}
-                        >
-                          <option value="not_submitted">Not Requested</option>
-                          <option value="in_review">In Review</option>
-                          <option value="incomplete">Incomplete</option>
-                          <option value="complete">Complete</option>
-                        </select>
-                      </div>
-                    </div>
+                          <div className="flex items-center gap-3">
+                            <SectionHeader>Check {checkIndex + 1}</SectionHeader>
+                            <span className="text-sm font-semibold text-luxury-accent">{fmt$(checkAmount)}</span>
+                            {check.check_from && (
+                              <span className="text-xs text-luxury-gray-3">from {check.check_from}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-medium ${
+                              check.status === 'cleared' ? 'text-green-600' :
+                              check.status === 'deposited' ? 'text-blue-600' : 'text-amber-600'
+                            }`}>
+                              {check.status || 'received'}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp size={14} className="text-luxury-gray-3" />
+                            ) : (
+                              <ChevronDown size={14} className="text-luxury-gray-3" />
+                            )}
+                          </div>
+                        </button>
 
-                    {/* CRC Transferred toggle */}
-                    <div className="flex items-center justify-between inner-card mb-3">
-                      <div>
-                        <p className="text-xs font-semibold text-luxury-gray-1">CRC Transferred</p>
-                        <p className="text-xs text-luxury-gray-3">
-                          Brokerage portion moved to CRC account
-                        </p>
+                        {isExpanded && (
+                          <>
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <label className="field-label">Check Amount</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.check_amount || ''}
+                                  onChange={e => updateCheckField(check.id, 'check_amount', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { check_amount: checkEdit.check_amount })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Check From</label>
+                                <input
+                                  type="text"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.check_from || ''}
+                                  onChange={e => updateCheckField(check.id, 'check_from', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { check_from: checkEdit.check_from })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Check #</label>
+                                <input
+                                  type="text"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.check_number || ''}
+                                  onChange={e => updateCheckField(check.id, 'check_number', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { check_number: checkEdit.check_number })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Received</label>
+                                <input
+                                  type="date"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.received_date || ''}
+                                  onChange={e => updateCheckField(check.id, 'received_date', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { received_date: checkEdit.received_date })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Deposited</label>
+                                <input
+                                  type="date"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.deposited_date || ''}
+                                  onChange={e => updateCheckField(check.id, 'deposited_date', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { deposited_date: checkEdit.deposited_date })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Cleared</label>
+                                <input
+                                  type="date"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.cleared_date || ''}
+                                  onChange={e => updateCheckField(check.id, 'cleared_date', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { cleared_date: checkEdit.cleared_date })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Compliance Complete</label>
+                                <input
+                                  type="date"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.compliance_complete_date || ''}
+                                  onChange={e => updateCheckField(check.id, 'compliance_complete_date', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { compliance_complete_date: checkEdit.compliance_complete_date })}
+                                />
+                              </div>
+                              <div>
+                                <label className="field-label">Brokerage Amount</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.brokerage_amount || ''}
+                                  onChange={e => updateCheckField(check.id, 'brokerage_amount', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { brokerage_amount: checkEdit.brokerage_amount })}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Payment Method + Funds Status */}
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                              <div>
+                                <label className="field-label">Payment Type</label>
+                                <select
+                                  className="select-luxury text-xs"
+                                  value={checkEdit.payment_method || 'check'}
+                                  onChange={e => {
+                                    updateCheckField(check.id, 'payment_method', e.target.value)
+                                    updateCheck(check.id, { payment_method: e.target.value })
+                                  }}
+                                >
+                                  <option value="check">Check</option>
+                                  <option value="zelle">Zelle</option>
+                                  <option value="payload">Payload</option>
+                                  <option value="ecommission">eCommission</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="field-label">Funds Status</label>
+                                <select
+                                  className="select-luxury text-xs"
+                                  value={checkEdit.status || 'received'}
+                                  onChange={e => {
+                                    updateCheckField(check.id, 'status', e.target.value)
+                                    updateCheck(check.id, { status: e.target.value })
+                                  }}
+                                >
+                                  <option value="received">Received</option>
+                                  <option value="deposited">Deposited</option>
+                                  <option value="cleared">Cleared</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="field-label">Compliance Status</label>
+                                <select
+                                  className="select-luxury text-xs"
+                                  value={txn.compliance_status || 'not_submitted'}
+                                  onChange={async e => {
+                                    const status = e.target.value
+                                    await updateTransaction({ compliance_status: status })
+                                    const updates: any = {}
+                                    if (status === 'complete') {
+                                      updates.compliance_complete_date = new Date().toISOString().split('T')[0]
+                                    } else if (status === 'not_submitted') {
+                                      updates.compliance_complete_date = null
+                                    }
+                                    if (Object.keys(updates).length > 0) {
+                                      await updateCheck(check.id, updates)
+                                    }
+                                  }}
+                                >
+                                  <option value="not_submitted">Not Requested</option>
+                                  <option value="in_review">In Review</option>
+                                  <option value="incomplete">Incomplete</option>
+                                  <option value="complete">Complete</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            {/* CRC Transferred toggle */}
+                            <div className="flex items-center justify-between inner-card mb-3">
+                              <div>
+                                <p className="text-xs font-semibold text-luxury-gray-1">CRC Transferred</p>
+                                <p className="text-xs text-luxury-gray-3">
+                                  Brokerage portion moved to CRC account
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => updateCheck(check.id, { crc_transferred: !check.crc_transferred })}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.crc_transferred ? 'translate-x-6' : 'translate-x-1'}`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Agents Paid toggle */}
+                            <div className="flex items-center justify-between inner-card mb-3">
+                              <div>
+                                <p className="text-xs font-semibold text-luxury-gray-1">Agents Paid</p>
+                                <p className="text-xs text-luxury-gray-3">
+                                  All agents paid — removes from payouts report
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => updateCheck(check.id, { agents_paid: !check.agents_paid })}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                              >
+                                <span
+                                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.agents_paid ? 'translate-x-6' : 'translate-x-1'}`}
+                                />
+                              </button>
+                            </div>
+
+                            {/* Notes */}
+                            <div>
+                              <label className="field-label">Notes</label>
+                              <textarea
+                                className="input-luxury text-xs"
+                                rows={2}
+                                value={checkEdit.notes || ''}
+                                onChange={e => updateCheckField(check.id, 'notes', e.target.value)}
+                                onBlur={() => updateCheck(check.id, { notes: checkEdit.notes })}
+                              />
+                            </div>
+
+                            {/* Check photo */}
+                            <div className="mt-3">
+                              <CheckImageUpload
+                                checkId={check.id}
+                                existingUrl={check.check_image_url}
+                                transactionFolderPath={txn.onedrive_folder_url}
+                                onUploaded={url => updateCheck(check.id, { check_image_url: url })}
+                              />
+                            </div>
+                          </>
+                        )}
                       </div>
-                      <button
-                        onClick={() => updateCheck(editCheckData?.id || check?.id, { crc_transferred: !check.crc_transferred })}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.crc_transferred ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.crc_transferred ? 'translate-x-6' : 'translate-x-1'}`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Agents Paid toggle */}
-                    <div className="flex items-center justify-between inner-card mb-3">
-                      <div>
-                        <p className="text-xs font-semibold text-luxury-gray-1">Agents Paid</p>
-                        <p className="text-xs text-luxury-gray-3">
-                          All agents paid — removes from payouts report
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => updateCheck(editCheckData?.id || check?.id, { agents_paid: !check.agents_paid })}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.agents_paid ? 'translate-x-6' : 'translate-x-1'}`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Notes */}
-                    <div>
-                      <label className="field-label">Notes</label>
-                      <textarea
-                        className="input-luxury text-xs"
-                        rows={2}
-                        value={editCheckData.notes || ''}
-                        onChange={e =>
-                          setEditCheckData((p: any) => ({ ...p, notes: e.target.value }))
-                        }
-                        onBlur={() => updateCheck(editCheckData?.id || check?.id, { notes: editCheckData.notes })}
-                      />
-                    </div>
-
-                    {/* Check photo */}
-                    <div className="mt-3">
-                      <CheckImageUpload
-                        checkId={check.id}
-                        existingUrl={check.check_image_url}
-                        transactionFolderPath={txn.onedrive_folder_url}
-                        onUploaded={url => updateCheck(editCheckData?.id || check?.id, { check_image_url: url })}
-                      />
-                    </div>
-                  </div>
+                    )
+                  })}
 
                   {/* Payouts */}
                   <div className="container-card">
@@ -2079,19 +2137,19 @@ export default function AdminTransactionDetailPage() {
 
                     {/* Summary row */}
                     <div className="inner-card flex justify-between items-center mb-3">
-                      <span className="text-xs text-luxury-gray-3">Check Amount</span>
+                      <span className="text-xs text-luxury-gray-3">Total Check Amount ({checks.length} check{checks.length !== 1 ? 's' : ''})</span>
                       <span className="text-xs font-semibold text-luxury-gray-1">
-                        {fmt$(checkAmount)}
+                        {fmt$(totalCheckAmount)}
                       </span>
                     </div>
 
-                    {brokerageAmount > 0 && (
+                    {totalBrokerageAmount > 0 && (
                       <div className="inner-card flex justify-between items-center mb-2">
                         <div>
                           <p className="text-xs font-semibold text-luxury-gray-1">CRC Brokerage</p>
                           <p className="text-xs text-luxury-gray-3">brokerage split</p>
                         </div>
-                        <span className="text-xs font-semibold text-luxury-gray-1">{fmt$(brokerageAmount)}</span>
+                        <span className="text-xs font-semibold text-luxury-gray-1">{fmt$(totalBrokerageAmount)}</span>
                       </div>
                     )}
 
@@ -2144,10 +2202,10 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {/* Existing manual check_payouts */}
-                    {(check.check_payouts || []).length > 0 && (
+                    {/* Existing manual check_payouts from all checks */}
+                    {checks.flatMap(c => c.check_payouts || []).length > 0 && (
                       <div className="space-y-2 mb-2">
-                        {(check.check_payouts || []).map((p: any) => (
+                        {checks.flatMap(c => c.check_payouts || []).map((p: any) => (
                           <div
                             key={p.id}
                             className="inner-card flex items-center justify-between group"
@@ -2181,7 +2239,7 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {agents.length === 0 && payoutBrokerages.length === 0 && (check.check_payouts || []).length === 0 && (
+                    {agents.length === 0 && payoutBrokerages.length === 0 && checks.flatMap(c => c.check_payouts || []).length === 0 && (
                       <p className="text-xs text-luxury-gray-3 text-center py-3">
                         No payouts recorded yet.
                       </p>

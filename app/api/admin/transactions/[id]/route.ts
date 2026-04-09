@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic'
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -241,15 +243,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
-      // Check linked to this transaction (all transaction types)
-      const { data: checkData } = await supabase
+      // All checks linked to this transaction (all transaction types)
+      const { data: checksData } = await supabase
         .from('checks_received')
         .select('*, check_payouts(*)')
         .eq('transaction_id', id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      const check = checkData || null
+        .order('created_at', { ascending: true })
+      const checks = checksData || []
 
       // Checklist completions
       const { data: completions } = await supabase
@@ -291,7 +291,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         primary_agent: primaryAgent || null,
         agent_billing: agentBilling,
         team_info: teamInfo,
-        check,
+        checks,
         checklist,
         company_settings: settings || null,
       })

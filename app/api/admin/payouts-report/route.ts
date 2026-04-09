@@ -4,6 +4,28 @@ import { requirePermission } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
+// Add business days (M-F) to a date
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    const dow = result.getDay()
+    if (dow !== 0 && dow !== 6) added++
+  }
+  return result
+}
+
+// Calculate pay-by date - requires BOTH received_date and compliance_complete_date
+function calculatePayByDate(receivedDate: string | null, complianceDate: string | null): string | null {
+  if (!receivedDate || !complianceDate) return null
+  const received = new Date(receivedDate)
+  const compliance = new Date(complianceDate)
+  const base = compliance > received ? compliance : received
+  const payBy = addBusinessDays(base, 10)
+  return payBy.toISOString().split('T')[0]
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_checks')
   if (auth.error) return auth.error
@@ -103,15 +125,28 @@ export async function GET(request: NextRequest) {
     }
     const roleOrder = (r: string) => ROLE_PRIORITY[r] ?? 99
 
-    // Assemble rows
-    const rows = allChecks.map(check => {
-      const txn = check.transaction_id ? txnMap[check.transaction_id] : null
+    // Group checks by transaction_id to avoid duplicate agent rows
+    const checksByTransaction = new Map<string | null, any[]>()
+    for (const check of allChecks) {
+      const key = check.transaction_id || `standalone-${check.id}`
+      if (!checksByTransaction.has(key)) {
+        checksByTransaction.set(key, [])
+      }
+      checksByTransaction.get(key)!.push(check)
+    }
+
+    // Assemble rows - one per transaction (or standalone check)
+    const rows: any[] = []
+    for (const [key, checksGroup] of checksByTransaction.entries()) {
+      const firstCheck = checksGroup[0]
+      const txn = firstCheck.transaction_id ? txnMap[firstCheck.transaction_id] : null
       const agents = internalAgents
-        .filter(a => a.transaction_id === check.transaction_id)
+        .filter(a => a.transaction_id === firstCheck.transaction_id)
         .sort((a, b) => roleOrder(a.agent_role) - roleOrder(b.agent_role))
-      const externals = externalBrokerages.filter(e => e.transaction_id === check.transaction_id)
+      const externals = externalBrokerages.filter(e => e.transaction_id === firstCheck.transaction_id)
 
       const agentRows = agents.map(a => ({
+        id: a.id, // TIA record id for marking paid
         agent_id: a.agent_id,
         name: agentNames[a.agent_id] || 'Unknown',
         amount: a.agent_net || 0,
@@ -120,36 +155,71 @@ export async function GET(request: NextRequest) {
       }))
 
       const externalRows = externals.map(e => ({
+        id: e.id, // External brokerage record id
         name: e.agent_name || e.brokerage_name || 'External',
         amount: e.commission_amount || 0,
         payment_status: e.payment_status,
         payment_date: e.payment_date,
       }))
 
-      const address = check.property_address || txn?.property_address || 'Unknown'
-      const complianceStatus = txn?.compliance_status || (check.compliance_complete_date ? 'complete' : 'not_submitted')
+      const address = firstCheck.property_address || txn?.property_address || 'Unknown'
+      const complianceStatus = txn?.compliance_status || (firstCheck.compliance_complete_date ? 'complete' : 'not_submitted')
 
       // Standalone check with direct agent
-      const standaloneAgentName = check.agent_id ? agentNames[check.agent_id] : null
+      const standaloneAgentName = firstCheck.agent_id ? agentNames[firstCheck.agent_id] : null
 
-      return {
-        check_id: check.id,
-        transaction_id: check.transaction_id,
+      // Sum amounts across all checks in this group
+      const totalCheckAmount = checksGroup.reduce((sum: number, c: any) => sum + (c.check_amount || 0), 0)
+      const totalBrokerageAmount = checksGroup.reduce((sum: number, c: any) => sum + (c.brokerage_amount || 0), 0)
+
+      // Use latest cleared date from any check (not requiring all to be cleared)
+      let latestClearedDate: string | null = null
+      for (const c of checksGroup) {
+        if (c.cleared_date && (!latestClearedDate || c.cleared_date > latestClearedDate)) {
+          latestClearedDate = c.cleared_date
+        }
+      }
+
+      // CRC transferred only when ALL checks have been transferred
+      const allCrcTransferred = checksGroup.every((c: any) => c.crc_transferred)
+      
+      // Check-level agents_paid flag (manual override) - true if ANY check is marked
+      const checkAgentsPaid = checksGroup.some((c: any) => c.agents_paid)
+
+      // Find latest received and compliance dates for pay-by calculation
+      let latestReceived: string | null = null
+      let latestCompliance: string | null = null
+      for (const c of checksGroup) {
+        if (c.received_date && (!latestReceived || c.received_date > latestReceived)) {
+          latestReceived = c.received_date
+        }
+        if (c.compliance_complete_date && (!latestCompliance || c.compliance_complete_date > latestCompliance)) {
+          latestCompliance = c.compliance_complete_date
+        }
+      }
+      const payByDate = calculatePayByDate(latestReceived, latestCompliance)
+
+      rows.push({
+        check_id: firstCheck.id, // Primary check ID for actions
+        check_ids: checksGroup.map((c: any) => c.id), // All check IDs
+        transaction_id: firstCheck.transaction_id,
         address,
-        crc_amount: check.brokerage_amount || 0,
-        check_amount: check.check_amount,
+        crc_amount: totalBrokerageAmount,
+        check_amount: totalCheckAmount,
+        check_count: checksGroup.length,
         agents: agentRows,
         externals: externalRows,
         standalone_agent: standaloneAgentName,
-        cleared_date: check.cleared_date,
-        received_date: check.received_date,
+        cleared_date: latestClearedDate,
+        received_date: firstCheck.received_date,
         compliance_status: complianceStatus,
-        crc_transferred: check.crc_transferred || false,
-        agents_paid: check.agents_paid || false,
-        status: check.status,
-        notes: check.notes,
-      }
-    })
+        pay_by_date: payByDate,
+        crc_transferred: allCrcTransferred,
+        agents_paid: checkAgentsPaid,
+        status: firstCheck.status,
+        notes: checksGroup.map((c: any) => c.notes).filter(Boolean).join(' | '),
+      })
+    }
 
     // Company settings (bank balance, holds, payload pending)
     const { data: settings } = await supabaseAdmin
@@ -288,7 +358,55 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { check_id, compliance_status } = await request.json()
+    const body = await request.json()
+    const { action } = body
+
+    // Mark individual agent (TIA) as paid
+    if (action === 'mark_agent_paid') {
+      const { tia_id, payment_method } = body
+      if (!tia_id) {
+        return NextResponse.json({ error: 'tia_id is required' }, { status: 400 })
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      
+      const { error } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .update({
+          payment_status: 'paid',
+          payment_date: today,
+          payment_method: payment_method || 'check',
+        })
+        .eq('id', tia_id)
+
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // Mark external brokerage as paid
+    if (action === 'mark_external_paid') {
+      const { external_id, payment_method } = body
+      if (!external_id) {
+        return NextResponse.json({ error: 'external_id is required' }, { status: 400 })
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      
+      const { error } = await supabaseAdmin
+        .from('transaction_external_brokerages')
+        .update({
+          payment_status: 'paid',
+          payment_date: today,
+          payment_method: payment_method || 'check',
+        })
+        .eq('id', external_id)
+
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // Update compliance status (existing functionality)
+    const { check_id, compliance_status } = body
 
     if (!check_id) {
       return NextResponse.json({ error: 'check_id is required' }, { status: 400 })

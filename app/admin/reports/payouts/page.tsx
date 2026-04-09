@@ -7,8 +7,21 @@ import { useAuth } from '@/lib/context/AuthContext'
 
 // Types
 
-interface AgentRow { agent_id: string; name: string; amount: number }
-interface ExternalRow { name: string; amount: number }
+interface AgentRow { 
+  id: string
+  agent_id: string
+  name: string
+  amount: number
+  payment_status: string | null
+  payment_date: string | null
+}
+interface ExternalRow { 
+  id: string
+  name: string
+  amount: number
+  payment_status: string | null
+  payment_date: string | null
+}
 
 interface PayoutRow {
   check_id: string
@@ -22,6 +35,7 @@ interface PayoutRow {
   cleared_date: string | null
   received_date: string | null
   compliance_status: string
+  pay_by_date: string | null
   crc_transferred: boolean
   agents_paid: boolean
   status: string
@@ -73,8 +87,9 @@ function complianceLabel(status: string): { label: string; cls: string } {
 }
 
 function agentNames(row: PayoutRow): string {
-  const names = row.agents.map(a => a.name.split(' ')[0].toLowerCase())
-  const ext = row.externals.map(e => e.name.split(' ')[0].toLowerCase())
+  // Only show names of unpaid agents
+  const names = row.agents.filter(a => a.payment_status !== 'paid').map(a => a.name.split(' ')[0].toLowerCase())
+  const ext = row.externals.filter(e => e.payment_status !== 'paid').map(e => e.name.split(' ')[0].toLowerCase())
   if (names.length || ext.length) return [...names, ...ext].join(' and ')
   if (row.standalone_agent) return row.standalone_agent
   if (row.notes) {
@@ -98,18 +113,43 @@ function agentTotal(row: PayoutRow): number {
     row.externals.reduce((s, e) => s + (e.amount || 0), 0)
 }
 
+function unpaidAgentTotal(row: PayoutRow): number {
+  return row.agents.filter(a => a.payment_status !== 'paid').reduce((s, a) => s + (a.amount || 0), 0) +
+    row.externals.filter(e => e.payment_status !== 'paid').reduce((s, e) => s + (e.amount || 0), 0)
+}
+
+// Check if all agents/externals in a row are paid
+function allAgentsPaid(row: PayoutRow): boolean {
+  const hasAgents = row.agents.length > 0 || row.externals.length > 0
+  if (!hasAgents) return false // standalone check with no agents - don't hide
+  const allAgentsPaid = row.agents.every(a => a.payment_status === 'paid')
+  const allExternalsPaid = row.externals.every(e => e.payment_status === 'paid')
+  return allAgentsPaid && allExternalsPaid
+}
+
+// Get only unpaid agents for display
+function unpaidAgents(row: PayoutRow): AgentRow[] {
+  return row.agents.filter(a => a.payment_status !== 'paid')
+}
+
+// Get only unpaid externals for display
+function unpaidExternals(row: PayoutRow): ExternalRow[] {
+  return row.externals.filter(e => e.payment_status !== 'paid')
+}
+
 // Mobile card — clean stacked layout
 
-function PayoutCard({ row, dateKey, onUpdateCompliance }: { 
+function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
   onUpdateCompliance?: (checkId: string, status: string) => void
+  onMarkAgentPaid?: (tiaId: string, checkId: string) => void
+  onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
-  const total = agentTotal(row)
+  const total = unpaidAgentTotal(row)
   const notes = cleanNotes(row.notes)
-  const allAgents = [...row.agents, ...row.externals]
 
   return (
     <div className="card-luxury rounded-lg overflow-hidden">
@@ -129,6 +169,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance }: {
           )}
         </div>
         <div className="text-right flex-shrink-0 ml-2">
+          <p className="text-xs text-luxury-gray-3">{fmt(row.check_amount)} check</p>
           <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '—'}</p>
           {row.crc_amount > 0 && (
             <p className="text-xs text-luxury-gray-3 mt-0.5">+{fmt(row.crc_amount)} CRC</p>
@@ -136,23 +177,57 @@ function PayoutCard({ row, dateKey, onUpdateCompliance }: {
         </div>
       </div>
 
-      {/* Agent payouts */}
-      {allAgents.length > 0 && (
-        <div className="px-4 pb-2 flex flex-col gap-0.5">
-          {allAgents.map((a, i) => (
-            <div key={i} className="flex items-center justify-between">
+      {/* Agent payouts - only show unpaid, tap to mark paid */}
+      {unpaidAgents(row).length > 0 && (
+        <div className="px-4 pb-1 flex flex-col gap-0.5">
+          {unpaidAgents(row).map((a) => (
+            <div key={a.id} className="flex items-center justify-between">
               <span className="text-xs text-luxury-gray-3 capitalize">
                 {a.name.split(' ').slice(0, 2).join(' ')}
               </span>
-              <span className="text-xs font-medium text-luxury-gray-2 tabular-nums">
-                {fmt(a.amount)}
-              </span>
+              {onMarkAgentPaid ? (
+                <button
+                  onClick={() => onMarkAgentPaid(a.id, row.check_id)}
+                  className="text-xs font-medium text-luxury-gray-2 tabular-nums hover:text-green-600"
+                >
+                  {fmt(a.amount)}
+                </button>
+              ) : (
+                <span className="text-xs font-medium tabular-nums text-luxury-gray-2">
+                  {fmt(a.amount)}
+                </span>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Footer — date, compliance, transferred */}
+      {/* External payouts - only show unpaid, tap to mark paid */}
+      {unpaidExternals(row).length > 0 && (
+        <div className="px-4 pb-2 flex flex-col gap-0.5">
+          {unpaidExternals(row).map((e) => (
+            <div key={e.id} className="flex items-center justify-between">
+              <span className="text-xs text-luxury-gray-3 capitalize">
+                {e.name.split(' ').slice(0, 2).join(' ')}
+              </span>
+              {onMarkExternalPaid ? (
+                <button
+                  onClick={() => onMarkExternalPaid(e.id, row.check_id)}
+                  className="text-xs font-medium text-luxury-gray-2 tabular-nums hover:text-green-600"
+                >
+                  {fmt(e.amount)}
+                </button>
+              ) : (
+                <span className="text-xs font-medium tabular-nums text-luxury-gray-2">
+                  {fmt(e.amount)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer — date, compliance, pay by, transferred */}
       <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           {dateVal && (
@@ -173,6 +248,9 @@ function PayoutCard({ row, dateKey, onUpdateCompliance }: {
           ) : (
             label && <span className={`text-xs ${cls}`}>{label}</span>
           )}
+          {row.pay_by_date && (
+            <span className="text-xs text-luxury-gray-3">pay by {fmtDate(row.pay_by_date)}</span>
+          )}
         </div>
         <span className={`text-xs font-medium flex-shrink-0 ${row.crc_transferred ? 'text-green-700' : 'text-red-400'}`}>
           {row.crc_transferred ? '✓ transferred' : 'not transferred'}
@@ -191,17 +269,64 @@ function PayoutCard({ row, dateKey, onUpdateCompliance }: {
 
 // Desktop table row — all columns visible, table scrolls horizontally if needed
 
-function PayoutTableRow({ row, dateKey, onUpdateCompliance }: { 
+function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
   onUpdateCompliance?: (checkId: string, status: string) => void
+  onMarkAgentPaid?: (tiaId: string, checkId: string) => void
+  onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
-  const a1 = row.agents[0]
-  const a2 = row.agents[1]
-  const a3 = row.agents[2]
-  const ext = row.externals[0]
+  // Only show unpaid agents/externals in table cells
+  const agents = unpaidAgents(row)
+  const externals = unpaidExternals(row)
+  const a1 = agents[0]
+  const a2 = agents[1]
+  const a3 = agents[2]
+  const ext = externals[0]
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
+
+  const renderAgentCell = (agent: AgentRow | undefined) => {
+    if (!agent) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">—</td>
+    return (
+      <td className="py-2 px-2 text-xs text-right whitespace-nowrap">
+        {onMarkAgentPaid ? (
+          <button
+            onClick={() => onMarkAgentPaid(agent.id, row.check_id)}
+            className="text-luxury-gray-2 hover:text-green-600 hover:font-semibold transition-colors"
+            title={`Mark ${agent.name} paid`}
+          >
+            {fmt(agent.amount)}
+          </button>
+        ) : (
+          <span className="text-luxury-gray-2">
+            {fmt(agent.amount)}
+          </span>
+        )}
+      </td>
+    )
+  }
+
+  const renderExternalCell = (external: ExternalRow | undefined) => {
+    if (!external) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">—</td>
+    return (
+      <td className="py-2 px-2 text-xs text-right whitespace-nowrap">
+        {onMarkExternalPaid ? (
+          <button
+            onClick={() => onMarkExternalPaid(external.id, row.check_id)}
+            className="text-luxury-gray-2 hover:text-green-600 hover:font-semibold transition-colors"
+            title={`Mark ${external.name} paid`}
+          >
+            {fmt(external.amount)}
+          </button>
+        ) : (
+          <span className="text-luxury-gray-2">
+            {fmt(external.amount)}
+          </span>
+        )}
+      </td>
+    )
+  }
 
   return (
     <tr className="border-b border-luxury-gray-5/30 hover:bg-luxury-gray-6/30">
@@ -213,12 +338,13 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance }: {
           </Link>
         ) : <span className="truncate block">{row.address}</span>}
       </td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.check_amount > 0 ? fmt(row.check_amount) : '—'}</td>
       <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.crc_amount > 0 ? fmt(row.crc_amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a1 ? fmt(a1.amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a2 ? fmt(a2.amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{a3 ? fmt(a3.amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{ext ? fmt(ext.amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right font-semibold text-luxury-gray-1 whitespace-nowrap">{agentTotal(row) > 0 ? fmt(agentTotal(row)) : '—'}</td>
+      {renderAgentCell(a1)}
+      {renderAgentCell(a2)}
+      {renderAgentCell(a3)}
+      {renderExternalCell(ext)}
+      <td className="py-2 px-2 text-xs text-right font-semibold text-luxury-gray-1 whitespace-nowrap">{unpaidAgentTotal(row) > 0 ? fmt(unpaidAgentTotal(row)) : '—'}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
         <span className="truncate block">{agentNames(row) || '—'}</span>
       </td>
@@ -239,6 +365,7 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance }: {
           <span className={cls}>{label}</span>
         )}
       </td>
+      <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(row.pay_by_date)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         <span className={`font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
           {row.crc_transferred ? 'yes' : 'no'}
@@ -256,10 +383,12 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance }: {
 type SortKey = 'date' | 'compliance' | null
 type SortDir = 'asc' | 'desc'
 
-function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onUpdateCompliance }: {
+function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: {
   rows: PayoutRow[]; title: string; collapsed: boolean; onToggle: () => void
   dateLabel: string; dateKey: 'cleared_date' | 'received_date'
   onUpdateCompliance?: (checkId: string, status: string) => void
+  onMarkAgentPaid?: (tiaId: string, checkId: string) => void
+  onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
   const [sortKey, setSortKey] = useState<SortKey>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -278,12 +407,13 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
   })
 
   const displayRows = sortKey ? sortedRows : rows
+  const checkTotal = rows.reduce((s, r) => s + r.check_amount, 0)
   const crcTotal  = rows.reduce((s, r) => s + r.crc_amount, 0)
-  const agentTot  = rows.reduce((s, r) => s + agentTotal(r), 0)
-  const a1Tot     = rows.reduce((s, r) => s + (r.agents[0]?.amount || 0), 0)
-  const a2Tot     = rows.reduce((s, r) => s + (r.agents[1]?.amount || 0), 0)
-  const a3Tot     = rows.reduce((s, r) => s + (r.agents[2]?.amount || 0), 0)
-  const extTot    = rows.reduce((s, r) => s + (r.externals[0]?.amount || 0), 0)
+  const agentTot  = rows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const a1Tot     = rows.reduce((s, r) => s + (r.agents[0] && r.agents[0].payment_status !== 'paid' ? r.agents[0].amount : 0), 0)
+  const a2Tot     = rows.reduce((s, r) => s + (r.agents[1] && r.agents[1].payment_status !== 'paid' ? r.agents[1].amount : 0), 0)
+  const a3Tot     = rows.reduce((s, r) => s + (r.agents[2] && r.agents[2].payment_status !== 'paid' ? r.agents[2].amount : 0), 0)
+  const extTot    = rows.reduce((s, r) => s + (r.externals[0] && r.externals[0].payment_status !== 'paid' ? r.externals[0].amount : 0), 0)
 
   return (
     <div className="container-card mb-5">
@@ -293,6 +423,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
           <span className="text-xs text-luxury-gray-3">({rows.length})</span>
         </div>
         <div className="flex items-center gap-4">
+          <span className="text-xs text-luxury-gray-2">Checks: <span className="font-semibold text-luxury-gray-1">{fmt(checkTotal)}</span></span>
           <span className="text-xs text-luxury-gray-2">Agents: <span className="font-semibold text-luxury-gray-1">{fmt(agentTot)}</span></span>
           <span className="text-xs text-luxury-gray-2">CRC: <span className="font-semibold text-luxury-gray-1">{fmt(crcTotal)}</span></span>
           {collapsed ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronUp size={14} className="text-luxury-gray-3" />}
@@ -307,7 +438,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
             {displayRows.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
             ) : (
-              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} />)
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
             )}
             {rows.length > 0 && (
               <div className="card-luxury rounded-lg flex items-center justify-between px-4 py-2 mt-1">
@@ -323,6 +454,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
               <thead>
                 <tr className="border-b border-luxury-gray-5/50">
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Address</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Check</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">CRC</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 1</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Agent 2</th>
@@ -342,28 +474,30 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                   >
                     Compliance {sortKey === 'compliance' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
                   </th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Pay By</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Transferred</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {displayRows.length === 0 ? (
-                  <tr><td colSpan={12} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
+                  <tr><td colSpan={14} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
                 ) : (
-                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} />)
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
                 )}
               </tbody>
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-luxury-gray-5/50 bg-luxury-gray-6/30">
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-luxury-gray-1">Total</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(checkTotal)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(crcTotal)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a1Tot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a2Tot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '—'}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(extTot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(agentTot)}</td>
-                    <td colSpan={5} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
+                    <td colSpan={6} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
                   </tr>
                 </tfoot>
               )}
@@ -434,11 +568,11 @@ export default function PayoutsReportPage() {
 
   useEffect(() => { if (user) load() }, [user, load])
 
-  const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid)
-  const holdRows = rows.filter(r => !r.crc_transferred && !r.agents_paid)
+  const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
+  const holdRows = rows.filter(r => !r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
 
-  const paidAgentTotal   = paidRows.reduce((s, r) => s + agentTotal(r), 0)
-  const holdAgentTotal   = holdRows.reduce((s, r) => s + agentTotal(r), 0)
+  const paidAgentTotal   = paidRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
+  const holdAgentTotal   = holdRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
   const expensesTotal    = expenses.reduce((s, e) => s + (e.amount || 0), 0)
   const pmFeesTotal      = pmFees.reduce((s, f) => s + f.amount, 0)
   const landlordTotal    = landlordPayouts.reduce((s, l) => s + l.amount, 0)
@@ -496,6 +630,56 @@ export default function PayoutsReportPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ check_id: checkId, compliance_status: status }),
+      })
+      if (!res.ok) load()
+    } catch {
+      load()
+    }
+  }
+
+  const markAgentPaid = async (tiaId: string, checkId: string) => {
+    // Optimistic update
+    setRows(prev => prev.map(r => 
+      r.check_id === checkId 
+        ? { 
+            ...r, 
+            agents: r.agents.map(a => 
+              a.id === tiaId ? { ...a, payment_status: 'paid', payment_date: new Date().toISOString().split('T')[0] } : a
+            )
+          } 
+        : r
+    ))
+    
+    try {
+      const res = await fetch('/api/admin/payouts-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_agent_paid', tia_id: tiaId }),
+      })
+      if (!res.ok) load()
+    } catch {
+      load()
+    }
+  }
+
+  const markExternalPaid = async (externalId: string, checkId: string) => {
+    // Optimistic update
+    setRows(prev => prev.map(r => 
+      r.check_id === checkId 
+        ? { 
+            ...r, 
+            externals: r.externals.map(e => 
+              e.id === externalId ? { ...e, payment_status: 'paid', payment_date: new Date().toISOString().split('T')[0] } : e
+            )
+          } 
+        : r
+    ))
+    
+    try {
+      const res = await fetch('/api/admin/payouts-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_external_paid', external_id: externalId }),
       })
       if (!res.ok) load()
     } catch {
@@ -581,8 +765,8 @@ export default function PayoutsReportPage() {
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} />
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={markAgentPaid} onMarkExternalPaid={markExternalPaid} />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={markAgentPaid} onMarkExternalPaid={markExternalPaid} />
         </div>
 
         {/* Landlord Disbursements */}
