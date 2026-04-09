@@ -74,11 +74,11 @@ export async function GET(request: NextRequest) {
       const [agentsRes, externalRes, txnRes] = await Promise.all([
         supabaseAdmin
           .from('transaction_internal_agents')
-          .select('transaction_id, agent_id, agent_role, agent_net, payment_status, payment_date, payment_method')
+          .select('id, transaction_id, agent_id, agent_role, agent_net, payment_status, payment_date, payment_method')
           .in('transaction_id', txnIds),
         supabaseAdmin
           .from('transaction_external_brokerages')
-          .select('transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date')
+          .select('id, transaction_id, brokerage_name, agent_name, commission_amount, payment_status, payment_date')
           .in('transaction_id', txnIds),
         supabaseAdmin
           .from('transactions')
