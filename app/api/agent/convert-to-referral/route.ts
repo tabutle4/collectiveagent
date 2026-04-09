@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
-import { v4 as uuidv4 } from 'uuid'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate new campaign token for onboarding
-    const newCampaignToken = uuidv4()
+    const newCampaignToken = crypto.randomUUID()
 
     // Update user to prospect status with referral mls_choice
     const { error: updateError } = await supabaseAdmin
