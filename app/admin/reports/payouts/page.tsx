@@ -756,7 +756,12 @@ export default function PayoutsReportPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="page-title">PAYOUTS REPORT</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="page-title">PAYOUTS REPORT</h1>
+          <Link href="/admin/reports/all-payouts" className="text-xs text-luxury-accent hover:underline">
+            View All Payouts →
+          </Link>
+        </div>
         <button onClick={load} className="btn btn-secondary text-xs flex items-center gap-1.5">
           <RefreshCw size={13} /> Refresh
         </button>

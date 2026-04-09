@@ -218,12 +218,12 @@ export async function GET(request: NextRequest) {
     if (status) rows = rows.filter(r => r.payment_status === status)
     if (typeFilter) rows = rows.filter(r => r.type === typeFilter)
     
-    // Year filter - use payment_date or created_at
+    // Year filter - use payment_date or created_at, but INCLUDE pending items with no date
     if (year) {
       const yearNum = parseInt(year)
       rows = rows.filter(r => {
         const dateStr = r.payment_date || r.created_at
-        if (!dateStr) return false
+        if (!dateStr) return true  // Include pending items with no date
         const rowYear = new Date(dateStr).getFullYear()
         return rowYear === yearNum
       })
@@ -232,8 +232,10 @@ export async function GET(request: NextRequest) {
     if (from) rows = rows.filter(r => r.payment_date && r.payment_date >= from)
     if (to) rows = rows.filter(r => r.payment_date && r.payment_date <= to)
 
-    // Sort by payment_date desc, nulls last
+    // Sort: pending first, then by payment_date desc
     rows.sort((a, b) => {
+      if (a.payment_status === 'pending' && b.payment_status !== 'pending') return -1
+      if (a.payment_status !== 'pending' && b.payment_status === 'pending') return 1
       if (!a.payment_date && !b.payment_date) return 0
       if (!a.payment_date) return 1
       if (!b.payment_date) return -1
@@ -247,7 +249,7 @@ export async function GET(request: NextRequest) {
         if (status && r.payment_status !== status) return false
         if (year) {
           const dateStr = r.payment_date || r.created_at
-          if (!dateStr) return false
+          if (!dateStr) return true  // Include pending items with no date in counts
           const rowYear = new Date(dateStr).getFullYear()
           if (rowYear !== parseInt(year)) return false
         }

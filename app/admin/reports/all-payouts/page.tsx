@@ -195,6 +195,10 @@ export default function AllPayoutsPage() {
             <ArrowLeft size={20} />
           </Link>
           <h1 className="page-title">All Payouts</h1>
+          <span className="text-sm text-luxury-gray-3">({currentYear})</span>
+          <Link href="/admin/reports/payouts" className="text-xs text-luxury-accent hover:underline">
+            ← Payouts Report
+          </Link>
         </div>
 
         {/* Pending Summary Cards - Clickable Filters */}
@@ -261,20 +265,6 @@ export default function AllPayoutsPage() {
                 />
               </div>
             </div>
-            
-            <div className="w-32">
-              <label className="field-label">Year</label>
-              <select
-                value={yearFilter}
-                onChange={(e) => setYearFilter(e.target.value)}
-                className="select-luxury w-full"
-              >
-                <option value="">All Years</option>
-                {yearOptions.map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
 
             <div className="w-36">
               <label className="field-label">Status</label>
@@ -310,13 +300,12 @@ export default function AllPayoutsPage() {
               />
             </div>
 
-            {(search || statusFilter || typeFilter || yearFilter !== currentYear.toString() || fromDate || toDate) && (
+            {(search || statusFilter || typeFilter || fromDate || toDate) && (
               <button
                 onClick={() => {
                   setSearch('')
                   setStatusFilter('')
                   setTypeFilter('')
-                  setYearFilter(currentYear.toString())
                   setFromDate('')
                   setToDate('')
                 }}
