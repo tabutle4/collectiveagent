@@ -100,6 +100,7 @@ const tcNav: NavItem[] = [
 
 const supportNav: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin/billing', label: 'Billing', icon: CircleDollarSign },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
   { href: '/admin/users', label: 'Agents', icon: UserCog },
   { href: '/admin/teams', label: 'Teams', icon: UsersRound },
