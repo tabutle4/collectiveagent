@@ -1,11 +1,62 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import CornerLines from '@/components/shared/CornerLines'
-import { Check, X, AlertTriangle, ArrowRight } from 'lucide-react'
+import { Check, X, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react'
 
 export default function ReferralCollectiveInformationPage() {
+  const router = useRouter()
+  const [isSignedIn, setIsSignedIn] = useState(false)
+  const [isConverting, setIsConverting] = useState(false)
+  const [userName, setUserName] = useState('')
+
+  // Check if user is signed in
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user && data.user.status === 'active') {
+            setIsSignedIn(true)
+            setUserName(data.user.preferred_first_name || data.user.first_name || '')
+          }
+        }
+      } catch {
+        // Not signed in
+      }
+    }
+    checkAuth()
+  }, [])
+
+  // Handle conversion for signed-in agents
+  async function handleConvertToReferral() {
+    if (!confirm('This will convert your account to Referral Collective. You will need to complete the referral onboarding process, sign the new ICA, and pay the $299 annual fee. Your current monthly subscription will be cancelled. Continue?')) {
+      return
+    }
+
+    setIsConverting(true)
+    try {
+      const res = await fetch('/api/agent/convert-to-referral', { method: 'POST' })
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || 'Conversion failed')
+        setIsConverting(false)
+        return
+      }
+
+      // Redirect to onboarding
+      router.push(data.onboardingUrl)
+    } catch (err) {
+      alert('Conversion failed. Please try again.')
+      setIsConverting(false)
+    }
+  }
+
   return (
     <div
       className="min-h-screen flex flex-col"
@@ -37,7 +88,7 @@ export default function ReferralCollectiveInformationPage() {
           
           {/* Page Header */}
           <div className="text-center mb-8">
-            <h1 className="page-title mb-1">The Referral Collective</h1>
+            <h1 className="page-title mb-1">Referral Collective</h1>
             <p className="text-xs font-semibold text-luxury-accent uppercase tracking-widest mb-3">
               Referral-Only Brokerage · Texas
             </p>
@@ -73,7 +124,7 @@ export default function ReferralCollectiveInformationPage() {
               </div>
               <div className="inner-card">
                 <p className="text-sm font-semibold text-luxury-gray-1 mb-1">Agent Profile Listing</p>
-                <p className="text-xs text-luxury-gray-3">Featured on The Referral Collective roster for credibility.</p>
+                <p className="text-xs text-luxury-gray-3">Featured on Referral Collective roster for credibility.</p>
               </div>
             </div>
           </div>
@@ -119,7 +170,7 @@ export default function ReferralCollectiveInformationPage() {
           </div>
 
           {/* CRITICAL: Referral-Only Warning */}
-          <div className="container-card mb-4 border-2 border-yellow-500 bg-yellow-50">
+          <div className="container-card mb-4 border-2 border-yellow-500">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div>
@@ -127,7 +178,7 @@ export default function ReferralCollectiveInformationPage() {
                   Referral-Only: No Exceptions
                 </p>
                 <p className="text-sm text-luxury-gray-1">
-                  Agents under The Referral Collective may <strong className="text-yellow-800">only</strong> refer clients to other agents. 
+                  Agents under Referral Collective may <strong className="text-yellow-800">only</strong> refer clients to other agents. 
                   You cannot show properties, write contracts, negotiate deals, represent clients, or perform any other real estate activity. 
                   Violating these restrictions results in immediate termination and potential TREC action. 
                   If you want to do more than refer, this is not the right fit. Consider Collective Realty Co. instead.
@@ -224,13 +275,13 @@ export default function ReferralCollectiveInformationPage() {
           </div>
 
           {/* TREC Compliance */}
-          <div className="container-card mb-4 bg-green-50 border border-green-200">
+          <div className="container-card mb-4 border border-green-200">
             <div className="flex items-start gap-3">
               <span className="text-xs font-semibold text-green-700 bg-white border border-green-200 px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap">
                 TREC Compliant
               </span>
               <p className="text-xs text-luxury-gray-2">
-                The Referral Collective is a Limited Function Referral Office (LFRO) under TREC. 
+                Referral Collective is a Limited Function Referral Office (LFRO) under TREC. 
                 <strong className="text-luxury-gray-1"> Agents may only generate referrals.</strong> Any agent who shows properties, 
                 writes contracts, or represents clients in any capacity will be terminated immediately and reported to TREC. 
                 All referral fees are paid through the sponsoring broker per TREC Rule §535.3.
@@ -242,7 +293,7 @@ export default function ReferralCollectiveInformationPage() {
           <div className="container-card mb-4">
             <p className="section-title">Growth Pathway</p>
             <p className="text-sm text-luxury-gray-2 mb-4">
-              When you're ready to do more than refer, The Referral Collective is your bridge to full agent status at Collective Realty Co.
+              When you're ready to do more than refer, Referral Collective is your bridge to full agent status at Collective Realty Co.
             </p>
             <div className="flex flex-col md:flex-row items-stretch gap-0">
               <div className="inner-card flex-1 text-center p-4">
@@ -273,10 +324,49 @@ export default function ReferralCollectiveInformationPage() {
             </div>
           </div>
 
+          {/* Call to Action */}
+          <div className="container-card mb-4">
+            <p className="section-title text-center">Ready to Join?</p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
+              {isSignedIn ? (
+                <button
+                  onClick={handleConvertToReferral}
+                  disabled={isConverting}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  {isConverting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Converting...
+                    </>
+                  ) : (
+                    <>
+                      Switch to Referral Collective
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              ) : (
+                <a
+                  href="/prospective-agent-form?type=referral"
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  Join Referral Collective
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+            {isSignedIn && (
+              <p className="text-xs text-luxury-gray-3 text-center mt-3">
+                Hi {userName}! Clicking above will start your conversion to Referral Collective.
+              </p>
+            )}
+          </div>
+
           {/* Footer Brand */}
           <div className="flex items-center justify-between pt-4 border-t border-luxury-gray-5">
             <span className="text-xs font-semibold text-luxury-gray-1 uppercase tracking-wider">
-              The Referral Collective
+              Referral Collective
             </span>
             <span className="text-xs text-luxury-gray-3">
               TREC Licensed Brokerage · Texas
