@@ -235,9 +235,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(0, 9999)
 
-    // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
+    // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared (or cleared in future)
+    const today = new Date().toISOString().split('T')[0]
     const pendingPayloadTotal = allChecks
-      .filter(c => c.payment_method === 'payload' && !c.cleared_date)
+      .filter(c => c.payment_method === 'payload' && (!c.cleared_date || c.cleared_date > today))
       .reduce((sum, c) => sum + (c.check_amount || 0), 0)
 
     // PM Fee Payouts (agent referrals only, pending)
