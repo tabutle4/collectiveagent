@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
 import CornerLines from '@/components/shared/CornerLines'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
-export default function ProspectiveAgentForm() {
+function ProspectiveAgentFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
@@ -507,5 +507,17 @@ export default function ProspectiveAgentForm() {
         <AuthFooter />
       </div>
     </div>
+  )
+}
+
+export default function ProspectiveAgentForm() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-luxury-light flex items-center justify-center">
+        <div className="text-luxury-gray-3">Loading...</div>
+      </div>
+    }>
+      <ProspectiveAgentFormContent />
+    </Suspense>
   )
 }
