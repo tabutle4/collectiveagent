@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { requirePermission } from '@/lib/auth'
+import { requirePermission } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
