@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     // Require admin permission
-    const authResult = await requirePermission(request, 'can_manage_settings')
+    const authResult = await requirePermission(request, 'can_manage_company_settings')
     if ('error' in authResult) {
       // Fall back to broker role check
       const brokerCheck = await requirePermission(request, 'can_manage_agents')
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Require admin permission
-    const authResult = await requirePermission(request, 'can_manage_settings')
+    const authResult = await requirePermission(request, 'can_manage_company_settings')
     if ('error' in authResult) {
       // Fall back to broker role check
       const brokerCheck = await requirePermission(request, 'can_manage_agents')

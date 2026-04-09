@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 // POST - Create new plan
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'can_manage_settings')
+    const authResult = await requirePermission(request, 'can_manage_commission_plans')
     if ('error' in authResult) {
       const brokerCheck = await requirePermission(request, 'can_manage_agents')
       if ('error' in brokerCheck) {
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
 // PUT - Update existing plan
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'can_manage_settings')
+    const authResult = await requirePermission(request, 'can_manage_commission_plans')
     if ('error' in authResult) {
       const brokerCheck = await requirePermission(request, 'can_manage_agents')
       if ('error' in brokerCheck) {
@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete plan
 export async function DELETE(request: NextRequest) {
   try {
-    const authResult = await requirePermission(request, 'can_manage_settings')
+    const authResult = await requirePermission(request, 'can_manage_commission_plans')
     if ('error' in authResult) {
       const brokerCheck = await requirePermission(request, 'can_manage_agents')
       if ('error' in brokerCheck) {
