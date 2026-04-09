@@ -24,12 +24,20 @@ function getLuxuryEmailTemplate({
   content,
   darkSection,
   closing,
+  isReferral = false,
 }: {
   greeting: string
   content: string
   darkSection?: string
   closing: string
+  isReferral?: boolean
 }) {
+  const companyName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
+  const tagline = isReferral ? 'Referral-Only Brokerage' : 'The Coaching Brokerage'
+  const footerText = isReferral 
+    ? 'Referral Collective - Keep Your License Active' 
+    : 'Welcome to Collective Realty Co. - Where Excellence Meets Opportunity'
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -38,7 +46,7 @@ function getLuxuryEmailTemplate({
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light only">
     <meta name="supported-color-schemes" content="light only">
-    <title>Collective Realty Co.</title>
+    <title>${companyName}</title>
     <style>
         :root { color-scheme: light only; supported-color-schemes: light only; }
         body { margin: 0 !important; padding: 0 !important; background-color: #ffffff !important; font-family: 'Trebuchet MS', Arial, sans-serif !important; }
@@ -76,8 +84,8 @@ function getLuxuryEmailTemplate({
 <body>
     <div class="email-container">
         <div class="header">
-            <h1 class="header-title">Collective Realty Co.</h1>
-            <p class="header-subtitle">The Coaching Brokerage</p>
+            <h1 class="header-title">${companyName}</h1>
+            <p class="header-subtitle">${tagline}</p>
             <div class="header-divider"></div>
         </div>
         <div class="content">
@@ -86,7 +94,7 @@ function getLuxuryEmailTemplate({
         </div>
         ${darkSection ? `<div class="dark-section">${darkSection}</div>` : ''}
         <div class="content">${closing}</div>
-        <div class="footer"><p>Welcome to Collective Realty Co. - Where Excellence Meets Opportunity</p></div>
+        <div class="footer"><p>${footerText}</p></div>
     </div>
 </body>
 </html>
@@ -99,10 +107,24 @@ export async function sendProspectWelcomeEmail(prospect: {
   preferred_first_name: string
   email: string
   join_link: string
+  mls_choice?: string
 }) {
-  const html = getLuxuryEmailTemplate({
-    greeting: `Hi ${prospect.preferred_first_name},`,
-    content: `
+  const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
+  const brokerageName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
+  
+  // Different content for referral vs standard agents
+  const contentSection = isReferral
+    ? `
+      <p class="intro-text">Thank you for submitting your information. We're excited to help you keep your license active while earning referral income with minimal overhead.</p>
+      <p class="intro-text">Referral Collective is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents - that's it. No showings, no contracts, no MLS fees, no association dues. Just $299/year.</p>
+      <div class="section-box">
+        <h2 class="section-title">Your Referral Splits</h2>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Apartment Referrals:</strong> 85% to you</p>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Buyer/Seller/Tenant/Landlord:</strong> 90% to you</p>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0;"><strong>External Referrals:</strong> 88% to you</p>
+      </div>
+    `
+    : `
       <p class="intro-text">Thank you for submitting your information. We're excited to learn more about you and your goals in real estate.</p>
       <p class="intro-text">At Collective Realty Co., we believe in offering real support, real structure, and real freedom so you can grow your business your way. Linked below, you'll find details about our commission plans and company offerings to help you explore whether we're the right fit for you.</p>
       <div class="section-box">
@@ -119,7 +141,11 @@ export async function sendProspectWelcomeEmail(prospect: {
           <a href="https://collectiverealtyco.com/coaching" class="btn btn-black">View Coaching Calendar</a>
         </div>
       </div>
-    `,
+    `
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hi ${prospect.preferred_first_name},`,
+    content: contentSection,
     darkSection: `
       <h2 class="dark-section-title">Choose Your Next Step</h2>
       <div class="option-box">
@@ -141,6 +167,7 @@ export async function sendProspectWelcomeEmail(prospect: {
         <p style="margin-top: 15px;">Looking forward to connecting soon.</p>
       </div>
     `,
+    isReferral,
   })
 
   return resend.emails.send({
@@ -148,7 +175,9 @@ export async function sendProspectWelcomeEmail(prospect: {
     to: prospect.email,
     replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
-    subject: 'Thank You for Your Interest in Joining Collective Realty Co., The Coaching Brokerage',
+    subject: isReferral 
+      ? 'Thank You for Your Interest in Joining Referral Collective'
+      : 'Thank You for Your Interest in Joining Collective Realty Co., The Coaching Brokerage',
     html,
   })
 }
@@ -320,15 +349,48 @@ export async function sendOnboardingNextStepsEmail(prospect: {
   first_name: string
   email: string
   campaign_token: string
+  mls_choice?: string
 }) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
   const onboardingUrl = `${appUrl}/onboard/${prospect.campaign_token}`
   const firstName = prospect.preferred_first_name || prospect.first_name
+  const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
+  const brokerageName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
 
-  const html = getLuxuryEmailTemplate({
-    greeting: `Hello ${firstName},`,
-    content: `
-      <p class="intro-text">Thank you for submitting your information. We are excited that you decided to join the firm! Please complete the following steps as quickly as possible to have your license sponsored and gain access to all systems and resources.</p>
+  // Different step content for referral vs standard agents
+  const stepsContent = isReferral
+    ? `
+      <div class="section-box">
+        <h2 class="section-title">Step 1 - Your Info</h2>
+        <p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p>
+      </div>
+      <div class="section-box">
+        <h2 class="section-title">Step 2 - Payment</h2>
+        <p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>Pay Your Annual Membership Fee</strong></p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your $299 annual fee to unlock your agreements and TREC sponsorship. No monthly fees, no processing fees.</p>
+      </div>
+      <div class="section-box">
+        <h2 class="section-title">Step 3 - Referral Agent Agreement</h2>
+        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Sign Your Referral Agent Independent Contractor Agreement</strong></p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Review and sign your ICA in the onboarding portal. This outlines your referral-only scope under TREC LFRO rules.</p>
+      </div>
+      <div class="section-box">
+        <h2 class="section-title">Step 4 - Policy Manual</h2>
+        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Review and Acknowledge the Policy Manual</strong></p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Read through the brokerage policy manual and confirm your acknowledgment to continue.</p>
+      </div>
+      <div class="section-box">
+        <h2 class="section-title">Step 5 - W-9</h2>
+        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Complete Your W-9</strong></p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">You will receive a separate email from Track1099 with a secure link to complete your W-9 electronically.</p>
+      </div>
+      <div class="section-box">
+        <h2 class="section-title">Step 6 - TREC Sponsorship</h2>
+        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Accept Your TREC Invitation</strong></p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p>
+      </div>
+    `
+    : `
       <div class="section-box">
         <h2 class="section-title">Step 1 - Your Info</h2>
         <p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p>
@@ -360,6 +422,13 @@ export async function sendOnboardingNextStepsEmail(prospect: {
         <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Accept Your TREC Invitation</strong></p>
         <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p>
       </div>
+    `
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hello ${firstName},`,
+    content: `
+      <p class="intro-text">Thank you for submitting your information. We are excited that you decided to join ${brokerageName}! Please complete the following steps as quickly as possible to have your license sponsored and gain access to all systems and resources.</p>
+      ${stepsContent}
     `,
     darkSection: `
       <h2 class="dark-section-title">Continue Your Onboarding</h2>
@@ -378,6 +447,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
       </div>
     `,
     closing: ``,
+    isReferral,
   })
 
   return resend.emails.send({
@@ -385,7 +455,9 @@ export async function sendOnboardingNextStepsEmail(prospect: {
     to: prospect.email,
     replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
-    subject: 'Next Steps: Your License Sponsorship with Collective Realty Co.',
+    subject: isReferral
+      ? 'Next Steps: Your License Sponsorship with Referral Collective'
+      : 'Next Steps: Your License Sponsorship with Collective Realty Co.',
     html,
   })
 }
@@ -461,6 +533,81 @@ export async function sendCourtneyFollowUpEmail(prospect: {
     replyTo: 'courtneyo@collectiverealtyco.com',
     to: prospect.email,
     subject: 'Courtney O. - Just Wanted You To Know',
+    html,
+  })
+}
+
+// ─── REFERRAL FOLLOW-UP EMAIL (simpler version for referral agents) ──────────
+
+const REFERRAL_STEP_LABELS: Record<number, string> = {
+  1: 'Your Info',
+  2: 'Payment',
+  3: 'Referral Agent Agreement',
+  4: 'Policy Manual',
+  5: 'W-9',
+  6: 'TREC Sponsorship',
+}
+
+export async function sendReferralFollowUpEmail(prospect: {
+  preferred_first_name: string
+  first_name: string
+  email: string
+  campaign_token: string
+  current_step: number | null
+  referral_split_apartment?: number
+  referral_split_internal?: number
+  referral_split_external?: number
+}) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+  const onboardingUrl = `${appUrl}/onboard/${prospect.campaign_token}`
+  const infoPageUrl = `${appUrl}/referral-collective-information`
+  const firstName = prospect.preferred_first_name || prospect.first_name
+
+  // Use provided splits or defaults
+  const apartmentSplit = prospect.referral_split_apartment ?? 85
+  const internalSplit = prospect.referral_split_internal ?? 90
+  const externalSplit = prospect.referral_split_external ?? 88
+
+  const stepLabel = prospect.current_step && prospect.current_step > 1
+    ? REFERRAL_STEP_LABELS[prospect.current_step] || `Step ${prospect.current_step}`
+    : null
+
+  const stepNotice = stepLabel
+    ? `<div style="background:#f0f0f0;border:1px solid #ddd;padding:12px 16px;font-size:14px;color:#555;margin:16px 0;line-height:1.5;">
+        You are currently on <strong>Step ${prospect.current_step}: ${stepLabel}</strong> of your onboarding. Pick up right where you left off using the link below.
+      </div>`
+    : ''
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hi ${firstName},`,
+    content: `
+      <p class="intro-text">Just a quick reminder to complete your Referral Collective onboarding! Once you're set up, you can start referring clients and earning passive income.</p>
+      <div class="section-box">
+        <h2 class="section-title">Your Referral Splits</h2>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Apartment Referrals:</strong> ${apartmentSplit}% to you</p>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Buyer/Seller/Tenant/Landlord:</strong> ${internalSplit}% to you</p>
+        <p style="text-align: center; color: #333; font-size: 15px; margin: 0;"><strong>External Referrals:</strong> ${externalSplit}% to you</p>
+      </div>
+      ${stepNotice}
+      <p class="intro-text">If you have any questions about how Referral Collective works, visit our <a href="${infoPageUrl}" style="color:#C5A278;text-decoration:underline;">information page</a> or reach out to the office.</p>
+    `,
+    darkSection: `
+      <h2 class="dark-section-title">Continue Your Onboarding</h2>
+      <div class="option-box">
+        <h3 class="option-title">Your Onboarding Portal</h3>
+        <p class="option-description">Your personalized link is ready. Pick up right where you left off.</p>
+        <div style="text-align: center;"><a href="${onboardingUrl}" class="btn btn-white">Continue Onboarding</a></div>
+      </div>
+    `,
+    closing: ``,
+    isReferral: true,
+  })
+
+  return resend.emails.send({
+    from: FROM_EMAILS.onboarding,
+    replyTo: 'office@collectiverealtyco.com',
+    to: prospect.email,
+    subject: 'Quick Reminder - Complete Your Referral Collective Onboarding',
     html,
   })
 }
