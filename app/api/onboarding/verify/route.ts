@@ -8,12 +8,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 })
     }
 
-    // Find prospect by campaign_token
+    // Find user by campaign_token (allow prospect or active for agents mid-onboarding)
     const { data: prospect, error } = await supabase
       .from('users')
       .select('*')
       .eq('campaign_token', token)
-      .eq('status', 'prospect')
       .single()
 
     if (error || !prospect) {

@@ -17,12 +17,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'token and step are required' }, { status: 400 })
     }
 
-    // Authenticate by campaign_token - include mls_choice to determine agent type
+    // Authenticate by campaign_token
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
       .select('id, first_name, last_name, email, mls_choice')
       .eq('campaign_token', token)
-      .eq('status', 'prospect')
       .single()
 
     if (error || !prospect) {

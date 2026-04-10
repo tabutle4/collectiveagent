@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
       .from('users')
       .select('id, status')
       .eq('campaign_token', token)
-      .eq('status', 'prospect')
       .single()
 
     if (fetchError || !prospect) {

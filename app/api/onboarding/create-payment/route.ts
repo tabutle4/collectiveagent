@@ -22,12 +22,11 @@ export async function POST(request: NextRequest) {
     const standardMonthlyFee = companySettings?.standard_monthly_fee ?? 50
     const referralAnnualFee = companySettings?.referral_annual_fee ?? 299
 
-    // Authenticate by campaign_token - include mls_choice to determine agent type
+    // Authenticate by campaign_token
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
       .select('id, first_name, last_name, email, payload_payee_id, mls_choice')
       .eq('campaign_token', token)
-      .eq('status', 'prospect')
       .single()
 
     if (prospectError || !prospect) {

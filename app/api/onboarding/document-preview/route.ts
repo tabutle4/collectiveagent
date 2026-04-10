@@ -21,7 +21,6 @@ export async function GET(request: NextRequest) {
       .from('users')
       .select('first_name, last_name, email, commission_plan, mls_choice, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip')
       .eq('campaign_token', token)
-      .eq('status', 'prospect')
       .single()
 
     if (error || !prospect) {
