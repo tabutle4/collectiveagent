@@ -15,6 +15,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Fetch fee settings
+    const { data: companySettings } = await supabaseAdmin
+      .from('company_settings')
+      .select('standard_monthly_fee, standard_late_fee')
+      .single()
+    
+    const monthlyFee = companySettings?.standard_monthly_fee ?? 50
+    const lateFee = companySettings?.standard_late_fee ?? 25
+
     const now = new Date()
     const monthName = now.toLocaleString('default', { month: 'long' })
     const year = now.getFullYear()
@@ -82,7 +91,7 @@ export async function GET(request: NextRequest) {
           subject: `Action Required: ${monthName} Monthly Fee Due Today`,
           html: getEmailLayout(
             `<p>Hi ${firstName},</p>
-             <p>Your <strong>${monthName} ${year} monthly brokerage fee of $50</strong> is due today. Please pay now to avoid a <strong>$25 late fee</strong>, which will be applied tomorrow.</p>
+             <p>Your <strong>${monthName} ${year} monthly brokerage fee of $${monthlyFee}</strong> is due today. Please pay now to avoid a <strong>$${lateFee} late fee</strong>, which will be applied tomorrow.</p>
              <p style="text-align: center; margin: 24px 0;">
                <a href="${feesUrl}" style="display: inline-block; padding: 12px 28px; background-color: #C5A278; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">Pay Now</a>
              </p>
@@ -90,7 +99,7 @@ export async function GET(request: NextRequest) {
             {
               title: 'Monthly Fee Due Today',
               subtitle: `${monthName} ${year}`,
-              preheader: `Your ${monthName} brokerage fee of $50 is due today. Pay now to avoid a late fee.`,
+              preheader: `Your ${monthName} brokerage fee of $${monthlyFee} is due today. Pay now to avoid a late fee.`,
             }
           ),
         })

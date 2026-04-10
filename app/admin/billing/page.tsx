@@ -56,6 +56,7 @@ export default function AdminBillingPage() {
   const [editingRecord, setEditingRecord] = useState<string | null>(null)
   const [editDesc, setEditDesc] = useState('')
   const [editAmount, setEditAmount] = useState('')
+  const [monthlyFee, setMonthlyFee] = useState(50)
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -65,6 +66,15 @@ export default function AdminBillingPage() {
     script.async = true
     document.head.appendChild(script)
     payloadScriptLoaded.current = true
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/settings/standard')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings?.monthly_fee) setMonthlyFee(data.settings.monthly_fee)
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -923,7 +933,7 @@ export default function AdminBillingPage() {
                                   <p className="text-xs text-luxury-gray-3">
                                     Will send:{' '}
                                     <span className="font-medium text-luxury-gray-1">
-                                      {invoiceMonth} {invoiceYear} Monthly Brokerage Fee - $50
+                                      {invoiceMonth} {invoiceYear} Monthly Brokerage Fee - ${monthlyFee}
                                     </span>
                                   </p>
                                   <button

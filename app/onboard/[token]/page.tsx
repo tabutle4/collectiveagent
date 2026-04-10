@@ -494,6 +494,14 @@ export default function OnboardingPage() {
     brokerage_name: 'Referral Collective',
   })
 
+  // Standard settings from company_settings
+  const [standardSettings, setStandardSettings] = useState({
+    onboarding_fee: 399,
+    monthly_fee: 50,
+    late_fee: 25,
+    agency_name: 'Collective Realty Co.',
+  })
+
   const [joinForm, setJoinForm] = useState<JoinFormData>({
     first_name: '',
     last_name: '',
@@ -537,6 +545,16 @@ export default function OnboardingPage() {
       .then(r => r.json())
       .then(data => {
         if (data.settings) setReferralSettings(data.settings)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Fetch standard settings
+  useEffect(() => {
+    fetch('/api/settings/standard')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings) setStandardSettings(data.settings)
       })
       .catch(() => {})
   }, [])
@@ -1358,10 +1376,10 @@ const checkout = new window.Payload.Checkout({
                       <div>
                         <p className="text-sm font-semibold text-luxury-gray-1">Onboarding Fee</p>
                         <p className="text-xs text-luxury-gray-3">
-                          One-time fee to join Collective Realty Co.
+                          One-time fee to join {standardSettings.agency_name}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-luxury-gray-1">$399.00</p>
+                      <p className="text-sm font-semibold text-luxury-gray-1">${standardSettings.onboarding_fee.toFixed(2)}</p>
                     </div>
                     <div className="inner-card flex items-center justify-between">
                       <div>
@@ -1383,7 +1401,7 @@ const checkout = new window.Payload.Checkout({
                           const now = new Date()
                           const dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
                           const remaining = dim - now.getDate() + 1
-                          return `$${(Math.round((50 / dim) * remaining * 100) / 100).toFixed(2)}`
+                          return `$${(Math.round((standardSettings.monthly_fee / dim) * remaining * 100) / 100).toFixed(2)}`
                         })()}
                       </p>
                     </div>
@@ -1394,7 +1412,7 @@ const checkout = new window.Payload.Checkout({
                 <p className="text-xs text-luxury-gray-3">
                   {isReferralAgent 
                     ? 'Processing fees are passed to the payer. Annual membership renews each year.'
-                    : 'Processing fees are passed to the payer. Monthly fees of $50 are due by the 5th of each month thereafter.'}
+                    : `Processing fees are passed to the payer. Monthly fees of $${standardSettings.monthly_fee} are due by the 5th of each month thereafter.`}
                 </p>
               </div>
             </div>

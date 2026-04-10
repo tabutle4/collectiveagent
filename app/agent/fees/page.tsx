@@ -19,7 +19,17 @@ export default function AgentFeesPage() {
   const [debts, setDebts] = useState<any[]>([])
   const [credits, setCredits] = useState<any[]>([])
   const [paying, setPaying] = useState<string | null>(null)
+  const [monthlyFee, setMonthlyFee] = useState(50)
   const payloadScriptLoaded = useRef(false)
+
+  useEffect(() => {
+    fetch('/api/settings/standard')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings?.monthly_fee) setMonthlyFee(data.settings.monthly_fee)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (payloadScriptLoaded.current) return
@@ -206,7 +216,7 @@ export default function AgentFeesPage() {
             {monthlyStatus === 'waived' ? (
               <p className="text-sm font-semibold text-luxury-gray-1">Waived</p>
             ) : (
-              <p className="text-sm font-semibold text-luxury-gray-1">$50 / month</p>
+              <p className="text-sm font-semibold text-luxury-gray-1">${monthlyFee} / month</p>
             )}
             {user?.monthly_fee_paid_through && monthlyStatus !== 'waived' && (
               <p className="text-xs text-luxury-gray-3 mt-1">

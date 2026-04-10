@@ -55,6 +55,7 @@ export default function ProfilePage({
   const [allAgents, setAllAgents] = useState<any[]>([])
   const [referrerSearch, setReferrerSearch] = useState('')
   const [referrerDropdownOpen, setReferrerDropdownOpen] = useState(false)
+  const [monthlyFee, setMonthlyFee] = useState(50)
 
   // Success/error states
   const [personalError, setPersonalError] = useState<string | null>(null)
@@ -157,6 +158,15 @@ export default function ProfilePage({
     if (Number.isNaN(date.getTime())) return value
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
+
+  useEffect(() => {
+    fetch('/api/settings/standard')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings?.monthly_fee) setMonthlyFee(data.settings.monthly_fee)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     loadProfile()
@@ -1633,7 +1643,7 @@ export default function ProfilePage({
                     <div>
                       <p className="text-sm font-medium text-luxury-gray-1">Monthly Fee Waived</p>
                       <p className="text-xs text-luxury-gray-3">
-                        Agent will not be invoiced for the $50 monthly fee
+                        Agent will not be invoiced for the ${monthlyFee} monthly fee
                       </p>
                     </div>
                     <button
@@ -1759,7 +1769,7 @@ export default function ProfilePage({
                 <div className="inner-card">
                   <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee</p>
                   <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.monthly_fee_waived ? 'Waived' : '$50/month'}
+                    {user.monthly_fee_waived ? 'Waived' : `$${monthlyFee}/month`}
                   </p>
                 </div>
                 <div className="inner-card">

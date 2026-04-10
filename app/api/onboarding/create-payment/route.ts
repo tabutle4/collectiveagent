@@ -12,6 +12,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 })
     }
 
+    // Fetch standard settings
+    const { data: companySettings } = await supabaseAdmin
+      .from('company_settings')
+      .select('standard_onboarding_fee, standard_monthly_fee')
+      .single()
+    
+    const onboardingFee = companySettings?.standard_onboarding_fee ?? 399
+    const monthlyFee = companySettings?.standard_monthly_fee ?? 50
+
     // Authenticate by campaign_token
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
@@ -71,7 +80,7 @@ export async function POST(request: NextRequest) {
     const endLabel = `${pad(now.getMonth() + 1)}/${pad(daysInMonth)}/${yy}`
     const proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
 
-    const proratedAmount = Math.round((50 / daysInMonth) * remainingDays * 100) / 100
+    const proratedAmount = Math.round((monthlyFee / daysInMonth) * remainingDays * 100) / 100
 
     // Step 3: Create the invoice
     const params = new URLSearchParams({
@@ -82,7 +91,7 @@ export async function POST(request: NextRequest) {
       description: 'Onboarding Invoice',
       'items[0][type]': 'Onboarding Fee',
       'items[0][description]': 'Non-Refundable Onboarding Fee',
-      'items[0][amount]': '399',
+      'items[0][amount]': onboardingFee.toString(),
       'items[0][entry_type]': 'charge',
     })
 
@@ -124,7 +133,7 @@ export async function POST(request: NextRequest) {
         type: 'client',
         intent: {
   checkout_plugin: {
-    amount: 399 + proratedAmount,
+    amount: onboardingFee + proratedAmount,
     description: 'Onboarding Invoice',
             conv_fee: true,
             auto_billing_toggle: true,

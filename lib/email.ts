@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
+import { supabaseAdmin } from '@/lib/supabase'
 
 if (!process.env.RESEND_API_KEY) {
   throw new Error('Missing env.RESEND_API_KEY')
@@ -110,14 +111,31 @@ export async function sendProspectWelcomeEmail(prospect: {
   mls_choice?: string
 }) {
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
-  const brokerageName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
+  
+  // Fetch referral settings if needed
+  let referralAnnualFee = 299
+  let referralBrokerageName = 'Referral Collective'
+  if (isReferral) {
+    try {
+      const { data: settings } = await supabaseAdmin
+        .from('company_settings')
+        .select('referral_annual_fee, referral_brokerage_name')
+        .single()
+      if (settings) {
+        referralAnnualFee = settings.referral_annual_fee ?? 299
+        referralBrokerageName = settings.referral_brokerage_name ?? 'Referral Collective'
+      }
+    } catch {}
+  }
+  
+  const brokerageName = isReferral ? referralBrokerageName : 'Collective Realty Co.'
   
   // Different content for referral vs standard agents
   const contentSection = isReferral
     ? `
       <p class="intro-text">Thank you for submitting your information. We're excited to help you keep your license active while earning referral income with minimal overhead.</p>
-      <p class="intro-text">Referral Collective is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents and that is it. No showings, no contracts, no MLS fees, no association dues. Just $299/year.</p>
-      <p class="intro-text">Want to learn more? <a href="https://agent.collectiverealtyco.com/referral-collective-information" style="color: #C5A278; text-decoration: underline;">View the full Referral Collective details</a>.</p>
+      <p class="intro-text">${referralBrokerageName} is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents and that is it. No showings, no contracts, no MLS fees, no association dues. Just $${referralAnnualFee}/year.</p>
+      <p class="intro-text">Want to learn more? <a href="https://agent.collectiverealtyco.com/referral-collective-information" style="color: #C5A278; text-decoration: underline;">View the full ${referralBrokerageName} details</a>.</p>
     `
     : `
       <p class="intro-text">Thank you for submitting your information. We're excited to learn more about you and your goals in real estate.</p>
@@ -350,7 +368,24 @@ export async function sendOnboardingNextStepsEmail(prospect: {
   const onboardingUrl = `${appUrl}/onboard/${prospect.campaign_token}`
   const firstName = prospect.preferred_first_name || prospect.first_name
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
-  const brokerageName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
+  
+  // Fetch referral settings if needed
+  let referralAnnualFee = 299
+  let referralBrokerageName = 'Referral Collective'
+  if (isReferral) {
+    try {
+      const { data: settings } = await supabaseAdmin
+        .from('company_settings')
+        .select('referral_annual_fee, referral_brokerage_name')
+        .single()
+      if (settings) {
+        referralAnnualFee = settings.referral_annual_fee ?? 299
+        referralBrokerageName = settings.referral_brokerage_name ?? 'Referral Collective'
+      }
+    } catch {}
+  }
+  
+  const brokerageName = isReferral ? referralBrokerageName : 'Collective Realty Co.'
 
   // Different step content for referral vs standard agents
   const stepsContent = isReferral
@@ -362,7 +397,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
       <div class="section-box">
         <h2 class="section-title">Step 2 - Payment</h2>
         <p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>Pay Your Annual Membership Fee</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your $299 annual fee to unlock your agreements and TREC sponsorship. No monthly fees, no processing fees.</p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your $${referralAnnualFee} annual fee to unlock your agreements and TREC sponsorship. No monthly fees, no processing fees.</p>
       </div>
       <div class="section-box">
         <h2 class="section-title">Step 3 - Referral Agent Agreement</h2>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
 import AuthFooter from '@/components/shared/AuthFooter'
@@ -12,6 +12,19 @@ function SuccessContent() {
   const name = searchParams.get('name') || 'there'
   const email = searchParams.get('email') || ''
   const isReferral = searchParams.get('type') === 'referral'
+  
+  const [referralAnnualFee, setReferralAnnualFee] = useState(299)
+
+  useEffect(() => {
+    if (isReferral) {
+      fetch('/api/settings/referral')
+        .then(r => r.json())
+        .then(data => {
+          if (data.settings?.annual_fee) setReferralAnnualFee(data.settings.annual_fee)
+        })
+        .catch(() => {})
+    }
+  }, [isReferral])
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
@@ -53,7 +66,7 @@ function SuccessContent() {
                     </div>
                     <div className="inner-card flex items-start gap-3">
                       <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">02</span>
-                      <p className="text-sm text-luxury-gray-2">Pay your $299 annual membership fee</p>
+                      <p className="text-sm text-luxury-gray-2">Pay your ${referralAnnualFee} annual membership fee</p>
                     </div>
                     <div className="inner-card flex items-start gap-3">
                       <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">03</span>
