@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
         preferred_first_name: prospect.preferred_first_name,
         email: prospect.email,
         join_link: joinLink,
+        mls_choice: prospect.mls_choice,
       })
     } catch (emailError) {
       console.error('Error sending prospect email:', emailError)
