@@ -1301,34 +1301,7 @@ const checkout = new window.Payload.Checkout({
               </div>
             </div>
 
-            {/* Referral */}
-            <div className="container-card">
-              <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-5">
-                Referral & Team
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">Referring Agent</label>
-                  <input
-                    name="referring_agent"
-                    value={joinForm.referring_agent}
-                    onChange={handleChange}
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                    Joining Team (name or team lead)
-                  </label>
-                  <input
-                    name="joining_team"
-                    value={joinForm.joining_team}
-                    onChange={handleChange}
-                    className="input-luxury"
-                  />
-                </div>
-              </div>
-            </div>
+            
 
             {!isReferralAgent && (
               <div className="container-card">
