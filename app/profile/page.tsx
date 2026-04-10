@@ -56,6 +56,7 @@ export default function ProfilePage({
   const [referrerSearch, setReferrerSearch] = useState('')
   const [referrerDropdownOpen, setReferrerDropdownOpen] = useState(false)
   const [monthlyFee, setMonthlyFee] = useState(50)
+  const [referralAnnualFee, setReferralAnnualFee] = useState(299)
 
   // Success/error states
   const [personalError, setPersonalError] = useState<string | null>(null)
@@ -144,6 +145,9 @@ export default function ProfilePage({
 
   // Check if user is a licensed agent
   const isLicensedAgent = user?.is_licensed_agent === true
+  
+  // Check if user is a referral agent
+  const isReferralAgent = user?.role === 'referral' || user?.mls_choice === 'Referral Collective (No MLS)'
 
   const formatDateForInput = (dateStr: string | null | undefined): string => {
     if (!dateStr) return ''
@@ -164,6 +168,13 @@ export default function ProfilePage({
       .then(r => r.json())
       .then(data => {
         if (data.settings?.monthly_fee) setMonthlyFee(data.settings.monthly_fee)
+      })
+      .catch(() => {})
+    
+    fetch('/api/settings/referral')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings?.annual_fee) setReferralAnnualFee(data.settings.annual_fee)
       })
       .catch(() => {})
   }, [])
@@ -1210,6 +1221,7 @@ export default function ProfilePage({
                     >
                       <option value="">Select role...</option>
                       <option value="agent">Agent</option>
+                      <option value="referral">Referral</option>
                       <option value="tc">TC</option>
                       <option value="operations">Operations</option>
                       <option value="broker">Broker</option>
@@ -1381,27 +1393,31 @@ export default function ProfilePage({
                       {formatDateForDisplay(user.join_date) || 'N/A'}
                     </p>
                   </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Commission Plan</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {(() => {
-                        const plan = normalizeCommissionPlan(user.commission_plan || '')
-                        const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30' }
-                        return labels[plan] || user.commission_plan || user.commission_plan_other || 'N/A'
-                      })()}
-                    </p>
-                  </div>
-                  <div className="inner-card">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Lease Plan</p>
-                    <p className="text-sm font-medium text-luxury-gray-1">
-                      {(() => {
-                        const plan = user.lease_commission_plan || 'lease'
-                        if (plan === 'lease') return 'Lease Plan 85/15'
-                        if (plan.toLowerCase().startsWith('custom lease')) return plan
-                        return plan
-                      })()}
-                    </p>
-                  </div>
+                  {!isReferralAgent && (
+                    <>
+                      <div className="inner-card">
+                        <p className="text-xs text-luxury-gray-3 mb-1">Commission Plan</p>
+                        <p className="text-sm font-medium text-luxury-gray-1">
+                          {(() => {
+                            const plan = normalizeCommissionPlan(user.commission_plan || '')
+                            const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30' }
+                            return labels[plan] || user.commission_plan || user.commission_plan_other || 'N/A'
+                          })()}
+                        </p>
+                      </div>
+                      <div className="inner-card">
+                        <p className="text-xs text-luxury-gray-3 mb-1">Lease Plan</p>
+                        <p className="text-sm font-medium text-luxury-gray-1">
+                          {(() => {
+                            const plan = user.lease_commission_plan || 'lease'
+                            if (plan === 'lease') return 'Lease Plan 85/15'
+                            if (plan.toLowerCase().startsWith('custom lease')) return plan
+                            return plan
+                          })()}
+                        </p>
+                      </div>
+                    </>
+                  )}
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Role</p>
                     <p className="text-sm font-medium text-luxury-gray-1 capitalize">
@@ -1570,29 +1586,34 @@ export default function ProfilePage({
                     {formatDateForDisplay(user.license_expiration) || 'N/A'}
                   </p>
                 </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">MLS ID</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">{user.mls_id || 'N/A'}</p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">NRDS ID</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">{user.nrds_id || 'N/A'}</p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Association</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">{user.association || 'N/A'}</p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Association Status (on join)</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.association_status_on_join || 'N/A'}
-                  </p>
-                </div>
+                {!isReferralAgent && (
+                  <>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">MLS ID</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{user.mls_id || 'N/A'}</p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">NRDS ID</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{user.nrds_id || 'N/A'}</p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Association</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{user.association || 'N/A'}</p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Association Status (on join)</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.association_status_on_join || 'N/A'}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
 
           {/* Performance Stats */}
+          {!isReferralAgent && (
           <div className="container-card mb-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
@@ -1629,6 +1650,7 @@ export default function ProfilePage({
               )}
             </div>
           </div>
+          )}
 
           {/* Billing */}
           <div className="container-card mb-5">
@@ -1766,46 +1788,65 @@ export default function ProfilePage({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.monthly_fee_waived ? 'Waived' : `$${monthlyFee}/month`}
-                  </p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Buyer Processing Fees</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.waive_buyer_processing_fees ? 'Waived' : 'Standard'}
-                  </p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Seller Processing Fees</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
-                  </p>
-                </div>
-                {user.admin_notes && (
-                  <div className="inner-card md:col-span-2">
-                    <p className="text-xs text-luxury-gray-3 mb-1">Admin Notes</p>
-                    <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap">
-                      {user.admin_notes}
-                    </p>
-                  </div>
+                {isReferralAgent ? (
+                  <>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Annual Membership</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">${referralAnnualFee}/year</p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Membership Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.onboarding_fee_paid
+                          ? `Paid ${formatDateForDisplay(user.onboarding_fee_paid_date)}`
+                          : 'Not Paid'}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.monthly_fee_waived ? 'Waived' : `$${monthlyFee}/month`}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Buyer Processing Fees</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_buyer_processing_fees ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Seller Processing Fees</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    {user.admin_notes && (
+                      <div className="inner-card md:col-span-2">
+                        <p className="text-xs text-luxury-gray-3 mb-1">Admin Notes</p>
+                        <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap">
+                          {user.admin_notes}
+                        </p>
+                      </div>
+                    )}
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Paid Through</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {formatDateForDisplay(user.monthly_fee_paid_through) || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Onboarding Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.onboarding_fee_paid
+                          ? `Paid ${formatDateForDisplay(user.onboarding_fee_paid_date)}`
+                          : 'Not Paid'}
+                      </p>
+                    </div>
+                  </>
                 )}
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Monthly Fee Paid Through</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {formatDateForDisplay(user.monthly_fee_paid_through) || 'N/A'}
-                  </p>
-                </div>
-                <div className="inner-card">
-                  <p className="text-xs text-luxury-gray-3 mb-1">Onboarding Fee</p>
-                  <p className="text-sm font-medium text-luxury-gray-1">
-                    {user.onboarding_fee_paid
-                      ? `Paid ${formatDateForDisplay(user.onboarding_fee_paid_date)}`
-                      : 'Not Paid'}
-                  </p>
-                </div>
               </div>
             )}
           </div>
