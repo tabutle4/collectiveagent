@@ -489,6 +489,34 @@ function ProspectiveAgentFormContent() {
                         />
                       </div>
                     )}
+                    {!isReferralAgent && (
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          If an agent referred you, please list their name below
+                        </label>
+                        <input
+                          name="referring_agent"
+                          type="text"
+                          value={formData.referring_agent}
+                          onChange={handleChange}
+                          className="input-luxury"
+                        />
+                      </div>
+                    )}
+                    {!isReferralAgent && (
+                      <div>
+                        <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                          Are you joining a team after onboarding? If so, please list the team name or team lead below
+                        </label>
+                        <input
+                          name="joining_team"
+                          type="text"
+                          value={formData.joining_team}
+                          onChange={handleChange}
+                          className="input-luxury"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
