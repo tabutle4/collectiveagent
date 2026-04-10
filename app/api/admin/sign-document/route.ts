@@ -191,6 +191,9 @@ export async function POST(request: NextRequest) {
         await cancelPayloadSubscription(agent.payload_payee_id)
       }
       
+      // Get referral settings for dynamic fee in checklist email
+      const referralFee = isReferralAgent ? (await getReferralSettings()).annual_fee : 0
+      
       await supabaseAdmin.from('users').update({
         status: 'active',
         is_active: true,
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Verify First</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship invitation has been accepted</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Annual membership payment received ($299)</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Annual membership payment received ($${referralFee})</p>
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">

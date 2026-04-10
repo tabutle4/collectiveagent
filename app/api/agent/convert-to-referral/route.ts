@@ -5,55 +5,6 @@ import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
-const authHeader = () =>
-  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
-
-// Cancel active Payload billing schedules for a customer
-async function cancelPayloadSubscription(payloadCustomerId: string): Promise<boolean> {
-  try {
-    // Find active billing schedules for this customer
-    const schedRes = await fetch(
-      `https://api.payload.com/billing_schedules/?customer_id=${payloadCustomerId}&limit=10`,
-      { headers: { Authorization: authHeader() } }
-    )
-    
-    if (!schedRes.ok) {
-      console.error('Failed to fetch billing schedules:', await schedRes.text())
-      return false
-    }
-    
-    const schedData = await schedRes.json()
-    const schedules = schedData.values || []
-    
-    if (schedules.length === 0) {
-      console.log('No billing schedules found for customer:', payloadCustomerId)
-      return true
-    }
-    
-    // Delete each billing schedule
-    for (const schedule of schedules) {
-      const deleteRes = await fetch(
-        `https://api.payload.com/billing_schedules/${schedule.id}`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: authHeader() },
-        }
-      )
-      
-      if (deleteRes.ok) {
-        console.log('Cancelled billing schedule:', schedule.id)
-      } else {
-        console.error('Failed to cancel billing schedule:', schedule.id, await deleteRes.text())
-      }
-    }
-    
-    return true
-  } catch (error) {
-    console.error('Error cancelling Payload subscription:', error)
-    return false
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Require authenticated user

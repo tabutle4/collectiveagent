@@ -38,6 +38,7 @@ export async function GET() {
       )
       .eq('is_active', true)
       .eq('is_licensed_agent', true)
+      .neq('mls_choice', 'Referral Collective (No MLS)')
 
     if (fetchError) {
       console.error('❌ Error fetching users for roster:', fetchError)
