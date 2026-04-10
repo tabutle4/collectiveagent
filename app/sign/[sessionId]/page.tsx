@@ -118,6 +118,15 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
   }
 
   const { agent, session, documents } = data
+  const isReferralAgent = agent.isReferralAgent
+
+  // Build completed steps list based on agent type
+  const completedSteps = [
+    { label: 'Onboarding Fee Paid', done: agent.onboardingFeePaid, date: agent.onboardingFeePaidDate },
+    { label: isReferralAgent ? 'Referral ICA Signed by Agent' : 'ICA Signed by Agent', done: !!agent.icaSignedAt, date: agent.icaSignedAt },
+    // Only show commission plan step for standard agents
+    ...(!isReferralAgent ? [{ label: 'Commission Plan Signed by Agent', done: !!agent.commissionPlanSignedAt, date: agent.commissionPlanSignedAt }] : []),
+  ]
 
   return (
     <PageShell>
@@ -126,9 +135,9 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
         {done ? (
           <div className="container-card text-center py-12 space-y-4">
             <CheckCircle2 size={40} className="text-green-600 mx-auto" />
-            <h2 className="text-lg font-semibold text-luxury-gray-1">Both Documents Signed</h2>
+            <h2 className="text-lg font-semibold text-luxury-gray-1">{isReferralAgent ? 'Agreement Signed' : 'Both Documents Signed'}</h2>
             <p className="text-sm text-luxury-gray-3">
-              Your signature has been embedded in both agreements and saved to OneDrive.
+              Your signature has been embedded in {isReferralAgent ? 'the agreement' : 'both agreements'} and saved to OneDrive.
               {' '}{agent.preferredName} is now active in the system.
             </p>
             <button
@@ -142,7 +151,7 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
           <div className="space-y-5">
             <div className="text-center mb-2">
               <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-1">Co-Signature Required</h1>
-              <p className="text-sm text-luxury-gray-3">Review the agreements below and confirm your co-signature.</p>
+              <p className="text-sm text-luxury-gray-3">Review {isReferralAgent ? 'the agreement' : 'the agreements'} below and confirm your co-signature.</p>
             </div>
 
             {/* ── Agent Summary ── */}
@@ -151,6 +160,9 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Agent</p>
                 <div className="flex items-center gap-2">
                   <p className="text-base font-semibold text-luxury-gray-1">{agent.preferredName}</p>
+                  {isReferralAgent && (
+                    <span className="text-xs bg-luxury-gold/10 text-luxury-accent px-2 py-0.5 rounded-full">Referral</span>
+                  )}
                   <a
                     href={`/admin/prospects/${sessionId}`}
                     target="_blank"
@@ -164,19 +176,18 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 <p className="text-xs text-luxury-gray-3">{agent.email}</p>
               </div>
 
+              {/* Only show commission plan for standard agents */}
+              {!isReferralAgent && (
               <div className="pt-3 border-t border-luxury-gray-5/50">
                 <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Commission Plan</p>
                 <p className="text-sm font-medium text-luxury-accent">{agent.commissionPlan || 'Not set'}</p>
               </div>
+              )}
 
               <div className="pt-3 border-t border-luxury-gray-5/50">
                 <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Completed Steps</p>
                 <div className="space-y-2">
-                  {[
-                    { label: 'Onboarding Fee Paid', done: agent.onboardingFeePaid, date: agent.onboardingFeePaidDate },
-                    { label: 'ICA Signed by Agent', done: !!agent.icaSignedAt, date: agent.icaSignedAt },
-                    { label: 'Commission Plan Signed by Agent', done: !!agent.commissionPlanSignedAt, date: agent.commissionPlanSignedAt },
-                  ].map(({ label, done: stepDone, date }) => (
+                  {completedSteps.map(({ label, done: stepDone, date }) => (
                     <div key={label} className="flex items-center gap-2">
                       {stepDone
                         ? <CheckCircle2 size={15} className="text-green-600 flex-shrink-0" />
@@ -226,7 +237,9 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 onClick={() => setIcaExpanded(v => !v)}
               >
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-luxury-gray-1">Independent Contractor Agreement</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {isReferralAgent ? 'Referral Agent Independent Contractor Agreement' : 'Independent Contractor Agreement'}
+                  </p>
                   <p className="text-xs text-luxury-gray-3 mt-0.5">Tap to review before signing</p>
                 </div>
                 {icaExpanded
@@ -253,7 +266,8 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
               )}
             </div>
 
-            {/* ── Commission Plan Preview ── */}
+            {/* ── Commission Plan Preview (standard agents only) ── */}
+            {!isReferralAgent && (
             <div className="container-card">
               <button
                 className="w-full flex items-center justify-between"
@@ -288,6 +302,7 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 </div>
               )}
             </div>
+            )}
 
             {/* ── Broker Signature ── */}
             <div className="container-card">
@@ -301,8 +316,8 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
             </div>
 
             <p className="text-xs text-luxury-gray-3 text-center px-4">
-              By clicking Confirm &amp; Sign, your signature will be embedded in both agreements
-              for {agent.preferredName} and both documents will be saved to OneDrive.
+              By clicking Confirm &amp; Sign, your signature will be embedded in {isReferralAgent ? 'the agreement' : 'both agreements'}
+              {' '}for {agent.preferredName} and {isReferralAgent ? 'the document' : 'both documents'} will be saved to OneDrive.
             </p>
 
             {error && <p className="text-xs text-red-600 text-center">{error}</p>}
@@ -319,7 +334,7 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 disabled={signing}
                 className="btn btn-primary flex-1 py-3.5 text-sm tracking-widest uppercase disabled:opacity-50"
               >
-                {signing ? 'Signing...' : 'Confirm & Sign Both →'}
+                {signing ? 'Signing...' : isReferralAgent ? 'Confirm & Sign →' : 'Confirm & Sign Both →'}
               </button>
             </div>
           </div>

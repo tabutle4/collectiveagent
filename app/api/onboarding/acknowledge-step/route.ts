@@ -17,10 +17,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'token and step are required' }, { status: 400 })
     }
 
-    // Authenticate by campaign_token
+    // Authenticate by campaign_token - include mls_choice to determine agent type
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email')
+      .select('id, first_name, last_name, email, mls_choice')
       .eq('campaign_token', token)
       .eq('status', 'prospect')
       .single()
@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired onboarding link' }, { status: 404 })
     }
 
+    const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
     const agentName = `${prospect.first_name} ${prospect.last_name}`
+    const agentType = isReferralAgent ? 'Referral' : 'Standard'
     const completedAtField = `step_${step}_completed_at`
     const nextStep = step + 1
 
@@ -43,14 +45,16 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id' }
     )
 
-    // Step 6 - agent acknowledged W-9 and is moving to TREC: notify office to submit TREC invite
-    if (step === 6) {
+    // W-9 step completed - notify office to submit TREC invite
+    // Referral: W-9 is step 5, Standard: W-9 is step 6
+    const isW9Step = (isReferralAgent && step === 5) || (!isReferralAgent && step === 6)
+    if (isW9Step) {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
         subject: `Action Required: Submit TREC Sponsorship for ${agentName}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has completed all onboarding steps and is ready for TREC sponsorship.</p>
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> (${agentType} Agent) has completed all onboarding steps and is ready for TREC sponsorship.</p>
           <p style="margin:0 0 12px;font-size:14px;color:#555;">Please submit their TREC sponsorship invitation now.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
           { title: 'TREC Sponsorship Needed', preheader: `Submit TREC invite for ${agentName}` }

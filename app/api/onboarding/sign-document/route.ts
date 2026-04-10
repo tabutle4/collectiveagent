@@ -209,13 +209,14 @@ export async function POST(request: NextRequest) {
 
     // Notify office when policy manual is signed
     if (documentType === 'policy_manual') {
+      const w9StepNumber = isReferralAgent ? 5 : 6
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Policy Manual Signed for ${agentName}`,
+        subject: `Policy Manual Signed for ${agentName}${isReferralAgent ? ' (Referral)' : ''}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed and acknowledged the Policy Manual.</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#555;">They are now on Step 6 (W-9). Please send their W-9 request via Track1099.</p>
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong>${isReferralAgent ? ' (Referral Agent)' : ''} has signed and acknowledged the Policy Manual.</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">They are now on Step ${w9StepNumber} (W-9). Please send their W-9 request via Track1099.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
           { title: 'Policy Manual Signed', preheader: `${agentName} acknowledged the policy manual` }
         ),
