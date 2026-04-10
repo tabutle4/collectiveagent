@@ -69,8 +69,8 @@ export async function POST(request: NextRequest) {
     const { name, options } = getSessionCookieOptions()
     const userRole = (user.role || '').toLowerCase()
     const redirectPath = ADMIN_ROLES.includes(userRole as any)
-  ? '/admin/dashboard'
-  : '/profile'
+      ? '/admin/dashboard'
+      : '/agent/profile'
 
     const response = NextResponse.json({
       message: 'Login successful',

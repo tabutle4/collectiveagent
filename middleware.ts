@@ -98,11 +98,17 @@ export async function middleware(request: NextRequest) {
 
   // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
-    return NextResponse.redirect(new URL('/profile', request.url))
+    return NextResponse.redirect(new URL('/agent/profile', request.url))
   }
 
   if (pathname.startsWith('/agent') && isAdminRole) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url))
+  }
+
+  // Redirect agents from restricted pages to profile
+  const restrictedAgentPages = ['/agent/dashboard', '/agent/transactions']
+  if (!isAdminRole && restrictedAgentPages.some(p => pathname.startsWith(p))) {
+    return NextResponse.redirect(new URL('/agent/profile', request.url))
   }
 
   // Add user info to headers for server components
