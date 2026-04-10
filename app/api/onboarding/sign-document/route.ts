@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
 import { getICAContent } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
+import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import {
   getCommissionPlanContent,
   getCommissionPlanKey,
@@ -82,13 +83,14 @@ export async function POST(request: NextRequest) {
 
     if (documentType === 'ica') {
       if (isReferralAgent) {
+        const referralSettings = await getReferralSettings()
         pdfContent = getReferralICAContent({
           agentFirstName: prospect.first_name,
           agentLastName: prospect.last_name,
           effectiveDate,
           mailingAddress: mailingParts,
           email: prospect.email,
-        })
+        }, referralSettings)
       } else {
         pdfContent = getICAContent({
           agentFirstName: prospect.first_name,

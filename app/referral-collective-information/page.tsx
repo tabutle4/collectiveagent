@@ -12,6 +12,23 @@ export default function ReferralCollectiveInformationPage() {
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
   const [userName, setUserName] = useState('')
+  const [referralSettings, setReferralSettings] = useState({
+    annual_fee: 299,
+    split_apartment: 85,
+    split_internal: 90,
+    split_external: 88,
+    brokerage_name: 'Referral Collective',
+  })
+
+  // Fetch referral settings
+  useEffect(() => {
+    fetch('/api/settings/referral')
+      .then(r => r.json())
+      .then(data => {
+        if (data.settings) setReferralSettings(data.settings)
+      })
+      .catch(() => {})
+  }, [])
 
   // Check if user is signed in
   useEffect(() => {
@@ -34,7 +51,7 @@ export default function ReferralCollectiveInformationPage() {
 
   // Handle conversion for signed-in agents
   async function handleConvertToReferral() {
-    if (!confirm('This will convert your account to Referral Collective. You will need to complete the referral onboarding process, sign the new ICA, and pay the $299 annual fee. Your current monthly subscription will be cancelled. Continue?')) {
+    if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process, sign the new ICA, and pay the $${referralSettings.annual_fee} annual fee. Your current monthly subscription will be cancelled. Continue?`)) {
       return
     }
 
@@ -88,7 +105,7 @@ export default function ReferralCollectiveInformationPage() {
           
           {/* Page Header */}
           <div className="text-center mb-8">
-            <h1 className="page-title mb-1">Referral Collective</h1>
+            <h1 className="page-title mb-1">{referralSettings.brokerage_name}</h1>
             <p className="text-xs font-semibold text-luxury-accent uppercase tracking-widest mb-3">
               Referral-Only Brokerage · Texas
             </p>
@@ -137,32 +154,32 @@ export default function ReferralCollectiveInformationPage() {
               <div className="inner-card">
                 <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-2 mt-2">Apartment Referrals</p>
                 <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-1">To CRC Agents</p>
-                <p className="text-4xl font-bold text-luxury-gray-1 text-center">85%</p>
+                <p className="text-4xl font-bold text-luxury-gray-1 text-center">{referralSettings.split_apartment}%</p>
                 <p className="text-xs text-luxury-gray-3 text-center mb-1">to you</p>
-                <p className="text-xs text-luxury-gray-3 text-center">15% brokerage split</p>
+                <p className="text-xs text-luxury-gray-3 text-center">{100 - referralSettings.split_apartment}% brokerage split</p>
               </div>
               
               {/* Buyer/Seller/Tenant/Landlord */}
               <div className="inner-card">
                 <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-2 mt-2">Buyer / Seller / Tenant / Landlord</p>
-                <p className="text-4xl font-bold text-luxury-gray-1 text-center">90%</p>
+                <p className="text-4xl font-bold text-luxury-gray-1 text-center">{referralSettings.split_internal}%</p>
                 <p className="text-xs text-luxury-gray-3 text-center mb-1">to you</p>
-                <p className="text-xs text-luxury-gray-3 text-center">10% brokerage split</p>
+                <p className="text-xs text-luxury-gray-3 text-center">{100 - referralSettings.split_internal}% brokerage split</p>
               </div>
               
               {/* External Referrals */}
               <div className="inner-card">
                 <p className="text-xs text-luxury-gray-3 uppercase tracking-wider text-center mb-2 mt-2">External Referrals</p>
-                <p className="text-4xl font-bold text-luxury-gray-1 text-center">88%</p>
+                <p className="text-4xl font-bold text-luxury-gray-1 text-center">{referralSettings.split_external}%</p>
                 <p className="text-xs text-luxury-gray-3 text-center mb-1">to you</p>
-                <p className="text-xs text-luxury-gray-3 text-center">12% brokerage split</p>
+                <p className="text-xs text-luxury-gray-3 text-center">{100 - referralSettings.split_external}% brokerage split</p>
                 <p className="text-xs text-luxury-gray-3 text-center mt-2">Out-of-state or in-state to other brokerages</p>
               </div>
             </div>
 
             {/* Annual Fee */}
             <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 flex flex-col md:flex-row items-center gap-4 p-5">
-              <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">$299 / year</span>
+              <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">${referralSettings.annual_fee} / year</span>
               <p className="text-sm text-luxury-gray-2">
                 <strong className="text-luxury-gray-1">Annual membership fee.</strong> No monthly fees. No contracts. No lock-in. Just one simple annual payment to keep your license active and earning.
               </p>
@@ -366,7 +383,7 @@ export default function ReferralCollectiveInformationPage() {
           {/* Footer Brand */}
           <div className="flex items-center justify-between pt-4 border-t border-luxury-gray-5">
             <span className="text-xs font-semibold text-luxury-gray-1 uppercase tracking-wider">
-              Referral Collective
+              {referralSettings.brokerage_name}
             </span>
             <span className="text-xs text-luxury-gray-3">
               TREC Licensed Brokerage · Texas

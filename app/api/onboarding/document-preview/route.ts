@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getICAContent } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
+import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 
@@ -43,21 +44,24 @@ export async function GET(request: NextRequest) {
     const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
     
     if (documentType === 'ica') {
-      content = isReferralAgent
-        ? getReferralICAContent({
-            agentFirstName: prospect.first_name,
-            agentLastName: prospect.last_name,
-            effectiveDate,
-            mailingAddress,
-            email: prospect.email,
-          })
-        : getICAContent({
-        agentFirstName: prospect.first_name,
-        agentLastName: prospect.last_name,
-        effectiveDate,
-        mailingAddress,
-        email: prospect.email,
-      })
+      if (isReferralAgent) {
+        const referralSettings = await getReferralSettings()
+        content = getReferralICAContent({
+          agentFirstName: prospect.first_name,
+          agentLastName: prospect.last_name,
+          effectiveDate,
+          mailingAddress,
+          email: prospect.email,
+        }, referralSettings)
+      } else {
+        content = getICAContent({
+          agentFirstName: prospect.first_name,
+          agentLastName: prospect.last_name,
+          effectiveDate,
+          mailingAddress,
+          email: prospect.email,
+        })
+      }
     } else if (documentType === 'commission_plan') {
       const planKey = getCommissionPlanKey(prospect.commission_plan || '')
       content = getCommissionPlanContent({

@@ -628,22 +628,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Apartment Locating */}
-                  <div className="inner-card">
-                    <h3 className="text-sm font-semibold text-luxury-gray-1 mb-4">Apartment Locating</h3>
-                    <div>
-                      <label className="field-label">Invoice Management Fee ($)</label>
-                      <input
-                        type="number"
-                        value={settings.apartment_invoice_fee}
-                        onChange={(e) => updateSetting('apartment_invoice_fee', Number(e.target.value))}
-                        className="input-luxury"
-                      />
-                      <p className="text-xs text-luxury-gray-3 mt-1">
-                        Mandatory fee for apartment locating. Covers vendor setup, invoicing, and electronic payment processing.
-                      </p>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
