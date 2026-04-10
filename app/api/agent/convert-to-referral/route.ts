@@ -85,37 +85,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only active agents can convert to Referral Collective' }, { status: 400 })
     }
 
-    // Cancel Payload monthly subscription if customer exists
-    if (user.payload_payee_id) {
-      const cancelled = await cancelPayloadSubscription(user.payload_payee_id)
-      if (!cancelled) {
-        console.warn('Could not cancel Payload subscription for user:', userId)
-        // Don't fail the conversion - just log the warning
-      }
-    }
-
     // Generate new campaign token for onboarding
     const newCampaignToken = crypto.randomUUID()
 
-    // Update user to prospect status with referral mls_choice
+    // Minimal changes - just start the conversion process
+    // Payload cancellation and field clearing happen when Courtney signs
     const { error: updateError } = await supabaseAdmin
       .from('users')
       .update({
         status: 'prospect',
         mls_choice: 'Referral Collective (No MLS)',
         campaign_token: newCampaignToken,
-        monthly_fee_waived: true, // Referral agents don't pay monthly fees
-        // Clear ICA fields - they need to sign new Referral ICA
-        independent_contractor_agreement_signed: false,
-        ica_signed_at: null,
-        ica_document_url: null,
-        // Clear commission plan fields - referral agents have fixed splits
-        commission_plan: null,
-        commission_plan_agreement_signed: false,
-        commission_plan_agreement_signed_at: null,
-        commission_plan_agreement_url: null,
-        // Keep debts (they carry over)
-        // Keep personal info, W-9 status, etc.
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)
@@ -153,6 +133,7 @@ export async function POST(request: NextRequest) {
         step_2_completed_at: isFreeConversion ? new Date().toISOString() : null, // Skip payment only if fully free
         payment_waived: isFreeConversion, // Track that fee was fully waived
         discount_amount: discountAmount, // Track discount amount
+        previous_mls_choice: user.mls_choice, // Store original MLS for cancel/revert
         step_3_completed_at: null,
         step_4_completed_at: null,
         step_5_completed_at: null,

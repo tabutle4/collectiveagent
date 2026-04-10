@@ -482,6 +482,8 @@ export default function OnboardingPage() {
   const [paymentPaid, setPaymentPaid] = useState(false)
   const [paymentWaived, setPaymentWaived] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
+  const [isConversion, setIsConversion] = useState(false) // True if existing agent converting to referral
+  const [cancelling, setCancelling] = useState(false)
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
@@ -621,6 +623,7 @@ export default function OnboardingPage() {
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
       if (data.session?.payment_waived) setPaymentWaived(true)
       if (data.session?.discount_amount) setDiscountAmount(data.session.discount_amount)
+      if (data.session?.previous_mls_choice) setIsConversion(true)
       const s = data.session || {}
       setCompletedSteps({
         2: !!s.step_2_completed_at,
@@ -838,6 +841,36 @@ const checkout = new window.Payload.Checkout({
               <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
                 Let's get you set up. Please confirm your information and complete the fields below.
               </p>
+              {/* Cancel conversion link for existing agents switching to referral */}
+              {isConversion && isReferralAgent && (
+                <p className="text-xs text-luxury-gray-3 mt-3">
+                  Changed your mind?{' '}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm('Cancel this conversion and return to your original agent status?')) return
+                      setCancelling(true)
+                      try {
+                        const res = await fetch('/api/agent/cancel-conversion', { method: 'POST' })
+                        if (res.ok) {
+                          window.location.href = '/profile'
+                        } else {
+                          const data = await res.json()
+                          alert(data.error || 'Failed to cancel')
+                        }
+                      } catch {
+                        alert('Failed to cancel')
+                      } finally {
+                        setCancelling(false)
+                      }
+                    }}
+                    disabled={cancelling}
+                    className="text-luxury-accent hover:text-luxury-gray-1 underline transition-colors disabled:opacity-50"
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel and return to agent status'}
+                  </button>
+                </p>
+              )}
             </div>
 
             {error && (

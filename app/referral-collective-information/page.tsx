@@ -202,16 +202,20 @@ export default function ReferralCollectiveInformationPage() {
                 <div className="flex flex-col md:flex-row md:items-center gap-4">
                   <div className="flex items-baseline gap-3">
                     <span className="text-3xl font-bold text-chart-gold-9">
-                      {referralSettings.promo_discount >= referralSettings.annual_fee ? 'FREE' : `$${referralSettings.annual_fee - referralSettings.promo_discount}`}
+                      {referralSettings.promo_discount >= referralSettings.annual_fee 
+                        ? 'FREE' 
+                        : `$${referralSettings.annual_fee - referralSettings.promo_discount}`}
                     </span>
                     <span className="text-sm text-luxury-gray-3">
                       <span className="line-through">${referralSettings.annual_fee}</span>
                       <span className="ml-2">first year</span>
                     </span>
                   </div>
-                  <p className="text-sm text-luxury-gray-2">
-                    <strong className="text-luxury-gray-1">Limited time for CRC agents.</strong> Renews at ${referralSettings.annual_fee}/year. No monthly fees. No contracts.
-                  </p>
+                  <div className="flex-1">
+                    <p className="text-sm text-luxury-gray-2">
+                      <strong className="text-luxury-gray-1">Limited time offer for CRC agents.</strong> Renews at ${referralSettings.annual_fee}/year. No monthly fees. No contracts.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col md:flex-row items-center gap-4">

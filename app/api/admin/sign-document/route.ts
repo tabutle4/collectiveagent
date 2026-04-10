@@ -14,6 +14,33 @@ import path from 'path'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+const plAuth = () =>
+  'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
+// Cancel active Payload billing schedules for a customer
+async function cancelPayloadSubscription(payloadCustomerId: string): Promise<boolean> {
+  try {
+    const schedRes = await fetch(
+      `https://api.payload.com/billing_schedules/?customer_id=${payloadCustomerId}&limit=10`,
+      { headers: { Authorization: plAuth() } }
+    )
+    if (!schedRes.ok) return false
+    const schedData = await schedRes.json()
+    const schedules = schedData.values || []
+    for (const schedule of schedules) {
+      if (schedule.status === 'active') {
+        await fetch(`https://api.payload.com/billing_schedules/${schedule.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: plAuth() },
+        })
+      }
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
@@ -30,7 +57,7 @@ export async function POST(request: NextRequest) {
     const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status'
+        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status, payload_payee_id'
       )
       .eq('id', userId)
       .single()
@@ -158,6 +185,12 @@ export async function POST(request: NextRequest) {
 
     if (allDocsDone && freshAgent?.status === 'prospect') {
       const agentType = isReferralAgent ? 'referral' : 'agent'
+      
+      // For referral agents converting from CRC: cancel Payload subscription
+      if (isReferralAgent && agent.payload_payee_id) {
+        await cancelPayloadSubscription(agent.payload_payee_id)
+      }
+      
       await supabaseAdmin.from('users').update({
         status: 'active',
         is_active: true,
@@ -165,7 +198,14 @@ export async function POST(request: NextRequest) {
         role: agentType,
         join_date: today.toISOString().split('T')[0],
         // Referral agents don't pay monthly fees
-        ...(isReferralAgent && { monthly_fee_waived: true }),
+        ...(isReferralAgent && { 
+          monthly_fee_waived: true,
+          // Clear commission plan fields - referral agents have fixed splits
+          commission_plan: null,
+          commission_plan_agreement_signed: false,
+          commission_plan_agreement_signed_at: null,
+          commission_plan_agreement_url: null,
+        }),
       }).eq('id', agent.id)
 
       // Different checklist for referral vs standard agents
