@@ -86,7 +86,7 @@ export async function middleware(request: NextRequest) {
   const userRole = session.user.role?.toLowerCase() || ''
   const isAdminRole = ADMIN_ROLES.includes(userRole as RoleName)
 
-  // Shared paths — accessible to all authenticated users, no role redirect
+  // Shared paths - accessible to all authenticated users, no role redirect
   if (isSharedPath(pathname)) {
     const requestHeaders = new Headers(request.headers)
     requestHeaders.set('x-user-id', session.user.id)

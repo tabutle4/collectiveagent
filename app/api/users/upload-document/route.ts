@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (error || !user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-    // Always rebuild folder path deterministically — same formula as onboarding
+    // Always rebuild folder path deterministically - same formula as onboarding
     const sanitizedName = `${user.first_name} ${user.last_name}`.replace(/[/\\?%*:|"<>]/g, '-')
     const folderPath = `Agent Documents/${sanitizedName}-${user.id}`
 

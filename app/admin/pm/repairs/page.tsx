@@ -336,7 +336,7 @@ export default function RepairsPage() {
                           </div>
                         </div>
                       ) : (
-                        <span className="text-luxury-gray-3">—</span>
+                        <span className="text-luxury-gray-3">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -351,7 +351,7 @@ export default function RepairsPage() {
                       ) : repair.estimated_cost ? (
                         <span className="text-xs text-luxury-gray-3">~{formatMoney(repair.estimated_cost)}</span>
                       ) : (
-                        <span className="text-xs text-luxury-gray-3">—</span>
+                        <span className="text-xs text-luxury-gray-3">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4">

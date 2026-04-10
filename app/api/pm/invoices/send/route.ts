@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         .eq('id', tenant.id)
     }
 
-    // Create payment link (NOT invoice — payment_links returns URL)
+    // Create payment link (NOT invoice - payment_links returns URL)
     const description = property
       ? `Rent - ${property.property_address}, ${property.city} - ${invoice.period_month}/${invoice.period_year}`
       : `Rent Payment - ${invoice.period_month}/${invoice.period_year}`

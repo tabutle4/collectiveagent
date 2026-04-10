@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // Page sends: update_user, { user_id, updates } — used for pre-access step toggles
+    // Page sends: update_user, { user_id, updates } - used for pre-access step toggles
     if (action === 'update_user') {
       const { user_id, updates } = body
       await supabase.from('users').update(updates).eq('id', user_id)
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       const { user_id, current } = body
       await supabase.from('users').update({ full_nav_access: !current }).eq('id', user_id)
 
-      // When granting access (not revoking), all setup is confirmed done — send the task reminder
+      // When granting access (not revoking), all setup is confirmed done - send the task reminder
       if (!current) {
         const { data: agent } = await supabase
           .from('users')

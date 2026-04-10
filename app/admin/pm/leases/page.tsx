@@ -203,12 +203,12 @@ export default function LeasesPage() {
                         <div className="text-xs text-luxury-gray-3">{lease.tenants.email}</div>
                       </div>
                     ) : (
-                      <span className="text-luxury-gray-3">—</span>
+                      <span className="text-luxury-gray-3">-</span>
                     )}
                   </td>
                   <td className="py-3 px-4">
                     <div className="text-sm text-luxury-gray-1">
-                      {formatDate(lease.lease_start)} — {formatDate(lease.lease_end)}
+                      {formatDate(lease.lease_start)} - {formatDate(lease.lease_end)}
                     </div>
                     {isExpiringSoon(lease) && (
                       <div className="flex items-center gap-1 mt-1">

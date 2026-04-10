@@ -75,7 +75,7 @@ function computeAgentNet(form: any): number {
 }
 
 function compute1099(form: any): number {
-  // 1099 does not deduct debts — debt repayment is not a reduction in taxable income
+  // 1099 does not deduct debts - debt repayment is not a reduction in taxable income
   return (
     num(form.agent_gross) +
     num(form.btsa_amount) -
@@ -573,7 +573,7 @@ export default function CloseTransactionModal({
     setSaving(true)
     setError(null)
     try {
-      // 1 — Update transaction
+      // 1 - Update transaction
       const txnUpdates: Record<string, any> = {
         status: 'closed',
         transaction_type: form.transaction_type || null,
@@ -601,7 +601,7 @@ export default function CloseTransactionModal({
       if (txn.revenue_share_recipient_id) txnUpdates.revenue_share_amount = parseNum(form.revenue_share_amount)
       await callAction('update_transaction', { updates: txnUpdates })
 
-      // 2 — Update existing internal agents
+      // 2 - Update existing internal agents
       for (const a of agents) {
         const af = agentForms[a.id]
         if (!af) continue
@@ -628,7 +628,7 @@ export default function CloseTransactionModal({
         })
       }
 
-      // 3 — Add new internal agent rows
+      // 3 - Add new internal agent rows
       for (const row of newAgentRows) {
         if (!row.agent_id) continue
         const computedNet = computeAgentNet(row)
@@ -655,7 +655,7 @@ export default function CloseTransactionModal({
         })
       }
 
-      // 4 — Update existing external brokerages
+      // 4 - Update existing external brokerages
       for (const b of externalBrokerages) {
         const bf = externalForms[b.id]
         if (!bf) continue
@@ -682,7 +682,7 @@ export default function CloseTransactionModal({
         })
       }
 
-      // 5 — Add new external brokerage rows
+      // 5 - Add new external brokerage rows
       for (const row of newBrokerageRows) {
         if (!row.brokerage_name) continue
         await callAction('add_external_brokerage', {
@@ -707,7 +707,7 @@ export default function CloseTransactionModal({
         })
       }
 
-      // 6 — Create check if needed
+      // 6 - Create check if needed
       if (!check && form.check_amount && form.received_date) {
         await callAction('create_check', {
           check: {
@@ -924,7 +924,7 @@ export default function CloseTransactionModal({
                   const af = agentForms[a.id] || {}
                   return (
                     <div key={a.id} className="inner-card space-y-3">
-                      {/* Agent search — change which agent this row is assigned to */}
+                      {/* Agent search - change which agent this row is assigned to */}
                       <div className="relative">
                         <label className="field-label">Agent</label>
                         <input

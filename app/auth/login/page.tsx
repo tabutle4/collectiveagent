@@ -192,7 +192,7 @@ export default function LoginPage() {
         }}
       >
         <div style={{ width: '100%', maxWidth: '480px' }}>
-          {/* Card — solid white, no transparency */}
+          {/* Card - solid white, no transparency */}
           <div
             style={{
               backgroundColor: 'white',

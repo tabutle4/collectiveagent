@@ -326,7 +326,7 @@ export default function InvoicesPage() {
                           <div className="text-xs text-luxury-gray-3">{invoice.tenants.email}</div>
                         </div>
                       ) : (
-                        <span className="text-luxury-gray-3">—</span>
+                        <span className="text-luxury-gray-3">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4">

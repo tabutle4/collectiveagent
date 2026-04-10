@@ -392,7 +392,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
         )}
       </div>
 
-      {/* Tabs — scrollable on mobile */}
+      {/* Tabs - scrollable on mobile */}
       <div className="flex gap-1 mb-4 bg-luxury-light rounded-lg p-1 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('calendar')}
@@ -411,7 +411,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
       {/* ─── CALENDAR TAB ─── */}
       {activeTab === 'calendar' && (
         <>
-          {/* Outlook tip + Attendance info — collapsible */}
+          {/* Outlook tip + Attendance info - collapsible */}
           <div className="container-card border-l-2 border-luxury-accent mb-4">
             <button
               onClick={() => setOutlookTipOpen(!outlookTipOpen)}
@@ -597,7 +597,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                         </p>
                         {!event.isAllDay && event.start.dateTime && (
                           <p className="text-xs text-luxury-gray-3 mt-0.5">
-                            {formatTime(event.start.dateTime)} — {formatTime(event.end.dateTime)}
+                            {formatTime(event.start.dateTime)} - {formatTime(event.end.dateTime)}
                           </p>
                         )}
                         {event.location?.displayName && (
@@ -779,7 +779,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                       <p className="text-xs font-semibold text-luxury-gray-1">{event.subject}</p>
                       {!event.isAllDay && event.start.dateTime && (
                         <p className="text-xs text-luxury-gray-3 mt-0.5">
-                          {formatTime(event.start.dateTime)} — {formatTime(event.end.dateTime)}
+                          {formatTime(event.start.dateTime)} - {formatTime(event.end.dateTime)}
                         </p>
                       )}
                       {event.isAllDay && (
@@ -835,7 +835,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                   <div className="flex items-center gap-2">
                     <Clock size={14} className="text-luxury-gray-3 flex-shrink-0" />
                     <p className="text-xs text-luxury-gray-2">
-                      {formatTime(selectedEvent.start.dateTime)} —{' '}
+                      {formatTime(selectedEvent.start.dateTime)} -{' '}
                       {formatTime(selectedEvent.end.dateTime)}
                     </p>
                   </div>

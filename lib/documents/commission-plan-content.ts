@@ -51,11 +51,11 @@ const PLAN_CONTENT: Record<CommissionPlanKey, { intro: string; tableRows: string
     ],
   },
   cap: {
-    intro: `The Salesperson has selected the Cap Plan. This plan applies to all buyer deals, commercial deals, and listing transactions. Starting with a competitive split, once the Salesperson has paid a predetermined amount to the Agency, they will benefit from a 97/3 split for the remainder of the cap year. The 3% in the post-cap split represents the post-cap processing fee — no additional brokerage processing fee is charged on post-cap transactions.`,
+    intro: `The Salesperson has selected the Cap Plan. This plan applies to all buyer deals, commercial deals, and listing transactions. Starting with a competitive split, once the Salesperson has paid a predetermined amount to the Agency, they will benefit from a 97/3 split for the remainder of the cap year. The 3% in the post-cap split represents the post-cap processing fee - no additional brokerage processing fee is charged on post-cap transactions.`,
     tableRows: [
       'Commission Split: 70 / 30 (Agent / Agency)',
       'Cap: $18,000',
-      'Post-Cap Split: 97 / 3 (Agent / Agency) — the 3% includes the post-cap processing fee',
+      'Post-Cap Split: 97 / 3 (Agent / Agency) - the 3% includes the post-cap processing fee',
       'Applies To: All buyer, commercial, and listing transactions',
       'Brokerage Processing Fee: May apply based on transaction type (waived post-cap)',
     ],

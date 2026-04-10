@@ -38,7 +38,7 @@ export default function TransactionDetailPage() {
   return (
     <div>
       <p className="text-sm text-luxury-gray-3">
-        Transaction {id} — role: {role}
+        Transaction {id} - role: {role}
       </p>
     </div>
   )

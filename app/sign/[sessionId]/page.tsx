@@ -190,7 +190,7 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 </div>
               </div>
 
-              {/* Agent signature — shown if saved, skipped gracefully if not */}
+              {/* Agent signature - shown if saved, skipped gracefully if not */}
               {session?.agentSignatureUrl && (
                 <div className="pt-3 border-t border-luxury-gray-5/50">
                   <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Agent Signature</p>
@@ -262,7 +262,7 @@ export default function BrokerSignPage({ params }: { params: Promise<{ sessionId
                 <div className="text-left">
                   <p className="text-sm font-semibold text-luxury-gray-1">Commission Plan Agreement</p>
                   <p className="text-xs text-luxury-gray-3 mt-0.5">
-                    {agent.commissionPlan} — tap to review before signing
+                    {agent.commissionPlan} - tap to review before signing
                   </p>
                 </div>
                 {commExpanded

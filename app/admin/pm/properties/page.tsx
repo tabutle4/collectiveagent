@@ -181,7 +181,7 @@ export default function PropertiesPage() {
                           {property.landlords.first_name} {property.landlords.last_name}
                         </Link>
                       ) : (
-                        <span className="text-luxury-gray-3">—</span>
+                        <span className="text-luxury-gray-3">-</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-sm">

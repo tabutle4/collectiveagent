@@ -73,7 +73,7 @@ const fmt = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 
 const fmtDate = (d: string | null) =>
-  d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'
+  d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '-'
 
 function complianceLabel(status: string): { label: string; cls: string } {
   const map: Record<string, { label: string; cls: string }> = {
@@ -137,7 +137,7 @@ function unpaidExternals(row: PayoutRow): ExternalRow[] {
   return row.externals.filter(e => e.payment_status !== 'paid')
 }
 
-// Mobile card — clean stacked layout
+// Mobile card - clean stacked layout
 
 function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
@@ -153,7 +153,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
 
   return (
     <div className="card-luxury rounded-lg overflow-hidden">
-      {/* Header row — address + total */}
+      {/* Header row - address + total */}
       <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-2">
         <div className="flex-1 min-w-0">
           {row.transaction_id ? (
@@ -170,7 +170,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
         </div>
         <div className="text-right flex-shrink-0 ml-2">
           <p className="text-xs text-luxury-gray-3">{fmt(row.check_amount)} check</p>
-          <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '—'}</p>
+          <p className="text-sm font-semibold text-luxury-gray-1">{total > 0 ? fmt(total) : '-'}</p>
           {row.crc_amount > 0 && (
             <p className="text-xs text-luxury-gray-3 mt-0.5">+{fmt(row.crc_amount)} CRC</p>
           )}
@@ -227,7 +227,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
         </div>
       )}
 
-      {/* Footer — date, compliance, pay by, transferred */}
+      {/* Footer - date, compliance, pay by, transferred */}
       <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           {dateVal && (
@@ -257,7 +257,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
         </span>
       </div>
 
-      {/* Notes — only if present */}
+      {/* Notes - only if present */}
       {notes && (
         <div className="px-4 pb-2">
           <p className="text-xs text-luxury-gray-3 italic">{notes}</p>
@@ -267,7 +267,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
   )
 }
 
-// Desktop table row — all columns visible, table scrolls horizontally if needed
+// Desktop table row - all columns visible, table scrolls horizontally if needed
 
 function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
@@ -287,7 +287,7 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
 
   const renderAgentCell = (agent: AgentRow | undefined) => {
-    if (!agent) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">—</td>
+    if (!agent) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">-</td>
     return (
       <td className="py-2 px-2 text-xs text-right whitespace-nowrap">
         {onMarkAgentPaid ? (
@@ -308,7 +308,7 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
   }
 
   const renderExternalCell = (external: ExternalRow | undefined) => {
-    if (!external) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">—</td>
+    if (!external) return <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">-</td>
     return (
       <td className="py-2 px-2 text-xs text-right whitespace-nowrap">
         {onMarkExternalPaid ? (
@@ -338,15 +338,15 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
           </Link>
         ) : <span className="truncate block">{row.address}</span>}
       </td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.check_amount > 0 ? fmt(row.check_amount) : '—'}</td>
-      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.crc_amount > 0 ? fmt(row.crc_amount) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.check_amount > 0 ? fmt(row.check_amount) : '-'}</td>
+      <td className="py-2 px-2 text-xs text-right text-luxury-gray-2 whitespace-nowrap">{row.crc_amount > 0 ? fmt(row.crc_amount) : '-'}</td>
       {renderAgentCell(a1)}
       {renderAgentCell(a2)}
       {renderAgentCell(a3)}
       {renderExternalCell(ext)}
-      <td className="py-2 px-2 text-xs text-right font-semibold text-luxury-gray-1 whitespace-nowrap">{unpaidAgentTotal(row) > 0 ? fmt(unpaidAgentTotal(row)) : '—'}</td>
+      <td className="py-2 px-2 text-xs text-right font-semibold text-luxury-gray-1 whitespace-nowrap">{unpaidAgentTotal(row) > 0 ? fmt(unpaidAgentTotal(row)) : '-'}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
-        <span className="truncate block">{agentNames(row) || '—'}</span>
+        <span className="truncate block">{agentNames(row) || '-'}</span>
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(dateVal)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
@@ -372,13 +372,13 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
         </span>
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[130px]">
-        <span className="truncate block">{cleanNotes(row.notes) || '—'}</span>
+        <span className="truncate block">{cleanNotes(row.notes) || '-'}</span>
       </td>
     </tr>
   )
 }
 
-// Section component — cards on mobile, scrollable table on desktop
+// Section component - cards on mobile, scrollable table on desktop
 
 type SortKey = 'date' | 'compliance' | null
 type SortDir = 'asc' | 'desc'
@@ -494,7 +494,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(crcTotal)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a1Tot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(a2Tot)}</td>
-                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '—'}</td>
+                    <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '-'}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(extTot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(agentTot)}</td>
                     <td colSpan={6} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
@@ -933,7 +933,7 @@ export default function PayoutsReportPage() {
         </div>
         </div>
 
-        {/* Bottom Line — first on mobile, last on desktop */}
+        {/* Bottom Line - first on mobile, last on desktop */}
         <div className="order-1 lg:order-5 mb-5">
         <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>

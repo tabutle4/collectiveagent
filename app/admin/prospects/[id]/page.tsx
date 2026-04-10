@@ -255,12 +255,12 @@ export default function ProspectDetailPage() {
 
           <div className="space-y-2 mb-5">
             {[
-              { step: 1, label: 'Step 1 — Your Information' },
-              { step: 2, label: 'Step 2 — Onboarding Payment' },
-              { step: 3, label: 'Step 3 — Independent Contractor Agreement' },
-              { step: 4, label: 'Step 4 — Commission Plan Agreement' },
-              { step: 5, label: 'Step 5 — Policy Manual' },
-              { step: 6, label: 'Step 6 — W-9' },
+              { step: 1, label: 'Step 1 - Your Information' },
+              { step: 2, label: 'Step 2 - Onboarding Payment' },
+              { step: 3, label: 'Step 3 - Independent Contractor Agreement' },
+              { step: 4, label: 'Step 4 - Commission Plan Agreement' },
+              { step: 5, label: 'Step 5 - Policy Manual' },
+              { step: 6, label: 'Step 6 - W-9' },
             ].map(({ step, label }) => (
               <label key={step} className="flex items-center gap-3 cursor-pointer">
                 <input

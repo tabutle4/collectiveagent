@@ -205,7 +205,7 @@ export default function AdminUsersPage() {
     try {
       const res = await fetch('/api/users/create-all-folders', { method: 'POST' })
       const data = await res.json()
-      alert(`Done. Created ${data.created} folders.${data.failed > 0 ? ` ${data.failed} failed — check console.` : ''}`)
+      alert(`Done. Created ${data.created} folders.${data.failed > 0 ? ` ${data.failed} failed - check console.` : ''}`)
       if (data.failed > 0) console.log('Failed:', data.results.filter((r: any) => !r.success))
     } catch (e) {
       alert('Something went wrong. Check console.')

@@ -113,7 +113,7 @@ export default function AdminBillingPage() {
       setLoading(false)
     }
 
-    // Load monthly invoice status in background (separate from main load — hits Payload for each agent)
+    // Load monthly invoice status in background (separate from main load - hits Payload for each agent)
     try {
       const res = await fetch('/api/payload/monthly-invoice-status')
       if (res.ok) {
@@ -923,7 +923,7 @@ export default function AdminBillingPage() {
                                   <p className="text-xs text-luxury-gray-3">
                                     Will send:{' '}
                                     <span className="font-medium text-luxury-gray-1">
-                                      {invoiceMonth} {invoiceYear} Monthly Brokerage Fee — $50
+                                      {invoiceMonth} {invoiceYear} Monthly Brokerage Fee - $50
                                     </span>
                                   </p>
                                   <button

@@ -176,7 +176,7 @@ export default function ProspectsPage() {
                         : resendResult[prospect.id] === 'sent'
                           ? '✓ Sent'
                           : resendResult[prospect.id] === 'error'
-                            ? 'Error — retry'
+                            ? 'Error - retry'
                             : 'Resend Link'}
                     </button>
                   </div>
@@ -251,7 +251,7 @@ export default function ProspectsPage() {
                               : resendResult[prospect.id] === 'sent'
                                 ? '✓ Sent'
                                 : resendResult[prospect.id] === 'error'
-                                  ? 'Error — retry'
+                                  ? 'Error - retry'
                                   : 'Resend Link'}
                           </button>
                         </div>

@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     if (fileUrls.commission_plan) updateFields.commission_plan_agreement_url = fileUrls.commission_plan
     await supabaseAdmin.from('users').update(updateFields).eq('id', agent.id)
 
-    // Check if both docs are now fully co-signed — flip prospect to active
+    // Check if both docs are now fully co-signed - flip prospect to active
     const { data: freshAgent } = await supabaseAdmin
       .from('users')
       .select('ica_document_url, commission_plan_agreement_url, ica_signed_at, commission_plan_agreement_signed_at, status')
@@ -158,9 +158,9 @@ export async function POST(request: NextRequest) {
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Create Accounts</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Outlook — create mailbox, add to groups, set permissions, enable MFA</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Dotloop — create account</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Transactions platform — create account</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Outlook - create mailbox, add to groups, set permissions, enable MFA</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Dotloop - create account</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Transactions platform - create account</p>
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
           <p style="margin:0 0 14px;font-size:14px;color:#555;">Once all of the above is done, run the <strong style="color:#1a1a1a;">New Agent Automated Onboarding Emails</strong> flow in Power Automate.</p>
           <p style="margin:0;font-size:12px;color:#888;">Agent personal email: ${agent.email}</p>`,
-          { title: 'Create Accounts for ' + agentName, preheader: `Action required — set up accounts for ${agentName}` }
+          { title: 'Create Accounts for ' + agentName, preheader: `Action required - set up accounts for ${agentName}` }
         ),
       }).catch((e: unknown) => console.error('Failed to send activation notification:', e))
     }

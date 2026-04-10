@@ -94,13 +94,13 @@ export async function GET(request: NextRequest) {
       .eq('user_id', id)
       .maybeSingle()
 
-    // Compute YTD sales volume and units — two queries because sales use closing_date
+    // Compute YTD sales volume and units - two queries because sales use closing_date
     // and leases use move_in_date
     const ytdStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]
     const today = new Date().toISOString().split('T')[0]
     const PRODUCTION_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
 
-    // Query 1: Sales — status must be closed, date by closing_date
+    // Query 1: Sales - status must be closed, date by closing_date
     const { data: salesData } = await supabaseAdmin
       .from('transaction_internal_agents')
       .select('sales_volume, units, transaction_id, transactions!inner(status, closing_date, transaction_type)')
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       .gte('transactions.move_in_date', ytdStart)
       .lte('transactions.move_in_date', today)
 
-    // Query 2b: Leases with no move_in_date — fall back to closing_date
+    // Query 2b: Leases with no move_in_date - fall back to closing_date
     const { data: leaseClosingData } = await supabaseAdmin
       .from('transaction_internal_agents')
       .select('sales_volume, transaction_id, transactions!inner(move_in_date, closing_date, transaction_type)')
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
 
     const allProductionRows = [...salesRows, ...leaseRows]
     const total_sales_volume = allProductionRows.reduce((sum, r) => sum + (r.sales_volume || 0), 0)
-    // Count TIA rows — each qualifying row = 1 unit (buyer, seller, tenant, landlord each count)
+    // Count TIA rows - each qualifying row = 1 unit (buyer, seller, tenant, landlord each count)
     const total_units_closed = allProductionRows.length
 
     // Cap progress: YTD sales only (leases never count toward cap)

@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
 
     await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
 
-    // Send ONE email to broker after commission plan is signed — by then both ICA
+    // Send ONE email to broker after commission plan is signed - by then both ICA
     // and commission plan are agent-signed, so she can review and co-sign both at once.
     if (documentType === 'commission_plan') {
       const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}`

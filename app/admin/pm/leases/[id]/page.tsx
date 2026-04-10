@@ -259,7 +259,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
             {lease.managed_properties?.unit && ` ${lease.managed_properties.unit}`}
           </h1>
           <p className="text-sm text-luxury-gray-3">
-            {lease.tenants?.first_name} {lease.tenants?.last_name} — {formatMoney(lease.monthly_rent)}/mo
+            {lease.tenants?.first_name} {lease.tenants?.last_name} - {formatMoney(lease.monthly_rent)}/mo
           </p>
         </div>
       </div>
@@ -408,7 +408,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                         </td>
                         <td className="py-2 px-3 text-right">{formatMoney(inv.rent_amount)}</td>
                         <td className="py-2 px-3 text-right">
-                          {inv.late_fee > 0 ? formatMoney(inv.late_fee) : '—'}
+                          {inv.late_fee > 0 ? formatMoney(inv.late_fee) : '-'}
                         </td>
                         <td className="py-2 px-3 text-right font-medium">{formatMoney(inv.total_amount)}</td>
                         <td className="py-2 px-3 text-luxury-gray-3">{formatDate(inv.due_date)}</td>

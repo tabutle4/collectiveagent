@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const debtType = searchParams.get('debt_type')
 
-    // Called with agent_id (explicit or auto-filled) — return records for that agent
+    // Called with agent_id (explicit or auto-filled) - return records for that agent
     if (effectiveAgentId) {
       let query = supabase
         .from('agent_debts')
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ records: records || [] })
     }
 
-    // Called with ?status=outstanding&debt_type=custom_invoice — return all matching debt records
+    // Called with ?status=outstanding&debt_type=custom_invoice - return all matching debt records
     if (status || debtType) {
       let query = supabase
         .from('agent_debts')
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ records: records || [] })
     }
 
-    // No params — return agent list + open debt counts (original overview endpoint)
+    // No params - return agent list + open debt counts (original overview endpoint)
     const [agentsRes, debtRes] = await Promise.all([
       supabase
         .from('users')

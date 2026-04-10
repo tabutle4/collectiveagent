@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id' }
     )
 
-    // Send next steps email only on first submission — not on re-submissions from step 1
+    // Send next steps email only on first submission - not on re-submissions from step 1
     if (isFirstSubmission) {
       const { data: userData } = await supabase
         .from('users')

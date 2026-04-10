@@ -118,12 +118,6 @@ export async function sendProspectWelcomeEmail(prospect: {
       <p class="intro-text">Thank you for submitting your information. We're excited to help you keep your license active while earning referral income with minimal overhead.</p>
       <p class="intro-text">Referral Collective is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents and that is it. No showings, no contracts, no MLS fees, no association dues. Just $299/year.</p>
       <p class="intro-text">Want to learn more? <a href="https://agent.collectiverealtyco.com/referral-collective-information" style="color: #C5A278; text-decoration: underline;">View the full Referral Collective details</a>.</p>
-      <div class="section-box">
-        <h2 class="section-title">Your Referral Splits</h2>
-        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Apartment Referrals:</strong> 85% to you</p>
-        <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Buyer/Seller/Tenant/Landlord:</strong> 90% to you</p>
-        <p style="text-align: center; color: #333; font-size: 15px; margin: 0;"><strong>External Referrals:</strong> 88% to you</p>
-      </div>
     `
     : `
       <p class="intro-text">Thank you for submitting your information. We're excited to learn more about you and your goals in real estate.</p>
@@ -617,27 +611,27 @@ export async function sendReferralFollowUpEmail(prospect: {
 
 const STEP_DESCRIPTIONS: Record<number, { label: string; description: string }> = {
   1: {
-    label: 'Step 1 — Your Information',
+    label: 'Step 1 - Your Information',
     description: 'Please review and resubmit your personal and license information.',
   },
   2: {
-    label: 'Step 2 — Onboarding Payment',
+    label: 'Step 2 - Onboarding Payment',
     description: 'Your invoice has been updated. Please complete your onboarding payment to continue.',
   },
   3: {
-    label: 'Step 3 — Independent Contractor Agreement',
+    label: 'Step 3 - Independent Contractor Agreement',
     description: 'Please review and sign your Independent Contractor Agreement.',
   },
   4: {
-    label: 'Step 4 — Commission Plan Agreement',
+    label: 'Step 4 - Commission Plan Agreement',
     description: 'Please review and sign your Commission Plan Agreement.',
   },
   5: {
-    label: 'Step 5 — Policy Manual',
+    label: 'Step 5 - Policy Manual',
     description: 'Please review and acknowledge the Brokerage Policy Manual.',
   },
   6: {
-    label: 'Step 6 — W-9',
+    label: 'Step 6 - W-9',
     description: 'Please complete your W-9. You will receive a new Track1099 invitation email.',
   },
 }

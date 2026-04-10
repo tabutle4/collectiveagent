@@ -7,7 +7,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const dynamic = 'force-dynamic'
 
-// Public route — authenticated by campaign_token, not session.
+// Public route - authenticated by campaign_token, not session.
 // Used for non-document steps (policy manual acknowledgment, W-9 notice, etc.)
 export async function POST(request: NextRequest) {
   try {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       { onConflict: 'user_id' }
     )
 
-    // Step 6 — agent acknowledged W-9 and is moving to TREC: notify office to submit TREC invite
+    // Step 6 - agent acknowledged W-9 and is moving to TREC: notify office to submit TREC invite
     if (step === 6) {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',

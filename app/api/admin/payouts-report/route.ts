@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     // Build txn lookup
     const txnMap = Object.fromEntries(transactions.map(t => [t.id, t]))
 
-    // Role sort priority — primary agent first
+    // Role sort priority - primary agent first
     const ROLE_PRIORITY: Record<string, number> = {
       primary_agent: 0, listing_agent: 1, co_agent: 2,
       referral_agent: 3, team_lead: 4,

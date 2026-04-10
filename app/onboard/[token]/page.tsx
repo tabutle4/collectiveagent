@@ -254,7 +254,7 @@ function SignatureStep({
 }
 
 // ── Policy Manual Step Component ───────────────────────────────────────────────
-// Policy manual PDF URL — swap in the OneDrive sharing link once uploaded
+// Policy manual PDF URL - swap in the OneDrive sharing link once uploaded
 const POLICY_MANUAL_PDF_URL = '/BrokerPolicyManual.pdf'
 
 function PolicyManualStep({ token, isCompleted = false, onComplete, onBack }: { token: string; isCompleted?: boolean; onComplete: () => void; onBack: () => void }) {
@@ -1199,12 +1199,12 @@ const checkout = new window.Payload.Checkout({
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="inner-card text-center p-4">
-                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">Apartment Referrals</p>
+                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">Internal Apartment Referrals</p>
                     <p className="text-2xl font-bold text-luxury-gray-1">{referralSettings.split_apartment}%</p>
                     <p className="text-xs text-luxury-gray-3">to you / {100 - referralSettings.split_apartment}% brokerage</p>
                   </div>
                   <div className="inner-card text-center p-4">
-                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">Buyer / Seller / Tenant</p>
+                    <p className="text-xs text-luxury-gray-3 uppercase tracking-wider mb-2">All Other Internal Referrals</p>
                     <p className="text-2xl font-bold text-luxury-gray-1">{referralSettings.split_internal}%</p>
                     <p className="text-xs text-luxury-gray-3">to you / {100 - referralSettings.split_internal}% brokerage</p>
                   </div>

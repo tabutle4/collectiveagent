@@ -247,7 +247,7 @@ export default function AgentFeesPage() {
             <p className="text-xs font-medium text-luxury-gray-2 mb-1">Prefer Zelle?</p>
             <p className="text-xs text-luxury-gray-3">
               Send to{' '}
-              <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> —
+              <span className="font-medium text-luxury-gray-2">info@collectiverealtyco.com</span> -
               include your name in the memo.
             </p>
           </div>

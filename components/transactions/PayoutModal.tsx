@@ -312,7 +312,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
     }
   }
 
-  // Agent search field — used for both existing rows (to reassign) and new rows
+  // Agent search field - used for both existing rows (to reassign) and new rows
   function AgentSearchField({ rowId, isExisting = false }: { rowId: string; isExisting?: boolean }) {
     return (
       <Field label="Agent">

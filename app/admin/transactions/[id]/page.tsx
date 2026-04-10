@@ -2081,7 +2081,7 @@ export default function AdminTransactionDetailPage() {
                               <div>
                                 <p className="text-xs font-semibold text-luxury-gray-1">Agents Paid</p>
                                 <p className="text-xs text-luxury-gray-3">
-                                  All agents paid — removes from payouts report
+                                  All agents paid - removes from payouts report
                                 </p>
                               </div>
                               <button
@@ -2541,7 +2541,7 @@ export default function AdminTransactionDetailPage() {
 
         {/* ── Right Panel ────────────────────────────────────────────────────── */}
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
-          {/* Agents — sorted: listing, primary, team lead, referral */}
+          {/* Agents - sorted: listing, primary, team lead, referral */}
           {agents.length > 0 && [...agents].sort((a: any, b: any) => {
             const order: Record<string, number> = {
               listing_agent: 0, primary_agent: 1, team_lead: 2,
@@ -2621,7 +2621,7 @@ export default function AdminTransactionDetailPage() {
                       >
                         <FileText size={11} />
                         {a.team_membership.team?.team_name
-                          ? `${a.team_membership.team.team_name} — Team Agreement`
+                          ? `${a.team_membership.team.team_name} - Team Agreement`
                           : 'Team Agreement'}
                       </Link>
                     )}

@@ -467,7 +467,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                           {lease.tenants?.first_name} {lease.tenants?.last_name}
                         </p>
                         <p className="text-xs text-luxury-gray-3">
-                          {formatDate(lease.lease_start)} — {formatDate(lease.lease_end)}
+                          {formatDate(lease.lease_start)} - {formatDate(lease.lease_end)}
                         </p>
                       </div>
                       <div className="text-right">

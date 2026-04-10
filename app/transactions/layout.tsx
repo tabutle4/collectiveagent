@@ -21,7 +21,7 @@ export default function TransactionsLayout({ children }: { children: React.React
         const { user } = await response.json()
         const role = getAppRole(user)
 
-        // Monthly fee redirect — agents only, not TC/admin/broker
+        // Monthly fee redirect - agents only, not TC/admin/broker
         if (role === 'agent' && pathname !== '/agent/fees') {
           if (!user.monthly_fee_waived && !user.division) {
             if (user.monthly_fee_paid_through) {

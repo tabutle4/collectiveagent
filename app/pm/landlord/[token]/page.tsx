@@ -309,13 +309,13 @@ export default function LandlordDashboardPage() {
                               {activeLease.tenants?.first_name} {activeLease.tenants?.last_name}
                             </p>
                             <p className="text-sm text-luxury-gray-3">
-                              Lease: {formatDate(activeLease.lease_start)} — {formatDate(activeLease.lease_end)}
+                              Lease: {formatDate(activeLease.lease_start)} - {formatDate(activeLease.lease_end)}
                             </p>
                           </div>
                         ) : (
                           <div className="bg-amber-50 text-amber-800 rounded-lg p-3 text-sm">
                             <Clock size={16} className="inline mr-1" />
-                            No active lease — property is vacant
+                            No active lease - property is vacant
                           </div>
                         )}
                       </div>
@@ -391,7 +391,7 @@ export default function LandlordDashboardPage() {
                         {d.managed_properties?.property_address}
                       </p>
                       <p className="text-xs text-luxury-gray-3">
-                        Gross: {formatMoney(d.gross_rent)} — Fee: {formatMoney(d.management_fee)}
+                        Gross: {formatMoney(d.gross_rent)} - Fee: {formatMoney(d.management_fee)}
                       </p>
                     </div>
                   ))}

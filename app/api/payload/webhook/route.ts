@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Check if this is a custom invoice — mark agent_debt resolved
+      // Check if this is a custom invoice - mark agent_debt resolved
       const hasCustomItem = data.items?.some(
         (item: any) =>
           item.type !== 'Onboarding Fee' &&

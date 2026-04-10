@@ -216,7 +216,7 @@ export default function ProfilePage({
         }
       }
 
-      // Load team/split data — for agents always, for admins when viewing any agent
+      // Load team/split data - for agents always, for admins when viewing any agent
       if (!isAdmin) {
         const teamRes = await fetch('/api/agent/team')
         if (teamRes.ok) {
@@ -224,7 +224,7 @@ export default function ProfilePage({
           setTeamData(td)
         }
       } else if (freshUserData.id) {
-        // Admin viewing any agent — fetch their team data
+        // Admin viewing any agent - fetch their team data
         const teamRes = await fetch(`/api/agent/team?user_id=${freshUserData.id}`)
         if (teamRes.ok) {
           const td = await teamRes.json()
@@ -655,7 +655,7 @@ export default function ProfilePage({
           : 'MY PROFILE'}
       </h1>
 
-      {/* Admin — Revert to Prospect */}
+      {/* Admin - Revert to Prospect */}
       {isAdmin && user?.status !== 'prospect' && (
         <div className="container-card mb-5 border border-red-100">
           <div className="flex items-center justify-between">
@@ -1094,7 +1094,7 @@ export default function ProfilePage({
                       </p>
                       {user.team_name && teamData?.membership && !user.is_team_lead && (
                         <button
-                          onClick={() => setSplitModalMember({ member: teamData.membership, title: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name} — Splits` })}
+                          onClick={() => setSplitModalMember({ member: teamData.membership, title: `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name} - Splits` })}
                           className="text-xs text-luxury-accent hover:underline"
                         >
                           View Splits
@@ -1444,7 +1444,7 @@ export default function ProfilePage({
                       className="inner-card flex items-center gap-3 text-left w-full hover:bg-luxury-gray-5/50 transition-colors cursor-pointer"
                       onClick={() => teamMemberData && teamMemberData.splits?.length > 0 && setSplitModalMember({
                         member: teamMemberData,
-                        title: `${member.preferred_first_name || member.first_name} ${member.preferred_last_name || member.last_name} — Splits`,
+                        title: `${member.preferred_first_name || member.first_name} ${member.preferred_last_name || member.last_name} - Splits`,
                       })}
                     >
                       {member.headshot_url ? (

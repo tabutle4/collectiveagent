@@ -200,7 +200,7 @@ function formatFieldLabel(key: string): string {
 
 function renderFieldValue(value: any): React.ReactNode {
   if (value === null || value === undefined || value === '') {
-    return '—'
+    return '-'
   }
 
   if (typeof value === 'boolean') {
@@ -1946,7 +1946,7 @@ export default function FormResponsesPage() {
                       >
                         <td className="py-3 px-4 text-sm font-medium">{form.name}</td>
                         <td className="py-3 px-4 text-sm text-luxury-gray-2">
-                          {form.description || '—'}
+                          {form.description || '-'}
                         </td>
                         <td className="py-3 px-4 text-sm">{form.form_type}</td>
                         <td className="py-3 px-4 text-sm">

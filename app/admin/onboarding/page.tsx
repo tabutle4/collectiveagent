@@ -374,7 +374,7 @@ export default function AdminOnboardingPage() {
                     </>
                   )}
 
-                  {/* Agent checklist — always visible */}
+                  {/* Agent checklist - always visible */}
                   <>
                       <div className="progress-bar mb-1">
                         <div className="progress-bar-fill" style={{ width: `${items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0}%` }} />

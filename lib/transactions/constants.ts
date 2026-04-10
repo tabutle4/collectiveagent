@@ -4,7 +4,7 @@ import { TransactionStatus } from './types'
 export type { AppRole } from './role'
 
 // ===== Contact Types =====
-// Enforced in code only — not a DB constraint
+// Enforced in code only - not a DB constraint
 export const CONTACT_TYPES = [
   { value: 'client', label: 'Client' },
   { value: 'title', label: 'Title Officer / Company' },
@@ -163,7 +163,7 @@ export function getVisibleSlides(isLease: boolean, role?: string): SlideConfig[]
   })
 }
 
-// Legacy slide config — kept for backward compatibility with existing pages
+// Legacy slide config - kept for backward compatibility with existing pages
 // until they are migrated to the new unified page
 export interface LegacySlideConfig {
   id: string

@@ -457,7 +457,7 @@ function TenantDashboardContent() {
             <div className="flex items-center gap-2">
               <Eye size={16} />
               <span className="text-sm font-medium">
-                Admin Preview — Viewing as {tenant.first_name} {tenant.last_name}
+                Admin Preview - Viewing as {tenant.first_name} {tenant.last_name}
               </span>
             </div>
             <Link 
@@ -724,7 +724,7 @@ function TenantDashboardContent() {
                         {formatMoney(invoice.paid_amount || invoice.total_amount)}
                       </td>
                       <td className="py-3 px-3 text-luxury-gray-3">
-                        {invoice.paid_at ? formatDate(invoice.paid_at) : '—'}
+                        {invoice.paid_at ? formatDate(invoice.paid_at) : '-'}
                       </td>
                       <td className="py-3 px-3">
                         <span className="inline-flex items-center gap-1 text-xs text-green-600">

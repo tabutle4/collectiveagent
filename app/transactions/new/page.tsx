@@ -35,7 +35,7 @@ export default function NewTransactionPage() {
   // TODO: render NewTransactionForm component with user and role props
   return (
     <div>
-      <p className="text-sm text-luxury-gray-3">New transaction — role: {role}</p>
+      <p className="text-sm text-luxury-gray-3">New transaction - role: {role}</p>
     </div>
   )
 }

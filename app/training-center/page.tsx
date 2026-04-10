@@ -690,7 +690,7 @@ export default function TrainingCenterPage() {
                   <>
                     <p className="text-xs text-luxury-gray-1 whitespace-pre-wrap">{announcement.content}</p>
                     <p className="text-xs text-luxury-gray-3 mt-1">
-                      — {announcement.created_by_name} · {formatDate(announcement.created_at)}
+                      - {announcement.created_by_name} · {formatDate(announcement.created_at)}
                     </p>
                   </>
                 ) : null}

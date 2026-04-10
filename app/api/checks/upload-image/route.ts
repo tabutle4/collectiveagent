@@ -37,13 +37,13 @@ async function uploadToOneDrive(
   fileBuffer: Buffer,
   contentType: string
 ): Promise<string> {
-  // Uses the OneDrive user account — same pattern as listing coordination
+  // Uses the OneDrive user account - same pattern as listing coordination
   const oneDriveUser = process.env.MICROSOFT_ONEDRIVE_USER! // your M365 email
   const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || 'Collective Agent'
 
   const fullPath = `${rootFolder}/${folderPath}/${filename}`.replace(/\/+/g, '/') // normalize double slashes
 
-  // Upload via the user's OneDrive — simple PUT for files under 4MB
+  // Upload via the user's OneDrive - simple PUT for files under 4MB
   const uploadUrl = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oneDriveUser)}/drive/root:/${fullPath}:/content`
 
   const uploadRes = await fetch(uploadUrl, {
@@ -62,7 +62,7 @@ async function uploadToOneDrive(
 
   const driveItem = await uploadRes.json()
 
-  // Return the webUrl — this is the clickable OneDrive link
+  // Return the webUrl - this is the clickable OneDrive link
   return driveItem.webUrl
 }
 

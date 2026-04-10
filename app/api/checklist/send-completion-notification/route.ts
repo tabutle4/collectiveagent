@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   const { user } = auth as import('@/lib/api-auth').AuthResult
 
   try {
-    // Use the authenticated user's own data — don't trust body for identity
+    // Use the authenticated user's own data - don't trust body for identity
     const agentName = `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
     const agentEmail = user.email
 
