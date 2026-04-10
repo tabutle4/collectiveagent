@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getICAContent } from '@/lib/documents/ica-content'
+import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('first_name, last_name, email, commission_plan, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip')
+      .select('first_name, last_name, email, commission_plan, mls_choice, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip')
       .eq('campaign_token', token)
       .eq('status', 'prospect')
       .single()
@@ -39,8 +40,18 @@ export async function GET(request: NextRequest) {
 
     let content: any
 
+    const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
+    
     if (documentType === 'ica') {
-      content = getICAContent({
+      content = isReferralAgent
+        ? getReferralICAContent({
+            agentFirstName: prospect.first_name,
+            agentLastName: prospect.last_name,
+            effectiveDate,
+            mailingAddress,
+            email: prospect.email,
+          })
+        : getICAContent({
         agentFirstName: prospect.first_name,
         agentLastName: prospect.last_name,
         effectiveDate,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
 import { getICAContent } from '@/lib/documents/ica-content'
+import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import {
   getCommissionPlanContent,
   getCommissionPlanKey,
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip'
+        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip'
       )
       .eq('campaign_token', token)
       .eq('status', 'prospect')
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired onboarding link' }, { status: 404 })
     }
 
+    const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
     const agentName = `${prospect.first_name} ${prospect.last_name}`
     const today = new Date()
     const effectiveDate = `${String(today.getMonth() + 1).padStart(2, '0')} / ${String(today.getDate()).padStart(2, '0')} / ${today.getFullYear()}`
@@ -79,13 +81,23 @@ export async function POST(request: NextRequest) {
     let fileName: string
 
     if (documentType === 'ica') {
-      pdfContent = getICAContent({
-        agentFirstName: prospect.first_name,
-        agentLastName: prospect.last_name,
-        effectiveDate,
-        mailingAddress: mailingParts,
-        email: prospect.email,
-      })
+      if (isReferralAgent) {
+        pdfContent = getReferralICAContent({
+          agentFirstName: prospect.first_name,
+          agentLastName: prospect.last_name,
+          effectiveDate,
+          mailingAddress: mailingParts,
+          email: prospect.email,
+        })
+      } else {
+        pdfContent = getICAContent({
+          agentFirstName: prospect.first_name,
+          agentLastName: prospect.last_name,
+          effectiveDate,
+          mailingAddress: mailingParts,
+          email: prospect.email,
+        })
+      }
       fileName = `ICA_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
     } else if (documentType === 'commission_plan') {
       const planKey = getCommissionPlanKey(prospect.commission_plan || '')
@@ -154,9 +166,9 @@ export async function POST(request: NextRequest) {
 
     await supabaseAdmin.from('onboarding_sessions').upsert(sessionUpdate, { onConflict: 'user_id' })
 
-    // Send ONE email to broker after commission plan is signed - by then both ICA
-    // and commission plan are agent-signed, so she can review and co-sign both at once.
-    if (documentType === 'commission_plan') {
+    // Send email to broker after commission plan is signed (standard agents)
+    // OR after ICA is signed (referral agents, since they skip commission plan)
+    if (documentType === 'commission_plan' || (documentType === 'ica' && isReferralAgent)) {
       const signingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/sign/${prospect.id}`
 
       // Look up broker by role so this stays correct if email ever changes
@@ -167,16 +179,28 @@ export async function POST(request: NextRequest) {
         .single()
       const brokerEmail = broker?.email ?? 'office@collectiverealtyco.com'
 
+      const emailSubject = isReferralAgent
+        ? `Action Required: Co-sign Referral Agent Agreement for ${agentName}`
+        : `Action Required: Review & Co-sign Agreements for ${agentName}`
+
+      const emailBody = isReferralAgent
+        ? `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed their Referral Agent Independent Contractor Agreement. Please review and co-sign.</p>`
+        : `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed both their Independent Contractor Agreement and Commission Plan Agreement. Please review and co-sign both documents.</p>`
+
+      const emailPreheader = isReferralAgent
+        ? `${agentName} needs your co-signature on their referral agreement`
+        : `${agentName} needs your co-signature on both agreements`
+
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: brokerEmail,
         replyTo: 'tarab@collectiverealtyco.com',
-        subject: `Action Required: Review & Co-sign Agreements for ${agentName}`,
+        subject: emailSubject,
         html: getEmailLayout(
-          `<p style="margin:0 0 16px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> has signed both their Independent Contractor Agreement and Commission Plan Agreement. Please review and co-sign both documents.</p>
-          ${emailButton('Review & Sign Both', signingUrl)}
+          `${emailBody}
+          ${emailButton('Review & Sign', signingUrl)}
           <p style="font-size:12px;color:#888;margin:16px 0 0;">Or copy this link: ${signingUrl}</p>`,
-          { title: `Co-sign Required for ${agentName}`, preheader: `${agentName} needs your co-signature on both agreements` }
+          { title: emailSubject, preheader: emailPreheader }
         ),
       }).catch((e: unknown) => console.error('Failed to send broker signing email:', e))
     }
