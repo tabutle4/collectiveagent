@@ -618,7 +618,7 @@ export default function SettingsPage() {
                           placeholder="0"
                         />
                         <p className="text-xs text-luxury-gray-3 mt-1">
-                          Amount to discount from $299 fee. Set to 299 for free conversion.
+                          Discount off first year only. Set to 299 for free first year.
                         </p>
                       </div>
                       <div>
@@ -636,7 +636,7 @@ export default function SettingsPage() {
                     </div>
                     {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) > new Date() && settings.referral_conversion_discount > 0 && (
                       <p className="text-xs text-green-600 mt-3 font-medium">
-                        ✓ Promotion active: ${settings.referral_conversion_discount} off (pay ${299 - settings.referral_conversion_discount}) until {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
+                        ✓ Promotion active: ${settings.referral_conversion_discount} off first year (pay ${settings.referral_annual_fee - settings.referral_conversion_discount}) until {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
                       </p>
                     )}
                     {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) <= new Date() && (

@@ -481,6 +481,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState('')
   const [paymentPaid, setPaymentPaid] = useState(false)
   const [paymentWaived, setPaymentWaived] = useState(false)
+  const [discountAmount, setDiscountAmount] = useState(0)
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
   const payloadScriptLoaded = useRef(false)
@@ -619,6 +620,7 @@ export default function OnboardingPage() {
       if (data.session?.current_step > 1) setStep1Completed(true)
       if (data.session?.step_2_completed_at) setPaymentPaid(true)
       if (data.session?.payment_waived) setPaymentWaived(true)
+      if (data.session?.discount_amount) setDiscountAmount(data.session.discount_amount)
       const s = data.session || {}
       setCompletedSteps({
         2: !!s.step_2_completed_at,
@@ -1365,10 +1367,31 @@ const checkout = new window.Payload.Checkout({
                     <div>
                       <p className="text-sm font-semibold text-luxury-gray-1">Annual Membership</p>
                       <p className="text-xs text-luxury-gray-3">
-                        One-year membership to {referralSettings.brokerage_name}
+                        {discountAmount > 0 ? 'First year' : 'One-year'} membership to {referralSettings.brokerage_name}
                       </p>
+                      {discountAmount > 0 && (
+                        <>
+                          <p className="text-xs font-semibold text-green-700 mt-1">
+                            CRC Agent Promo: ${discountAmount} off first year
+                          </p>
+                          <p className="text-xs text-luxury-gray-3">
+                            Renews at ${referralSettings.annual_fee}/year
+                          </p>
+                        </>
+                      )}
                     </div>
-                    <p className="text-sm font-semibold text-luxury-gray-1">${referralSettings.annual_fee.toFixed(2)}</p>
+                    <div className="text-right">
+                      {discountAmount > 0 ? (
+                        <>
+                          <p className="text-xs text-luxury-gray-3 line-through">${referralSettings.annual_fee.toFixed(2)}</p>
+                          <p className="text-sm font-semibold text-green-700">
+                            {discountAmount >= referralSettings.annual_fee ? 'FREE' : `$${(referralSettings.annual_fee - discountAmount).toFixed(2)}`}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm font-semibold text-luxury-gray-1">${referralSettings.annual_fee.toFixed(2)}</p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <>

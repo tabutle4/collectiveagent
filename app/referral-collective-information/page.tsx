@@ -61,9 +61,16 @@ export default function ReferralCollectiveInformationPage() {
     const finalPrice = referralSettings.promo_active && referralSettings.promo_discount > 0 
       ? Math.max(0, referralSettings.annual_fee - referralSettings.promo_discount)
       : referralSettings.annual_fee
-    const priceText = finalPrice === 0 ? 'free (promotional offer)' : `$${finalPrice}`
+    const priceText = finalPrice === 0 
+      ? 'free for the first year (promotional offer), then $' + referralSettings.annual_fee + '/year' 
+      : `$${finalPrice} for the first year, then $${referralSettings.annual_fee}/year`
+    const standardPriceText = `$${referralSettings.annual_fee}/year`
     
-    if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process and sign the new ICA. The annual fee is ${priceText}. Your current monthly subscription will be cancelled. Continue?`)) {
+    const feeMessage = referralSettings.promo_active && referralSettings.promo_discount > 0
+      ? priceText
+      : standardPriceText
+    
+    if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process and sign the new ICA. The annual fee is ${feeMessage}. Your current monthly subscription will be cancelled. Continue?`)) {
       return
     }
 
@@ -196,13 +203,16 @@ export default function ReferralCollectiveInformationPage() {
                   <span className="text-sm text-luxury-gray-3 line-through">${referralSettings.annual_fee} / year</span>
                   <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">
                     {referralSettings.promo_discount >= referralSettings.annual_fee ? (
-                      'FREE'
+                      'FREE first year'
                     ) : (
-                      `$${referralSettings.annual_fee - referralSettings.promo_discount} / year`
+                      `$${referralSettings.annual_fee - referralSettings.promo_discount} first year`
                     )}
                   </span>
                   <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded mt-1">
                     CRC Agent Promo: Save ${referralSettings.promo_discount}
+                  </span>
+                  <span className="text-xs text-luxury-gray-3 mt-1">
+                    Then ${referralSettings.annual_fee}/year
                   </span>
                 </div>
               ) : (
