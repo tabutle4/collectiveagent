@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Get referral settings for dynamic fee in checklist email
-      const referralFee = isReferralAgent ? (await getReferralSettings()).annual_fee : 0
+      const referralFee = isReferralAgent ? (await getReferralSettings()).referral_annual_fee : 0
       
       await supabaseAdmin.from('users').update({
         status: 'active',
