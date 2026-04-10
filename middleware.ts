@@ -40,12 +40,19 @@ const PUBLIC_PATHS = [
 // Paths accessible to all authenticated users regardless of role
 const SHARED_PATHS = ['/transactions', '/training-center', '/profile']
 
+// Paths referral agents can access
+const REFERRAL_ALLOWED_PATHS = ['/agent/profile', '/agent/calendar', '/training-center', '/roster']
+
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(path => pathname.startsWith(path))
 }
 
 function isSharedPath(pathname: string): boolean {
   return SHARED_PATHS.some(path => pathname.startsWith(path))
+}
+
+function isReferralAllowedPath(pathname: string): boolean {
+  return REFERRAL_ALLOWED_PATHS.some(path => pathname.startsWith(path))
 }
 
 export async function middleware(request: NextRequest) {
@@ -96,6 +103,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
+  // Referral agents: restricted to profile, calendar, training center, roster
+  const isReferralRole = userRole === 'referral'
+  if (isReferralRole) {
+    if (!isReferralAllowedPath(pathname)) {
+      return NextResponse.redirect(new URL('/agent/profile', request.url))
+    }
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set('x-user-id', session.user.id)
+    requestHeaders.set('x-user-email', session.user.email)
+    requestHeaders.set('x-user-role', session.user.role)
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+  
   // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
     return NextResponse.redirect(new URL('/agent/profile', request.url))
