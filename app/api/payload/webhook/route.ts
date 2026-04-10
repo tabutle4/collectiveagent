@@ -72,6 +72,13 @@ export async function POST(request: NextRequest) {
             const hasSchedule = (schedData.values?.length ?? 0) > 0
 
             if (!hasSchedule) {
+              // Fetch monthly fee setting
+              const { data: companySettings } = await supabase
+                .from('company_settings')
+                .select('standard_monthly_fee')
+                .single()
+              const monthlyFee = companySettings?.standard_monthly_fee ?? 50
+
               const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
               const startDate = nextMonth.toISOString().split('T')[0]
               const fiveYearsOut = new Date(now.getFullYear() + 5, now.getMonth(), 1)
@@ -92,7 +99,7 @@ export async function POST(request: NextRequest) {
                   end_date: fiveYearsOut,
                   recurring_frequency: 'monthly',
                   'charges[0][type]': 'Monthly Fee',
-                  'charges[0][amount]': '50',
+                  'charges[0][amount]': monthlyFee.toString(),
                 }),
               })
 

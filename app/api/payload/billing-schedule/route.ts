@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -15,6 +16,14 @@ export async function POST(request: NextRequest) {
   try {
     const { user_id } = await request.json()
     if (!user_id) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
+
+    // Fetch fee settings
+    const { data: companySettings } = await supabaseAdmin
+      .from('company_settings')
+      .select('standard_monthly_fee')
+      .single()
+    
+    const monthlyFee = companySettings?.standard_monthly_fee ?? 50
 
     const supabase = createClient()
     const { data: user } = await supabase
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
         start_date: startDate,
         recurring_frequency: 'monthly',
         'charges[0][type]': 'Monthly Fee',
-        'charges[0][amount]': '50',
+        'charges[0][amount]': monthlyFee.toString(),
       }),
     })
 

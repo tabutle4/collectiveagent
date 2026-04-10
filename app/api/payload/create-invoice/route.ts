@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
@@ -38,6 +39,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Fetch fee settings
+    const { data: companySettings } = await supabaseAdmin
+      .from('company_settings')
+      .select('standard_onboarding_fee, standard_monthly_fee')
+      .single()
+    
+    const onboardingFee = companySettings?.standard_onboarding_fee ?? 399
+    const monthlyFee = companySettings?.standard_monthly_fee ?? 50
+
     const supabase = createClient()
     const { data: user } = await supabase
       .from('users')
@@ -64,12 +74,12 @@ export async function POST(request: NextRequest) {
       const now = new Date()
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
       const remainingDays = daysInMonth - now.getDate() + 1
-      const proratedFee = Math.round((50 / daysInMonth) * remainingDays * 100) / 100
+      const proratedFee = Math.round((monthlyFee / daysInMonth) * remainingDays * 100) / 100
       const monthName = now.toLocaleString('default', { month: 'long' })
 
       params.append('items[0][type]', 'Onboarding Fee')
       params.append('items[0][description]', 'One-time onboarding fee')
-      params.append('items[0][amount]', '399')
+      params.append('items[0][amount]', onboardingFee.toString())
       params.append('items[0][entry_type]', 'charge')
 
       if (proratedFee > 0) {
@@ -88,7 +98,7 @@ export async function POST(request: NextRequest) {
       params.append('description', `${monthName} ${year} Monthly Brokerage Fee`)
       params.append('items[0][type]', 'Monthly Fee')
       params.append('items[0][description]', `${monthName} ${year} Monthly Brokerage Fee`)
-      params.append('items[0][amount]', '50')
+      params.append('items[0][amount]', monthlyFee.toString())
       params.append('items[0][entry_type]', 'charge')
     } else {
       // Custom invoice
