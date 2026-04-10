@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
         email: prospect.email,
         phone: prospect.phone,
         location: prospect.location,
+        mls_choice: prospect.mls_choice,
       })
     } catch (notifyError) {
       console.error('Error sending prospect notification:', notifyError)

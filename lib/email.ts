@@ -204,12 +204,15 @@ export async function sendNewProspectNotification(prospect: {
   email: string
   phone: string
   location: string
+  mls_choice?: string
 }) {
   const adminUrl = `https://agent.collectiverealtyco.com/admin/prospects/${prospect.id}`
+  const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
+  const agentType = isReferral ? 'Referral Collective' : 'Standard Agent'
   return resend.emails.send({
     from: FROM_EMAILS.notifications,
     to: ADMIN_EMAIL,
-    subject: `New Prospect: ${prospect.first_name} ${prospect.last_name}`,
+    subject: `New ${isReferral ? 'Referral ' : ''}Prospect: ${prospect.first_name} ${prospect.last_name}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px; background: #ffffff;">
         <h2 style="margin: 0 0 24px; font-size: 18px; color: #1a1a1a;">New Prospective Agent</h2>
@@ -218,6 +221,7 @@ export async function sendNewProspectNotification(prospect: {
           <tr><td style="padding: 8px 0; color: #888;">Email</td><td style="padding: 8px 0;">${prospect.email}</td></tr>
           <tr><td style="padding: 8px 0; color: #888;">Phone</td><td style="padding: 8px 0;">${prospect.phone}</td></tr>
           <tr><td style="padding: 8px 0; color: #888;">Location</td><td style="padding: 8px 0;">${prospect.location}</td></tr>
+          <tr><td style="padding: 8px 0; color: #888;">Type</td><td style="padding: 8px 0; font-weight: 600; color: ${isReferral ? '#C5A278' : '#1a1a1a'};">${agentType}</td></tr>
         </table>
         <div style="margin-top: 32px;">
           <a href="${adminUrl}" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">View Prospect →</a>

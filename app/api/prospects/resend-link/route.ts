@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('preferred_first_name, email, campaign_token, status')
+      .select('preferred_first_name, email, campaign_token, status, mls_choice')
       .eq('id', prospect_id)
       .single()
 
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       preferred_first_name: prospect.preferred_first_name,
       email: prospect.email,
       join_link: joinLink,
+      mls_choice: prospect.mls_choice,
     })
 
     return NextResponse.json({ success: true })
