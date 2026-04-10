@@ -154,12 +154,25 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const isAdmin = ['admin', 'broker', 'operations'].includes(userRole)
   const isTC = userRole === 'tc'
   const isSupport = userRole === 'support'
+  const isReferral = userRole === 'referral'
   const isStaff = isAdmin || isTC || isSupport
 
   const restrictedAgentNav: NavItem[] = [
-    { href: '/agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
+    { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
+    { href: '/training-center', label: 'Training Center', icon: BookOpen },
+    {
+      href: 'https://agent.collectiverealtyco.com/roster',
+      label: 'Roster',
+      icon: FileText,
+      external: true,
+    },
+  ]
+
+  const referralAgentNav: NavItem[] = [
+    { href: '/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     {
@@ -174,6 +187,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     if (isAdmin) return adminNav
     if (isTC) return tcNav
     if (isSupport) return supportNav
+    if (isReferral) return referralAgentNav
     if (user?.full_nav_access) return agentNav
     return restrictedAgentNav
   }

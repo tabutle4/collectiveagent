@@ -30,14 +30,23 @@ export default function AgentDashboard() {
     commissionPlan: '',
   })
   const [recentTransactions, setRecentTransactions] = useState<any[]>([])
-  // Hide dashboard for agents until transaction data is verified
-if (authUser?.role === 'agent') {
-  return (
-    <div className="text-center py-12">
-      <p className="text-luxury-gray-3">Dashboard coming soon</p>
-    </div>
-  )
-}
+  
+  // Redirect agents and referrals to profile page
+  useEffect(() => {
+    if (authUser?.role === 'agent' || authUser?.role === 'referral') {
+      router.replace('/profile')
+    }
+  }, [authUser, router])
+
+  // Show loading while redirecting
+  if (authUser?.role === 'agent' || authUser?.role === 'referral') {
+    return (
+      <div className="text-center py-12">
+        <p className="text-luxury-gray-3">Redirecting...</p>
+      </div>
+    )
+  }
+
   useEffect(() => {
     loadDashboard()
   }, [])
