@@ -44,7 +44,7 @@ export const PATHS = {
 } as const
 
 // Paths accessible by all authenticated users (not just admin or agent specific)
-export const SHARED_PATHS = ['/transactions', '/training-center', '/roster', 'agent/profile']
+export const SHARED_PATHS = ['/transactions', '/training-center', '/roster', '/agent/profile']
 
 // Public paths that don't require authentication
 export const PUBLIC_PATHS = [

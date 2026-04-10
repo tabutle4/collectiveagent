@@ -158,7 +158,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const isStaff = isAdmin || isTC || isSupport
 
   const restrictedAgentNav: NavItem[] = [
-    { href: 'agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
     { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
@@ -172,7 +172,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   ]
 
   const referralAgentNav: NavItem[] = [
-    { href: 'agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/calendar', label: 'Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     {
