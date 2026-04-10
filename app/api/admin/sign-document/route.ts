@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
-import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
+import { generateAgreementPDF, AuditTrailEntry } from '@/lib/documents/generate-pdf'
 import { getICAContent } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
@@ -46,6 +46,12 @@ export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_agents')
   if (auth.error) return auth.error
+
+  // Extract request info for audit trail
+  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                    request.headers.get('x-real-ip') || 
+                    'Unknown'
+  const userAgent = request.headers.get('user-agent') || 'Unknown'
 
   try {
     const { userId, documentType, signBoth } = await request.json()
@@ -116,6 +122,33 @@ export async function POST(request: NextRequest) {
       const sigDate = signedAt ? new Date(signedAt) : today
       const effectiveDate = `${String(sigDate.getMonth() + 1).padStart(2, '0')} / ${String(sigDate.getDate()).padStart(2, '0')} / ${sigDate.getFullYear()}`
 
+      // Fetch existing signing events for this document
+      const { data: existingEvents } = await supabaseAdmin
+        .from('document_signing_events')
+        .select('signer_type, signer_name, signed_at, ip_address, user_agent')
+        .eq('user_id', userId)
+        .eq('document_type', docType)
+        .eq('document_subtype', 'onboarding')
+        .order('signed_at', { ascending: true })
+
+      // Build audit trail: existing agent events + this broker event
+      const auditTrail: AuditTrailEntry[] = (existingEvents || []).map(e => ({
+        signerType: e.signer_type as 'agent' | 'broker',
+        signerName: e.signer_name || 'Unknown',
+        signedAt: e.signed_at,
+        ipAddress: e.ip_address || undefined,
+        userAgent: e.user_agent || undefined,
+      }))
+
+      // Add broker's signing event
+      auditTrail.push({
+        signerType: 'broker',
+        signerName: 'Courtney Okanlomo',
+        signedAt: today.toISOString(),
+        ipAddress,
+        userAgent,
+      })
+
       let pdfContent: any
       let fileName: string
 
@@ -154,12 +187,27 @@ export async function POST(request: NextRequest) {
         agentSignatureDataUrl: onboardingSession?.agent_signature_url ?? undefined,
         brokerSignatureImageBytes,
         showAgencySignature: true,
+        auditTrail,
       })
 
       const sanitizedName = agentName.replace(/[/\\?%*:|"<>]/g, '-')
       const folderPath = `Agent Documents/${sanitizedName}-${agent.id}`
       const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
       fileUrls[docType] = fileUrl
+
+      // Record broker signing event
+      await supabaseAdmin.from('document_signing_events').insert({
+        user_id: userId,
+        signer_id: auth.user.id,
+        signer_type: 'broker',
+        signer_name: 'Courtney Okanlomo',
+        document_type: docType,
+        document_subtype: 'onboarding',
+        pdf_url: fileUrl,
+        ip_address: ipAddress,
+        user_agent: userAgent,
+        is_final_version: true,
+      })
     }
 
     // Persist document URLs and broker sign timestamp

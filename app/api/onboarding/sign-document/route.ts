@@ -18,6 +18,12 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  // Extract request info for audit trail
+  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                    request.headers.get('x-real-ip') || 
+                    'Unknown'
+  const userAgent = request.headers.get('user-agent') || 'Unknown'
+
   try {
     const { token, documentType, signatureDataUrl } = await request.json()
 
@@ -125,6 +131,20 @@ export async function POST(request: NextRequest) {
 
     // Upload to OneDrive
     const { fileUrl } = await uploadAgentDocument(folderPath, fileName, Buffer.from(pdfBytes))
+
+    // Record signing event in audit trail
+    await supabaseAdmin.from('document_signing_events').insert({
+      user_id: prospect.id,
+      signer_id: prospect.id,
+      signer_type: 'agent',
+      signer_name: agentName,
+      document_type: documentType,
+      document_subtype: 'onboarding',
+      pdf_url: fileUrl,
+      ip_address: ipAddress,
+      user_agent: userAgent,
+      is_final_version: false, // Not final until broker co-signs
+    })
 
     const updateFields: Record<string, any> = {}
     if (documentType === 'ica') {

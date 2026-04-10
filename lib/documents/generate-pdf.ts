@@ -16,6 +16,14 @@ interface PageContext {
   y: number
 }
 
+export interface AuditTrailEntry {
+  signerType: 'agent' | 'broker'
+  signerName: string
+  signedAt: string
+  ipAddress?: string
+  userAgent?: string
+}
+
 function wrapText(text: string, font: PDFFont, fontSize: number, maxWidth: number): string[] {
   const lines: string[] = []
   const paragraphs = text.split('\n')
@@ -138,6 +146,138 @@ function drawSignatureLine(
   ctx.y -= LINE_HEIGHT_BODY + 4
 }
 
+function formatDateTimeCT(isoString: string): string {
+  const date = new Date(isoString)
+  return date.toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }) + ' CT'
+}
+
+function drawAuditTrailPage(
+  pdfDoc: PDFDocument,
+  ctx: PageContext,
+  title: string,
+  agentName: string,
+  auditTrail: AuditTrailEntry[],
+  regularFont: PDFFont,
+  boldFont: PDFFont
+): void {
+  // Start a new page for audit trail
+  const auditPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+  ctx.page = auditPage
+  ctx.y = PAGE_HEIGHT - MARGIN
+
+  // Title
+  ctx.page.drawText('DOCUMENT SIGNING AUDIT TRAIL', {
+    x: MARGIN + (CONTENT_WIDTH - boldFont.widthOfTextAtSize('DOCUMENT SIGNING AUDIT TRAIL', FONT_SIZE_TITLE)) / 2,
+    y: ctx.y,
+    size: FONT_SIZE_TITLE,
+    font: boldFont,
+    color: rgb(0, 0, 0),
+  })
+  ctx.y -= FONT_SIZE_TITLE + 20
+
+  // Document info
+  ctx.page.drawText(`Document: ${title}`, {
+    x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: boldFont, color: rgb(0, 0, 0),
+  })
+  ctx.y -= LINE_HEIGHT_BODY + 4
+
+  ctx.page.drawText(`Agent: ${agentName}`, {
+    x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
+  })
+  ctx.y -= LINE_HEIGHT_BODY + 4
+
+  ctx.page.drawText(`Generated: ${formatDateTimeCT(new Date().toISOString())}`, {
+    x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
+  })
+  ctx.y -= LINE_HEIGHT_BODY + 20
+
+  // Divider line
+  ctx.page.drawLine({
+    start: { x: MARGIN, y: ctx.y },
+    end: { x: PAGE_WIDTH - MARGIN, y: ctx.y },
+    thickness: 1,
+    color: rgb(0.8, 0.8, 0.8),
+  })
+  ctx.y -= 20
+
+  // Signing events
+  ctx.page.drawText('SIGNING EVENTS', {
+    x: MARGIN, y: ctx.y, size: FONT_SIZE_HEADING, font: boldFont, color: rgb(0, 0, 0),
+  })
+  ctx.y -= LINE_HEIGHT_HEADING + 10
+
+  for (const entry of auditTrail) {
+    addPageIfNeeded(pdfDoc, ctx, 80, regularFont, FONT_SIZE_BODY)
+
+    // Signer type badge
+    const signerLabel = entry.signerType === 'broker' ? 'BROKER' : 'AGENT'
+    ctx.page.drawText(signerLabel, {
+      x: MARGIN, y: ctx.y, size: 9, font: boldFont, color: rgb(0.4, 0.4, 0.4),
+    })
+    ctx.y -= LINE_HEIGHT_BODY
+
+    // Signer name
+    ctx.page.drawText(entry.signerName, {
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: boldFont, color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY
+
+    // Date/time
+    ctx.page.drawText(`Signed: ${formatDateTimeCT(entry.signedAt)}`, {
+      x: MARGIN, y: ctx.y, size: FONT_SIZE_BODY, font: regularFont, color: rgb(0, 0, 0),
+    })
+    ctx.y -= LINE_HEIGHT_BODY
+
+    // IP Address
+    if (entry.ipAddress) {
+      ctx.page.drawText(`IP Address: ${entry.ipAddress}`, {
+        x: MARGIN, y: ctx.y, size: 9, font: regularFont, color: rgb(0.5, 0.5, 0.5),
+      })
+      ctx.y -= LINE_HEIGHT_BODY
+    }
+
+    // User Agent (truncated)
+    if (entry.userAgent) {
+      const truncatedUA = entry.userAgent.length > 80 
+        ? entry.userAgent.substring(0, 80) + '...' 
+        : entry.userAgent
+      ctx.page.drawText(`Browser: ${truncatedUA}`, {
+        x: MARGIN, y: ctx.y, size: 8, font: regularFont, color: rgb(0.5, 0.5, 0.5),
+      })
+      ctx.y -= LINE_HEIGHT_BODY
+    }
+
+    ctx.y -= 10 // Gap between entries
+  }
+
+  // Footer disclaimer
+  ctx.y -= 20
+  ctx.page.drawLine({
+    start: { x: MARGIN, y: ctx.y },
+    end: { x: PAGE_WIDTH - MARGIN, y: ctx.y },
+    thickness: 0.5,
+    color: rgb(0.8, 0.8, 0.8),
+  })
+  ctx.y -= 15
+
+  const disclaimer = 'This audit trail provides a record of all signing events for this document. All times are displayed in Central Time (CT).'
+  const disclaimerLines = wrapText(disclaimer, regularFont, 8, CONTENT_WIDTH)
+  for (const line of disclaimerLines) {
+    ctx.page.drawText(line, {
+      x: MARGIN, y: ctx.y, size: 8, font: regularFont, color: rgb(0.5, 0.5, 0.5),
+    })
+    ctx.y -= 12
+  }
+}
+
 export interface DocumentSection {
   heading: string | null
   body: string
@@ -151,10 +291,11 @@ export interface GeneratePDFOptions {
   effectiveDate: string
   brokerSignatureImageBytes?: Uint8Array // PNG bytes for Courtney's signature image
   showAgencySignature?: boolean // default true; set false for TAR-2303 style
+  auditTrail?: AuditTrailEntry[] // signing events to include on final page
 }
 
 export async function generateAgreementPDF(options: GeneratePDFOptions): Promise<Uint8Array> {
-  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate, brokerSignatureImageBytes, showAgencySignature = true } = options
+  const { title, sections, agentName, agentSignatureDataUrl, effectiveDate, brokerSignatureImageBytes, showAgencySignature = true, auditTrail } = options
 
   const pdfDoc = await PDFDocument.create()
 
@@ -321,6 +462,11 @@ export async function generateAgreementPDF(options: GeneratePDFOptions): Promise
     font: regularFont,
     color: rgb(0, 0, 0),
   })
+
+  // Add audit trail page if provided (broker co-sign generates final version)
+  if (auditTrail && auditTrail.length > 0) {
+    drawAuditTrailPage(pdfDoc, ctx, title, agentName, auditTrail, regularFont, boldFont)
+  }
 
   return pdfDoc.save()
 }
