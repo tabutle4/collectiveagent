@@ -125,21 +125,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to convert agent' }, { status: 500 })
     }
 
-    // Check if there's a free conversion promotion active
+    // Check if there's a conversion promotion active
     const { data: settings } = await supabaseAdmin
       .from('company_settings')
-      .select('referral_conversion_free_until')
+      .select('referral_conversion_free_until, referral_conversion_discount, referral_annual_fee')
       .single()
 
     const now = new Date()
     const promoEndDate = settings?.referral_conversion_free_until 
       ? new Date(settings.referral_conversion_free_until) 
       : null
-    const isFreeConversion = promoEndDate && now <= promoEndDate
+    const isPromoActive = promoEndDate && now <= promoEndDate
+    const discountAmount = isPromoActive ? (settings?.referral_conversion_discount || 0) : 0
+    const annualFee = settings?.referral_annual_fee || 299
+    const isFreeConversion = discountAmount >= annualFee // Full discount = free
 
     // Create new onboarding session for referral flow
     // Start at step 1 so they can review their existing info
-    // If free promotion: mark step 2 (payment) as completed so it's skipped
+    // If full discount (free): mark step 2 (payment) as completed so it's skipped
     // Clear previous completion timestamps for fresh start
     const { error: sessionError } = await supabaseAdmin
       .from('onboarding_sessions')
@@ -147,8 +150,9 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         current_step: 1, // Always start at info review
         step_1_completed_at: null,
-        step_2_completed_at: isFreeConversion ? new Date().toISOString() : null, // Skip payment if free
-        payment_waived: isFreeConversion, // Track that fee was waived
+        step_2_completed_at: isFreeConversion ? new Date().toISOString() : null, // Skip payment only if fully free
+        payment_waived: isFreeConversion, // Track that fee was fully waived
+        discount_amount: discountAmount, // Track discount amount
         step_3_completed_at: null,
         step_4_completed_at: null,
         step_5_completed_at: null,

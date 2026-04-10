@@ -12,9 +12,18 @@ export async function GET() {
         referral_split_apartment,
         referral_split_internal,
         referral_split_external,
-        referral_brokerage_name
+        referral_brokerage_name,
+        referral_conversion_discount,
+        referral_conversion_free_until
       `)
       .single()
+
+    // Check if promo is active
+    const now = new Date()
+    const promoEnd = settings?.referral_conversion_free_until 
+      ? new Date(settings.referral_conversion_free_until) 
+      : null
+    const promoActive = promoEnd && now <= promoEnd && (settings?.referral_conversion_discount || 0) > 0
 
     return NextResponse.json({
       success: true,
@@ -24,6 +33,8 @@ export async function GET() {
         split_internal: settings?.referral_split_internal ?? 90,
         split_external: settings?.referral_split_external ?? 88,
         brokerage_name: settings?.referral_brokerage_name ?? 'Referral Collective',
+        promo_discount: promoActive ? settings?.referral_conversion_discount : 0,
+        promo_active: promoActive,
       }
     })
   } catch (error: any) {
@@ -36,6 +47,8 @@ export async function GET() {
         split_internal: 90,
         split_external: 88,
         brokerage_name: 'Referral Collective',
+        promo_discount: 0,
+        promo_active: false,
       }
     })
   }

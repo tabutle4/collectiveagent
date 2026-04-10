@@ -36,6 +36,15 @@ export async function POST(request: NextRequest) {
 
     const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
 
+    // Fetch onboarding session to check for discount
+    const { data: session } = await supabaseAdmin
+      .from('onboarding_sessions')
+      .select('discount_amount')
+      .eq('user_id', prospect.id)
+      .single()
+    
+    const discountAmount = session?.discount_amount || 0
+
     // Step 1: Create Payload customer if they don't have one yet
     let payloadCustomerId = prospect.payload_payee_id
 
@@ -84,13 +93,17 @@ export async function POST(request: NextRequest) {
     })
 
     if (isReferralAgent) {
-      // Referral agent: $299 annual fee only, no monthly
-      params.append('description', 'Referral Collective Annual Membership')
+      // Referral agent: $299 annual fee only, no monthly (minus any discount)
+      const finalAmount = Math.max(0, referralAnnualFee - discountAmount)
+      const description = discountAmount > 0 
+        ? `Referral Collective Annual Membership (${discountAmount >= referralAnnualFee ? 'Promo - Free' : `$${discountAmount} discount applied`})`
+        : 'Referral Collective Annual Membership'
+      params.append('description', description)
       params.append('items[0][type]', 'Annual Membership Fee')
-      params.append('items[0][description]', 'Referral Collective Annual Membership Fee')
-      params.append('items[0][amount]', referralAnnualFee.toString())
+      params.append('items[0][description]', description)
+      params.append('items[0][amount]', finalAmount.toString())
       params.append('items[0][entry_type]', 'charge')
-      invoiceAmount = referralAnnualFee
+      invoiceAmount = finalAmount
     } else {
       // Standard agent: $399 onboarding + prorated monthly
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()

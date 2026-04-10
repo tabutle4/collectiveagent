@@ -10,6 +10,7 @@ import { Check, X, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react'
 export default function ReferralCollectiveInformationPage() {
   const router = useRouter()
   const [isSignedIn, setIsSignedIn] = useState(false)
+  const [isAgent, setIsAgent] = useState(false)
   const [isConverting, setIsConverting] = useState(false)
   const [userName, setUserName] = useState('')
   const [referralSettings, setReferralSettings] = useState({
@@ -18,9 +19,11 @@ export default function ReferralCollectiveInformationPage() {
     split_internal: 90,
     split_external: 88,
     brokerage_name: 'Referral Collective',
+    promo_discount: 0,
+    promo_active: false,
   })
 
-  // Fetch referral settings
+  // Fetch referral settings (includes promo info)
   useEffect(() => {
     fetch('/api/settings/referral')
       .then(r => r.json())
@@ -40,6 +43,10 @@ export default function ReferralCollectiveInformationPage() {
           if (data.user && data.user.status === 'active') {
             setIsSignedIn(true)
             setUserName(data.user.preferred_first_name || data.user.first_name || '')
+            // Check if user is a standard agent (eligible for conversion promo)
+            if (data.user.role === 'agent') {
+              setIsAgent(true)
+            }
           }
         }
       } catch {
@@ -51,7 +58,12 @@ export default function ReferralCollectiveInformationPage() {
 
   // Handle conversion for signed-in agents
   async function handleConvertToReferral() {
-    if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process, sign the new ICA, and pay the $${referralSettings.annual_fee} annual fee. Your current monthly subscription will be cancelled. Continue?`)) {
+    const finalPrice = referralSettings.promo_active && referralSettings.promo_discount > 0 
+      ? Math.max(0, referralSettings.annual_fee - referralSettings.promo_discount)
+      : referralSettings.annual_fee
+    const priceText = finalPrice === 0 ? 'free (promotional offer)' : `$${finalPrice}`
+    
+    if (!confirm(`This will convert your account to ${referralSettings.brokerage_name}. You will need to complete the referral onboarding process and sign the new ICA. The annual fee is ${priceText}. Your current monthly subscription will be cancelled. Continue?`)) {
       return
     }
 
@@ -179,7 +191,23 @@ export default function ReferralCollectiveInformationPage() {
 
             {/* Annual Fee */}
             <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 flex flex-col md:flex-row items-center gap-4 p-5">
-              <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">${referralSettings.annual_fee} / year</span>
+              {isAgent && referralSettings.promo_active && referralSettings.promo_discount > 0 ? (
+                <div className="flex flex-col items-center md:items-start">
+                  <span className="text-sm text-luxury-gray-3 line-through">${referralSettings.annual_fee} / year</span>
+                  <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">
+                    {referralSettings.promo_discount >= referralSettings.annual_fee ? (
+                      'FREE'
+                    ) : (
+                      `$${referralSettings.annual_fee - referralSettings.promo_discount} / year`
+                    )}
+                  </span>
+                  <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded mt-1">
+                    CRC Agent Promo: Save ${referralSettings.promo_discount}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">${referralSettings.annual_fee} / year</span>
+              )}
               <p className="text-sm text-luxury-gray-2">
                 <strong className="text-luxury-gray-1">Annual membership fee.</strong> No monthly fees. No contracts. No lock-in. Just one simple annual payment to keep your license active and earning.
               </p>

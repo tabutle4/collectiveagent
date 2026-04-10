@@ -46,6 +46,7 @@ interface CompanySettings {
   referral_payment_terms_days: number
   referral_refund_period_days: number
   referral_conversion_free_until: string | null
+  referral_conversion_discount: number
   // Apartment locating
   apartment_invoice_fee: number
 }
@@ -604,28 +605,45 @@ export default function SettingsPage() {
                   {/* CRC Agent Conversion Promotion */}
                   <div className="inner-card">
                     <h3 className="text-sm font-semibold text-luxury-gray-1 mb-4">CRC Agent Conversion Promotion</h3>
-                    <div>
-                      <label className="field-label">Free Conversion Until</label>
-                      <input
-                        type="date"
-                        value={settings.referral_conversion_free_until ? settings.referral_conversion_free_until.split('T')[0] : ''}
-                        onChange={(e) => updateSetting('referral_conversion_free_until', e.target.value ? `${e.target.value}T23:59:59` : null)}
-                        className="input-luxury"
-                      />
-                      <p className="text-xs text-luxury-gray-3 mt-1">
-                        CRC agents converting to Referral Collective before this date will have their $299 fee waived. Leave blank to disable promotion.
-                      </p>
-                      {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) > new Date() && (
-                        <p className="text-xs text-green-600 mt-2 font-medium">
-                          ✓ Promotion active until {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="field-label">Discount Amount ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="299"
+                          value={settings.referral_conversion_discount || 0}
+                          onChange={(e) => updateSetting('referral_conversion_discount', parseInt(e.target.value) || 0)}
+                          className="input-luxury"
+                          placeholder="0"
+                        />
+                        <p className="text-xs text-luxury-gray-3 mt-1">
+                          Amount to discount from $299 fee. Set to 299 for free conversion.
                         </p>
-                      )}
-                      {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) <= new Date() && (
-                        <p className="text-xs text-luxury-gray-3 mt-2">
-                          Promotion ended {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
+                      </div>
+                      <div>
+                        <label className="field-label">Promotion Ends</label>
+                        <input
+                          type="date"
+                          value={settings.referral_conversion_free_until ? settings.referral_conversion_free_until.split('T')[0] : ''}
+                          onChange={(e) => updateSetting('referral_conversion_free_until', e.target.value ? `${e.target.value}T23:59:59` : null)}
+                          className="input-luxury"
+                        />
+                        <p className="text-xs text-luxury-gray-3 mt-1">
+                          Leave blank to disable promotion.
                         </p>
-                      )}
+                      </div>
                     </div>
+                    {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) > new Date() && settings.referral_conversion_discount > 0 && (
+                      <p className="text-xs text-green-600 mt-3 font-medium">
+                        ✓ Promotion active: ${settings.referral_conversion_discount} off (pay ${299 - settings.referral_conversion_discount}) until {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
+                      </p>
+                    )}
+                    {settings.referral_conversion_free_until && new Date(settings.referral_conversion_free_until) <= new Date() && (
+                      <p className="text-xs text-luxury-gray-3 mt-3">
+                        Promotion ended {new Date(settings.referral_conversion_free_until).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
 
                 </div>

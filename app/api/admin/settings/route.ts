@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
       referral_payment_terms_days: 30,
       referral_refund_period_days: 90,
       referral_conversion_free_until: null,
+      referral_conversion_discount: 0,
       // Apartment Locating
       apartment_invoice_fee: 100,
     }
