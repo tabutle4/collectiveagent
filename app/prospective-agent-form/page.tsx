@@ -129,7 +129,7 @@ function ProspectiveAgentFormContent() {
       }
 
       router.push(
-        `/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}`
+        `/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}&type=${formData.mls_choice === 'Referral Collective (No MLS)' ? 'referral' : 'standard'}`
       )
     } catch (err) {
       setError('An error occurred. Please try again.')

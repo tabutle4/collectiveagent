@@ -11,6 +11,7 @@ function SuccessContent() {
   const searchParams = useSearchParams()
   const name = searchParams.get('name') || 'there'
   const email = searchParams.get('email') || ''
+  const isReferral = searchParams.get('type') === 'referral'
 
   return (
     <div className="relative min-h-screen flex flex-col" style={{ backgroundColor: '#F9F9F9' }}>
@@ -30,30 +31,51 @@ function SuccessContent() {
                 Thank You, {name}!
               </h1>
               <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                We've received your information and are excited to connect with you.
+                {isReferral
+                  ? "We have received your information. You are one step closer to keeping your license active with Referral Collective."
+                  : "We have received your information and are excited to connect with you."}
               </p>
             </div>
 
             <div className="container-card mb-5">
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                What's Next
+                What Happens Next
               </h2>
               <p className="text-sm text-luxury-gray-2 mb-4">
-                Check your email{email && ` (${email})`} — we just sent you information about our commission plans and your next steps.
+                Check your email{email && ` (${email})`} for your next steps.
               </p>
               <div className="space-y-3">
-                <div className="inner-card flex items-start gap-3">
-                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">01</span>
-                  <p className="text-sm text-luxury-gray-2">Review our commission plans and company offerings</p>
-                </div>
-                <div className="inner-card flex items-start gap-3">
-                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">02</span>
-                  <p className="text-sm text-luxury-gray-2">Start your onboarding using the personalized link in your email</p>
-                </div>
-                <div className="inner-card flex items-start gap-3">
-                  <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">03</span>
-                  <p className="text-sm text-luxury-gray-2">Or schedule a call with our broker to talk through your goals</p>
-                </div>
+                {isReferral ? (
+                  <>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">01</span>
+                      <p className="text-sm text-luxury-gray-2">Click the link in your email to start onboarding</p>
+                    </div>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">02</span>
+                      <p className="text-sm text-luxury-gray-2">Pay your $299 annual membership fee</p>
+                    </div>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">03</span>
+                      <p className="text-sm text-luxury-gray-2">Sign your Referral Agent Agreement and complete W-9</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">01</span>
+                      <p className="text-sm text-luxury-gray-2">Review our commission plans and company offerings</p>
+                    </div>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">02</span>
+                      <p className="text-sm text-luxury-gray-2">Start your onboarding using the personalized link in your email</p>
+                    </div>
+                    <div className="inner-card flex items-start gap-3">
+                      <span className="text-luxury-accent font-semibold text-sm flex-shrink-0">03</span>
+                      <p className="text-sm text-luxury-gray-2">Or schedule a call with our broker to talk through your goals</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

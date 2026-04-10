@@ -116,7 +116,8 @@ export async function sendProspectWelcomeEmail(prospect: {
   const contentSection = isReferral
     ? `
       <p class="intro-text">Thank you for submitting your information. We're excited to help you keep your license active while earning referral income with minimal overhead.</p>
-      <p class="intro-text">Referral Collective is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents - that's it. No showings, no contracts, no MLS fees, no association dues. Just $299/year.</p>
+      <p class="intro-text">Referral Collective is a Limited Function Referral Office (LFRO) under TREC. You refer clients to other agents and that is it. No showings, no contracts, no MLS fees, no association dues. Just $299/year.</p>
+      <p class="intro-text">Want to learn more? <a href="https://agent.collectiverealtyco.com/referral-collective-information" style="color: #C5A278; text-decoration: underline;">View the full Referral Collective details</a>.</p>
       <div class="section-box">
         <h2 class="section-title">Your Referral Splits</h2>
         <p style="text-align: center; color: #333; font-size: 15px; margin: 0 0 8px 0;"><strong>Apartment Referrals:</strong> 85% to you</p>
