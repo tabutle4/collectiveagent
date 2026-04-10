@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Eye, PenLine, CheckCircle2, FileText, Download, Loader2 } from 'lucide-react'
+import { ArrowLeft, PenLine, CheckCircle2, FileText, Download, Loader2, User, Building2 } from 'lucide-react'
 import Link from 'next/link'
 
-interface AuditLog {
+interface SigningEvent {
   id: string
+  signer_type: 'agent' | 'broker'
+  signer_name: string
   document_type: string
-  event_type: 'viewed' | 'signed' | 'completed'
+  document_subtype: string
+  pdf_url: string | null
   ip_address: string
   user_agent: string
+  is_final_version: boolean
+  signed_at: string | null
   created_at: string
 }
 
@@ -20,19 +25,17 @@ interface AuditData {
     email: string
     isReferralAgent: boolean
   }
-  auditLogs: AuditLog[]
+  signingEvents: SigningEvent[]
 }
 
-const EVENT_ICONS = {
-  viewed: Eye,
-  signed: PenLine,
-  completed: CheckCircle2,
+const SIGNER_ICONS = {
+  agent: User,
+  broker: Building2,
 }
 
-const EVENT_LABELS = {
-  viewed: 'Viewed',
-  signed: 'Signed',
-  completed: 'Completed',
+const SIGNER_LABELS = {
+  agent: 'Agent',
+  broker: 'Broker',
 }
 
 const DOCUMENT_LABELS: Record<string, string> = {
@@ -62,8 +65,7 @@ function formatTime(dateStr: string): string {
 }
 
 function truncateUserAgent(ua: string): string {
-  if (!ua || ua === 'unknown') return 'Unknown'
-  // Extract browser name and version
+  if (!ua || ua === 'unknown' || ua === 'Unknown') return 'Unknown'
   const match = ua.match(/(Chrome|Firefox|Safari|Edge|Opera)\/[\d.]+/)
   if (match) return match[0]
   return ua.substring(0, 50) + (ua.length > 50 ? '...' : '')
@@ -121,24 +123,37 @@ export default function AuditTrailPage() {
     )
   }
 
-  // Group logs by document type
-  const logsByDocument = data.auditLogs.reduce((acc, log) => {
-    const key = log.document_type
+  // Group events by document type
+  const eventsByDocument = data.signingEvents.reduce((acc, event) => {
+    const key = event.document_type
     if (!acc[key]) acc[key] = []
-    acc[key].push(log)
+    acc[key].push(event)
     return acc
-  }, {} as Record<string, AuditLog[]>)
+  }, {} as Record<string, SigningEvent[]>)
 
-  // Calculate completion status
-  const signedDocs = new Set(
-    data.auditLogs
-      .filter(l => l.event_type === 'signed')
-      .map(l => l.document_type)
+  // Check which documents have final (broker co-signed) versions
+  const finalizedDocs = new Set(
+    data.signingEvents
+      .filter(e => e.is_final_version)
+      .map(e => e.document_type)
+  )
+
+  // Check which documents have agent signatures
+  const agentSignedDocs = new Set(
+    data.signingEvents
+      .filter(e => e.signer_type === 'agent')
+      .map(e => e.document_type)
   )
   
-  const allDocsComplete = data.user.isReferralAgent
-    ? signedDocs.has('ica') && signedDocs.has('policy_manual')
-    : signedDocs.has('ica') && signedDocs.has('commission_plan') && signedDocs.has('policy_manual')
+  // All docs complete when broker has co-signed required documents
+  const requiredDocs = data.user.isReferralAgent
+    ? ['ica', 'policy_manual']
+    : ['ica', 'commission_plan', 'policy_manual']
+  
+  // Policy manual doesn't need broker signature
+  const allDocsComplete = requiredDocs.every(doc => 
+    doc === 'policy_manual' ? agentSignedDocs.has(doc) : finalizedDocs.has(doc)
+  )
 
   return (
     <div className="min-h-screen bg-luxury-cream p-4 md:p-8">
@@ -155,7 +170,7 @@ export default function AuditTrailPage() {
           
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="page-title mb-1">Audit Trail</h1>
+              <h1 className="page-title mb-1">Signing Audit Trail</h1>
               <p className="text-sm text-luxury-gray-3">Document signing history</p>
             </div>
             <button 
@@ -204,53 +219,74 @@ export default function AuditTrailPage() {
           </div>
         </div>
 
-        {/* Audit Trail */}
+        {/* Signing Events */}
         <div className="container-card">
-          <h2 className="section-title mb-6">Document History</h2>
+          <h2 className="section-title mb-6">Signing History</h2>
           
-          {data.auditLogs.length === 0 ? (
+          {data.signingEvents.length === 0 ? (
             <p className="text-sm text-luxury-gray-3 text-center py-8">
-              No document activity recorded yet.
+              No signing events recorded yet.
             </p>
           ) : (
             <div className="space-y-6">
-              {Object.entries(logsByDocument).map(([docType, logs]) => (
+              {Object.entries(eventsByDocument).map(([docType, events]) => (
                 <div key={docType} className="inner-card">
                   <div className="flex items-center gap-2 mb-4">
                     <FileText size={16} className="text-luxury-gray-3" />
                     <h3 className="text-sm font-medium text-luxury-gray-1">
                       {DOCUMENT_LABELS[docType] || docType}
                     </h3>
-                    {signedDocs.has(docType) && (
+                    {finalizedDocs.has(docType) ? (
                       <span className="ml-auto text-xs text-green-600 flex items-center gap-1">
                         <CheckCircle2 size={12} />
-                        Signed
+                        Finalized
                       </span>
-                    )}
+                    ) : agentSignedDocs.has(docType) ? (
+                      <span className="ml-auto text-xs text-amber-600 flex items-center gap-1">
+                        <PenLine size={12} />
+                        Awaiting Broker
+                      </span>
+                    ) : null}
                   </div>
                   
                   <div className="space-y-3">
-                    {logs.map((log) => {
-                      const Icon = EVENT_ICONS[log.event_type]
+                    {events.map((event) => {
+                      const Icon = SIGNER_ICONS[event.signer_type]
+                      const timestamp = event.signed_at || event.created_at
                       return (
                         <div 
-                          key={log.id}
+                          key={event.id}
                           className="flex items-start gap-3 text-sm border-l-2 border-luxury-gray-5 pl-3 py-1"
                         >
                           <Icon size={16} className="text-luxury-gray-3 mt-0.5 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-luxury-gray-1">
-                              <span className="font-medium">{EVENT_LABELS[log.event_type]}</span>
+                              <span className="font-medium">{SIGNER_LABELS[event.signer_type]} Signed</span>
                               {' by '}
-                              <span className="text-luxury-gray-2">({data.user.email})</span>
+                              <span className="text-luxury-gray-2">{event.signer_name}</span>
+                              {event.is_final_version && (
+                                <span className="ml-2 text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                                  Final Version
+                                </span>
+                              )}
                             </p>
                             <p className="text-xs text-luxury-gray-3 mt-0.5">
-                              IP: {log.ip_address}
+                              IP: {event.ip_address} | Browser: {truncateUserAgent(event.user_agent)}
                             </p>
+                            {event.pdf_url && (
+                              <a 
+                                href={event.pdf_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-luxury-gold hover:underline mt-1 inline-block"
+                              >
+                                View PDF
+                              </a>
+                            )}
                           </div>
                           <div className="text-right flex-shrink-0">
-                            <p className="text-luxury-gray-1">{formatDate(log.created_at)}</p>
-                            <p className="text-xs text-luxury-gray-3">{formatTime(log.created_at)}</p>
+                            <p className="text-luxury-gray-1">{formatDate(timestamp)}</p>
+                            <p className="text-xs text-luxury-gray-3">{formatTime(timestamp)}</p>
                           </div>
                         </div>
                       )
@@ -265,7 +301,7 @@ export default function AuditTrailPage() {
         {/* Print Footer */}
         <div className="hidden print:block mt-8 text-center text-xs text-luxury-gray-3">
           <p>Generated by Collective Agent on {new Date().toLocaleString()}</p>
-          <p>This document is a record of electronic signatures and document access.</p>
+          <p>This document is a record of electronic signatures.</p>
         </div>
       </div>
     </div>

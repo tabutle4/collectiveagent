@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search, ExternalLink } from 'lucide-react'
+import { CheckCircle2, Circle, ChevronDown, ChevronUp, Search, ExternalLink, FileText } from 'lucide-react'
 
 interface Agent {
   id: string
@@ -412,13 +412,22 @@ export default function AdminOnboardingPage() {
 
                       {/* Link to agent profile */}
                       <div className="pt-3 border-t border-luxury-gray-5/30 flex items-center justify-between">
-                        <a
-                          href={`/admin/users/${agent.id}`}
-                          className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
-                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                        >
-                          <ExternalLink size={11} /> View Profile
-                        </a>
+                        <div className="flex items-center gap-4">
+                          <a
+                            href={`/admin/users/${agent.id}`}
+                            className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          >
+                            <ExternalLink size={11} /> View Profile
+                          </a>
+                          <a
+                            href={`/admin/audit-trail/${agent.id}`}
+                            className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          >
+                            <FileText size={11} /> Audit Trail
+                          </a>
+                        </div>
                         {agent.full_nav_access && (
                           <button
                             onClick={() => toggleNavAccess(agent.id, agent.full_nav_access)}
