@@ -98,7 +98,7 @@ export async function middleware(request: NextRequest) {
 
   // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
-    return NextResponse.redirect(new URL('/agent/dashboard', request.url))
+    return NextResponse.redirect(new URL('/profile', request.url))
   }
 
   if (pathname.startsWith('/agent') && isAdminRole) {
