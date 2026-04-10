@@ -89,6 +89,8 @@ export async function POST(request: NextRequest) {
         joining_team: formData.joining_team || null,
         prospect_status: 'new',
         campaign_token,
+        // Referral agents don't pay monthly fees
+        monthly_fee_waived: isReferralAgent,
       })
       .select()
       .single()
