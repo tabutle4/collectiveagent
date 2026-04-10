@@ -71,7 +71,7 @@ const adminNav: NavItem[] = [
     icon: FileText,
     external: true,
   },
-  { href: '/admin/settings', label: 'Settings', icon: Settings, disabled: true },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
 ]
 
 const tcNav: NavItem[] = [
