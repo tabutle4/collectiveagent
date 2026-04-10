@@ -12,19 +12,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 })
     }
 
-    // Fetch standard settings
+    // Fetch all settings (standard + referral)
     const { data: companySettings } = await supabaseAdmin
       .from('company_settings')
-      .select('standard_onboarding_fee, standard_monthly_fee')
+      .select('standard_onboarding_fee, standard_monthly_fee, referral_annual_fee')
       .single()
     
-    const onboardingFee = companySettings?.standard_onboarding_fee ?? 399
-    const monthlyFee = companySettings?.standard_monthly_fee ?? 50
+    const standardOnboardingFee = companySettings?.standard_onboarding_fee ?? 399
+    const standardMonthlyFee = companySettings?.standard_monthly_fee ?? 50
+    const referralAnnualFee = companySettings?.referral_annual_fee ?? 299
 
-    // Authenticate by campaign_token
+    // Authenticate by campaign_token - include mls_choice to determine agent type
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, payload_payee_id')
+      .select('id, first_name, last_name, email, payload_payee_id, mls_choice')
       .eq('campaign_token', token)
       .eq('status', 'prospect')
       .single()
@@ -32,6 +33,8 @@ export async function POST(request: NextRequest) {
     if (prospectError || !prospect) {
       return NextResponse.json({ error: 'Invalid or expired onboarding link' }, { status: 404 })
     }
+
+    const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
 
     // Step 1: Create Payload customer if they don't have one yet
     let payloadCustomerId = prospect.payload_payee_id
@@ -67,41 +70,57 @@ export async function POST(request: NextRequest) {
         .eq('id', prospect.id)
     }
 
-    // Step 2: Calculate prorated fee with date range label
     const now = new Date()
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-    const today = now.getDate()
-    const remainingDays = daysInMonth - today + 1
+    let invoiceAmount: number
+    let proratedAmount = 0
+    let proratedLabel = ''
 
-    // Start = today, End = last day of month
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const yy = String(now.getFullYear()).slice(2)
-    const startLabel = `${pad(now.getMonth() + 1)}/${pad(today)}/${yy}`
-    const endLabel = `${pad(now.getMonth() + 1)}/${pad(daysInMonth)}/${yy}`
-    const proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
-
-    const proratedAmount = Math.round((monthlyFee / daysInMonth) * remainingDays * 100) / 100
-
-    // Step 3: Create the invoice
+    // Step 2: Build invoice based on agent type
     const params = new URLSearchParams({
       type: 'bill',
       due_date: now.toISOString().split('T')[0],
       processing_id: process.env.PAYLOAD_PROCESSING_ID!,
       customer_id: payloadCustomerId,
-      description: 'Onboarding Invoice',
-      'items[0][type]': 'Onboarding Fee',
-      'items[0][description]': 'Non-Refundable Onboarding Fee',
-      'items[0][amount]': onboardingFee.toString(),
-      'items[0][entry_type]': 'charge',
     })
 
-    if (proratedAmount > 0) {
-      params.append('items[1][type]', 'Monthly Fee (Prorated)')
-      params.append('items[1][description]', proratedLabel)
-      params.append('items[1][amount]', proratedAmount.toString())
-      params.append('items[1][entry_type]', 'charge')
+    if (isReferralAgent) {
+      // Referral agent: $299 annual fee only, no monthly
+      params.append('description', 'Referral Collective Annual Membership')
+      params.append('items[0][type]', 'Annual Membership Fee')
+      params.append('items[0][description]', 'Referral Collective Annual Membership Fee')
+      params.append('items[0][amount]', referralAnnualFee.toString())
+      params.append('items[0][entry_type]', 'charge')
+      invoiceAmount = referralAnnualFee
+    } else {
+      // Standard agent: $399 onboarding + prorated monthly
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      const today = now.getDate()
+      const remainingDays = daysInMonth - today + 1
+
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const yy = String(now.getFullYear()).slice(2)
+      const startLabel = `${pad(now.getMonth() + 1)}/${pad(today)}/${yy}`
+      const endLabel = `${pad(now.getMonth() + 1)}/${pad(daysInMonth)}/${yy}`
+      proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
+      proratedAmount = Math.round((standardMonthlyFee / daysInMonth) * remainingDays * 100) / 100
+
+      params.append('description', 'Onboarding Invoice')
+      params.append('items[0][type]', 'Onboarding Fee')
+      params.append('items[0][description]', 'Non-Refundable Onboarding Fee')
+      params.append('items[0][amount]', standardOnboardingFee.toString())
+      params.append('items[0][entry_type]', 'charge')
+
+      if (proratedAmount > 0) {
+        params.append('items[1][type]', 'Monthly Fee (Prorated)')
+        params.append('items[1][description]', proratedLabel)
+        params.append('items[1][amount]', proratedAmount.toString())
+        params.append('items[1][entry_type]', 'charge')
+      }
+
+      invoiceAmount = standardOnboardingFee + proratedAmount
     }
 
+    // Step 3: Create the invoice
     const invoiceRes = await fetch('https://api.payload.com/invoices/', {
       method: 'POST',
       headers: {
@@ -123,6 +142,24 @@ export async function POST(request: NextRequest) {
     const invoiceId = invoiceData.id
 
     // Step 4: Get checkout token
+    // Referral agents: no auto-billing (they pay annually, not monthly)
+    // Standard agents: offer auto-billing for monthly fees
+    const checkoutIntent: any = {
+      checkout_plugin: {
+        amount: invoiceAmount,
+        description: isReferralAgent ? 'Referral Collective Annual Membership' : 'Onboarding Invoice',
+        conv_fee: true,
+        card_payments: true,
+        bank_account_payments: true,
+      },
+    }
+
+    // Only show auto-billing toggle for standard agents (who have monthly fees)
+    if (!isReferralAgent) {
+      checkoutIntent.checkout_plugin.auto_billing_toggle = true
+      checkoutIntent.checkout_plugin.keep_active_toggle = true
+    }
+
     const tokenRes = await fetch('https://api.payload.com/access_tokens', {
       method: 'POST',
       headers: {
@@ -131,17 +168,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         type: 'client',
-        intent: {
-  checkout_plugin: {
-    amount: onboardingFee + proratedAmount,
-    description: 'Onboarding Invoice',
-            conv_fee: true,
-            auto_billing_toggle: true,
-            keep_active_toggle: true,
-            card_payments: true,
-            bank_account_payments: true,
-          },
-        },
+        intent: checkoutIntent,
       }),
     })
 
@@ -160,6 +187,7 @@ export async function POST(request: NextRequest) {
       invoice_id: invoiceId,
       prorated_amount: proratedAmount,
       prorated_label: proratedLabel,
+      is_referral: isReferralAgent,
     })
   } catch (error: any) {
     console.error('Onboarding create-payment error:', error)
