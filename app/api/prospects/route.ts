@@ -11,6 +11,8 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.json()
 
+    const isReferralAgent = formData.mls_choice === 'Referral Collective (No MLS)'
+
     const requiredFields = [
       'first_name',
       'last_name',
@@ -20,13 +22,17 @@ export async function POST(request: NextRequest) {
       'phone',
       'location',
       'mls_choice',
-      'association_status',
       'expectations',
       'accountability',
       'lead_generation',
       'additional_info',
       'how_heard',
     ]
+
+    // Association status only required for non-referral agents
+    if (!isReferralAgent) {
+      requiredFields.push('association_status')
+    }
 
     for (const field of requiredFields) {
       if (!formData[field]) {
