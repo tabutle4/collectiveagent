@@ -34,7 +34,7 @@ export default function AgentDashboard() {
   // Redirect agents and referrals to profile page
   useEffect(() => {
     if (authUser?.role === 'agent' || authUser?.role === 'referral') {
-      router.replace('/profile')
+      router.replace('agent/profile')
     }
   }, [authUser, router])
 
