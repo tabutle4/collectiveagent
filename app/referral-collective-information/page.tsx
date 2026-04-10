@@ -197,30 +197,30 @@ export default function ReferralCollectiveInformationPage() {
             </div>
 
             {/* Annual Fee */}
-            <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 flex flex-col md:flex-row items-center gap-4 p-5">
+            <div className="inner-card bg-chart-gold-1 border border-chart-gold-4 p-5">
               {isAgent && referralSettings.promo_active && referralSettings.promo_discount > 0 ? (
-                <div className="flex flex-col items-center md:items-start">
-                  <span className="text-sm text-luxury-gray-3 line-through">${referralSettings.annual_fee} / year</span>
-                  <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">
-                    {referralSettings.promo_discount >= referralSettings.annual_fee ? (
-                      'FREE first year'
-                    ) : (
-                      `$${referralSettings.annual_fee - referralSettings.promo_discount} first year`
-                    )}
-                  </span>
-                  <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded mt-1">
-                    CRC Agent Promo: Save ${referralSettings.promo_discount}
-                  </span>
-                  <span className="text-xs text-luxury-gray-3 mt-1">
-                    Then ${referralSettings.annual_fee}/year
-                  </span>
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-bold text-chart-gold-9">
+                      {referralSettings.promo_discount >= referralSettings.annual_fee ? 'FREE' : `$${referralSettings.annual_fee - referralSettings.promo_discount}`}
+                    </span>
+                    <span className="text-sm text-luxury-gray-3">
+                      <span className="line-through">${referralSettings.annual_fee}</span>
+                      <span className="ml-2">first year</span>
+                    </span>
+                  </div>
+                  <p className="text-sm text-luxury-gray-2">
+                    <strong className="text-luxury-gray-1">Limited time for CRC agents.</strong> Renews at ${referralSettings.annual_fee}/year. No monthly fees. No contracts.
+                  </p>
                 </div>
               ) : (
-                <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">${referralSettings.annual_fee} / year</span>
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                  <span className="text-3xl font-bold text-chart-gold-9 whitespace-nowrap">${referralSettings.annual_fee} / year</span>
+                  <p className="text-sm text-luxury-gray-2">
+                    <strong className="text-luxury-gray-1">Annual membership fee.</strong> No monthly fees. No contracts. No lock-in. Just one simple annual payment to keep your license active and earning.
+                  </p>
+                </div>
               )}
-              <p className="text-sm text-luxury-gray-2">
-                <strong className="text-luxury-gray-1">Annual membership fee.</strong> No monthly fees. No contracts. No lock-in. Just one simple annual payment to keep your license active and earning.
-              </p>
             </div>
           </div>
 
