@@ -16,12 +16,10 @@ export default function WebsitePreview() {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const videos = [
-    // Cloudinary (Courtney's site - known working)
-    'https://res.cloudinary.com/luxuryp/video/upload/f_auto,q_auto/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.mp4',
-    // Mixkit free stock videos (test these - usually allow embedding)
-    'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-city-buildings-702-large.mp4',
-    'https://assets.mixkit.co/videos/preview/mixkit-living-room-in-a-modern-house-4646-large.mp4',
-    'https://assets.mixkit.co/videos/preview/mixkit-aerial-shot-of-a-big-city-next-to-the-sea-1178-large.mp4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/1.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/2.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/3.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.MP4',
   ];
 
   // White logo for dark backgrounds (from Courtney's site footer)
@@ -222,8 +220,8 @@ export default function WebsitePreview() {
         .listing-card:nth-child(4) { grid-column: span 4; }
         .listing-card:nth-child(5) { grid-column: span 4; }
         .listing-card:nth-child(6) { grid-column: span 6; }
-        .listing-image-wrap { position: relative; height: 380px; overflow: hidden; }
-        .listing-card:nth-child(1) .listing-image-wrap { height: 480px; }
+        .listing-image-wrap { position: relative; height: 450px; overflow: hidden; }
+        .listing-card:nth-child(1) .listing-image-wrap { height: 550px; }
         .listing-image { width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
         .listing-card:hover .listing-image { transform: scale(1.05); }
         .listing-status { position: absolute; top: 20px; left: 20px; padding: 8px 14px; font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); color: #fff; }

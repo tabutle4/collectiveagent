@@ -16,10 +16,10 @@ export default function WebsitePreview() {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const videos = [
-    '/videos/1.mp4',
-    '/videos/2.mp4',
-    '/videos/3.mp4',
-    '/videos/4.mp4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/1.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/2.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/3.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.MP4',
   ];
 
   // White logo for dark backgrounds (from Courtney's site footer)
