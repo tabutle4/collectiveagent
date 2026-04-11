@@ -16,7 +16,12 @@ export default function WebsitePreview() {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const videos = [
+    // Cloudinary (Courtney's site - known working)
     'https://res.cloudinary.com/luxuryp/video/upload/f_auto,q_auto/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.mp4',
+    // Mixkit free stock videos (test these - usually allow embedding)
+    'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-city-buildings-702-large.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-living-room-in-a-modern-house-4646-large.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-aerial-shot-of-a-big-city-next-to-the-sea-1178-large.mp4',
   ];
 
   // White logo for dark backgrounds (from Courtney's site footer)
@@ -364,11 +369,12 @@ export default function WebsitePreview() {
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
           <video
             ref={videoRef}
+            key={currentVideo}
             autoPlay
             muted
-            loop
             playsInline
             preload="auto"
+            onEnded={handleVideoEnd}
             onCanPlayThrough={handleCanPlay}
           >
             <source src={videos[currentVideo]} type="video/mp4" />
@@ -385,6 +391,7 @@ export default function WebsitePreview() {
           </div>
         </div>
         <div className="scroll-indicator"><span>Scroll</span><div className="scroll-line"></div></div>
+        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { if (i !== currentVideo) { setVideoLoaded(false); setCurrentVideo(i); } }} />)}</div>
       </section>
 
       <section className="stats-section reveal" ref={statsRef}>
