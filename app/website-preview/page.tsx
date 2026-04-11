@@ -141,7 +141,7 @@ export default function WebsitePreview() {
         </button>
       </nav>
 
-      {/* Hero Section with Courtney's actual video */}
+      {/* Hero Section with video */}
       <section className="hero">
         <div className="hero-video">
           <video 
@@ -149,15 +149,15 @@ export default function WebsitePreview() {
             muted 
             loop 
             playsInline
-            poster="https://res.cloudinary.com/luxuryp/videos/f_auto,q_auto/so_0,eo_0/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.jpg"
+            poster="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80"
           >
-            <source src="https://res.cloudinary.com/luxuryp/video/upload/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.mp4" type="video/mp4" />
+            <source src="https://cdn.pixabay.com/video/2020/07/30/45913-446930982_large.mp4" type="video/mp4" />
           </video>
           <div className="hero-overlay"></div>
         </div>
         <div className="hero-content">
           <p className="hero-eyebrow">Houston &amp; Dallas Real Estate</p>
-          <h1 className="hero-title">Collective <span>Realty Co.</span></h1>
+          <h1 className="hero-title">Collective Realty Co.</h1>
           <p className="hero-sub">Exceptional service and expertise for buyers, sellers, and investors across Texas. Your home journey starts here.</p>
           <div className="hero-cta">
             <a href="#" className="btn btn-primary">Search Homes</a>
@@ -440,6 +440,7 @@ export default function WebsitePreview() {
           background: #0a0a0a;
           color: #fff;
           min-height: 100vh;
+          --accent: #C5A278;
         }
 
         /* Navigation */
@@ -474,7 +475,7 @@ export default function WebsitePreview() {
           gap: 2.5rem;
         }
         .nav-links a {
-          color: #fff;
+          color: rgba(255,255,255,0.8);
           text-decoration: none;
           font-size: 0.7rem;
           font-weight: 500;
@@ -483,16 +484,17 @@ export default function WebsitePreview() {
           transition: color 0.2s;
         }
         .nav-links a:hover {
-          color: #C5A572;
+          color: #fff;
         }
         .nav-cta {
           padding: 0.75rem 1.5rem !important;
-          border: 1px solid #C5A572 !important;
-          color: #C5A572 !important;
+          border: 1px solid rgba(255,255,255,0.3) !important;
+          color: #fff !important;
         }
         .nav-cta:hover {
-          background: #C5A572 !important;
+          background: #fff !important;
           color: #0a0a0a !important;
+          border-color: #fff !important;
         }
 
         /* Hamburger Menu */
@@ -539,7 +541,7 @@ export default function WebsitePreview() {
         .hero-video {
           position: absolute;
           inset: 0;
-          background: url('https://res.cloudinary.com/luxuryp/videos/f_auto,q_auto/so_0,eo_0/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.jpg') center/cover no-repeat;
+          background: url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80') center/cover no-repeat;
         }
         .hero-video video {
           width: 100%;
@@ -549,7 +551,7 @@ export default function WebsitePreview() {
         .hero-overlay {
           position: absolute;
           inset: 0;
-          background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.6));
+          background: linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.65));
         }
         .hero-content {
           position: relative;
@@ -562,7 +564,7 @@ export default function WebsitePreview() {
           font-size: 0.7rem;
           letter-spacing: 0.4em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.7);
           margin-bottom: 2rem;
           font-weight: 500;
         }
@@ -573,15 +575,12 @@ export default function WebsitePreview() {
           line-height: 1.1;
           margin-bottom: 1.5rem;
           letter-spacing: 0.02em;
-        }
-        .hero-title span {
-          font-style: italic;
-          color: #C5A572;
+          color: #fff;
         }
         .hero-sub {
           font-size: 1.1rem;
           font-weight: 300;
-          color: rgba(255,255,255,0.8);
+          color: rgba(255,255,255,0.75);
           max-width: 550px;
           margin: 0 auto 3rem;
           line-height: 1.8;
@@ -604,20 +603,20 @@ export default function WebsitePreview() {
           font-family: 'Montserrat', sans-serif;
         }
         .btn-primary {
-          background: #C5A572;
+          background: var(--accent);
           color: #0a0a0a;
         }
         .btn-primary:hover {
-          background: #D4BC8A;
+          background: #d4b78f;
         }
         .btn-outline {
           background: transparent;
-          border: 1px solid rgba(255,255,255,0.4);
+          border: 1px solid rgba(255,255,255,0.35);
           color: #fff;
         }
         .btn-outline:hover {
-          border-color: #C5A572;
-          color: #C5A572;
+          border-color: #fff;
+          background: rgba(255,255,255,0.05);
         }
         .btn-full {
           width: 100%;
@@ -631,17 +630,18 @@ export default function WebsitePreview() {
           flex-direction: column;
           align-items: center;
           gap: 0.75rem;
-          opacity: 0.6;
+          opacity: 0.5;
         }
         .scroll-text {
           font-size: 0.6rem;
           letter-spacing: 0.3em;
           text-transform: uppercase;
+          color: rgba(255,255,255,0.7);
         }
         .scroll-line {
           width: 1px;
           height: 50px;
-          background: linear-gradient(to bottom, #C5A572, transparent);
+          background: linear-gradient(to bottom, rgba(255,255,255,0.5), transparent);
           animation: scroll 2s infinite;
         }
         @keyframes scroll {
@@ -653,14 +653,14 @@ export default function WebsitePreview() {
         .stats {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          background: linear-gradient(90deg, #0a0a0a 0%, #111 50%, #0a0a0a 100%);
-          border-top: 1px solid rgba(197,165,114,0.15);
-          border-bottom: 1px solid rgba(197,165,114,0.15);
+          background: #0a0a0a;
+          border-top: 1px solid rgba(255,255,255,0.08);
+          border-bottom: 1px solid rgba(255,255,255,0.08);
         }
         .stat {
           padding: 4rem 2rem;
           text-align: center;
-          border-right: 1px solid rgba(197,165,114,0.1);
+          border-right: 1px solid rgba(255,255,255,0.06);
         }
         .stat:last-child {
           border-right: none;
@@ -669,14 +669,14 @@ export default function WebsitePreview() {
           font-family: 'Cormorant Garamond', serif;
           font-size: 4rem;
           font-weight: 300;
-          color: #C5A572;
+          color: #fff;
           margin-bottom: 0.5rem;
         }
         .stat-label {
           font-size: 0.65rem;
           letter-spacing: 0.25em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.4);
         }
 
         /* Sections */
@@ -691,7 +691,7 @@ export default function WebsitePreview() {
           font-size: 0.65rem;
           letter-spacing: 0.35em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.45);
           margin-bottom: 1rem;
           font-weight: 500;
         }
@@ -699,6 +699,7 @@ export default function WebsitePreview() {
           font-family: 'Cormorant Garamond', serif;
           font-size: 3rem;
           font-weight: 300;
+          color: #fff;
         }
         .section-cta {
           text-align: center;
@@ -733,7 +734,7 @@ export default function WebsitePreview() {
           position: absolute;
           top: 1.25rem;
           left: 1.25rem;
-          background: #C5A572;
+          background: #fff;
           color: #0a0a0a;
           font-size: 0.55rem;
           font-weight: 600;
@@ -773,22 +774,23 @@ export default function WebsitePreview() {
           font-family: 'Cormorant Garamond', serif;
           font-size: 1.75rem;
           margin-bottom: 0.4rem;
+          color: #fff;
         }
         .listing-addr {
           font-size: 0.85rem;
-          color: rgba(255,255,255,0.7);
+          color: rgba(255,255,255,0.65);
           margin-bottom: 0.5rem;
         }
         .listing-meta {
           font-size: 0.75rem;
-          color: #C5A572;
+          color: rgba(255,255,255,0.5);
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
         }
         .listing-btn {
           background: transparent;
-          border: 1px solid #C5A572;
-          color: #C5A572;
+          border: 1px solid rgba(255,255,255,0.4);
+          color: #fff;
           padding: 0.75rem 1.5rem;
           font-size: 0.65rem;
           font-weight: 600;
@@ -799,8 +801,9 @@ export default function WebsitePreview() {
           font-family: 'Montserrat', sans-serif;
         }
         .listing-btn:hover {
-          background: #C5A572;
+          background: #fff;
           color: #0a0a0a;
+          border-color: #fff;
         }
 
         /* Broker */
@@ -834,7 +837,7 @@ export default function WebsitePreview() {
           font-size: 0.65rem;
           letter-spacing: 0.35em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.45);
           margin-bottom: 1.5rem;
           font-weight: 500;
         }
@@ -843,18 +846,19 @@ export default function WebsitePreview() {
           font-size: 2.75rem;
           font-weight: 300;
           margin-bottom: 0.5rem;
+          color: #fff;
         }
         .broker-title {
           font-size: 0.75rem;
           letter-spacing: 0.15em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.4);
           margin-bottom: 2rem;
         }
         .broker-text {
           font-size: 0.95rem;
           line-height: 1.9;
-          color: rgba(255,255,255,0.7);
+          color: rgba(255,255,255,0.65);
           margin-bottom: 1.5rem;
           font-weight: 300;
         }
@@ -896,12 +900,14 @@ export default function WebsitePreview() {
           font-size: 1.5rem;
           position: relative;
           z-index: 2;
+          color: #fff;
         }
 
         /* Testimonials */
         .testimonials {
-          background: linear-gradient(to right, #0d0d0d, #0a0a0a, #0d0d0d);
+          background: #0a0a0a;
           padding: 7rem 4rem;
+          border-top: 1px solid rgba(255,255,255,0.06);
         }
         .testimonial-container {
           max-width: 800px;
@@ -930,13 +936,13 @@ export default function WebsitePreview() {
           font-style: italic;
           line-height: 1.6;
           margin-bottom: 2rem;
-          color: rgba(255,255,255,0.9);
+          color: rgba(255,255,255,0.85);
         }
         .testimonial-author {
           font-size: 0.75rem;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.5);
         }
         .testimonial-dots {
           display: flex;
@@ -954,7 +960,7 @@ export default function WebsitePreview() {
           transition: all 0.2s;
         }
         .dot.active {
-          background: #C5A572;
+          background: var(--accent);
         }
 
         /* Podcast */
@@ -975,7 +981,7 @@ export default function WebsitePreview() {
           border-radius: 4px;
         }
         .podcast-text {
-          color: rgba(255,255,255,0.7);
+          color: rgba(255,255,255,0.65);
           line-height: 1.8;
           margin: 1.5rem 0 2rem;
           font-weight: 300;
@@ -983,10 +989,10 @@ export default function WebsitePreview() {
 
         /* Valuation */
         .valuation {
-          background: linear-gradient(135deg, #1a1815 0%, #0d0d0d 100%);
+          background: #111;
           text-align: center;
           padding: 5rem;
-          border: 1px solid rgba(197,165,114,0.15);
+          border: 1px solid rgba(255,255,255,0.08);
           max-width: 900px;
           margin: 0 auto;
         }
@@ -995,9 +1001,10 @@ export default function WebsitePreview() {
           font-size: 2.5rem;
           font-weight: 300;
           margin-bottom: 1rem;
+          color: #fff;
         }
         .valuation-text {
-          color: rgba(255,255,255,0.6);
+          color: rgba(255,255,255,0.55);
           margin-bottom: 2.5rem;
           max-width: 500px;
           margin-left: auto;
@@ -1014,14 +1021,18 @@ export default function WebsitePreview() {
         .valuation-input {
           flex: 1;
           padding: 1rem 1.5rem;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.12);
           color: #fff;
           font-size: 0.9rem;
           font-family: 'Montserrat', sans-serif;
         }
         .valuation-input::placeholder {
-          color: rgba(255,255,255,0.4);
+          color: rgba(255,255,255,0.35);
+        }
+        .valuation-input:focus {
+          outline: none;
+          border-color: rgba(255,255,255,0.3);
         }
 
         /* Contact */
@@ -1039,7 +1050,7 @@ export default function WebsitePreview() {
           padding-right: 2rem;
         }
         .contact-text {
-          color: rgba(255,255,255,0.7);
+          color: rgba(255,255,255,0.65);
           line-height: 1.8;
           margin: 1.5rem 0 2.5rem;
           font-weight: 300;
@@ -1058,16 +1069,16 @@ export default function WebsitePreview() {
           font-size: 0.65rem;
           letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.4);
         }
         .contact-value {
-          color: rgba(255,255,255,0.8);
+          color: rgba(255,255,255,0.75);
           font-weight: 300;
         }
         .contact-form-wrapper {
           background: #111;
           padding: 3rem;
-          border: 1px solid rgba(197,165,114,0.1);
+          border: 1px solid rgba(255,255,255,0.08);
         }
         .contact-form {
           display: flex;
@@ -1083,7 +1094,7 @@ export default function WebsitePreview() {
         .contact-form select,
         .contact-form textarea {
           padding: 1rem;
-          background: rgba(255,255,255,0.03);
+          background: rgba(255,255,255,0.02);
           border: 1px solid rgba(255,255,255,0.1);
           color: #fff;
           font-size: 0.9rem;
@@ -1094,16 +1105,16 @@ export default function WebsitePreview() {
         .contact-form select:focus,
         .contact-form textarea:focus {
           outline: none;
-          border-color: #C5A572;
+          border-color: rgba(255,255,255,0.3);
         }
         .contact-form input::placeholder,
         .contact-form textarea::placeholder {
-          color: rgba(255,255,255,0.4);
+          color: rgba(255,255,255,0.35);
         }
         .contact-form select {
           appearance: none;
           cursor: pointer;
-          color: rgba(255,255,255,0.4);
+          color: rgba(255,255,255,0.35);
         }
         .contact-form select:valid {
           color: #fff;
@@ -1116,7 +1127,7 @@ export default function WebsitePreview() {
         /* Footer */
         .footer {
           padding: 5rem 4rem 2rem;
-          border-top: 1px solid rgba(197,165,114,0.1);
+          border-top: 1px solid rgba(255,255,255,0.06);
         }
         .footer-grid {
           display: grid;
@@ -1132,7 +1143,7 @@ export default function WebsitePreview() {
         }
         .footer-tagline {
           font-size: 0.85rem;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.45);
           line-height: 1.8;
           font-weight: 300;
           margin-bottom: 2rem;
@@ -1143,25 +1154,25 @@ export default function WebsitePreview() {
         }
         .social-link {
           font-size: 0.7rem;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.45);
           text-decoration: none;
           letter-spacing: 0.1em;
           transition: color 0.2s;
         }
         .social-link:hover {
-          color: #C5A572;
+          color: #fff;
         }
         .footer-col h4 {
           font-size: 0.6rem;
           letter-spacing: 0.25em;
           text-transform: uppercase;
-          color: #C5A572;
+          color: rgba(255,255,255,0.5);
           margin-bottom: 1.5rem;
           font-weight: 500;
         }
         .footer-col a {
           display: block;
-          color: rgba(255,255,255,0.5);
+          color: rgba(255,255,255,0.45);
           text-decoration: none;
           font-size: 0.85rem;
           margin-bottom: 0.75rem;
@@ -1169,7 +1180,7 @@ export default function WebsitePreview() {
           transition: color 0.2s;
         }
         .footer-col a:hover {
-          color: #C5A572;
+          color: #fff;
         }
         .footer-legal-links {
           text-align: center;
@@ -1186,7 +1197,7 @@ export default function WebsitePreview() {
           transition: color 0.2s;
         }
         .footer-legal-links a:hover {
-          color: #C5A572;
+          color: rgba(255,255,255,0.6);
         }
         .footer-bottom {
           text-align: center;
@@ -1194,7 +1205,7 @@ export default function WebsitePreview() {
         }
         .footer-bottom p {
           font-size: 0.7rem;
-          color: rgba(255,255,255,0.3);
+          color: rgba(255,255,255,0.25);
           letter-spacing: 0.1em;
         }
 
@@ -1260,7 +1271,7 @@ export default function WebsitePreview() {
           .hero-cta { flex-direction: column; gap: 0.75rem; }
           .btn { width: 100%; text-align: center; }
           .stats { grid-template-columns: 1fr 1fr; }
-          .stat { padding: 2rem 1rem; border-right: none; border-bottom: 1px solid rgba(197,165,114,0.1); }
+          .stat { padding: 2rem 1rem; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
           .stat:nth-child(3), .stat:nth-child(4) { border-bottom: none; }
           .stat-num { font-size: 2.5rem; }
           .section-title { font-size: 2rem; }
@@ -1272,6 +1283,7 @@ export default function WebsitePreview() {
           .neighborhood { aspect-ratio: 4/3; }
           .testimonial-quote { font-size: 1.35rem; }
           .testimonial-dots { margin-top: 10rem; }
+          .testimonials { padding: 5rem 2rem; }
           .valuation { padding: 3rem 2rem; }
           .valuation-form { flex-direction: column; }
           .valuation-input { width: 100%; }
