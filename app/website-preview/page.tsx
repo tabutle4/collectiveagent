@@ -16,10 +16,7 @@ export default function WebsitePreview() {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const videos = [
-    'https://videos.pexels.com/video-files/3773486/3773486-hd_1920_1080_30fps.mp4',
-    'https://videos.pexels.com/video-files/5587616/5587616-hd_1920_1080_25fps.mp4',
-    'https://videos.pexels.com/video-files/4625513/4625513-hd_1920_1080_30fps.mp4',
-    'https://videos.pexels.com/video-files/5529610/5529610-hd_1920_1080_25fps.mp4',
+    'https://res.cloudinary.com/luxuryp/video/upload/f_auto,q_auto/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.mp4',
   ];
 
   // White logo for dark backgrounds (from Courtney's site footer)
@@ -367,12 +364,11 @@ export default function WebsitePreview() {
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
           <video
             ref={videoRef}
-            key={currentVideo}
             autoPlay
             muted
+            loop
             playsInline
             preload="auto"
-            onEnded={handleVideoEnd}
             onCanPlayThrough={handleCanPlay}
           >
             <source src={videos[currentVideo]} type="video/mp4" />
@@ -389,7 +385,6 @@ export default function WebsitePreview() {
           </div>
         </div>
         <div className="scroll-indicator"><span>Scroll</span><div className="scroll-line"></div></div>
-        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { if (i !== currentVideo) { setVideoLoaded(false); setCurrentVideo(i); } }} />)}</div>
       </section>
 
       <section className="stats-section reveal" ref={statsRef}>
