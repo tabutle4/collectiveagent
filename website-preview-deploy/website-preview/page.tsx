@@ -113,7 +113,7 @@ export default function WebsitePreview() {
   ];
 
   return (
-    <div className="website-preview">
+    <div className="website-preview" style={{ backgroundColor: '#0a0a0a', minHeight: '100vh' }}>
       <style jsx global>{`@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600&display=swap');`}</style>
       <style jsx>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
