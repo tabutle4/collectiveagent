@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 
 export default function WebsitePreview() {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentTestimonial, setCurrentTestimonial] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -11,95 +13,96 @@ export default function WebsitePreview() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Real listings from courtneyokanlomo.com
   const listings = [
     {
-      image: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80',
-      price: '$1,850,000',
-      address: '4521 River Oaks Blvd',
-      city: 'Houston',
-      beds: 5,
-      baths: 4,
-      sqft: '4,200',
-      badge: 'For Sale'
-    },
-    {
-      image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-      price: '$2,450,000',
-      address: '1820 Preston Hollow',
-      city: 'Dallas',
-      beds: 6,
-      baths: 5,
-      sqft: '5,800',
-      badge: 'For Sale'
-    },
-    {
-      image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&q=80',
-      price: '$975,000',
-      address: '9012 Memorial Park',
-      city: 'Houston',
-      beds: 4,
-      baths: 3,
-      sqft: '3,100',
-      badge: 'New Listing'
-    },
-    {
-      image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?w=800&q=80',
-      price: '$1,275,000',
-      address: '3847 Highland Park',
-      city: 'Dallas',
-      beds: 4,
-      baths: 4,
-      sqft: '3,600',
-      badge: 'For Sale'
-    },
-    {
-      image: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=800&q=80',
-      price: '$2,100,000',
-      address: '7234 Tanglewood',
-      city: 'Houston',
-      beds: 5,
-      baths: 5,
-      sqft: '4,800',
-      badge: 'Price Reduced'
-    },
-    {
-      image: 'https://images.unsplash.com/photo-1600573472591-ee6c8e695481?w=800&q=80',
-      price: '$895,000',
-      address: '2156 University Park',
-      city: 'Dallas',
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/27413120/-3703647671636790085.jpg',
+      price: '$759,800',
+      address: '3103 Lelia Street Unit: A and B',
+      city: 'Houston, TX',
       beds: 3,
       baths: 3,
-      sqft: '2,800',
+      sqft: '3,458',
       badge: 'Open House'
+    },
+    {
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/21154925/-5823161010216405600.jpg',
+      price: '$665,000',
+      address: '936 Brookwood Drive',
+      city: 'Dallas, TX',
+      beds: 4,
+      baths: 4,
+      sqft: '2,994',
+      badge: 'For Sale'
+    },
+    {
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/88627905/8322605856205348101.jpg',
+      price: '$470,000',
+      address: '11402 Collinsia Lane',
+      city: 'Cypress, TX',
+      beds: 4,
+      baths: 3,
+      sqft: '2,169',
+      badge: 'For Sale'
+    },
+    {
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/21204937/-6971321241190329174.jpg',
+      price: '$379,900',
+      address: '3224 Sioux Trail',
+      city: 'Crandall, TX',
+      beds: 4,
+      baths: 4,
+      sqft: '2,673',
+      badge: 'For Sale'
+    },
+    {
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/98933377/4714277768199769826.jpg',
+      price: '$349,900',
+      address: '3804 Sayers Street',
+      city: 'Houston, TX',
+      beds: 3,
+      baths: 3,
+      sqft: '1,593',
+      badge: 'New Construction'
+    },
+    {
+      image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/21178190/-7239361692667679586.jpg',
+      price: '$245,000',
+      address: '1309 Pennsylvania Avenue',
+      city: 'Dallas, TX',
+      beds: 3,
+      baths: 3,
+      sqft: '1,380',
+      badge: 'Under Contract'
     }
   ];
 
+  // Neighborhood images from Courtney's site
   const neighborhoods = [
-    { name: 'River Oaks', image: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=600&q=80' },
-    { name: 'The Heights', image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=600&q=80' },
-    { name: 'Preston Hollow', image: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=600&q=80' },
-    { name: 'Highland Park', image: 'https://images.unsplash.com/photo-1602343168117-bb8ffe3e2e9f?w=600&q=80' },
+    { name: 'Cypress', image: 'https://media-production.lp-cdn.com/media/w12r6bpxzyvslncfx4vt' },
+    { name: 'The Heights', image: 'https://media-production.lp-cdn.com/media/j4e2upot0p7moxlexbzw' },
+    { name: 'Oak Cliff', image: 'https://media-production.lp-cdn.com/media/gunjg851qixw05nqgi2s' },
+    { name: 'Katy', image: 'https://media-production.lp-cdn.com/media/sgqzqdoauxjeorskbuom' },
   ];
 
+  // Real testimonials from coachingbrokerage.com
   const testimonials = [
     {
-      quote: "They made what could have been an overwhelming process feel seamless. From our first conversation to closing, we felt like the only client that mattered.",
-      author: "First-Time Buyer",
-      location: "Houston"
+      quote: "I have joined CRC this year and the first 6 months has been amazing. I love that Courtney is so professional and encouraging. My prior two years in real estate was nothing compared to the topnotch knowledge, support, and family environment I have here.",
+      author: "Twila B.",
+      type: "Agent"
     },
     {
-      quote: "Courtney and her team went above and beyond. Their knowledge of the Dallas market is unmatched, and their negotiation skills got us $50K under asking.",
-      author: "Relocating Family",
-      location: "Dallas"
+      quote: "It was a great experience getting the chance to speak with Courtney one-on-one. She is very knowledgeable and helped out with all the questions I needed answered.",
+      author: "Eric R.",
+      type: "Client"
     },
     {
-      quote: "As investors, we've worked with dozens of agents. Collective Realty stands out for their professionalism, market insight, and genuine care for their clients.",
-      author: "Real Estate Investor",
-      location: "Houston"
+      quote: "Courtney was an amazing host for this 1/1 meeting. I got insightful information, she is always a pleasure to speak with!",
+      author: "Moneasia T.",
+      type: "Agent"
     }
   ];
-
-  const [currentTestimonial, setCurrentTestimonial] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -113,34 +116,52 @@ export default function WebsitePreview() {
       {/* Navigation */}
       <nav className={`nav ${scrolled ? 'nav-scrolled' : ''}`}>
         <div className="logo">
-          <span className="logo-main">COLLECTIVE</span>
-          <span className="logo-sub">REALTY CO.</span>
+          <img 
+            src="https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga" 
+            alt="Collective Realty Co."
+            className="logo-img"
+          />
         </div>
-        <div className="nav-links">
-          <a href="#">Buy</a>
-          <a href="#">Sell</a>
-          <a href="#">Agents</a>
-          <a href="#">Neighborhoods</a>
-          <a href="#">About</a>
-          <a href="#" className="nav-cta">Contact</a>
+        <div className={`nav-links ${mobileMenuOpen ? 'nav-open' : ''}`}>
+          <a href="#" onClick={() => setMobileMenuOpen(false)}>Buy</a>
+          <a href="#" onClick={() => setMobileMenuOpen(false)}>Sell</a>
+          <a href="#" onClick={() => setMobileMenuOpen(false)}>Agents</a>
+          <a href="#" onClick={() => setMobileMenuOpen(false)}>Neighborhoods</a>
+          <a href="#" onClick={() => setMobileMenuOpen(false)}>About</a>
+          <a href="#" className="nav-cta" onClick={() => setMobileMenuOpen(false)}>Contact</a>
         </div>
+        <button 
+          className={`hamburger ${mobileMenuOpen ? 'hamburger-open' : ''}`}
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Menu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
       </nav>
 
-      {/* Hero Section */}
+      {/* Hero Section with Courtney's actual video */}
       <section className="hero">
         <div className="hero-video">
-          <video autoPlay muted loop playsInline>
-            <source src="https://videos.pexels.com/video-files/3773486/3773486-uhd_2560_1440_30fps.mp4" type="video/mp4" />
+          <video 
+            autoPlay 
+            muted 
+            loop 
+            playsInline
+            poster="https://res.cloudinary.com/luxuryp/videos/f_auto,q_auto/so_0,eo_0/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.jpg"
+          >
+            <source src="https://res.cloudinary.com/luxuryp/video/upload/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.mp4" type="video/mp4" />
           </video>
           <div className="hero-overlay"></div>
         </div>
         <div className="hero-content">
-          <p className="hero-eyebrow">Houston & Dallas Luxury Real Estate</p>
-          <h1 className="hero-title">Find Your <span>Forever</span> in Texas</h1>
-          <p className="hero-sub">Exceptional homes deserve exceptional representation. We guide families through the most significant purchases of their lives.</p>
+          <p className="hero-eyebrow">Houston &amp; Dallas Real Estate</p>
+          <h1 className="hero-title">Collective <span>Realty Co.</span></h1>
+          <p className="hero-sub">Exceptional service and expertise for buyers, sellers, and investors across Texas. Your home journey starts here.</p>
           <div className="hero-cta">
             <a href="#" className="btn btn-primary">Search Homes</a>
-            <a href="#" className="btn btn-outline">What&apos;s Your Home Worth?</a>
+            <a href="#" className="btn btn-outline">Get Home Value</a>
           </div>
         </div>
         <div className="scroll-indicator">
@@ -149,20 +170,11 @@ export default function WebsitePreview() {
         </div>
       </section>
 
-      {/* Press Bar */}
-      <div className="press-bar">
-        <span className="press-item">Houston Chronicle</span>
-        <span className="press-item">D Magazine</span>
-        <span className="press-item">CultureMap</span>
-        <span className="press-item">PaperCity</span>
-        <span className="press-item">Texas Monthly</span>
-      </div>
-
       {/* Stats Section */}
       <div className="stats">
         <div className="stat">
-          <div className="stat-num">$85M+</div>
-          <div className="stat-label">Sales Volume 2025</div>
+          <div className="stat-num">19+</div>
+          <div className="stat-label">Years Experience</div>
         </div>
         <div className="stat">
           <div className="stat-num">78</div>
@@ -178,11 +190,11 @@ export default function WebsitePreview() {
         </div>
       </div>
 
-      {/* Featured Listings */}
+      {/* Featured Listings - Real listings from Courtney's site */}
       <section className="section">
         <div className="section-header">
           <p className="section-eyebrow">Featured Properties</p>
-          <h2 className="section-title">Newest Listings</h2>
+          <h2 className="section-title">Current Listings</h2>
         </div>
         <div className="listings-grid">
           {listings.map((listing, i) => (
@@ -191,7 +203,7 @@ export default function WebsitePreview() {
               <span className="listing-badge">{listing.badge}</span>
               <div className="listing-info">
                 <div className="listing-price">{listing.price}</div>
-                <div className="listing-addr">{listing.address}, {listing.city}</div>
+                <div className="listing-addr">{listing.address}</div>
               </div>
               <div className="listing-overlay">
                 <div className="listing-price">{listing.price}</div>
@@ -207,12 +219,12 @@ export default function WebsitePreview() {
         </div>
       </section>
 
-      {/* Broker Section */}
+      {/* Broker Section - Courtney's actual photo and bio */}
       <section className="section broker-section">
         <div className="broker">
           <div className="broker-img">
             <img 
-              src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&q=80" 
+              src="https://media-production.lp-cdn.com/media/efe6ba81-3dae-4ae0-9784-5b6bbfd04f9f" 
               alt="Courtney Okanlomo"
             />
           </div>
@@ -221,13 +233,14 @@ export default function WebsitePreview() {
             <h2 className="broker-name">Courtney Okanlomo</h2>
             <p className="broker-title">Broker / Owner</p>
             <p className="broker-text">
-              With a decade of experience and a passion for client success, Courtney founded Collective Realty Co. 
-              to redefine what Texas families expect from their real estate experience. Her brokerage combines 
-              boutique attention with the reach of a major firm—78 agents strong across Houston and Dallas.
+              Courtney Okanlomo, an esteemed presence in Houston and Dallas real estate markets for over 19 years, 
+              offers a wealth of real estate sales experience. Renowned for her dedication to quality service and 
+              delivering results, Courtney has personally managed multimillion-dollar real estate deals.
             </p>
             <p className="broker-text">
-              Whether you&apos;re buying your first home, selling a luxury estate, or building an investment portfolio, 
-              Courtney and her team bring the expertise, negotiation skills, and market knowledge to exceed your expectations.
+              Holding a Bachelor&apos;s Degree in Business Administration with a major in Marketing from DePaul University, 
+              Courtney&apos;s business acumen and marketing expertise are unmatched in any market environment. She is trusted 
+              and admired in Houston and Dallas, consistently striving for excellence in every transaction.
             </p>
             <a href="#" className="btn btn-outline">Learn More About Courtney</a>
           </div>
@@ -252,8 +265,8 @@ export default function WebsitePreview() {
       {/* Testimonials */}
       <section className="testimonials">
         <div className="section-header">
-          <p className="section-eyebrow">Client Stories</p>
-          <h2 className="section-title">What Our Clients Say</h2>
+          <p className="section-eyebrow">Success Stories</p>
+          <h2 className="section-title">What People Are Saying</h2>
         </div>
         <div className="testimonial-container">
           {testimonials.map((t, i) => (
@@ -262,7 +275,7 @@ export default function WebsitePreview() {
               className={`testimonial-card ${i === currentTestimonial ? 'active' : ''}`}
             >
               <p className="testimonial-quote">&ldquo;{t.quote}&rdquo;</p>
-              <p className="testimonial-author">— {t.author}, {t.location}</p>
+              <p className="testimonial-author">— {t.author}, {t.type}</p>
             </div>
           ))}
           <div className="testimonial-dots">
@@ -277,6 +290,27 @@ export default function WebsitePreview() {
         </div>
       </section>
 
+      {/* Selling Houston Podcast */}
+      <section className="section podcast-section">
+        <div className="podcast">
+          <div className="podcast-img">
+            <img 
+              src="https://media-production.lp-cdn.com/media/pv5ysthrmqr7nujm33le" 
+              alt="Selling Houston Podcast"
+            />
+          </div>
+          <div className="podcast-content">
+            <p className="section-eyebrow">#SellingHouston</p>
+            <h2 className="section-title">Selling Houston Podcast</h2>
+            <p className="podcast-text">
+              Real estate insights, market updates, and business strategies for agents and investors. 
+              Join Courtney as she breaks down what&apos;s happening in Houston and Dallas real estate.
+            </p>
+            <a href="#" className="btn btn-primary">Listen Now</a>
+          </div>
+        </div>
+      </section>
+
       {/* Home Valuation CTA */}
       <section className="section">
         <div className="valuation">
@@ -284,7 +318,7 @@ export default function WebsitePreview() {
           <h2 className="valuation-title">What&apos;s Your Home Worth?</h2>
           <p className="valuation-text">
             Get an instant estimate based on recent sales in your neighborhood. 
-            Our market analysis is powered by real MLS data, not algorithms.
+            Our market analysis gives you the insight you need to make informed decisions.
           </p>
           <div className="valuation-form">
             <input type="text" placeholder="Enter your address..." className="valuation-input" />
@@ -306,15 +340,15 @@ export default function WebsitePreview() {
             <div className="contact-details">
               <div className="contact-item">
                 <span className="contact-label">Houston Office</span>
-                <span className="contact-value">1234 Westheimer Rd, Houston, TX 77006</span>
+                <span className="contact-value">13201 Northwest Fwy Ste 450, Houston TX 77040</span>
               </div>
               <div className="contact-item">
                 <span className="contact-label">Dallas Office</span>
-                <span className="contact-value">5678 Preston Rd, Dallas, TX 75205</span>
+                <span className="contact-value">2300 Valley View Ln Ste 518, Irving TX 75062</span>
               </div>
               <div className="contact-item">
                 <span className="contact-label">Phone</span>
-                <span className="contact-value">(713) 555-0123</span>
+                <span className="contact-value">(281) 638-9407</span>
               </div>
               <div className="contact-item">
                 <span className="contact-label">Email</span>
@@ -330,12 +364,13 @@ export default function WebsitePreview() {
               </div>
               <input type="email" placeholder="Email Address" />
               <input type="tel" placeholder="Phone Number" />
-              <select>
-                <option value="">I&apos;m interested in...</option>
+              <select defaultValue="">
+                <option value="" disabled>I&apos;m interested in...</option>
                 <option value="buying">Buying a Home</option>
                 <option value="selling">Selling My Home</option>
-                <option value="both">Buying & Selling</option>
+                <option value="both">Buying &amp; Selling</option>
                 <option value="investing">Investment Properties</option>
+                <option value="renting">Renting</option>
                 <option value="other">Something Else</option>
               </select>
               <textarea placeholder="Tell us about your goals..."></textarea>
@@ -349,12 +384,13 @@ export default function WebsitePreview() {
       <footer className="footer">
         <div className="footer-grid">
           <div className="footer-brand">
-            <div className="logo">
-              <span className="logo-main">COLLECTIVE</span>
-              <span className="logo-sub">REALTY CO.</span>
-            </div>
+            <img 
+              src="https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga" 
+              alt="Collective Realty Co."
+              className="footer-logo"
+            />
             <p className="footer-tagline">
-              Luxury real estate services across Houston and Dallas. 
+              Houston and Dallas real estate services for buyers, sellers, and investors. 
               Your home journey starts here.
             </p>
             <div className="social-links">
@@ -366,33 +402,31 @@ export default function WebsitePreview() {
           </div>
           <div className="footer-col">
             <h4>Buy</h4>
-            <a href="#">Search Homes</a>
-            <a href="#">New Listings</a>
-            <a href="#">Open Houses</a>
+            <a href="#">Houston Metroplex</a>
+            <a href="#">DFW Metroplex</a>
             <a href="#">Neighborhoods</a>
-            <a href="#">Market Reports</a>
+            <a href="#">Buyer&apos;s Guide</a>
           </div>
           <div className="footer-col">
             <h4>Sell</h4>
             <a href="#">Home Valuation</a>
-            <a href="#">Selling Process</a>
-            <a href="#">Staging Tips</a>
-            <a href="#">Pricing Strategy</a>
+            <a href="#">Seller&apos;s Guide</a>
+            <a href="#">Book a Consultation</a>
           </div>
           <div className="footer-col">
             <h4>Company</h4>
             <a href="#">Our Agents</a>
-            <a href="#">Join Our Team</a>
-            <a href="#">About Us</a>
-            <a href="#">Careers</a>
+            <a href="#">Join Our Firm</a>
+            <a href="#">Selling Houston Podcast</a>
             <a href="#">Contact</a>
           </div>
         </div>
+        <div className="footer-legal-links">
+          <a href="https://content.harstatic.com/pdf/TREC_CPN.pdf" target="_blank" rel="noopener noreferrer">TREC Consumer Protection Notice</a>
+          <a href="https://www.har.com/mhf/terms/dispBrokerInfo?sitetype=aws&amp;cid=870685756" target="_blank" rel="noopener noreferrer">TREC Information About Brokerage Services</a>
+        </div>
         <div className="footer-bottom">
-          <p>© 2026 Collective Realty Co.  ·  Houston  ·  Dallas  ·  All Rights Reserved</p>
-          <p className="footer-legal">
-            <a href="#">Privacy Policy</a>  ·  <a href="#">Terms of Service</a>  ·  <a href="#">TREC Consumer Protection Notice</a>
-          </p>
+          <p>© 2026 Collective Realty Co.  ·  Designated Broker: Courtney Okanlomo  ·  Houston  ·  Dallas</p>
         </div>
       </footer>
 
@@ -415,7 +449,7 @@ export default function WebsitePreview() {
           left: 0;
           right: 0;
           z-index: 1000;
-          padding: 1.5rem 4rem;
+          padding: 1rem 4rem;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -425,24 +459,14 @@ export default function WebsitePreview() {
         .nav-scrolled {
           background: rgba(10,10,10,0.95);
           backdrop-filter: blur(10px);
-          padding: 1rem 4rem;
+          padding: 0.75rem 4rem;
         }
-        .logo {
-          display: flex;
-          flex-direction: column;
+        .logo-img {
+          height: 50px;
+          width: auto;
         }
-        .logo-main {
-          font-family: 'Cormorant Garamond', serif;
-          font-size: 1.6rem;
-          font-weight: 500;
-          letter-spacing: 0.15em;
-          color: #C5A572;
-        }
-        .logo-sub {
-          font-size: 0.6rem;
-          letter-spacing: 0.35em;
-          color: rgba(255,255,255,0.5);
-          margin-top: 2px;
+        .nav-scrolled .logo-img {
+          height: 40px;
         }
         .nav-links {
           display: flex;
@@ -462,7 +486,7 @@ export default function WebsitePreview() {
           color: #C5A572;
         }
         .nav-cta {
-          padding: 0.75rem 1.5rem;
+          padding: 0.75rem 1.5rem !important;
           border: 1px solid #C5A572 !important;
           color: #C5A572 !important;
         }
@@ -471,10 +495,42 @@ export default function WebsitePreview() {
           color: #0a0a0a !important;
         }
 
+        /* Hamburger Menu */
+        .hamburger {
+          display: none;
+          flex-direction: column;
+          justify-content: center;
+          gap: 5px;
+          width: 28px;
+          height: 28px;
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          z-index: 1001;
+        }
+        .hamburger span {
+          display: block;
+          width: 100%;
+          height: 2px;
+          background: #fff;
+          transition: all 0.3s;
+        }
+        .hamburger-open span:nth-child(1) {
+          transform: rotate(45deg) translate(5px, 5px);
+        }
+        .hamburger-open span:nth-child(2) {
+          opacity: 0;
+        }
+        .hamburger-open span:nth-child(3) {
+          transform: rotate(-45deg) translate(5px, -5px);
+        }
+
         /* Hero */
         .hero {
           position: relative;
           height: 100vh;
+          height: 100svh;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -483,6 +539,7 @@ export default function WebsitePreview() {
         .hero-video {
           position: absolute;
           inset: 0;
+          background: url('https://res.cloudinary.com/luxuryp/videos/f_auto,q_auto/so_0,eo_0/lspwvo7fqzfdg7t7vwc0/hov-downtown-houston-trim.jpg') center/cover no-repeat;
         }
         .hero-video video {
           width: 100%;
@@ -492,7 +549,7 @@ export default function WebsitePreview() {
         .hero-overlay {
           position: absolute;
           inset: 0;
-          background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.6));
+          background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.6));
         }
         .hero-content {
           position: relative;
@@ -592,30 +649,13 @@ export default function WebsitePreview() {
           50% { opacity: 1; transform: translateY(0); }
         }
 
-        /* Press Bar */
-        .press-bar {
-          background: #111;
-          border-top: 1px solid rgba(197,165,114,0.15);
-          border-bottom: 1px solid rgba(197,165,114,0.15);
-          padding: 2rem 4rem;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 5rem;
-        }
-        .press-item {
-          font-size: 0.65rem;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: rgba(255,255,255,0.3);
-          font-weight: 500;
-        }
-
         /* Stats */
         .stats {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
           background: linear-gradient(90deg, #0a0a0a 0%, #111 50%, #0a0a0a 100%);
+          border-top: 1px solid rgba(197,165,114,0.15);
+          border-bottom: 1px solid rgba(197,165,114,0.15);
         }
         .stat {
           padding: 4rem 2rem;
@@ -917,6 +957,30 @@ export default function WebsitePreview() {
           background: #C5A572;
         }
 
+        /* Podcast */
+        .podcast-section {
+          background: #0d0d0d;
+        }
+        .podcast {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4rem;
+          max-width: 1200px;
+          margin: 0 auto;
+          align-items: center;
+        }
+        .podcast-img img {
+          width: 100%;
+          height: auto;
+          border-radius: 4px;
+        }
+        .podcast-text {
+          color: rgba(255,255,255,0.7);
+          line-height: 1.8;
+          margin: 1.5rem 0 2rem;
+          font-weight: 300;
+        }
+
         /* Valuation */
         .valuation {
           background: linear-gradient(135deg, #1a1815 0%, #0d0d0d 100%);
@@ -962,7 +1026,7 @@ export default function WebsitePreview() {
 
         /* Contact */
         .contact-section {
-          background: #0d0d0d;
+          background: #0a0a0a;
         }
         .contact-grid {
           display: grid;
@@ -1039,6 +1103,10 @@ export default function WebsitePreview() {
         .contact-form select {
           appearance: none;
           cursor: pointer;
+          color: rgba(255,255,255,0.4);
+        }
+        .contact-form select:valid {
+          color: #fff;
         }
         .contact-form textarea {
           min-height: 120px;
@@ -1049,16 +1117,17 @@ export default function WebsitePreview() {
         .footer {
           padding: 5rem 4rem 2rem;
           border-top: 1px solid rgba(197,165,114,0.1);
-          margin-top: 0;
         }
         .footer-grid {
           display: grid;
           grid-template-columns: 2fr 1fr 1fr 1fr;
           gap: 4rem;
           max-width: 1200px;
-          margin: 0 auto 4rem;
+          margin: 0 auto 3rem;
         }
-        .footer-brand .logo {
+        .footer-logo {
+          height: 50px;
+          width: auto;
           margin-bottom: 1.5rem;
         }
         .footer-tagline {
@@ -1102,24 +1171,166 @@ export default function WebsitePreview() {
         .footer-col a:hover {
           color: #C5A572;
         }
-        .footer-bottom {
+        .footer-legal-links {
           text-align: center;
-          padding-top: 2rem;
+          padding: 1.5rem 0;
           border-top: 1px solid rgba(255,255,255,0.05);
+          display: flex;
+          justify-content: center;
+          gap: 2rem;
         }
-        .footer-bottom p {
-          font-size: 0.75rem;
-          color: rgba(255,255,255,0.3);
-          letter-spacing: 0.1em;
-          margin-bottom: 0.75rem;
-        }
-        .footer-legal a {
+        .footer-legal-links a {
+          font-size: 0.65rem;
           color: rgba(255,255,255,0.3);
           text-decoration: none;
           transition: color 0.2s;
         }
-        .footer-legal a:hover {
+        .footer-legal-links a:hover {
           color: #C5A572;
+        }
+        .footer-bottom {
+          text-align: center;
+          padding-top: 1.5rem;
+        }
+        .footer-bottom p {
+          font-size: 0.7rem;
+          color: rgba(255,255,255,0.3);
+          letter-spacing: 0.1em;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 1024px) {
+          .nav { padding: 1rem 2rem; }
+          .nav-scrolled { padding: 0.75rem 2rem; }
+          .nav-links { gap: 1.5rem; }
+          .nav-links a { font-size: 0.65rem; }
+          .hero-title { font-size: 3.5rem; }
+          .stats { grid-template-columns: repeat(2, 1fr); }
+          .stat { padding: 3rem 1.5rem; }
+          .stat:nth-child(2) { border-right: none; }
+          .stat-num { font-size: 3rem; }
+          .section { padding: 5rem 2rem; }
+          .listings-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+          .broker { grid-template-columns: 1fr; }
+          .broker-img { aspect-ratio: 16/9; }
+          .broker-content { padding: 3rem; }
+          .neighborhoods { grid-template-columns: repeat(2, 1fr); }
+          .podcast { grid-template-columns: 1fr; gap: 2rem; }
+          .contact-grid { grid-template-columns: 1fr; gap: 3rem; }
+          .footer-grid { grid-template-columns: 1fr 1fr; gap: 2rem; }
+        }
+
+        @media (max-width: 768px) {
+          .nav { padding: 1rem 1.5rem; }
+          .hamburger {
+            display: flex;
+          }
+          .nav-links {
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10,10,10,0.98);
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 1000;
+          }
+          .nav-links.nav-open {
+            opacity: 1;
+            pointer-events: auto;
+          }
+          .nav-links a {
+            font-size: 1.25rem;
+            letter-spacing: 0.2em;
+          }
+          .nav-links .nav-cta {
+            margin-top: 1rem;
+            padding: 1rem 2.5rem !important;
+          }
+          .logo-img { height: 40px; }
+          .hero-title { font-size: 2.5rem; }
+          .hero-sub { font-size: 0.95rem; }
+          .hero-cta { flex-direction: column; gap: 0.75rem; }
+          .btn { width: 100%; text-align: center; }
+          .stats { grid-template-columns: 1fr 1fr; }
+          .stat { padding: 2rem 1rem; border-right: none; border-bottom: 1px solid rgba(197,165,114,0.1); }
+          .stat:nth-child(3), .stat:nth-child(4) { border-bottom: none; }
+          .stat-num { font-size: 2.5rem; }
+          .section-title { font-size: 2rem; }
+          .listings-grid { grid-template-columns: 1fr; }
+          .listing { aspect-ratio: 16/10; }
+          .broker-content { padding: 2rem; }
+          .broker-name { font-size: 2rem; }
+          .neighborhoods { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+          .neighborhood { aspect-ratio: 4/3; }
+          .testimonial-quote { font-size: 1.35rem; }
+          .testimonial-dots { margin-top: 10rem; }
+          .valuation { padding: 3rem 2rem; }
+          .valuation-form { flex-direction: column; }
+          .valuation-input { width: 100%; }
+          .contact-info { padding-right: 0; }
+          .contact-form-wrapper { padding: 2rem; }
+          .form-row { grid-template-columns: 1fr; }
+          .footer { padding: 3rem 1.5rem 2rem; }
+          .footer-grid { grid-template-columns: 1fr; gap: 2rem; text-align: center; }
+          .footer-brand { order: -1; }
+          .footer-logo { margin: 0 auto 1.5rem; }
+          .social-links { justify-content: center; }
+          .footer-legal-links { flex-direction: column; gap: 0.75rem; }
+        }
+
+        @media (max-width: 480px) {
+          .hero { height: 100svh; }
+          .hero-content { padding: 0 1.25rem; }
+          .hero-eyebrow { font-size: 0.6rem; letter-spacing: 0.3em; }
+          .hero-title { font-size: 2rem; }
+          .hero-sub { font-size: 0.9rem; margin-bottom: 2rem; }
+          .btn { padding: 1rem 1.5rem; font-size: 0.65rem; }
+          .scroll-indicator { bottom: 2rem; }
+          .stats { grid-template-columns: 1fr 1fr; }
+          .stat { padding: 1.5rem 0.75rem; }
+          .stat-num { font-size: 2rem; }
+          .stat-label { font-size: 0.55rem; }
+          .section { padding: 3.5rem 1.25rem; }
+          .section-header { margin-bottom: 2.5rem; }
+          .section-title { font-size: 1.75rem; }
+          .listing-price { font-size: 1.35rem; }
+          .listing-addr { font-size: 0.75rem; }
+          .broker-name { font-size: 1.75rem; }
+          .broker-text { font-size: 0.85rem; }
+          .neighborhoods { grid-template-columns: 1fr; }
+          .neighborhood { aspect-ratio: 16/9; }
+          .neighborhood-name { font-size: 1.25rem; }
+          .testimonial-container { min-height: 280px; }
+          .testimonial-quote { font-size: 1.15rem; }
+          .testimonial-dots { margin-top: 16rem; }
+          .valuation-title { font-size: 1.75rem; }
+          .contact-form-wrapper { padding: 1.5rem; }
+          .footer-col h4 { margin-top: 1rem; }
+        }
+
+        /* Ensure video covers on mobile */
+        @media (max-width: 768px) {
+          .hero-video video {
+            object-position: center center;
+          }
+        }
+
+        /* Safe area for notched phones */
+        @supports (padding-top: env(safe-area-inset-top)) {
+          .nav {
+            padding-top: calc(1rem + env(safe-area-inset-top));
+          }
+          .footer-bottom {
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+          }
         }
       `}</style>
     </div>
