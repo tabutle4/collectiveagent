@@ -1,17 +1,47 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function WebsitePreview() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
+  const [currentVideo, setCurrentVideo] = useState(0);
+  const [videoFading, setVideoFading] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Video playlist - HD versions load faster
+  const videos = [
+    'https://videos.pexels.com/video-files/3773486/3773486-hd_1920_1080_30fps.mp4',
+    'https://videos.pexels.com/video-files/5587616/5587616-hd_1920_1080_25fps.mp4',
+    'https://videos.pexels.com/video-files/4625513/4625513-hd_1920_1080_30fps.mp4',
+    'https://videos.pexels.com/video-files/5529610/5529610-hd_1920_1080_25fps.mp4',
+  ];
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Handle video end - cycle to next
+  const handleVideoEnd = () => {
+    setVideoFading(true);
+    setVideoLoaded(false);
+    setTimeout(() => {
+      setCurrentVideo((prev) => (prev + 1) % videos.length);
+      setVideoFading(false);
+    }, 500);
+  };
+
+  // Handle video can play
+  const handleCanPlay = () => {
+    setVideoLoaded(true);
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  };
 
   // Real listings from courtneyokanlomo.com
   const listings = [
@@ -141,19 +171,45 @@ export default function WebsitePreview() {
         </button>
       </nav>
 
-      {/* Hero Section with video */}
+      {/* Hero Section with video playlist */}
       <section className="hero">
-        <div className="hero-video">
+        <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
+          {!videoLoaded && (
+            <div className="video-loading">
+              <div className="loading-spinner"></div>
+            </div>
+          )}
           <video 
+            ref={videoRef}
             autoPlay 
             muted 
-            loop 
             playsInline
-            poster="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80"
+            preload="auto"
+            onEnded={handleVideoEnd}
+            onCanPlay={handleCanPlay}
+            onLoadedData={handleCanPlay}
+            key={currentVideo}
+            style={{ opacity: videoLoaded ? 1 : 0 }}
           >
-            <source src="https://cdn.pixabay.com/video/2020/07/30/45913-446930982_large.mp4" type="video/mp4" />
+            <source src={videos[currentVideo]} type="video/mp4" />
           </video>
           <div className="hero-overlay"></div>
+        </div>
+        <div className="video-dots">
+          {videos.map((_, i) => (
+            <button 
+              key={i}
+              className={`video-dot ${i === currentVideo ? 'active' : ''}`}
+              onClick={() => {
+                setVideoFading(true);
+                setTimeout(() => {
+                  setCurrentVideo(i);
+                  setVideoFading(false);
+                }, 300);
+              }}
+              aria-label={`Video ${i + 1}`}
+            />
+          ))}
         </div>
         <div className="hero-content">
           <p className="hero-eyebrow">Houston &amp; Dallas Real Estate</p>
@@ -541,17 +597,66 @@ export default function WebsitePreview() {
         .hero-video {
           position: absolute;
           inset: 0;
-          background: url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80') center/cover no-repeat;
+          background: #0a0a0a;
+          transition: opacity 0.5s ease-in-out;
+        }
+        .hero-video.fading {
+          opacity: 0.3;
         }
         .hero-video video {
           width: 100%;
           height: 100%;
           object-fit: cover;
+          transition: opacity 0.5s;
+        }
+        .video-loading {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #0a0a0a;
+          z-index: 1;
+        }
+        .loading-spinner {
+          width: 40px;
+          height: 40px;
+          border: 2px solid rgba(255,255,255,0.1);
+          border-top-color: rgba(255,255,255,0.4);
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         .hero-overlay {
           position: absolute;
           inset: 0;
           background: linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0.65));
+        }
+        .video-dots {
+          position: absolute;
+          bottom: 6rem;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          gap: 0.5rem;
+          z-index: 20;
+        }
+        .video-dot {
+          width: 32px;
+          height: 3px;
+          background: rgba(255,255,255,0.3);
+          border: none;
+          cursor: pointer;
+          transition: all 0.3s;
+          padding: 0;
+        }
+        .video-dot.active {
+          background: rgba(255,255,255,0.9);
+        }
+        .video-dot:hover {
+          background: rgba(255,255,255,0.6);
         }
         .hero-content {
           position: relative;
@@ -1306,6 +1411,8 @@ export default function WebsitePreview() {
           .hero-sub { font-size: 0.9rem; margin-bottom: 2rem; }
           .btn { padding: 1rem 1.5rem; font-size: 0.65rem; }
           .scroll-indicator { bottom: 2rem; }
+          .video-dots { bottom: 4rem; }
+          .video-dot { width: 24px; height: 2px; }
           .stats { grid-template-columns: 1fr 1fr; }
           .stat { padding: 1.5rem 0.75rem; }
           .stat-num { font-size: 2rem; }
