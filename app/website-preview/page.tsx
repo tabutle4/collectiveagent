@@ -22,6 +22,17 @@ export default function WebsitePreview() {
     'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.MP4',
   ];
 
+  // Preload all videos on mount
+  useEffect(() => {
+    videos.forEach((src) => {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'video';
+      link.href = src;
+      document.head.appendChild(link);
+    });
+  }, []);
+
   // White logo for dark backgrounds (from Courtney's site footer)
   const whiteLogo = 'https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga';
 
@@ -377,6 +388,10 @@ export default function WebsitePreview() {
           >
             <source src={videos[currentVideo]} type="video/mp4" />
           </video>
+          {/* Preload next videos in hidden elements */}
+          {videos.map((src, i) => i !== currentVideo && (
+            <video key={`preload-${i}`} src={src} preload="auto" muted style={{ display: 'none' }} />
+          ))}
           <div className="hero-overlay"></div>
         </div>
         <div className="hero-content">
