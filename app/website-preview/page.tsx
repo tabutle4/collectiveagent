@@ -77,27 +77,18 @@ export default function WebsitePreview() {
 
   // Video ended - advance to next
   const handleVideoEnd = () => {
+    setVideoLoaded(false);
     setVideoFading(true);
     setTimeout(() => {
       setCurrentVideo((prev) => (prev + 1) % videos.length);
       setVideoFading(false);
-      setVideoLoaded(false);
-    }, 400);
+    }, 300);
   };
 
   // Video ready to play
   const handleCanPlay = () => {
     setVideoLoaded(true);
-    videoRef.current?.play().catch(() => {});
   };
-
-  // When video source changes, reset and play
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {});
-    }
-  }, [currentVideo]);
 
   const listings = [
     { image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/27413120/-3703647671636790085.jpg', price: '$759,800', address: '3103 Lelia Street', city: 'Houston, TX', beds: 3, baths: 3, sqft: '3,458', status: 'Open House' },
@@ -127,8 +118,7 @@ export default function WebsitePreview() {
       <style jsx>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         .website-preview { font-family: 'Montserrat', sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; overflow-x: hidden; }
-        .reveal { opacity: 0; transform: translateY(60px); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
-        .reveal.animate-in { opacity: 1; transform: translateY(0); }
+        .reveal { opacity: 1; transform: translateY(0); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
         
         /* Header */
         .header { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 20px 60px; display: flex; justify-content: space-between; align-items: center; transition: all 0.4s; background: ${scrolled ? 'rgba(10,10,10,0.95)' : 'transparent'}; backdrop-filter: ${scrolled ? 'blur(20px)' : 'none'}; }
@@ -136,8 +126,8 @@ export default function WebsitePreview() {
         .nav { display: flex; gap: 40px; align-items: center; }
         .nav a { color: #fff; text-decoration: none; font-size: 12px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; transition: opacity 0.3s; }
         .nav a:hover { opacity: 0.6; }
-        .nav-btn { background: #fff; color: #000; padding: 14px 32px; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; transition: all 0.3s; }
-        .nav-btn:hover { background: #e0e0e0; }
+        .nav a.nav-btn { background: #fff; color: #000 !important; padding: 14px 32px; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; transition: all 0.3s; }
+        .nav a.nav-btn:hover { background: #e0e0e0; opacity: 1; }
         .mobile-menu-btn { display: none; background: none; border: none; color: #fff; font-size: 28px; cursor: pointer; }
 
         /* Hero */
@@ -377,6 +367,7 @@ export default function WebsitePreview() {
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
           <video
             ref={videoRef}
+            key={currentVideo}
             autoPlay
             muted
             playsInline
@@ -393,12 +384,12 @@ export default function WebsitePreview() {
           <h1 className="hero-title"><span>Find Your</span><span>Place in Texas</span></h1>
           <p className="hero-subtitle">Where local expertise meets personalized service. We guide you home with care, precision, and an unwavering commitment to your vision.</p>
           <div className="hero-ctas">
-            <a href="#contact" className="hero-cta hero-cta-primary">Schedule Consultation</a>
-            <a href="#listings" className="hero-cta hero-cta-secondary">View Properties</a>
+            <a href="#listings" className="hero-cta hero-cta-primary">View Properties</a>
+            <a href="#cta" className="hero-cta hero-cta-secondary">Get Home Value</a>
           </div>
         </div>
         <div className="scroll-indicator"><span>Scroll</span><div className="scroll-line"></div></div>
-        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { setCurrentVideo(i); setVideoLoaded(false); }} />)}</div>
+        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { if (i !== currentVideo) { setVideoLoaded(false); setCurrentVideo(i); } }} />)}</div>
       </section>
 
       <section className="stats-section reveal" ref={statsRef}>
