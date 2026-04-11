@@ -22,6 +22,9 @@ export default function WebsitePreview() {
     'https://videos.pexels.com/video-files/5529610/5529610-hd_1920_1080_25fps.mp4',
   ];
 
+  // White logo for dark backgrounds (from Courtney's site footer)
+  const whiteLogo = 'https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga';
+
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 50);
@@ -72,16 +75,29 @@ export default function WebsitePreview() {
     return () => clearInterval(timer);
   }, []);
 
+  // Video ended - advance to next
   const handleVideoEnd = () => {
     setVideoFading(true);
-    setVideoLoaded(false);
-    setTimeout(() => { setCurrentVideo((prev) => (prev + 1) % videos.length); setVideoFading(false); }, 500);
+    setTimeout(() => {
+      setCurrentVideo((prev) => (prev + 1) % videos.length);
+      setVideoFading(false);
+      setVideoLoaded(false);
+    }, 400);
   };
 
+  // Video ready to play
   const handleCanPlay = () => {
     setVideoLoaded(true);
-    if (videoRef.current) videoRef.current.play().catch(() => {});
+    videoRef.current?.play().catch(() => {});
   };
+
+  // When video source changes, reset and play
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  }, [currentVideo]);
 
   const listings = [
     { image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/27413120/-3703647671636790085.jpg', price: '$759,800', address: '3103 Lelia Street', city: 'Houston, TX', beds: 3, baths: 3, sqft: '3,458', status: 'Open House' },
@@ -116,7 +132,7 @@ export default function WebsitePreview() {
         
         /* Header */
         .header { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 20px 60px; display: flex; justify-content: space-between; align-items: center; transition: all 0.4s; background: ${scrolled ? 'rgba(10,10,10,0.95)' : 'transparent'}; backdrop-filter: ${scrolled ? 'blur(20px)' : 'none'}; }
-        .logo img { height: 50px; filter: brightness(0) invert(1); }
+        .logo img { height: 50px; }
         .nav { display: flex; gap: 40px; align-items: center; }
         .nav a { color: #fff; text-decoration: none; font-size: 12px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; transition: opacity 0.3s; }
         .nav a:hover { opacity: 0.6; }
@@ -126,10 +142,11 @@ export default function WebsitePreview() {
 
         /* Hero */
         .hero { position: relative; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .hero-video { position: absolute; inset: 0; transition: opacity 0.8s; }
+        .hero-video { position: absolute; inset: 0; transition: opacity 0.5s ease-in-out; }
         .hero-video.fading { opacity: 0.3; }
         .hero-video video { width: 100%; height: 100%; object-fit: cover; transform: scale(1.1) translateY(${scrollY * 0.15}px); }
-        .video-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0a0a0a; z-index: 1; }
+        .video-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0a0a0a; z-index: 1; transition: opacity 0.5s; }
+        .video-loading.hidden { opacity: 0; pointer-events: none; }
         .loading-spinner { width: 40px; height: 40px; border: 1px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .hero-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.7) 100%); }
@@ -165,7 +182,7 @@ export default function WebsitePreview() {
         .stat-number { font-family: 'Cormorant Garamond', serif; font-size: 80px; font-weight: 300; color: #fff; line-height: 1; margin-bottom: 15px; }
         .stat-label { font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.4); }
 
-        /* Services - Magazine Style */
+        /* Services */
         .services-section { padding: 0; background: #111; }
         .services-grid { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
         .services-content { padding: 100px 80px; display: flex; flex-direction: column; justify-content: center; }
@@ -185,7 +202,7 @@ export default function WebsitePreview() {
         .service-list-arrow { font-size: 18px; color: rgba(255,255,255,0.3); transition: all 0.3s; }
         .service-list-item:hover .service-list-arrow { color: #fff; transform: translateX(5px); }
 
-        /* Broker - Split */
+        /* Broker */
         .broker-section { min-height: 100vh; display: grid; grid-template-columns: 55% 45%; background: #0a0a0a; }
         .broker-image-side { position: relative; overflow: hidden; }
         .broker-image { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
@@ -200,7 +217,7 @@ export default function WebsitePreview() {
         .broker-btn { display: inline-flex; align-items: center; gap: 12px; background: #fff; color: #000; padding: 18px 40px; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; transition: all 0.3s; align-self: flex-start; }
         .broker-btn:hover { background: #e0e0e0; }
 
-        /* Listings - Staggered Grid */
+        /* Listings */
         .listings-section { padding: 140px 60px; background: #111; }
         .listings-header { max-width: 1400px; margin: 0 auto 70px; display: flex; justify-content: space-between; align-items: flex-end; }
         .listings-eyebrow { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: rgba(255,255,255,0.4); margin-bottom: 15px; }
@@ -227,7 +244,7 @@ export default function WebsitePreview() {
         .view-all-btn { display: inline-flex; align-items: center; gap: 10px; color: #fff; font-size: 12px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; transition: gap 0.3s; }
         .view-all-btn:hover { gap: 15px; }
 
-        /* Neighborhoods - Full Bleed */
+        /* Neighborhoods */
         .neighborhoods-section { padding: 0; }
         .neighborhoods-grid { display: grid; grid-template-columns: repeat(4, 1fr); min-height: 75vh; }
         .neighborhood-card { position: relative; overflow: hidden; cursor: pointer; }
@@ -256,7 +273,7 @@ export default function WebsitePreview() {
         .testimonial-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.2); cursor: pointer; transition: all 0.3s; }
         .testimonial-dot.active { background: #C5A278; }
 
-        /* Podcast - Side by Side */
+        /* Podcast */
         .podcast-section { display: grid; grid-template-columns: 1fr 1fr; min-height: 70vh; }
         .podcast-image-side { position: relative; overflow: hidden; }
         .podcast-image-side img { width: 100%; height: 100%; object-fit: cover; }
@@ -267,7 +284,7 @@ export default function WebsitePreview() {
         .podcast-btn { display: inline-flex; align-items: center; gap: 12px; background: #fff; color: #000; padding: 18px 40px; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; transition: all 0.3s; align-self: flex-start; }
         .podcast-btn:hover { background: #e0e0e0; }
 
-        /* CTA Section */
+        /* CTA */
         .cta-section { padding: 160px 60px; background: #0a0a0a; text-align: center; }
         .cta-content { max-width: 700px; margin: 0 auto; }
         .cta-title { font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 400; margin-bottom: 25px; line-height: 1.2; }
@@ -299,7 +316,7 @@ export default function WebsitePreview() {
         .footer { padding: 80px 60px 45px; background: #050505; }
         .footer-content { max-width: 1300px; margin: 0 auto; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 50px; margin-bottom: 70px; }
         .footer-brand p { font-size: 14px; color: rgba(255,255,255,0.4); line-height: 1.8; margin-top: 20px; max-width: 280px; }
-        .footer-logo img { height: 40px; filter: brightness(0) invert(1); }
+        .footer-logo img { height: 40px; }
         .footer-col h4 { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 25px; color: rgba(255,255,255,0.8); }
         .footer-col a { display: block; color: rgba(255,255,255,0.4); text-decoration: none; font-size: 13px; margin-bottom: 12px; transition: color 0.3s; }
         .footer-col a:hover { color: #fff; }
@@ -344,7 +361,7 @@ export default function WebsitePreview() {
       `}</style>
 
       <header className="header">
-        <a href="/" className="logo"><img src="https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga" alt="CRC" /></a>
+        <a href="/" className="logo"><img src={whiteLogo} alt="Collective Realty Co." /></a>
         <nav className="nav">
           <a href="#listings">Properties</a>
           <a href="#about">About</a>
@@ -357,8 +374,16 @@ export default function WebsitePreview() {
 
       <section className="hero">
         <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
-          {!videoLoaded && <div className="video-loading"><div className="loading-spinner"></div></div>}
-          <video ref={videoRef} autoPlay muted playsInline preload="auto" onEnded={handleVideoEnd} onCanPlay={handleCanPlay} onLoadedData={handleCanPlay} key={currentVideo} style={{ opacity: videoLoaded ? 1 : 0 }}>
+          <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            preload="auto"
+            onEnded={handleVideoEnd}
+            onCanPlayThrough={handleCanPlay}
+          >
             <source src={videos[currentVideo]} type="video/mp4" />
           </video>
           <div className="hero-overlay"></div>
@@ -373,7 +398,7 @@ export default function WebsitePreview() {
           </div>
         </div>
         <div className="scroll-indicator"><span>Scroll</span><div className="scroll-line"></div></div>
-        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { setVideoFading(true); setVideoLoaded(false); setTimeout(() => { setCurrentVideo(i); setVideoFading(false); }, 300); }} />)}</div>
+        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { setCurrentVideo(i); setVideoLoaded(false); }} />)}</div>
       </section>
 
       <section className="stats-section reveal" ref={statsRef}>
@@ -408,7 +433,7 @@ export default function WebsitePreview() {
       </section>
 
       <section className="broker-section reveal" id="about">
-        <div className="broker-image-side"><img className="broker-image" src="https://media-production.lp-cdn.com/media/efe6ba81-3dae-4ae0-9784-5b6bbfd04f9f" alt="Courtney" /></div>
+        <div className="broker-image-side"><img className="broker-image" src="https://media-production.lp-cdn.com/media/efe6ba81-3dae-4ae0-9784-5b6bbfd04f9f" alt="Courtney Okanlomo" /></div>
         <div className="broker-content-side">
           <p className="broker-eyebrow">The Broker</p>
           <h2 className="broker-name">Courtney<br />Okanlomo</h2>
@@ -497,7 +522,7 @@ export default function WebsitePreview() {
 
       <footer className="footer">
         <div className="footer-content">
-          <div className="footer-brand"><div className="footer-logo"><img src="https://media-production.lp-cdn.com/media/tfyio0knwbjij9ifmgga" alt="CRC" /></div><p>Your trusted partner in Texas real estate since 2007.</p></div>
+          <div className="footer-brand"><div className="footer-logo"><img src={whiteLogo} alt="CRC" /></div><p>Your trusted partner in Texas real estate.</p></div>
           <div className="footer-col"><h4>Explore</h4><a href="#">Properties</a><a href="#">Neighborhoods</a><a href="#">Sell</a><a href="#">Buy</a></div>
           <div className="footer-col"><h4>Company</h4><a href="#">About</a><a href="#">Agents</a><a href="#">Careers</a><a href="#">Blog</a></div>
           <div className="footer-col"><h4>Connect</h4><a href="#">Instagram</a><a href="#">LinkedIn</a><a href="#">Podcast</a><a href="#">Contact</a></div>
