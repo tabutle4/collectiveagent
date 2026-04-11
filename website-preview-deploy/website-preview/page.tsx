@@ -16,10 +16,10 @@ export default function WebsitePreview() {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const videos = [
-    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/1.MP4',
-    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/2.MP4',
-    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/3.MP4',
-    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.MP4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/1.mp4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/2.mp4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/3.mp4',
+    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.mp4',
   ];
 
   // Preload all videos on mount
