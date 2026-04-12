@@ -17,7 +17,6 @@ export default function WebsitePreview() {
 
   const videos = [
     'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/1.mp4',
-    'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/2.mp4',
     'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/3.mp4',
     'https://5zsj4yo3aszpvnrb.public.blob.vercel-storage.com/4.mp4',
   ];
