@@ -12,6 +12,7 @@ export default function WebsitePreview() {
   const [animatedStats, setAnimatedStats] = useState({ years: 0, sold: 0, agents: 0 });
   const [statsVisible, setStatsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +44,14 @@ export default function WebsitePreview() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Detect mobile for single video loop
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+      checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   useEffect(() => {
@@ -163,6 +172,7 @@ export default function WebsitePreview() {
         .hero-cta-secondary { border: 1px solid rgba(255,255,255,0.4); color: #fff; }
         .hero-cta-secondary:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
         .video-dots { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; z-index: 20; }
+        @media (max-width: 768px) { .video-dots { display: none; } }  
         .video-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.3s; }
         .video-dot.active { background: #C5A278; }
         .scroll-indicator { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; animation: bounce 2s infinite; }
@@ -377,17 +387,18 @@ export default function WebsitePreview() {
         <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
           <video
-            ref={videoRef}
-            key={currentVideo}
-            autoPlay
-            muted
-            playsInline
-            preload="auto"
-            onEnded={handleVideoEnd}
-            onCanPlayThrough={handleCanPlay}
-          >
-            <source src={videos[currentVideo]} type="video/mp4" />
-          </video>
+  ref={videoRef}
+  key={isMobile ? 'mobile' : currentVideo}
+  autoPlay
+  muted
+  playsInline
+  preload="auto"
+  loop={isMobile}
+  onEnded={isMobile ? undefined : handleVideoEnd}
+  onCanPlayThrough={handleCanPlay}
+>
+  <source src={isMobile ? videos[0] : videos[currentVideo]} type="video/mp4" />
+</video>
           {/* Preload next videos in hidden elements */}
           {videos.map((src, i) => i !== currentVideo && (
             <video key={`preload-${i}`} src={src} preload="auto" muted style={{ display: 'none' }} />
