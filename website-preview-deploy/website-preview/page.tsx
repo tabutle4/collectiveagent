@@ -97,13 +97,14 @@ export default function WebsitePreview() {
 
   // Video ended - advance to next
   const handleVideoEnd = () => {
-    setVideoLoaded(false);
-    setVideoFading(true);
-    setTimeout(() => {
-      setCurrentVideo((prev) => (prev + 1) % videos.length);
-      setVideoFading(false);
-    }, 300);
-  };
+  if (isMobile) return; // Don't cycle on mobile, let it loop
+  setVideoLoaded(false);
+  setVideoFading(true);
+  setTimeout(() => {
+    setCurrentVideo((prev) => (prev + 1) % videos.length);
+    setVideoFading(false);
+  }, 300);
+};
 
   // Video ready to play
   const handleCanPlay = () => {
