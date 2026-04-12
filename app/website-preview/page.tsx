@@ -95,6 +95,20 @@ export default function WebsitePreview() {
     setVideoLoaded(true);
   };
 
+  // Play the current video when it changes
+useEffect(() => {
+  const allVideos = document.querySelectorAll('.hero-video video');
+  allVideos.forEach((video, i) => {
+    const v = video as HTMLVideoElement;
+    if (i === currentVideo) {
+      v.currentTime = 0;
+      v.play();
+    } else {
+      v.pause();
+    }
+  });
+}, [currentVideo]);
+
   const listings = [
     { image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/27413120/-3703647671636790085.jpg', price: '$759,800', address: '3103 Lelia Street', city: 'Houston, TX', beds: 3, baths: 3, sqft: '3,458', status: 'Open House' },
     { image: 'https://dlajgvw9htjpb.cloudfront.net/cms/8e615603-6b76-4ed6-ab51-9386ff86d830/21154925/-5823161010216405600.jpg', price: '$665,000', address: '936 Brookwood Drive', city: 'Dallas, TX', beds: 4, baths: 4, sqft: '2,994', status: 'For Sale' },
