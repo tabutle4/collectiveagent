@@ -7,8 +7,6 @@ export default function WebsitePreview() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [currentVideo, setCurrentVideo] = useState(0);
-  const [videoFading, setVideoFading] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(true);
   const [animatedStats, setAnimatedStats] = useState({ years: 0, sold: 0, agents: 0 });
   const [statsVisible, setStatsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
@@ -90,11 +88,6 @@ export default function WebsitePreview() {
   setCurrentVideo((prev) => (prev + 1) % videos.length);
 };
 
-  // Video ready to play
-  const handleCanPlay = () => {
-    setVideoLoaded(true);
-  };
-
   // Play the current video when it changes
 useEffect(() => {
   const allVideos = document.querySelectorAll('.hero-video video');
@@ -152,12 +145,7 @@ useEffect(() => {
         /* Hero */
         .hero { position: relative; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         .hero-video { position: absolute; inset: 0; transition: opacity 0.5s ease-in-out; }
-        .hero-video.fading { opacity: 0.3; }
         .hero-video video { width: 100%; height: 100%; object-fit: cover; transform: scale(1.1) translateY(${scrollY * 0.15}px); }
-        .video-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #0a0a0a; z-index: 1; transition: opacity 0.5s; }
-        .video-loading.hidden { opacity: 0; pointer-events: none; }
-        .loading-spinner { width: 40px; height: 40px; border: 1px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
         .hero-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.7) 100%); }
         .hero-content { position: relative; z-index: 10; text-align: center; max-width: 1000px; padding: 0 20px; }
         .hero-eyebrow { font-size: 13px; letter-spacing: 5px; text-transform: uppercase; color: rgba(255,255,255,0.7); margin-bottom: 30px; font-weight: 400; }
@@ -382,8 +370,7 @@ useEffect(() => {
       </header>
 
       <section className="hero">
-        <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
-          <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
+        <div className="hero-video">
           {videos.map((src, i) => (
   <video
     key={i}
@@ -418,7 +405,7 @@ useEffect(() => {
           </div>
         </div>
         <div className="scroll-indicator"><span>Scroll</span><div className="scroll-line"></div></div>
-        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { if (i !== currentVideo) { setVideoLoaded(false); setCurrentVideo(i); } }} />)}</div>
+        <div className="video-dots">{videos.map((_, i) => <div key={i} className={`video-dot ${currentVideo === i ? 'active' : ''}`} onClick={() => { if (i !== currentVideo) { setCurrentVideo(i); } }} />)}</div>
       </section>
 
       <section className="stats-section reveal" ref={statsRef}>
