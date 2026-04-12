@@ -8,7 +8,7 @@ export default function WebsitePreview() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [currentVideo, setCurrentVideo] = useState(0);
   const [videoFading, setVideoFading] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(true);
   const [animatedStats, setAnimatedStats] = useState({ years: 0, sold: 0, agents: 0 });
   const [statsVisible, setStatsVisible] = useState(false);
   const [scrollY, setScrollY] = useState(0);
