@@ -88,12 +88,8 @@ export default function WebsitePreview() {
 
   // Video ended - advance to next
   const handleVideoEnd = () => {
-    setVideoFading(true);
-    setTimeout(() => {
-      setCurrentVideo((prev) => (prev + 1) % videos.length);
-      setVideoFading(false);
-    }, 300);
-  };
+  setCurrentVideo((prev) => (prev + 1) % videos.length);
+};
 
   // Video ready to play
   const handleCanPlay = () => {
