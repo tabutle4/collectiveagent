@@ -88,7 +88,6 @@ export default function WebsitePreview() {
 
   // Video ended - advance to next
   const handleVideoEnd = () => {
-    setVideoLoaded(false);
     setVideoFading(true);
     setTimeout(() => {
       setCurrentVideo((prev) => (prev + 1) % videos.length);
@@ -165,13 +164,6 @@ export default function WebsitePreview() {
         .video-dots { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; z-index: 20; }
         .video-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.3s; }
         .video-dot.active { background: #C5A278; }
-        .mobile-video { display: none; width: 100%; height: 100%; object-fit: cover; }
-        .desktop-video { display: block; }
-        @media (max-width: 768px) {
-          .mobile-video { display: block; }
-          .desktop-video { display: none; }
-          .video-dots { display: none; }
-}
         .scroll-indicator { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; animation: bounce 2s infinite; }
         .scroll-indicator span { font-size: 9px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,0.4); }
         .scroll-line { width: 1px; height: 30px; background: linear-gradient(to bottom, rgba(255,255,255,0.4), transparent); }
@@ -383,20 +375,7 @@ export default function WebsitePreview() {
       <section className="hero">
         <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
-          {/* Mobile: single video, loops */}
-<video
-  className="mobile-video"
-  autoPlay
-  muted
-  playsInline
-  loop
->
-  <source src={videos[0]} type="video/mp4" />
-</video>
-
-{/* Desktop: cycles through videos */}
-<video
-  className="desktop-video"
+          <video
   ref={videoRef}
   key={currentVideo}
   autoPlay
