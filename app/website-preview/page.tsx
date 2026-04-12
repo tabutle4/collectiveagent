@@ -370,21 +370,27 @@ export default function WebsitePreview() {
       <section className="hero">
         <div className={`hero-video ${videoFading ? 'fading' : ''}`}>
           <div className={`video-loading ${videoLoaded ? 'hidden' : ''}`}><div className="loading-spinner"></div></div>
-          <video
-  ref={videoRef}
-  key={currentVideo}
-  autoPlay
-  muted
-  playsInline
-  preload="auto"
-  onEnded={handleVideoEnd}
-  onCanPlayThrough={handleCanPlay}
->
-  <source src={videos[currentVideo]} type="video/mp4" />
-</video>
-{/* Preload next videos in hidden elements */}
-{videos.map((src, i) => i !== currentVideo && (
-  <video key={`preload-${i}`} src={src} preload="auto" muted style={{ display: 'none' }} />
+          {videos.map((src, i) => (
+  <video
+    key={i}
+    autoPlay={i === 0}
+    muted
+    playsInline
+    preload="auto"
+    onEnded={i === currentVideo ? handleVideoEnd : undefined}
+    style={{
+      position: 'absolute',
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+      opacity: currentVideo === i ? 1 : 0,
+      transition: 'opacity 0.3s',
+      transform: `scale(1.1) translateY(${scrollY * 0.15}px)`,
+    }}
+    ref={i === currentVideo ? videoRef : undefined}
+  >
+    <source src={src} type="video/mp4" />
+  </video>
 ))}
           <div className="hero-overlay"></div>
         </div>
