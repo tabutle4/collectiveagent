@@ -110,12 +110,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 // ── Empty form factories ──────────────────────────────────────────────────────
 
-function emptyAgentForm(agentUser?: any) {
+function emptyAgentForm(agentUser?: any, defaultSalesVolume?: string) {
   return {
     _id: uid(),
     agent_id: '',
     agent_role: 'co_agent',
     commission_plan: agentUser ? defaultCommissionPlan(agentUser.commission_plan || '') : '',
+    sales_volume: defaultSalesVolume || '',
     agent_gross: '',
     brokerage_split: '',
     processing_fee: '',
@@ -168,6 +169,11 @@ function AgentFinancialFields({
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <Field label="Sales Volume">
+            <input type="number" className="input-luxury text-xs" value={form.sales_volume} onChange={e => setField('sales_volume', e.target.value)} placeholder="0.00" step="0.01" min="0" />
+          </Field>
+        </div>
         <Field label="Agent Gross">
           <input type="number" className="input-luxury text-xs" value={form.agent_gross} onChange={e => setField('agent_gross', e.target.value)} placeholder="0.00" step="0.01" min="0" />
         </Field>
@@ -341,6 +347,7 @@ export default function CloseTransactionModal({
         agent_id: a.agent_id || '',
         agent_role: a.agent_role || '',
         commission_plan: a.commission_plan || defaultCommissionPlan(a.user?.commission_plan || ''),
+        sales_volume: a.sales_volume != null ? String(a.sales_volume) : String(txn.sales_volume || ''),
         agent_gross: a.agent_gross != null ? String(a.agent_gross) : '',
         brokerage_split: a.brokerage_split != null ? String(a.brokerage_split) : '',
         processing_fee: a.processing_fee != null ? String(a.processing_fee) : '',
@@ -613,6 +620,7 @@ export default function CloseTransactionModal({
           updates: {
             agent_role: af.agent_role || a.agent_role || 'co_agent',
             commission_plan: af.commission_plan || null,
+            sales_volume: parseNum(af.sales_volume),
             agent_gross: parseNum(af.agent_gross),
             brokerage_split: parseNum(af.brokerage_split),
             processing_fee: parseNum(af.processing_fee),
@@ -639,6 +647,7 @@ export default function CloseTransactionModal({
             agent_id: row.agent_id,
             agent_role: row.agent_role || 'co_agent',
             commission_plan: row.commission_plan || null,
+            sales_volume: parseNum(row.sales_volume),
             agent_gross: parseNum(row.agent_gross),
             brokerage_split: parseNum(row.brokerage_split),
             processing_fee: parseNum(row.processing_fee),
@@ -1110,7 +1119,7 @@ export default function CloseTransactionModal({
 
                 <button
                   type="button"
-                  onClick={() => setNewAgentRows(p => [...p, emptyAgentForm()])}
+                  onClick={() => setNewAgentRows(p => [...p, emptyAgentForm(undefined, String(txn.sales_volume || ''))])}
                   className="w-full flex items-center justify-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 py-2 border border-dashed border-luxury-accent/40 rounded-lg transition-colors"
                 >
                   <Plus size={13} /> Add Agent

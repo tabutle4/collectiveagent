@@ -1611,6 +1611,7 @@ export default function AdminTransactionDetailPage() {
                       const brokerageSplit = parseFloat(a.brokerage_split || calc?.brokerage_split || 0)
                       const teamLeadComm = parseFloat(a.team_lead_commission || calc?.team_lead_payout || 0)
                       const debtsDeducted = parseFloat(a.debts_deducted || 0)
+                      const salesVolume = parseFloat(a.sales_volume || 0)
                       const agentNet = parseFloat(a.agent_net || calc?.agent_net || 0)
                       const amount1099 = a.amount_1099_reportable || (agentGross - processingFee - coachingFee - otherFees)
                       const isDeleting = deleteConfirm === a.id
@@ -1727,6 +1728,7 @@ export default function AdminTransactionDetailPage() {
 
                           {/* Financial breakdown */}
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <FieldRow label="Sales Volume" value={salesVolume > 0 ? fmt$(salesVolume) : null} />
                             <FieldRow label="Office Gross (100%)" value={fmt$(txn.office_gross)} />
                             <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : (calc?.agent_split_pct ? `${calc.agent_split_pct}%` : null)} />
                             <FieldRow label="Agent Gross" value={fmt$(agentGross)} />
