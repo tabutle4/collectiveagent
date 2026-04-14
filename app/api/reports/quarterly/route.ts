@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
     const PRODUCER_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
     allRelevantRows.forEach(row => {
       // Top producers: primary, listing, co_agent only
-      if (!PRODUCER_ROLES.includes(row.agent_role)) return
+      if (!PRODUCTION_ROLES.includes(row.agent_role)) return
       const txn = transactions.find(t => t.id === row.transaction_id)
       if (!txn || !row.agent) return
       
@@ -344,15 +344,11 @@ export async function GET(request: NextRequest) {
           initials: formatInitials(l.agent),
         }))
         
-        // Get team members (excluding leads)
+        // Get team members (excluding leads) - show ALL members, not just those with deals
         const leadIds = activeLeads.map(l => l.agent?.id)
         const memberIds = teamMembers.filter(tm => tm.team_id === teamId).map(tm => tm.agent_id)
-        const memberAgents = allRelevantRows
-          .filter(row => memberIds.includes(row.agent_id) && row.agent && !leadIds.includes((row.agent as any).id))
-          .map(row => row.agent as any)
-          .filter((agent: any, index: number, self: any[]) => 
-            self.findIndex((a: any) => a.id === agent.id) === index
-          )
+        const memberAgents = activeAgents
+          .filter(agent => memberIds.includes(agent.id) && !leadIds.includes(agent.id))
           .slice(0, 4)
         
         return {
