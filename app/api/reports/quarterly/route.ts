@@ -350,7 +350,6 @@ export async function GET(request: NextRequest) {
         const memberIds = teamMembers.filter(tm => tm.team_id === teamId).map(tm => tm.agent_id)
         const memberAgents = activeAgents
           .filter(agent => memberIds.includes(agent.id) && !leadIds.includes(agent.id))
-          .slice(0, 4)
         
         return {
           id: teamId,
