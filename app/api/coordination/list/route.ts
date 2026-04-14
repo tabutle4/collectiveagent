@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
@@ -12,29 +13,23 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const filter = searchParams.get('filter') || 'active'
 
-    let query = supabase
-      .from('listing_coordination')
-      .select(
-        `
-        *,
-        listing:transactions(*)
-      `
-      )
-      .order('created_at', { ascending: false })
-      .range(0, 9999)
-
+    // Build filters based on active/inactive/all
+    const filters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
     if (filter === 'active') {
-      query = query.eq('is_active', true)
+      filters.push({ type: 'eq', column: 'is_active', value: true })
     } else if (filter === 'inactive') {
-      query = query.eq('is_active', false)
+      filters.push({ type: 'eq', column: 'is_active', value: false })
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      console.error('Error fetching coordinations:', error)
-      return NextResponse.json({ error: 'Failed to fetch coordinations' }, { status: 500 })
-    }
+    const data = await fetchAllRows(
+      'listing_coordination',
+      `*, listing:transactions(*)`,
+      {
+        filters,
+        orderBy: { column: 'created_at', ascending: false },
+      },
+      supabase
+    )
 
     // Batch fetch agents and listings
     const agentIds = [...new Set(data.map((c: any) => c.agent_id).filter(Boolean))]

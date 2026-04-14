@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { supabaseAdmin as supabase, fetchAllRows } from '@/lib/supabase'
 import { sendProspectWelcomeEmail, sendNewProspectNotification } from '@/lib/email'
 import { requirePermission } from '@/lib/api-auth'
 import crypto from 'crypto'
@@ -11,8 +11,6 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.json()
 
-    const isReferralAgent = formData.mls_choice === 'Referral Collective (No MLS)'
-
     const requiredFields = [
       'first_name',
       'last_name',
@@ -22,17 +20,13 @@ export async function POST(request: NextRequest) {
       'phone',
       'location',
       'mls_choice',
+      'association_status',
       'expectations',
       'accountability',
       'lead_generation',
       'additional_info',
       'how_heard',
     ]
-
-    // Association status only required for non-referral agents
-    if (!isReferralAgent) {
-      requiredFields.push('association_status')
-    }
 
     for (const field of requiredFields) {
       if (!formData[field]) {
@@ -89,8 +83,6 @@ export async function POST(request: NextRequest) {
         joining_team: formData.joining_team || null,
         prospect_status: 'new',
         campaign_token,
-        // Referral agents don't pay monthly fees
-        monthly_fee_waived: isReferralAgent,
       })
       .select()
       .single()
@@ -131,7 +123,6 @@ export async function POST(request: NextRequest) {
         preferred_first_name: prospect.preferred_first_name,
         email: prospect.email,
         join_link: joinLink,
-        mls_choice: prospect.mls_choice,
       })
     } catch (emailError) {
       console.error('Error sending prospect email:', emailError)
@@ -145,7 +136,6 @@ export async function POST(request: NextRequest) {
         email: prospect.email,
         phone: prospect.phone,
         location: prospect.location,
-        mls_choice: prospect.mls_choice,
       })
     } catch (notifyError) {
       console.error('Error sending prospect notification:', notifyError)
@@ -174,17 +164,17 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const { data: prospects, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('status', 'prospect')
-      .order('created_at', { ascending: false })
-      .range(0, 9999)
-
-    if (error) throw error
+    const prospects = await fetchAllRows(
+      'users',
+      '*',
+      {
+        filters: [{ type: 'eq', column: 'status', value: 'prospect' }],
+        orderBy: { column: 'created_at', ascending: false },
+      }
+    )
 
     // Strip sensitive fields
-    const safeProspects = (prospects || []).map(
+    const safeProspects = prospects.map(
       ({ password_hash, reset_token, reset_token_expires, ...p }: any) => p
     )
 

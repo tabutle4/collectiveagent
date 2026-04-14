@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requireRole } from '@/lib/api-auth'
 
 /**
@@ -33,98 +33,102 @@ export async function GET(request: NextRequest) {
     const startDateStr = startDate.toISOString().split('T')[0]
     const endDateStr = endDate.toISOString().split('T')[0]
 
-    // Run all queries in parallel
+    // Run all queries in parallel (all batched)
     const [
-      newAgentsRes,
-      activeAgentsRes,
-      transactionsRes,
-      internalAgentsRes,
-      teamMembersRes,
-      teamsRes,
+      newAgents,
+      activeAgents,
+      transactions,
+      internalAgents,
+      teamMembers,
+      teams,
     ] = await Promise.all([
       // New agents this quarter
-      supabaseAdmin
-        .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, office, headshot_url, join_date')
-        .gte('join_date', startDateStr)
-        .lte('join_date', endDateStr)
-        .eq('is_licensed_agent', true)
-        .eq('is_active', true)
-        .range(0, 9999),
+      fetchAllRows(
+        'users',
+        'id, first_name, last_name, preferred_first_name, preferred_last_name, office, headshot_url, join_date',
+        {
+          filters: [
+            { type: 'gte', column: 'join_date', value: startDateStr },
+            { type: 'lte', column: 'join_date', value: endDateStr },
+            { type: 'eq', column: 'is_licensed_agent', value: true },
+            { type: 'eq', column: 'is_active', value: true },
+          ],
+        }
+      ),
       
       // All active agents by office
-      supabaseAdmin
-        .from('users')
-        .select('id, office')
-        .eq('status', 'active')
-        .eq('is_active', true)
-        .eq('is_licensed_agent', true)
-        .range(0, 9999),
+      fetchAllRows(
+        'users',
+        'id, office',
+        {
+          filters: [
+            { type: 'eq', column: 'status', value: 'active' },
+            { type: 'eq', column: 'is_active', value: true },
+            { type: 'eq', column: 'is_licensed_agent', value: true },
+          ],
+        }
+      ),
       
       // Transactions - we'll filter by date and status in JS since we need different logic
       // for sales (require closed) vs leases (just need move_in_date in past)
-      supabaseAdmin
-        .from('transactions')
-        .select('id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status')
-        .neq('status', 'cancelled')
-        .range(0, 9999),
+      fetchAllRows(
+        'transactions',
+        'id, transaction_type, sales_price, monthly_rent, lease_term, closing_date, closed_date, move_in_date, office_location, status',
+        {
+          filters: [{ type: 'neq', column: 'status', value: 'cancelled' }],
+        }
+      ),
       
       // All internal agent records for closed transactions
-      supabaseAdmin
-        .from('transaction_internal_agents')
-        .select(`
-          transaction_id,
-          agent_id,
-          agent_role,
-          sales_volume,
-          units,
-          agent_net,
-          agent:users!transaction_internal_agents_agent_id_fkey(
-            id,
-            first_name,
-            last_name,
-            preferred_first_name,
-            preferred_last_name,
-            office,
-            headshot_url
-          )
-        `)
-        .range(0, 9999),
+      fetchAllRows(
+        'transaction_internal_agents',
+        `transaction_id,
+         agent_id,
+         agent_role,
+         sales_volume,
+         units,
+         agent_net,
+         agent:users!transaction_internal_agents_agent_id_fkey(
+           id,
+           first_name,
+           last_name,
+           preferred_first_name,
+           preferred_last_name,
+           office,
+           headshot_url
+         )`
+      ),
       
       // Active team memberships
-      supabaseAdmin
-        .from('team_member_agreements')
-        .select('agent_id, team_id')
-        .is('end_date', null)
-        .range(0, 9999),
+      fetchAllRows(
+        'team_member_agreements',
+        'agent_id, team_id',
+        {
+          filters: [{ type: 'is', column: 'end_date', value: null }],
+        }
+      ),
       
       // Teams with leads
-      supabaseAdmin
-        .from('teams')
-        .select(`
-          id,
-          team_name,
-          team_leads(
-            agent_id,
-            agent:users!team_leads_agent_id_fkey(
-              id,
-              first_name,
-              last_name,
-              preferred_first_name,
-              preferred_last_name,
-              headshot_url
-            )
-          )
-        `)
-        .eq('status', 'active')
-        .range(0, 9999),
+      fetchAllRows(
+        'teams',
+        `id,
+         team_name,
+         team_leads(
+           agent_id,
+           agent:users!team_leads_agent_id_fkey(
+             id,
+             first_name,
+             last_name,
+             preferred_first_name,
+             preferred_last_name,
+             headshot_url
+           )
+         )`,
+        {
+          filters: [{ type: 'eq', column: 'status', value: 'active' }],
+        }
+      ),
     ])
-
-    // Build lookup maps
-    const transactions = transactionsRes.data || []
-    const internalAgents = internalAgentsRes.data || []
-    const teamMembers = teamMembersRes.data || []
-    const teams = teamsRes.data || []
 
     // Helper to check if transaction is a lease
     const isLeaseType = (txnType: string | null) => {
@@ -187,7 +191,6 @@ export async function GET(request: NextRequest) {
     })
 
     // Agent count by office
-    const activeAgents = activeAgentsRes.data || []
     const houstonCount = activeAgents.filter(a => a.office?.toLowerCase().includes('houston')).length
     const dallasCount = activeAgents.filter(a => {
       const office = a.office?.toLowerCase() || ''
@@ -365,7 +368,7 @@ export async function GET(request: NextRequest) {
       })
 
     // Format new agents
-    const newAgents = (newAgentsRes.data || []).map(a => ({
+    const newAgentsList = newAgents.map(a => ({
       name: formatName(a),
       initials: formatInitials(a),
       office: a.office,
@@ -379,8 +382,8 @@ export async function GET(request: NextRequest) {
         endDate: endDateStr,
       },
       growth: {
-        newAgents: newAgents.length,
-        newAgentsList: newAgents,
+        newAgents: newAgentsList.length,
+        newAgentsList,
         totalAgents: activeAgents.length,
         houstonAgents: houstonCount,
         dallasAgents: dallasCount,

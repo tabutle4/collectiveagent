@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions, PermissionCode } from '@/lib/permissions'
 
@@ -22,40 +23,36 @@ export async function GET(request: NextRequest) {
     const permissions = await getUserPermissions(userId)
     const canViewAll = permissions.has('can_view_all_transactions')
 
-    // Build transactions query
-    let txnQuery = supabase
-      .from('transactions')
-      .select(
-        `
-        id,
-        created_at,
-        updated_at,
-        property_address,
-        status,
-        compliance_status,
-        client_name,
-        sales_price,
-        monthly_rent,
-        sales_volume,
-        closing_date,
-        move_in_date,
-        transaction_type,
-        submitted_by,
-        office_location
-      `
-      )
-      .order('closing_date', { ascending: false })
-      .range(0, 9999)
-    // Filter by user if they don't have can_view_all_transactions
+    // Build filters
+    const filters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
     if (!canViewAll) {
-      txnQuery = txnQuery.eq('submitted_by', userId)
+      filters.push({ type: 'eq', column: 'submitted_by', value: userId })
     }
 
-    const { data: transactions, error: txnError } = await txnQuery
-
-    if (txnError) {
-      return NextResponse.json({ error: txnError.message }, { status: 400 })
-    }
+    // Fetch transactions (batched)
+    const transactions = await fetchAllRows(
+      'transactions',
+      `id,
+       created_at,
+       updated_at,
+       property_address,
+       status,
+       compliance_status,
+       client_name,
+       sales_price,
+       monthly_rent,
+       sales_volume,
+       closing_date,
+       move_in_date,
+       transaction_type,
+       submitted_by,
+       office_location`,
+      {
+        filters,
+        orderBy: { column: 'closing_date', ascending: false },
+      },
+      supabase
+    )
 
     // Get agents list for users who can view all
     let agents: any[] = []
@@ -76,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      transactions: transactions || [],
+      transactions,
       agents,
       permissions: permissionsObject,
       canViewAll,

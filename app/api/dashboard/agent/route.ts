@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
 
 export async function GET(request: NextRequest) {
@@ -12,8 +13,9 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
     const userId = session.user.id
 
-    // Load user, commission plan, transactions, and agent rows in parallel
-    const [userRes, txnRes, agentRowsRes] = await Promise.all([
+    // Load user, transactions, and agent rows in parallel
+    const [userRes, transactions, agentRows] = await Promise.all([
+      // User (single row, no batching needed)
       supabase
         .from('users')
         .select(
@@ -21,19 +23,27 @@ export async function GET(request: NextRequest) {
         )
         .eq('id', userId)
         .single(),
-      supabase
-        .from('transactions')
-        .select(
-          'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date'
-        )
-        .eq('submitted_by', userId)
-        .order('closing_date', { ascending: false })
-        .range(0, 9999),
-      supabase
-        .from('transaction_internal_agents')
-        .select('transaction_id, agent_net, sales_volume, units, brokerage_split, counts_toward_progress')
-        .eq('agent_id', userId)
-        .range(0, 9999),
+
+      // Transactions (batched)
+      fetchAllRows(
+        'transactions',
+        'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date',
+        {
+          filters: [{ type: 'eq', column: 'submitted_by', value: userId }],
+          orderBy: { column: 'closing_date', ascending: false },
+        },
+        supabase
+      ),
+
+      // Agent rows (batched)
+      fetchAllRows(
+        'transaction_internal_agents',
+        'transaction_id, agent_net, sales_volume, units, brokerage_split, counts_toward_progress',
+        {
+          filters: [{ type: 'eq', column: 'agent_id', value: userId }],
+        },
+        supabase
+      ),
     ])
 
     if (userRes.error) throw userRes.error
@@ -74,7 +84,6 @@ export async function GET(request: NextRequest) {
       const closedIds = (closedTxns || []).map(t => t.id)
       
       // Sum brokerage_split from agent rows on those transactions
-      const agentRows = agentRowsRes.data || []
       capProgress = agentRows
         .filter((r: any) => 
           closedIds.includes(r.transaction_id) && 
@@ -95,8 +104,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user,
       commissionPlan,
-      transactions: txnRes.data || [],
-      agentRows: agentRowsRes.data || [],
+      transactions,
+      agentRows,
       capProgress,
     })
   } catch (err: any) {

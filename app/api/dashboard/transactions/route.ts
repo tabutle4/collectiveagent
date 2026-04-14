@@ -1,49 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
-
-// Fetch all rows in batches to bypass 1000 row limit
-async function fetchAllRows(
-  table: string,
-  selectFields: string,
-  filters?: { column: string; operator: string; value: any }[]
-) {
-  const BATCH_SIZE = 1000
-  let allData: any[] = []
-  let offset = 0
-  let hasMore = true
-
-  while (hasMore) {
-    let query = supabaseAdmin
-      .from(table)
-      .select(selectFields)
-      .range(offset, offset + BATCH_SIZE - 1)
-
-    if (filters) {
-      for (const f of filters) {
-        if (f.operator === 'is') {
-          query = query.is(f.column, f.value)
-        } else if (f.operator === 'eq') {
-          query = query.eq(f.column, f.value)
-        }
-      }
-    }
-
-    const { data, error } = await query
-
-    if (error) throw error
-
-    if (data && data.length > 0) {
-      allData = allData.concat(data)
-      offset += BATCH_SIZE
-      hasMore = data.length === BATCH_SIZE
-    } else {
-      hasMore = false
-    }
-  }
-
-  return allData
-}
 
 export async function GET(request: NextRequest) {
   try {
