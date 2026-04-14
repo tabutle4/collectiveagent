@@ -638,7 +638,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         amount_1099_reportable: Math.round(amount1099 * 100) / 100,
         debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
         agent_net: Math.round(agentNet * 100) / 100,
-        counts_toward_progress: counts_toward_progress ?? true,
       }
 
       const { error: updateTiaError } = await supabase
