@@ -503,7 +503,7 @@ function TeamSlide({ team, rank, quarter, active }: { team: QuarterlyData['topTe
           
           {team.members.length > 0 && (
             <div className="flex gap-2">
-              {team.members.slice(0, 4).map((m, i) => (
+              {team.members.map((m, i) => (
                 <InitialBadge key={i} initials={m.initials} size={36} />
               ))}
             </div>
