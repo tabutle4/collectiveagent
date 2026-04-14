@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       // All active agents by office
       fetchAllRows(
         'users',
-        'id, office',
+        'id, office, first_name, last_name, preferred_first_name, preferred_last_name',
         {
           filters: [
             { type: 'eq', column: 'status', value: 'active' },
@@ -210,7 +210,7 @@ export async function GET(request: NextRequest) {
     const PRODUCER_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
     allRelevantRows.forEach(row => {
       // Top producers: primary, listing, co_agent only
-      if (!PRODUCTION_ROLES.includes(row.agent_role)) return
+      if (!PRODUCER_ROLES.includes(row.agent_role)) return
       const txn = transactions.find(t => t.id === row.transaction_id)
       if (!txn || !row.agent) return
       
@@ -320,7 +320,8 @@ export async function GET(request: NextRequest) {
       const teamId = agentTeamMap[row.agent_id]
       if (!teamId) return
       // Team stats: primary + listing only (consistent with firm totals)
-      if (!PRODUCER_ROLES.includes(row.agent_role)) return
+      if (!PRODUCTION_ROLES.includes(row.agent_role)) return
+
       
       if (!teamStats[teamId]) {
         teamStats[teamId] = { volume: 0, units: 0 }
