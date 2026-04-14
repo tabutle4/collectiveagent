@@ -11,28 +11,33 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.json()
 
-    const requiredFields = [
-      'first_name',
-      'last_name',
-      'preferred_first_name',
-      'preferred_last_name',
-      'email',
-      'phone',
-      'location',
-      'mls_choice',
-      'association_status',
-      'expectations',
-      'accountability',
-      'lead_generation',
-      'additional_info',
-      'how_heard',
-    ]
+    const isReferralAgent = formData.mls_choice === 'Referral Collective (No MLS)'
 
-    for (const field of requiredFields) {
-      if (!formData[field]) {
-        return NextResponse.json({ error: `${field} is required` }, { status: 400 })
-      }
-    }
+const requiredFields = [
+  'first_name',
+  'last_name',
+  'preferred_first_name',
+  'preferred_last_name',
+  'email',
+  'phone',
+  'location',
+  'mls_choice',
+  'expectations',
+  'accountability',
+  'lead_generation',
+  'additional_info',
+  'how_heard',
+]
+
+if (!isReferralAgent) {
+  requiredFields.push('association_status')
+}
+
+for (const field of requiredFields) {
+  if (!formData[field]) {
+    return NextResponse.json({ error: `${field} is required` }, { status: 400 })
+  }
+}
 
     const phoneDigits = formData.phone.replace(/\D/g, '')
     if (phoneDigits.length !== 10) {
