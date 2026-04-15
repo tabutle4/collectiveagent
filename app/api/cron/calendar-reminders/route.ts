@@ -74,7 +74,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const events: any[] = data.value || []
+    // calendarView returns events that OVERLAP the window, not just start within it.
+    // Filter to only events whose start time falls within our window.
+    const allEvents: any[] = data.value || []
+    const events = allEvents.filter((event: any) => {
+      const startMs = new Date(event.start?.dateTime || '').getTime()
+      return startMs >= windowStart.getTime() && startMs < windowEnd.getTime()
+    })
 
     if (!events.length) {
       return NextResponse.json({ success: true, message: 'No upcoming events', sent: 0 })
