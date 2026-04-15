@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { sendCalendarReminderEmail } from '@/lib/email'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
@@ -43,9 +44,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Clean up log entries older than 14 days
+    const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+    await supabaseAdmin
+      .from('calendar_reminder_logs')
+      .delete()
+      .lt('sent_at', cutoff.toISOString())
+
     const now = new Date()
     // Window: events starting 8-13 minutes from now.
-    // Matches the 5-minute cron interval so each event is caught exactly once.
+    // 5-minute window matches the cron interval — each event start time
+    // can only fall in one window. The dedup table is the final safety net.
     const windowStart = new Date(now.getTime() + 8 * 60 * 1000)
     const windowEnd = new Date(now.getTime() + 13 * 60 * 1000)
 
@@ -75,7 +84,7 @@ export async function GET(request: NextRequest) {
     }
 
     // calendarView returns events that OVERLAP the window, not just start within it.
-    // Filter to only events whose start time falls within our window.
+    // Filter to only events whose start time falls strictly within our window.
     const allEvents: any[] = data.value || []
     const events = allEvents.filter((event: any) => {
       const startMs = new Date(event.start?.dateTime || '').getTime()
@@ -87,10 +96,22 @@ export async function GET(request: NextRequest) {
     }
 
     let sent = 0
+    let skipped = 0
     const errors: string[] = []
 
     for (const event of events) {
       try {
+        // Attempt to insert into dedup log — fails silently if event_id already exists
+        const { error: insertError } = await supabaseAdmin
+          .from('calendar_reminder_logs')
+          .insert({ event_id: event.id })
+
+        if (insertError) {
+          // Duplicate key — reminder already sent for this event
+          skipped++
+          continue
+        }
+
         await sendCalendarReminderEmail({
           title: event.subject || 'Upcoming Event',
           startTime: formatEventTime(event.start?.dateTime || now.toISOString()),
@@ -107,6 +128,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       sent,
+      skipped,
       errors: errors.length ? errors : undefined,
     })
   } catch (err: any) {
