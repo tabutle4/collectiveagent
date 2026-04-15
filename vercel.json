@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/calendar-reminders",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/create-monthly-invoices",
       "schedule": "0 14 25 * *"
     },

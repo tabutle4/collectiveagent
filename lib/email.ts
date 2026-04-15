@@ -727,3 +727,48 @@ export async function sendOnboardingResetEmail(prospect: {
     html,
   })
 }
+// ─── CALENDAR EVENT REMINDER (getEmailLayout) ─────────────────────────────────
+
+export async function sendCalendarReminderEmail({
+  title,
+  startTime,
+  endTime,
+  location,
+  notes,
+}: {
+  title: string
+  startTime: string
+  endTime: string
+  location?: string
+  notes?: string
+}) {
+  const html = getEmailLayout(
+    `<p style="margin: 0 0 16px; font-size: 14px; color: #555555; line-height: 1.6;">
+       This is a reminder that the following event starts in approximately <strong style="color: #1a1a1a;">10 minutes</strong>.
+     </p>
+     <div style="background-color: #f9f9f9; padding: 20px 24px; border-left: 3px solid #C5A278; margin: 0 0 16px;">
+       <p style="margin: 0 0 12px; font-size: 12px; font-weight: 600; color: #C5A278; text-transform: uppercase; letter-spacing: 0.05em;">Event Details</p>
+       <p style="margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #1a1a1a;">${title}</p>
+       <p style="margin: 0 0 6px; font-size: 14px; color: #555555;"><strong style="color: #1a1a1a;">Starts:</strong> ${startTime}</p>
+       <p style="margin: 0 0 6px; font-size: 14px; color: #555555;"><strong style="color: #1a1a1a;">Ends:</strong> ${endTime}</p>
+       ${location ? `<p style="margin: 0 0 6px; font-size: 14px; color: #555555;"><strong style="color: #1a1a1a;">Location:</strong> ${location}</p>` : ''}
+       ${notes ? `<p style="margin: 8px 0 0 0; font-size: 14px; color: #555555; line-height: 1.6;">${notes}</p>` : ''}
+     </div>
+     <p style="text-align: center; margin: 24px 0 16px;">
+       <a href="https://agent.collectiverealtyco.com/training-center" style="display: inline-block; padding: 12px 28px; background-color: #C5A278; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">Go to Training Center</a>
+     </p>
+     <p style="font-size: 13px; color: #888888; margin: 0;">This reminder was sent automatically by the Collective Agent app.</p>`,
+    {
+      title: 'Event Reminder',
+      subtitle: 'Collective Realty Co.',
+      preheader: `Reminder: ${title} starts in 10 minutes`,
+    }
+  )
+
+  return resend.emails.send({
+    from: FROM_EMAILS.notifications,
+    to: 'agents@collectiverealtyco.com',
+    subject: `Reminder: ${title} starts in 10 minutes`,
+    html,
+  })
+}
