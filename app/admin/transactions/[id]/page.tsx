@@ -3005,12 +3005,13 @@ export default function AdminTransactionDetailPage() {
                   <span className="text-xs font-semibold text-luxury-gray-2">Agent Will Receive</span>
                   <span className="text-lg font-bold text-luxury-accent">
                     {fmt$(
-                      parseFloat(markPaidModal.agent.agent_gross || 0) -
-                      parseFloat(markPaidModal.agent.processing_fee || 0) -
-                      parseFloat(markPaidModal.agent.coaching_fee || 0) -
-                      parseFloat(markPaidModal.agent.other_fees || 0) -
-                      Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0)
-                    )}
+                    parseFloat(markPaidModal.agent.agent_gross || 0) -
+                    parseFloat(markPaidModal.agent.processing_fee || 0) -
+                    parseFloat(markPaidModal.agent.coaching_fee || 0) -
+                    parseFloat(markPaidModal.agent.other_fees || 0) -
+                    parseFloat(markPaidModal.agent.debts_deducted || 0) -
+                    Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0)
+                  )}
                   </span>
                 </div>
               </div>
