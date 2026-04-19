@@ -15,13 +15,13 @@ import {
  * TC Module layout.
  *
  * Renders the sub-nav tabs (Dashboard, Calendar, Deals, Admin) above every
- * /admin/tc/* page. Does NOT wrap content in a background div because the
- * parent AppSidebar layout already provides the page background and
- * horizontal padding.
+ * /admin/tc/* page.
  *
- * Dropdown pattern matches AppSidebar's user menu: full-screen overlay at
- * z-40 captures outside clicks, dropdown panel at z-50 floats above the
- * sidebar's sticky header (which is z-30).
+ * Structure note: tabs are in an overflow-x-auto scroll container so they
+ * can scroll on narrow screens, but the Admin dropdown lives OUTSIDE that
+ * container. If the dropdown were inside, the overflow-x: auto would clip
+ * the dropdown vertically too (a CSS quirk: setting overflow on one axis
+ * auto-clips the other axis), and the dropdown would be invisible.
  */
 export default function TcLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -45,21 +45,27 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <div className="border-b border-luxury-gray-5 -mx-4 md:-mx-6 mb-6 bg-white">
-        <div className="px-4 md:px-6 flex items-center gap-1 text-sm overflow-x-auto">
-          <TcTab href="/admin/tc" active={isActive('/admin/tc', true)}>
-            <LayoutDashboard size={14} />
-            Dashboard
-          </TcTab>
-          <TcTab href="/admin/tc/calendar" active={isActive('/admin/tc/calendar')}>
-            <CalendarIcon size={14} />
-            Calendar
-          </TcTab>
-          <TcTab href="/admin/tc/list" active={isActive('/admin/tc/list')}>
-            <List size={14} />
-            Deals
-          </TcTab>
+        <div className="px-4 md:px-6 flex items-stretch">
+          {/* Left: scrollable tabs. overflow-x-auto stays ONLY on this element. */}
+          <div className="flex items-center gap-1 text-sm overflow-x-auto flex-1">
+            <TcTab href="/admin/tc" active={isActive('/admin/tc', true)}>
+              <LayoutDashboard size={14} />
+              Dashboard
+            </TcTab>
+            <TcTab href="/admin/tc/calendar" active={isActive('/admin/tc/calendar')}>
+              <CalendarIcon size={14} />
+              Calendar
+            </TcTab>
+            <TcTab href="/admin/tc/list" active={isActive('/admin/tc/list')}>
+              <List size={14} />
+              Deals
+            </TcTab>
+          </div>
 
-          <div className="ml-auto relative">
+          {/* Right: Admin dropdown lives OUTSIDE the overflow-x-auto scroll area
+              so the dropdown panel can extend below the nav bar without being
+              clipped. */}
+          <div className="relative flex items-stretch">
             <button
               type="button"
               onClick={() => setAdminOpen(!adminOpen)}
@@ -71,14 +77,17 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
             >
               <SettingsIcon size={14} />
               Admin
-              <ChevronDown size={12} className={adminOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              <ChevronDown
+                size={12}
+                className={adminOpen ? 'rotate-180 transition-transform' : 'transition-transform'}
+              />
             </button>
 
             {adminOpen && (
               <>
                 {/* Full-screen overlay captures outside clicks */}
                 <div className="fixed inset-0 z-40" onClick={closeAdmin} />
-                {/* Dropdown panel floats above sidebar sticky header (z-30) */}
+                {/* Dropdown panel. z-50 puts it above the sidebar sticky header (z-30). */}
                 <div className="absolute right-0 top-full mt-1 bg-white border border-luxury-gray-5 rounded-lg shadow-lg py-1 min-w-[200px] z-50">
                   <AdminItem href="/admin/tc/templates" onClick={closeAdmin}>
                     Email Templates
