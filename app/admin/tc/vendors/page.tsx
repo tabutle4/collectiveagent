@@ -93,7 +93,7 @@ export default function TcVendorsPage() {
                     className="container-card hover:border-luxury-accent transition-colors cursor-pointer"
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="text-sm font-semibold text-luxury-gray-1">{v.company_name}</h3>
+                      <h3 className="text-sm font-semibold text-luxury-gray-1 min-w-0 break-words">{v.company_name}</h3>
                       {v.is_featured && (
                         <span className="text-xs px-2 py-0.5 rounded bg-luxury-accent/10 text-luxury-accent font-semibold whitespace-nowrap flex-shrink-0">
                           Featured
@@ -101,9 +101,9 @@ export default function TcVendorsPage() {
                       )}
                     </div>
                     {v.contact_name && (
-                      <p className="text-xs text-luxury-gray-3 mb-1">{v.contact_name}</p>
+                      <p className="text-xs text-luxury-gray-3 mb-1 break-words">{v.contact_name}</p>
                     )}
-                    <p className="text-xs text-luxury-gray-4">
+                    <p className="text-xs text-luxury-gray-4 break-words">
                       {v.phone || 'no phone'}
                       {v.email ? ` · ${v.email}` : ''}
                     </p>

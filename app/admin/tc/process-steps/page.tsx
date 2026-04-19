@@ -1,21 +1,20 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, X, Mail, ExternalLink } from 'lucide-react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { Plus, X, Mail, ExternalLink, Search } from 'lucide-react'
 import { PhasePlaceholder } from '../page'
 import type { TcProcessStep, TcEmailTemplate, PreferredVendor } from '@/types/tc-module'
 
 /**
  * /admin/tc/process-steps  Process step CRUD
  *
- * Phase 1 scaffold with template preview. Groups steps by transaction_type
- * (buyer, nc_buyer, seller) matching the Preferred Vendors page pattern.
- * Each step card shows the linked email template. Clicking the template
- * name opens a modal with the rendered body. Vendor merge fields render
- * live from /api/tc/vendors.
+ * Phase 1 scaffold. Groups steps by transaction_type. Each section numbers
+ * its steps 1..N in display order (based on server-sorted step_order) so
+ * the sequence is obvious even when raw step_order values have gaps
+ * (10, 20, 135, 200, etc).
  *
- * Full editor with drag-to-reorder and inline editing comes in Phase 1
- * completion per TC_Module_Build_Guide.docx section 9.2.
+ * Client-side search filters by title, step slug, and linked template
+ * name. The match is case-insensitive.
  */
 
 type StepWithTemplate = TcProcessStep & {
@@ -28,6 +27,7 @@ export default function TcProcessStepsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -51,10 +51,22 @@ export default function TcProcessStepsPage() {
       })
   }, [])
 
-  // Group by transaction_type. API already sorts by transaction_type then
-  // step_order, so iterating preserves the workflow sequence within each
-  // section.
-  const grouped = steps.reduce<Record<string, StepWithTemplate[]>>((acc, s) => {
+  // Apply search filter first. Sequence numbers are assigned AFTER filtering
+  // so visible cards always read 1, 2, 3... without gaps.
+  const q = query.trim().toLowerCase()
+  const filteredSteps = useMemo(() => {
+    if (!q) return steps
+    return steps.filter(s => {
+      const hay = [s.title, s.slug, s.template?.name ?? '', s.step_type, s.anchor ?? '']
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(q)
+    })
+  }, [steps, q])
+
+  // Group by transaction_type. API sorts by (transaction_type, step_order)
+  // so the reduce preserves execution order.
+  const grouped = filteredSteps.reduce<Record<string, StepWithTemplate[]>>((acc, s) => {
     if (!acc[s.transaction_type]) acc[s.transaction_type] = []
     acc[s.transaction_type].push(s)
     return acc
@@ -81,6 +93,22 @@ export default function TcProcessStepsPage() {
         </div>
       </div>
 
+      {!loading && !error && steps.length > 0 && (
+        <div className="mb-6 relative max-w-md">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-4 pointer-events-none"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search steps by title, slug, template, or anchor..."
+            className="input-luxury pl-9"
+          />
+        </div>
+      )}
+
       {loading && (
         <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
       )}
@@ -90,13 +118,26 @@ export default function TcProcessStepsPage() {
           <PhasePlaceholder
             phase="Phase 1 (in progress)"
             title="Process steps API coming soon"
-            description="Once /api/tc/process-steps is wired up, this page will show all 52 seeded steps grouped by transaction type with the linked email template and a preview modal."
+            description="Once /api/tc/process-steps is wired up, this page will show all seeded steps grouped by transaction type with the linked email template and a preview modal."
           />
           <p className="text-xs text-luxury-gray-4 mt-4 text-center">{error}</p>
         </>
       )}
 
-      {!loading && !error && steps.length > 0 && (
+      {!loading && !error && steps.length > 0 && filteredSteps.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-sm text-luxury-gray-3">No steps match &ldquo;{query}&rdquo;</p>
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            className="text-xs text-luxury-accent hover:text-luxury-accent/80 mt-2"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && filteredSteps.length > 0 && (
         <div className="space-y-8">
           {sectionOrder.map(section => {
             const list = grouped[section.key] || []
@@ -107,19 +148,25 @@ export default function TcProcessStepsPage() {
                   {section.label} ({list.length})
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {list.map(s => (
+                  {list.map((s, idx) => (
                     <div
                       key={s.id}
                       className="container-card hover:border-luxury-accent transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="text-sm font-semibold text-luxury-gray-1">{s.title}</h3>
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <h3 className="text-sm font-semibold text-luxury-gray-1 min-w-0 break-words">
+                            {s.title}
+                          </h3>
+                        </div>
                         <span className="text-xs px-2 py-0.5 rounded bg-luxury-light text-luxury-gray-3 whitespace-nowrap flex-shrink-0">
                           {s.step_type}
                         </span>
                       </div>
-                      <p className="text-xs text-luxury-gray-3 mb-2">order {s.step_order}</p>
-                      <p className="text-xs text-luxury-gray-4 mb-3">
+                      <p className="text-xs text-luxury-gray-4 mb-3 break-words">
                         {s.anchor
                           ? `${s.anchor} ${(s.offset_days ?? 0) >= 0 ? '+' : ''}${s.offset_days ?? 0}d`
                           : 'no anchor'}
@@ -130,10 +177,10 @@ export default function TcProcessStepsPage() {
                       {s.template ? (
                         <button
                           onClick={() => setPreviewTemplateId(s.template!.id)}
-                          className="flex items-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium"
+                          className="flex items-start gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium text-left w-full"
                         >
-                          <Mail size={12} />
-                          <span className="truncate">{s.template.name}</span>
+                          <Mail size={12} className="flex-shrink-0 mt-0.5" />
+                          <span className="break-words min-w-0">{s.template.name}</span>
                         </button>
                       ) : (
                         <p className="text-xs text-luxury-gray-4 italic">No template (task step)</p>
@@ -151,7 +198,7 @@ export default function TcProcessStepsPage() {
         <PhasePlaceholder
           phase="Seed needed"
           title="No process steps found"
-          description="Run deploy/sql/05_seed_process_steps.sql in the Supabase SQL Editor to seed the 52 TC process steps."
+          description="Run deploy/sql/05_seed_process_steps.sql in the Supabase SQL Editor to seed the TC process steps."
         />
       )}
 
@@ -167,7 +214,7 @@ export default function TcProcessStepsPage() {
 }
 
 // ----------------------------------------------------------------------------
-// Preview modal. Matches the repo's inline modal pattern.
+// Preview modal
 // ----------------------------------------------------------------------------
 
 function TemplatePreviewModal({
@@ -219,7 +266,7 @@ function TemplatePreviewModal({
         <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-luxury-gray-5">
           <div className="min-w-0 flex-1">
             <p className="field-label">Template preview</p>
-            <h2 className="text-sm font-semibold text-luxury-gray-1 truncate">
+            <h2 className="text-sm font-semibold text-luxury-gray-1 break-words">
               {template?.name || 'Loading...'}
             </h2>
           </div>
@@ -268,7 +315,7 @@ function TemplatePreviewModal({
 
               <div className="px-5 py-3 border-t border-luxury-gray-5 bg-luxury-light">
                 <p className="text-xs text-luxury-gray-4">
-                  Orange pills are merge fields. They are replaced with real data at send-time.
+                  Highlighted pills are merge fields. They are replaced with real data at send-time.
                   Vendor blocks render live from the Preferred Vendors table.
                 </p>
               </div>

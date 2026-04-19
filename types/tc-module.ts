@@ -3,6 +3,7 @@
  *
  * These types mirror the database schema from:
  *   deploy/sql/01_schema.sql
+ *   deploy/sql/01_homestead.sql (Patch 2)
  *
  * Keep in sync with any schema changes.
  */
@@ -178,11 +179,23 @@ export interface TcSettings {
   office_phone: string | null
   default_reply_to: string
   google_review_link: string | null
-  homestead_application_link: string | null
   office_locations_html: string | null
   updated_by: string | null
   updated_at: string
   created_at: string
+}
+
+// Patch 2: per-county homestead exemption application links.
+// Resolved at email send-time via transactions.homestead_county_id.
+export interface HomesteadCounty {
+  id: string
+  county_name: string
+  state: string
+  link_url: string | null
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
 }
 
 // ----------------------------------------------------------------------------

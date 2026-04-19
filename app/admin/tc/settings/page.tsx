@@ -9,6 +9,9 @@ import type { TcSettings } from '@/types/tc-module'
  *
  * Phase 1 scaffold. Reads the singleton tc_settings row. Full editor
  * comes in Phase 1 completion per TC_Module_Build_Guide.docx section 9.5.
+ *
+ * Homestead links are NOT edited here. They are managed per-county in
+ * /admin/tc/homestead-counties (see Patch 2).
  */
 export default function TcSettingsPage() {
   const [settings, setSettings] = useState<TcSettings | null>(null)
@@ -52,7 +55,7 @@ export default function TcSettingsPage() {
           <PhasePlaceholder
             phase="Phase 1 (in progress)"
             title="Settings API coming soon"
-            description="Once /api/tc/settings is wired up, this page will let you edit the banner image, signature template, calendar group ID, office email and phone, reply-to, Google review link, homestead application link, and office locations HTML."
+            description="Once /api/tc/settings is wired up, this page will let you edit the banner image, signature template, calendar group ID, office email and phone, reply-to, Google review link, and office locations HTML."
           />
           <p className="text-xs text-luxury-gray-4 mt-4 text-center">{error}</p>
         </>
@@ -64,10 +67,6 @@ export default function TcSettingsPage() {
           <SettingRow label="Office phone" value={settings.office_phone} />
           <SettingRow label="Default reply-to" value={settings.default_reply_to} />
           <SettingRow label="Google review link" value={settings.google_review_link} />
-          <SettingRow
-            label="Homestead application link"
-            value={settings.homestead_application_link}
-          />
           <SettingRow label="TC calendar group ID" value={settings.tc_calendar_group_id} mono />
           <SettingRow label="Banner image" value={settings.banner_image_url} />
           <SettingRow

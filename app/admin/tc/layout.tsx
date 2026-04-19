@@ -98,6 +98,9 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
                   <AdminItem href="/admin/tc/vendors" onClick={closeAdmin}>
                     Preferred Vendors
                   </AdminItem>
+                  <AdminItem href="/admin/tc/homestead-counties" onClick={closeAdmin}>
+                    Homestead Counties
+                  </AdminItem>
                   <AdminItem href="/admin/tc/intake-form" onClick={closeAdmin}>
                     Intake Form
                   </AdminItem>
