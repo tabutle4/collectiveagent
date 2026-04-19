@@ -17,9 +17,11 @@ import {
  * Renders the sub-nav tabs (Dashboard, Calendar, Deals, Admin) above every
  * /admin/tc/* page. Does NOT wrap content in a background div because the
  * parent AppSidebar layout already provides the page background and
- * horizontal padding. Just a thin sub-nav strip, then the child page.
+ * horizontal padding.
  *
- * Phase 1 scaffold. Full behavior per TC_Module_Build_Guide.docx section 9.
+ * Dropdown pattern matches AppSidebar's user menu: full-screen overlay at
+ * z-40 captures outside clicks, dropdown panel at z-50 floats above the
+ * sidebar's sticky header (which is z-30).
  */
 export default function TcLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -35,7 +37,10 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
     pathname.startsWith('/admin/tc/process-steps') ||
     pathname.startsWith('/admin/tc/vendors') ||
     pathname.startsWith('/admin/tc/intake-form') ||
-    pathname.startsWith('/admin/tc/settings')
+    pathname.startsWith('/admin/tc/settings') ||
+    pathname.startsWith('/admin/tc/homestead-counties')
+
+  const closeAdmin = () => setAdminOpen(false)
 
   return (
     <>
@@ -56,6 +61,7 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
 
           <div className="ml-auto relative">
             <button
+              type="button"
               onClick={() => setAdminOpen(!adminOpen)}
               className={`flex items-center gap-1.5 px-3 py-2.5 border-b-2 transition-colors whitespace-nowrap ${
                 isAdminActive
@@ -65,30 +71,32 @@ export default function TcLayout({ children }: { children: React.ReactNode }) {
             >
               <SettingsIcon size={14} />
               Admin
-              <ChevronDown size={12} />
+              <ChevronDown size={12} className={adminOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
             </button>
 
             {adminOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 bg-white border border-luxury-gray-5 rounded-lg shadow-lg py-1 min-w-[180px] z-10"
-                onMouseLeave={() => setAdminOpen(false)}
-              >
-                <AdminItem href="/admin/tc/templates" onClick={() => setAdminOpen(false)}>
-                  Email Templates
-                </AdminItem>
-                <AdminItem href="/admin/tc/process-steps" onClick={() => setAdminOpen(false)}>
-                  Process Steps
-                </AdminItem>
-                <AdminItem href="/admin/tc/vendors" onClick={() => setAdminOpen(false)}>
-                  Preferred Vendors
-                </AdminItem>
-                <AdminItem href="/admin/tc/intake-form" onClick={() => setAdminOpen(false)}>
-                  Intake Form
-                </AdminItem>
-                <AdminItem href="/admin/tc/settings" onClick={() => setAdminOpen(false)}>
-                  Settings
-                </AdminItem>
-              </div>
+              <>
+                {/* Full-screen overlay captures outside clicks */}
+                <div className="fixed inset-0 z-40" onClick={closeAdmin} />
+                {/* Dropdown panel floats above sidebar sticky header (z-30) */}
+                <div className="absolute right-0 top-full mt-1 bg-white border border-luxury-gray-5 rounded-lg shadow-lg py-1 min-w-[200px] z-50">
+                  <AdminItem href="/admin/tc/templates" onClick={closeAdmin}>
+                    Email Templates
+                  </AdminItem>
+                  <AdminItem href="/admin/tc/process-steps" onClick={closeAdmin}>
+                    Process Steps
+                  </AdminItem>
+                  <AdminItem href="/admin/tc/vendors" onClick={closeAdmin}>
+                    Preferred Vendors
+                  </AdminItem>
+                  <AdminItem href="/admin/tc/intake-form" onClick={closeAdmin}>
+                    Intake Form
+                  </AdminItem>
+                  <AdminItem href="/admin/tc/settings" onClick={closeAdmin}>
+                    Settings
+                  </AdminItem>
+                </div>
+              </>
             )}
           </div>
         </div>

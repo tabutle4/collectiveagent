@@ -8,11 +8,11 @@ import type { TcProcessStep, TcEmailTemplate, PreferredVendor } from '@/types/tc
 /**
  * /admin/tc/process-steps  Process step CRUD
  *
- * Phase 1 scaffold with template preview. Each step card shows the
- * linked email template (if any), and clicking the template name opens
- * a modal with the rendered body. Vendor merge fields are rendered
- * live from /api/tc/vendors so the preview matches what the email
- * actually sends.
+ * Phase 1 scaffold with template preview. Groups steps by transaction_type
+ * (buyer, nc_buyer, seller) matching the Preferred Vendors page pattern.
+ * Each step card shows the linked email template. Clicking the template
+ * name opens a modal with the rendered body. Vendor merge fields render
+ * live from /api/tc/vendors.
  *
  * Full editor with drag-to-reorder and inline editing comes in Phase 1
  * completion per TC_Module_Build_Guide.docx section 9.2.
@@ -51,10 +51,20 @@ export default function TcProcessStepsPage() {
       })
   }, [])
 
-  const counts = steps.reduce<Record<string, number>>((acc, s) => {
-    acc[s.transaction_type] = (acc[s.transaction_type] || 0) + 1
+  // Group by transaction_type. API already sorts by transaction_type then
+  // step_order, so iterating preserves the workflow sequence within each
+  // section.
+  const grouped = steps.reduce<Record<string, StepWithTemplate[]>>((acc, s) => {
+    if (!acc[s.transaction_type]) acc[s.transaction_type] = []
+    acc[s.transaction_type].push(s)
     return acc
   }, {})
+
+  const sectionOrder: Array<{ key: string; label: string }> = [
+    { key: 'buyer', label: 'Buyer' },
+    { key: 'nc_buyer', label: 'NC Buyer' },
+    { key: 'seller', label: 'Seller' },
+  ]
 
   return (
     <div>
@@ -80,64 +90,61 @@ export default function TcProcessStepsPage() {
           <PhasePlaceholder
             phase="Phase 1 (in progress)"
             title="Process steps API coming soon"
-            description="Once /api/tc/process-steps is wired up, this page will show all 52 seeded steps (buyer=20, nc_buyer=18, seller=14) with the linked email template and a preview modal."
+            description="Once /api/tc/process-steps is wired up, this page will show all 52 seeded steps grouped by transaction type with the linked email template and a preview modal."
           />
           <p className="text-xs text-luxury-gray-4 mt-4 text-center">{error}</p>
         </>
       )}
 
       {!loading && !error && steps.length > 0 && (
-        <>
-          <div className="flex gap-2 mb-4 text-xs flex-wrap">
-            <span className="px-2 py-1 rounded bg-luxury-light text-luxury-gray-3">
-              Buyer: {counts.buyer || 0}
-            </span>
-            <span className="px-2 py-1 rounded bg-luxury-light text-luxury-gray-3">
-              NC Buyer: {counts.nc_buyer || 0}
-            </span>
-            <span className="px-2 py-1 rounded bg-luxury-light text-luxury-gray-3">
-              Seller: {counts.seller || 0}
-            </span>
-          </div>
+        <div className="space-y-8">
+          {sectionOrder.map(section => {
+            const list = grouped[section.key] || []
+            if (list.length === 0) return null
+            return (
+              <section key={section.key}>
+                <p className="section-title">
+                  {section.label} ({list.length})
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {list.map(s => (
+                    <div
+                      key={s.id}
+                      className="container-card hover:border-luxury-accent transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="text-sm font-semibold text-luxury-gray-1">{s.title}</h3>
+                        <span className="text-xs px-2 py-0.5 rounded bg-luxury-light text-luxury-gray-3 whitespace-nowrap flex-shrink-0">
+                          {s.step_type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-luxury-gray-3 mb-2">order {s.step_order}</p>
+                      <p className="text-xs text-luxury-gray-4 mb-3">
+                        {s.anchor
+                          ? `${s.anchor} ${(s.offset_days ?? 0) >= 0 ? '+' : ''}${s.offset_days ?? 0}d`
+                          : 'no anchor'}
+                        {s.recurrence !== 'none' ? ` · ${s.recurrence}` : ''}
+                        {s.is_conditional ? ' · conditional' : ''}
+                      </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {steps.map(s => (
-              <div
-                key={s.id}
-                className="container-card hover:border-luxury-accent transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="text-sm font-semibold text-luxury-gray-1">{s.title}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded bg-luxury-light text-luxury-gray-3 whitespace-nowrap flex-shrink-0">
-                    {s.transaction_type}
-                  </span>
+                      {s.template ? (
+                        <button
+                          onClick={() => setPreviewTemplateId(s.template!.id)}
+                          className="flex items-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium"
+                        >
+                          <Mail size={12} />
+                          <span className="truncate">{s.template.name}</span>
+                        </button>
+                      ) : (
+                        <p className="text-xs text-luxury-gray-4 italic">No template (task step)</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <p className="text-xs text-luxury-gray-3 mb-2">
-                  {s.step_type} · order {s.step_order}
-                </p>
-                <p className="text-xs text-luxury-gray-4 mb-3">
-                  {s.anchor
-                    ? `${s.anchor} ${(s.offset_days ?? 0) >= 0 ? '+' : ''}${s.offset_days ?? 0}d`
-                    : 'no anchor'}
-                  {s.recurrence !== 'none' ? ` · ${s.recurrence}` : ''}
-                  {s.is_conditional ? ' · conditional' : ''}
-                </p>
-
-                {s.template ? (
-                  <button
-                    onClick={() => setPreviewTemplateId(s.template!.id)}
-                    className="flex items-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium"
-                  >
-                    <Mail size={12} />
-                    <span className="truncate">{s.template.name}</span>
-                  </button>
-                ) : (
-                  <p className="text-xs text-luxury-gray-4 italic">No template (task step)</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </>
+              </section>
+            )
+          })}
+        </div>
       )}
 
       {!loading && !error && steps.length === 0 && (
@@ -160,9 +167,7 @@ export default function TcProcessStepsPage() {
 }
 
 // ----------------------------------------------------------------------------
-// Preview modal. Matches the repo's inline modal pattern:
-//   outer: fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50
-//   inner: container-card max-w-* w-full mx-4
+// Preview modal. Matches the repo's inline modal pattern.
 // ----------------------------------------------------------------------------
 
 function TemplatePreviewModal({
@@ -219,6 +224,7 @@ function TemplatePreviewModal({
             </h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="text-luxury-gray-3 hover:text-luxury-gray-1 p-1 -m-1"
             aria-label="Close"
@@ -287,12 +293,8 @@ function TemplatePreviewModal({
 }
 
 // ----------------------------------------------------------------------------
-// Merge field renderer
+// Merge field renderer (preview only)
 // ----------------------------------------------------------------------------
-// Renders a template body for PREVIEW only. At send-time the server-side
-// renderer (Phase 4) substitutes real transaction, client, and TC values.
-// For now, unmatched merge fields are replaced with a luxury-accent pill.
-// Vendor merge fields are rendered from the live preferred_vendors table.
 
 function renderPreview(body: string, vendors: PreferredVendor[]): string {
   const byType = vendors
@@ -342,7 +344,6 @@ function renderPreview(body: string, vendors: PreferredVendor[]): string {
       renderGroup('Home Warranty Companies', 'home_warranty')
   )
 
-  // Unmatched {{merge_fields}} render as luxury-accent pills (#C5A278).
   rendered = rendered.replace(/\{\{(\w+)\}\}/g, (_m, name: string) => {
     const readable = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     return `<span style="background: rgba(197, 162, 120, 0.12); color: #C5A278; padding: 1px 6px; border-radius: 4px; font-size: 0.92em; font-weight: 500;">[${readable}]</span>`
