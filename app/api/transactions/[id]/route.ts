@@ -282,15 +282,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ── Update check ─────────────────────────────────────────────────────────
-    if (action === 'update_check') {
-      const { check_id, updates } = body
-      const { error } = await supabase
-        .from('checks_received')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', check_id)
-      if (error) throw error
-      return NextResponse.json({ success: true })
-    }
+   if (action === 'update_check') {
+     const { check_id, updates } = body
+     // Convert empty-string dates to null (Postgres rejects "" on date columns)
+     const DATE_FIELDS = ['received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
+     const cleanUpdates: any = { ...updates }
+     for (const f of DATE_FIELDS) {
+       if (cleanUpdates[f] === '') cleanUpdates[f] = null
+     }
+     const { error } = await supabase
+       .from('checks_received')
+       .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
+       .eq('id', check_id)
+     if (error) throw error
+     return NextResponse.json({ success: true })
+   }
 
     // ── Create check linked to transaction ───────────────────────────────────
     if (action === 'create_check') {

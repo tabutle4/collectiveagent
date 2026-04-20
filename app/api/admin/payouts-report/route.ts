@@ -168,9 +168,11 @@ export async function GET(request: NextRequest) {
     )
 
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
-    const pendingPayloadTotal = allChecks
-      .filter(c => c.payment_method === 'payload' && !c.cleared_date)
-      .reduce((sum, c) => sum + (c.check_amount || 0), 0)
+   // A cleared_date in the future still counts as pending
+   const today = new Date().toISOString().split('T')[0]
+   const pendingPayloadTotal = allChecks
+     .filter(c => c.payment_method === 'payload' && (!c.cleared_date || c.cleared_date > today))
+     .reduce((sum, c) => sum + (c.check_amount || 0), 0)
 
     return NextResponse.json({
       rows,
