@@ -52,12 +52,17 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json()
     const update: Record<string, unknown> = {}
 
-    // Email field helper. Accepts strings with a loose email shape,
-    // allows null to clear.
-    const setEmail = (key: string) => {
+    // Email field helper. Accepts strings with a loose email shape.
+    // When `required` is true (for NOT NULL columns like office_email and
+    // default_reply_to), empty or null values are rejected. Otherwise
+    // empty/null clears the field.
+    const setEmail = (key: string, { required = false } = {}) => {
       if (!(key in body)) return
       const v = body[key]
       if (v === null || v === '') {
+        if (required) {
+          throw new Error(`${key} is required`)
+        }
         update[key] = null
         return
       }
@@ -121,11 +126,11 @@ export async function PATCH(request: NextRequest) {
       update[key] = v.trim()
     }
 
-    // office_email and default_reply_to have NOT NULL + default in the
-    // schema, so we treat them as required when present.
+    // office_email and default_reply_to have NOT NULL in the schema, so
+    // reject empty values. The other fields allow null to clear.
     try {
-      setEmail('office_email')
-      setEmail('default_reply_to')
+      setEmail('office_email', { required: true })
+      setEmail('default_reply_to', { required: true })
       setUrl('google_review_link')
       setText('signature_html_template')
       setText('office_locations_html')
