@@ -82,7 +82,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
-        { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
+        { href: '/admin/pm', label: 'Property Management', icon: Building2 },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser, disabled: true },
         { href: '/admin/documents', label: 'Documents', icon: FolderOpen, disabled: true },
       ],
@@ -146,7 +146,7 @@ const tcNavEntries: NavEntry[] = [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
-        { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
+        { href: '/admin/pm', label: 'Property Management', icon: Building2 },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
         { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
       ],
@@ -201,7 +201,7 @@ const supportNavEntries: NavEntry[] = [
       label: 'Deals',
       items: [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
-        { href: '/admin/pm', label: 'Property Mgmt', icon: Building2 },
+        { href: '/admin/pm', label: 'Property Management', icon: Building2 },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
       ],
     },
@@ -675,7 +675,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       )}
 
       {!isMobile && (
-        <aside className="fixed top-0 left-0 bottom-0 w-[220px] bg-luxury-light border-r border-luxury-gray-5/50 z-50 flex flex-col">
+        <aside className="fixed top-0 left-0 bottom-0 w-[240px] bg-luxury-light border-r border-luxury-gray-5/50 z-50 flex flex-col">
           {sidebarContent}
         </aside>
       )}
@@ -694,7 +694,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
       <div
         className="min-h-screen"
-        style={{ marginLeft: isMobile ? 0 : '220px', position: 'relative', zIndex: 1 }}
+        style={{ marginLeft: isMobile ? 0 : '240px', position: 'relative', zIndex: 1 }}
       >
         <div className="sticky top-0 z-30 bg-luxury-page-bg/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
           <div>
