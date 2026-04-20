@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
-import type { TcEmailTemplate } from '@/types/tc-module'
+import type { TcEmailTemplate, TcAttachmentRef } from '@/types/tc-module'
 
 /**
  * GET /api/tc/templates
@@ -19,13 +19,8 @@ import type { TcEmailTemplate } from '@/types/tc-module'
  *       nc_buyer: TcEmailTemplate[],   // in step order
  *       seller:   TcEmailTemplate[],   // in step order
  *     },
- *     // Flat list of all templates (used by the search filter in the
- *     // admin page so search can find templates that are not yet
- *     // referenced by any step).
- *     all: TcEmailTemplate[]
+ *     all: TcEmailTemplate[]  // flat list for search over orphans
  *   }
- *
- * Phase 1: read-only. POST/PATCH/DELETE come in Phase 1 completion.
  */
 
 type SectionKey = 'buyer' | 'nc_buyer' | 'seller'
@@ -36,7 +31,6 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    // Fetch all templates
     const { data: templatesData, error: templatesError } = await supabase
       .from('tc_email_templates')
       .select('*')
@@ -44,8 +38,6 @@ export async function GET(request: NextRequest) {
 
     if (templatesError) throw templatesError
 
-    // Fetch all steps with their (transaction_type, step_order, template_id).
-    // We need this to build the per-section ordered template lists.
     const { data: stepsData, error: stepsError } = await supabase
       .from('tc_process_steps')
       .select('transaction_type, step_order, template_id')
@@ -60,13 +52,9 @@ export async function GET(request: NextRequest) {
       template_id: string
     }>
 
-    // Build index: template_id -> template
     const byId = new Map<string, TcEmailTemplate>()
     for (const t of templates) byId.set(t.id, t)
 
-    // For each section, collect the minimum step_order per template_id.
-    // (If a template is used in multiple steps within the same section,
-    // we display it at its earliest position.)
     const sections: Record<SectionKey, TcEmailTemplate[]> = {
       buyer: [],
       nc_buyer: [],
@@ -82,7 +70,6 @@ export async function GET(request: NextRequest) {
           minOrderByTemplate.set(step.template_id, step.step_order)
         }
       }
-      // Turn the map into a sorted array of templates
       const sectionEntries: Array<{ order: number; template: TcEmailTemplate }> = []
       for (const [templateId, order] of minOrderByTemplate) {
         const template = byId.get(templateId)
@@ -96,5 +83,122 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Get TC templates error:', error)
     return NextResponse.json({ error: 'Failed to fetch TC templates' }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/tc/templates
+ *
+ * Creates a new template. Required fields are name, slug, transaction_type,
+ * category, subject. Body is optional so the user can create a shell and
+ * fill it in. body_format defaults to 'html'.
+ *
+ * Slug uniqueness is enforced by the DB (UNIQUE constraint on slug).
+ * A conflict returns a 409 with a helpful message.
+ */
+export async function POST(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_coordination')
+  if (auth.error) return auth.error
+
+  try {
+    const body = await request.json()
+
+    // Validate required fields.
+    const required = ['name', 'slug', 'transaction_type', 'category', 'subject'] as const
+    for (const key of required) {
+      if (!body[key] || typeof body[key] !== 'string' || body[key].trim() === '') {
+        return NextResponse.json({ error: `${key} is required` }, { status: 400 })
+      }
+    }
+
+    const validTxTypes = ['buyer', 'nc_buyer', 'seller', 'all']
+    if (!validTxTypes.includes(body.transaction_type)) {
+      return NextResponse.json(
+        { error: `transaction_type must be one of: ${validTxTypes.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
+    const validFormats = ['html', 'plain_text']
+    const body_format = body.body_format || 'html'
+    if (!validFormats.includes(body_format)) {
+      return NextResponse.json(
+        { error: `body_format must be 'html' or 'plain_text'` },
+        { status: 400 }
+      )
+    }
+
+    // Slug format: lowercase letters, digits, underscores only.
+    const slug = body.slug.trim().toLowerCase()
+    if (!/^[a-z0-9_]+$/.test(slug)) {
+      return NextResponse.json(
+        { error: 'slug may only contain lowercase letters, digits, and underscores' },
+        { status: 400 }
+      )
+    }
+
+    // Attachment refs are one of a known set.
+    const validAttach: TcAttachmentRef[] = ['contract', 'addenda', 'amendment']
+    const attach_documents = Array.isArray(body.attach_documents) ? body.attach_documents : []
+    for (const a of attach_documents) {
+      if (!validAttach.includes(a)) {
+        return NextResponse.json(
+          { error: `attach_documents contains invalid value: ${a}` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const insert = {
+      name: body.name.trim(),
+      slug,
+      transaction_type: body.transaction_type,
+      category: body.category.trim(),
+      subject: body.subject.trim(),
+      body_format,
+      html_body: typeof body.html_body === 'string' ? body.html_body : null,
+      plain_body: typeof body.plain_body === 'string' ? body.plain_body : null,
+      default_recipient_roles: body.default_recipient_roles || {
+        to: [],
+        cc: [],
+        bcc: [],
+      },
+      attach_documents,
+      uses_banner: body.uses_banner === true,
+      uses_signature: body.uses_signature !== false, // default true
+      is_active: body.is_active !== false, // default true
+      notes: typeof body.notes === 'string' ? body.notes : null,
+      updated_by: auth.user.id,
+    }
+
+    const { data, error } = await supabase
+      .from('tc_email_templates')
+      .insert(insert)
+      .select()
+      .single()
+
+    if (error) {
+      // Duplicate slug violation from the UNIQUE constraint.
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: `A template with slug "${slug}" already exists` },
+          { status: 409 }
+        )
+      }
+      console.error('Create TC template error:', error)
+      return NextResponse.json(
+        { error: 'Failed to create template', details: error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ template: data }, { status: 201 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Create TC template error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error', details: message },
+      { status: 500 }
+    )
   }
 }

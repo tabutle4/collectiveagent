@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { PhasePlaceholder } from '../page'
 import type { TcEmailTemplate } from '@/types/tc-module'
 
@@ -33,6 +35,7 @@ const SECTION_ORDER: Array<{ key: SectionKey; label: string }> = [
 ]
 
 export default function TcTemplatesPage() {
+  const router = useRouter()
   const [sections, setSections] = useState<Record<SectionKey, TcEmailTemplate[]>>({
     buyer: [],
     nc_buyer: [],
@@ -42,6 +45,7 @@ export default function TcTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [newOpen, setNewOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/tc/templates')
@@ -94,8 +98,9 @@ export default function TcTemplatesPage() {
         <h1 className="page-title">EMAIL TEMPLATES</h1>
         <div className="flex gap-2 flex-wrap">
           <button
-            className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
-            disabled
+            type="button"
+            onClick={() => setNewOpen(true)}
+            className="btn btn-primary flex items-center gap-2"
           >
             <Plus size={14} />
             New template
@@ -159,9 +164,10 @@ export default function TcTemplatesPage() {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {list.map((t, idx) => (
-                    <div
+                    <Link
                       key={`${section.key}-${t.id}`}
-                      className="container-card hover:border-luxury-accent transition-colors cursor-pointer"
+                      href={`/admin/tc/templates/${t.id}`}
+                      className="container-card hover:border-luxury-accent transition-colors cursor-pointer block"
                     >
                       <div className="flex items-start gap-2 mb-2">
                         <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2 py-0.5 rounded whitespace-nowrap flex-shrink-0 mt-0.5">
@@ -173,7 +179,7 @@ export default function TcTemplatesPage() {
                       </div>
                       <p className="text-xs text-luxury-gray-3 mb-2 break-words">{t.category}</p>
                       <p className="text-xs text-luxury-gray-4 break-words">{t.subject}</p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </section>
@@ -189,6 +195,206 @@ export default function TcTemplatesPage() {
           description="Run deploy/sql/04_seed_templates.sql in the Supabase SQL Editor to seed the TC templates."
         />
       )}
+
+      {newOpen && (
+        <NewTemplateModal
+          onClose={() => setNewOpen(false)}
+          onSuccess={id => {
+            setNewOpen(false)
+            router.push(`/admin/tc/templates/${id}`)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// New template modal
+// ============================================================================
+// Minimum fields required for insertion: name, slug, transaction_type,
+// category, subject. Everything else is edited in the editor after the
+// row exists.
+
+function NewTemplateModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void
+  onSuccess: (id: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [transactionType, setTransactionType] = useState<
+    'buyer' | 'nc_buyer' | 'seller' | 'all'
+  >('buyer')
+  const [category, setCategory] = useState('')
+  const [subject, setSubject] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  // Auto-suggest a slug from the name the first time the user types it.
+  const [slugTouched, setSlugTouched] = useState(false)
+  const handleNameChange = (v: string) => {
+    setName(v)
+    if (!slugTouched) {
+      const auto = v
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 48)
+      setSlug(auto)
+    }
+  }
+
+  const canSubmit =
+    name.trim() && slug.trim() && category.trim() && subject.trim() && !busy
+
+  const submit = async () => {
+    if (!canSubmit) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res = await fetch('/api/tc/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          slug: slug.trim().toLowerCase(),
+          transaction_type: transactionType,
+          category: category.trim(),
+          subject: subject.trim(),
+          body_format: 'html',
+          html_body: '',
+          uses_banner: false,
+          uses_signature: true,
+          is_active: true,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Create failed (${res.status})`)
+      onSuccess(data.template.id)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Create failed')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="container-card max-w-md w-full"
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-sm font-semibold text-luxury-gray-1 mb-4">New template</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="field-label">
+              Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              className="input-luxury"
+              value={name}
+              onChange={e => handleNameChange(e.target.value)}
+              placeholder="e.g. Under contract welcome"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="field-label">
+              Slug <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              className="input-luxury font-mono text-xs"
+              value={slug}
+              onChange={e => {
+                setSlugTouched(true)
+                setSlug(e.target.value.toLowerCase())
+              }}
+              placeholder="under_contract_welcome"
+            />
+            <p className="text-[11px] text-luxury-gray-4 mt-1">
+              Lowercase letters, digits, underscores. Must be unique.
+            </p>
+          </div>
+
+          <div>
+            <label className="field-label">
+              Transaction type <span className="text-red-500">*</span>
+            </label>
+            <select
+              className="input-luxury"
+              value={transactionType}
+              onChange={e => setTransactionType(e.target.value as typeof transactionType)}
+            >
+              <option value="buyer">Buyer</option>
+              <option value="nc_buyer">NC Buyer</option>
+              <option value="seller">Seller</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="field-label">
+              Category <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              className="input-luxury"
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              placeholder="e.g. Under Contract, Pre-Closing"
+            />
+          </div>
+
+          <div>
+            <label className="field-label">
+              Subject <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              className="input-luxury"
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              placeholder="Welcome to Collective Realty Co."
+            />
+          </div>
+
+          {err && <p className="text-xs text-red-600">{err}</p>}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="btn text-luxury-gray-2 border border-luxury-gray-5"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSubmit}
+            className="btn btn-primary flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {busy ? (
+              <>
+                <Loader2 size={14} strokeWidth={1.75} className="animate-spin" />
+                Creating
+              </>
+            ) : (
+              'Create'
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
