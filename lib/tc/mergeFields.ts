@@ -315,3 +315,33 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
 }
+
+// ----------------------------------------------------------------------------
+// Shared vendor-block builder.
+// ----------------------------------------------------------------------------
+// Both the preview renderer (above) and the send-time renderer in
+// renderSendTime.ts produce the same vendor block HTML. This helper is the
+// single source of truth for that formatting. The preview renderer keeps
+// its own inline implementation for historical reasons; new callers should
+// use this function.
+
+export function renderVendorGroup(
+  label: string,
+  type: string,
+  vendors: PreferredVendor[]
+): string {
+  const list = vendors.filter(v => v.is_active && v.vendor_type === type)
+  if (list.length === 0) return ''
+  const renderOne = (v: PreferredVendor): string => {
+    const lines: string[] = []
+    if (v.contact_name) lines.push(escapeHtml(v.contact_name))
+    lines.push(escapeHtml(v.company_name))
+    if (v.phone) lines.push(escapeHtml(v.phone))
+    if (v.email) lines.push(escapeHtml(v.email))
+    return `<p style="margin: 0 0 10px 0;">${lines.join('<br>')}</p>`
+  }
+  return `<div style="text-align: center; margin: 16px 0;">
+      <p style="margin: 0 0 10px 0;"><strong><u>${escapeHtml(label)}</u></strong></p>
+      ${list.map(renderOne).join('')}
+    </div>`
+}

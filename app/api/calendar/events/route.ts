@@ -1,31 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/api-auth'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
-const TENANT_ID = process.env.MICROSOFT_TENANT_ID!
-const CLIENT_ID = process.env.MICROSOFT_CLIENT_ID!
-const CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET!
-
-let cachedToken: string | null = null
-let tokenExpiry = 0
-
-async function getToken() {
-  if (cachedToken && Date.now() < tokenExpiry) return cachedToken
-  const res = await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      scope: 'https://graph.microsoft.com/.default',
-      grant_type: 'client_credentials',
-    }),
-  })
-  const data = await res.json()
-  cachedToken = data.access_token
-  tokenExpiry = Date.now() + (data.expires_in - 300) * 1000
-  return cachedToken
-}
 
 export async function GET(request: NextRequest) {
   // Any authenticated user can view calendar
@@ -34,11 +11,8 @@ export async function GET(request: NextRequest) {
 
   try {
     console.log('Calendar GET - GROUP_ID:', GROUP_ID)
-    console.log('Calendar GET - TENANT_ID:', TENANT_ID ? 'set' : 'missing')
-    console.log('Calendar GET - CLIENT_ID:', CLIENT_ID ? 'set' : 'missing')
-    console.log('Calendar GET - CLIENT_SECRET:', CLIENT_SECRET ? 'set' : 'missing')
 
-    const token = await getToken()
+    const token = await getGraphToken()
     console.log('Calendar GET - token obtained:', !!token)
 
     const { searchParams } = new URL(request.url)
@@ -77,7 +51,7 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const token = await getToken()
+    const token = await getGraphToken()
     const body = await request.json()
     const { title, start, end, description, location, isAllDay } = body
 
@@ -113,7 +87,7 @@ export async function PATCH(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const token = await getToken()
+    const token = await getGraphToken()
     const body = await request.json()
     const { eventId, title, start, end, description, location, isAllDay } = body
 
@@ -153,7 +127,7 @@ export async function DELETE(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const token = await getToken()
+    const token = await getGraphToken()
     const { searchParams } = new URL(request.url)
     const eventId = searchParams.get('eventId')
     if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 })

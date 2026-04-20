@@ -12,8 +12,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Search,
+  Send,
 } from 'lucide-react'
 import RichTextEditor from '@/components/tc/RichTextEditor'
+import SendTestModal from '@/components/tc/SendTestModal'
 import {
   MERGE_FIELDS,
   MERGE_FIELD_GROUPS,
@@ -72,6 +74,10 @@ export default function TemplateEditorPage() {
   // Duplicate modal state
   const [dupOpen, setDupOpen] = useState(false)
 
+  // Send test modal state
+  const [testOpen, setTestOpen] = useState(false)
+  const [adminEmail, setAdminEmail] = useState<string>('')
+
   // Merge field sidebar search
   const [fieldQuery, setFieldQuery] = useState('')
 
@@ -95,8 +101,9 @@ export default function TemplateEditorPage() {
     Promise.all([
       fetch(`/api/tc/templates/${id}`).then(r => r.json()),
       fetch('/api/tc/vendors').then(r => r.json()),
+      fetch('/api/auth/me').then(r => r.json()),
     ])
-      .then(([tplData, vendorData]) => {
+      .then(([tplData, vendorData, meData]) => {
         if (tplData.error) {
           setLoadError(tplData.error)
         } else if (tplData.template) {
@@ -106,6 +113,9 @@ export default function TemplateEditorPage() {
         }
         if (vendorData && Array.isArray(vendorData.vendors)) {
           setVendors(vendorData.vendors as PreferredVendor[])
+        }
+        if (meData?.user?.email && typeof meData.user.email === 'string') {
+          setAdminEmail(meData.user.email)
         }
         setLoading(false)
       })
@@ -314,6 +324,22 @@ export default function TemplateEditorPage() {
           </button>
           <button
             type="button"
+            onClick={() => setTestOpen(true)}
+            disabled={dirty || !template.is_active}
+            title={
+              dirty
+                ? 'Save your changes before sending a test'
+                : !template.is_active
+                  ? 'Reactivate this template to send a test'
+                  : 'Send a test render to any inbox'
+            }
+            className="btn flex items-center gap-1.5 text-luxury-gray-2 hover:text-luxury-gray-1 border border-luxury-gray-5 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send size={14} strokeWidth={1.75} />
+            Send test
+          </button>
+          <button
+            type="button"
             onClick={handleArchive}
             disabled={archiving || !template.is_active}
             className="btn flex items-center gap-1.5 text-luxury-gray-2 hover:text-red-600 border border-luxury-gray-5 disabled:opacity-50"
@@ -499,6 +525,16 @@ export default function TemplateEditorPage() {
             setDupOpen(false)
             router.push(`/admin/tc/templates/${newId}`)
           }}
+        />
+      )}
+
+      {testOpen && template && (
+        <SendTestModal
+          templateId={template.id}
+          templateName={template.name}
+          defaultFromEmail={adminEmail}
+          defaultToEmail={adminEmail}
+          onClose={() => setTestOpen(false)}
         />
       )}
     </div>

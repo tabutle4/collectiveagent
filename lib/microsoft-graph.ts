@@ -8,11 +8,69 @@ interface GraphConfig {
   userEmail: string
 }
 
+// ---------------------------------------------------------------------------
+// Shared Microsoft Graph token (client credentials / application auth).
+//
+// A single module-level cache is used by every Graph caller in the app:
+//   - MicrosoftGraphClient (OneDrive/SharePoint file operations)
+//   - /api/calendar/events (group calendar CRUD)
+//   - /api/tc/templates/[id]/send-test (TC test email sends)
+//
+// The token is valid tenant-wide, so sharing one cache is correct and saves
+// round trips to login.microsoftonline.com.
+// ---------------------------------------------------------------------------
+
+let cachedGraphToken: string | null = null
+let graphTokenExpiry = 0
+
+export async function getGraphToken(): Promise<string> {
+  if (cachedGraphToken && Date.now() < graphTokenExpiry) {
+    return cachedGraphToken
+  }
+
+  const tenantId = process.env.MICROSOFT_TENANT_ID
+  const clientId = process.env.MICROSOFT_CLIENT_ID
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET
+
+  if (!tenantId || !clientId || !clientSecret) {
+    throw new Error(
+      'Microsoft Graph is not configured (MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET required)'
+    )
+  }
+
+  const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
+
+  const response = await fetch(tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      scope: 'https://graph.microsoft.com/.default',
+      grant_type: 'client_credentials',
+    }).toString(),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to get Microsoft Graph access token: ${errorText}`)
+  }
+
+  const data = await response.json()
+  const token = data.access_token as string | undefined
+  if (!token) {
+    throw new Error('Microsoft Graph token endpoint returned no access_token')
+  }
+
+  cachedGraphToken = token
+  // Subtract 5 minutes so we rotate before the token actually expires.
+  graphTokenExpiry = Date.now() + (data.expires_in - 300) * 1000
+  return token
+}
+
 class MicrosoftGraphClient {
   private client: Client | null = null
   private config: GraphConfig
-  private accessToken: string | null = null
-  private tokenExpiry: number = 0
 
   constructor() {
     this.config = {
@@ -23,54 +81,20 @@ class MicrosoftGraphClient {
     }
   }
 
-  private async getAccessToken(): Promise<string> {
-    if (this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.accessToken
-    }
-
-    const tokenEndpoint = `https://login.microsoftonline.com/${this.config.tenantId}/oauth2/v2.0/token`
-
-    const params = new URLSearchParams({
-      client_id: this.config.clientId,
-      client_secret: this.config.clientSecret,
-      scope: 'https://graph.microsoft.com/.default',
-      grant_type: 'client_credentials',
-    })
-
-    const response = await fetch(tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString(),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Failed to get access token: ${error}`)
-    }
-
-    const data = await response.json()
-    this.accessToken = data.access_token
-    this.tokenExpiry = Date.now() + (data.expires_in - 300) * 1000
-
-    if (!this.accessToken) {
-      throw new Error('Failed to obtain access token')
-    }
-
-    return this.accessToken
-  }
-
   private async initClient(): Promise<Client> {
-    if (this.client && this.accessToken && Date.now() < this.tokenExpiry) {
-      return this.client
-    }
+    if (this.client) return this.client
 
-    const token = await this.getAccessToken()
-
+    // Use an async authProvider so the Graph SDK requests a fresh token on
+    // every call. getGraphToken() internally caches until near-expiry, so
+    // this is cheap.
     this.client = Client.init({
-      authProvider: done => {
-        done(null, token)
+      authProvider: async done => {
+        try {
+          const token = await getGraphToken()
+          done(null, token)
+        } catch (err) {
+          done(err as Error, null)
+        }
       },
     })
 
