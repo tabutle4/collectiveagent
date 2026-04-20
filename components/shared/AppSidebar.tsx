@@ -18,7 +18,6 @@ import {
   Menu,
   X,
   ChevronRight,
-  ChevronDown,
   Users,
   UserPlus,
   FileText,
@@ -337,9 +336,17 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const logo = logoUrl || '/logo.png'
 
   // ----------------------------------------------------------------
-  // Accordion: auto-expand the group containing the current route,
-  // then let the user override via click. localStorage persists the
-  // last-opened group across navigations.
+  // Accordion: one group open at a time.
+  //
+  // On FIRST mount only, auto-expand the group containing the current
+  // route so the user lands on the app with their context visible.
+  // After that, the user has full control. Navigation never force-opens
+  // or force-closes anything. localStorage persists the last choice.
+  //
+  // Why mount-only: if we reacted to every pathname change, closing a
+  // group and clicking any link inside it would re-open the group
+  // against the user's will. That fights the user. The deployed version
+  // had this bug. Now navigation is a pure no-op for accordion state.
   // ----------------------------------------------------------------
 
   const isPathInItem = (item: NavItem): boolean => {
@@ -356,9 +363,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     return null
   }
 
-  // On mount or route change, decide which group should be open.
-  // Priority: a group matching the current path wins; otherwise use
-  // whatever was last opened in localStorage; otherwise collapsed.
+  // Mount-only hydration. Priority: group matching current route, then
+  // last-remembered group from localStorage, then null (all collapsed).
   useEffect(() => {
     if (!staffEntries) return
     const pathGroup = findGroupForPath()
@@ -370,8 +376,9 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       const saved = window.localStorage.getItem('sidebar.openGroup')
       if (saved) setOpenGroup(saved)
     }
+    // Empty dep array. Runs ONCE per mount. Not on pathname changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, userRole])
+  }, [])
 
   const toggleGroup = (key: string) => {
     setOpenGroup(prev => {
@@ -435,7 +442,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     const Icon = item.icon
     const isActive = isPathInItem(item)
 
-    const basePadding = nested ? 'pl-9 pr-3 py-1.5' : 'px-3 py-2'
+    const basePadding = nested ? 'pl-5 pr-3 py-1.5' : 'px-3 py-2'
     const iconSize = nested ? 14 : 18
     const textSize = 'text-[13px]'
 
@@ -512,31 +519,24 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           onClick={() => toggleGroup(group.key)}
           aria-expanded={expanded}
           className={`
-            flex items-center justify-between w-full px-3 py-2 rounded-md transition-colors
+            flex items-center w-full px-3 pt-3 pb-1 rounded-md transition-colors
             ${
               groupHasActive
                 ? 'text-luxury-gray-1'
-                : 'text-luxury-gray-2 hover:bg-luxury-gray-5/40 hover:text-luxury-gray-1'
+                : 'text-luxury-gray-3 hover:text-luxury-gray-1'
             }
           `}
         >
           <span
-            className={`text-[11px] uppercase tracking-wider ${
+            className={`text-[10px] uppercase tracking-[0.12em] ${
               groupHasActive ? 'font-semibold' : 'font-medium'
             }`}
           >
             {group.label}
           </span>
-          <ChevronDown
-            size={12}
-            className={`flex-shrink-0 text-luxury-gray-3 transition-transform ${
-              expanded ? 'rotate-0' : '-rotate-90'
-            }`}
-            strokeWidth={1.5}
-          />
         </button>
         {expanded && (
-          <div className="mt-0.5 mb-1 space-y-0.5">
+          <div className="mb-1 space-y-0.5">
             {group.items.map(item => renderItem(item, true))}
           </div>
         )}
@@ -675,7 +675,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       )}
 
       {!isMobile && (
-        <aside className="fixed top-0 left-0 bottom-0 w-[240px] bg-luxury-light border-r border-luxury-gray-5/50 z-50 flex flex-col">
+        <aside className="fixed top-0 left-0 bottom-0 w-[260px] bg-luxury-light border-r border-luxury-gray-5/50 z-50 flex flex-col">
           {sidebarContent}
         </aside>
       )}
@@ -694,7 +694,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
       <div
         className="min-h-screen"
-        style={{ marginLeft: isMobile ? 0 : '240px', position: 'relative', zIndex: 1 }}
+        style={{ marginLeft: isMobile ? 0 : '260px', position: 'relative', zIndex: 1 }}
       >
         <div className="sticky top-0 z-30 bg-luxury-page-bg/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between">
           <div>
