@@ -363,8 +363,16 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     return null
   }
 
-  // Mount-only hydration. Priority: group matching current route, then
-  // last-remembered group from localStorage, then null (all collapsed).
+  // Runs when userRole becomes available (user data loads) and any time
+  // userRole changes (rare, only on login/logout). Does NOT run on
+  // pathname changes, which is what preserves the "manual close stays
+  // closed across navigation" behavior.
+  //
+  // Previously this used [] as the dep array, which caused the effect
+  // to fire exactly once at mount, before user data had loaded. At
+  // that point staffEntries is null, so the effect bailed and the
+  // group never auto-expanded. Switching to [userRole] means the
+  // effect re-runs when user data arrives.
   useEffect(() => {
     if (!staffEntries) return
     const pathGroup = findGroupForPath()
@@ -376,9 +384,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       const saved = window.localStorage.getItem('sidebar.openGroup')
       if (saved) setOpenGroup(saved)
     }
-    // Empty dep array. Runs ONCE per mount. Not on pathname changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [userRole])
 
   const toggleGroup = (key: string) => {
     setOpenGroup(prev => {
@@ -528,7 +535,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           `}
         >
           <span
-            className={`text-[10px] uppercase tracking-[0.12em] ${
+            className={`text-[13px] uppercase tracking-wider ${
               groupHasActive ? 'font-semibold' : 'font-medium'
             }`}
           >
