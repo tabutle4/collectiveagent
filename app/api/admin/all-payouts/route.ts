@@ -1,36 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import {
+  getTransactionTypeLabel,
+  isLeaseTransactionType,
+} from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
 
-const TRANSACTION_TYPE_LABELS: Record<string, string> = {
-  'buyer_v2':                 'Buyer',
-  'seller_v2':                'Seller',
-  'tenant_apt_v2':            'Tenant (apartment)',
-  'tenant_other_v2':          'Tenant (not apartment)',
-  'tenant_simplyhome_v2':     'Tenant (SimplyHome)',
-  'tenant_commercial_v2':     'Tenant (commercial)',
-  'landlord_v2':              'Landlord',
-  'new_construction_buyer_v2':'New Construction Buyer',
-  'land_lot_buyer_v2':        'Land/Lot Buyer',
-  'commercial_buyer_v2':      'Commercial Buyer',
-  'land_lot_seller_v2':       'Land/Lot Seller',
-  'referred_out_v2':          'Referred Out',
-  'sale':                     'Sale',
-  'lease':                    'Lease',
+// Aliases for the legacy `sale` / `lease` values that can appear on older rows.
+const LEGACY_SHORT_LABELS: Record<string, string> = {
+  sale: 'Sale',
+  lease: 'Lease',
 }
 
 function friendlyType(t: string | null): string {
   if (!t) return ''
-  return TRANSACTION_TYPE_LABELS[t] || t.replace(/_/g, ' ')
+  if (t in LEGACY_SHORT_LABELS) return LEGACY_SHORT_LABELS[t]
+  return getTransactionTypeLabel(t)
 }
 
 function isLeaseType(t: string | null): boolean {
   if (!t) return false
-  return ['lease', 'apartment', 'rent', 'tenant', 'landlord'].some(k =>
-    t.toLowerCase().includes(k)
-  )
+  if (t === 'lease') return true
+  return isLeaseTransactionType(t)
 }
 
 export async function GET(request: NextRequest) {

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
+import { getTransactionTypeCategory } from '@/lib/transactions/transactionTypes'
 
 type DateRange =
   | 'ytd'
@@ -414,19 +415,7 @@ export default function AdminDashboard() {
       if (t.office_net) officeNet += parseFloat(t.office_net)
 
       const txnType = t.transaction_type || ''
-      let typeCategory: string | null = null
-      
-      if (['buyer_v2', 'nc_buyer_v2', 'land_buyer_v2', 'commercial_buyer_v2'].includes(txnType)) {
-        typeCategory = 'Buyers'
-      } else if (['tenant_apt_v2', 'tenant_non_apt_v2', 'tenant_simplyhome_v2', 'tenant_commercial_v2'].includes(txnType)) {
-        typeCategory = 'Tenants'
-      } else if (['seller_v2', 'land_seller_v2'].includes(txnType)) {
-        typeCategory = 'Sellers'
-      } else if (txnType === 'landlord_v2') {
-        typeCategory = 'Landlords'
-      } else if (txnType === 'referred_out_v2') {
-        typeCategory = 'Referred Out'
-      }
+      const typeCategory: string | null = getTransactionTypeCategory(txnType)
 
       const office = t.office_location || 'Unknown'
 

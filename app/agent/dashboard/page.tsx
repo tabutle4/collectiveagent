@@ -7,6 +7,7 @@ import SalesGoalWidget from '@/components/transactions/SalesGoalWidget'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
 import { useAuth } from '@/lib/context/AuthContext'
+import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 export default function AgentDashboard() {
   const router = useRouter()
@@ -268,7 +269,7 @@ export default function AgentDashboard() {
                         {t.property_address || 'No address'}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
-                        {t.transaction_type || ''}
+                        {getTransactionTypeLabel(t.transaction_type)}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
                         {formatDate(t.closing_date)}
@@ -300,7 +301,7 @@ export default function AgentDashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-luxury-gray-3">
-                    {t.transaction_type}
+                    {getTransactionTypeLabel(t.transaction_type)}
                     {t.closing_date ? ` · ${formatDate(t.closing_date)}` : ''}
                   </p>
                 </div>

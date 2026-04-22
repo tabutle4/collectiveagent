@@ -27,8 +27,13 @@ import {
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
-import CloseTransactionModal from '@/components/transactions/CloseTransactionModal'
-import PayoutModal from '@/components/transactions/PayoutModal'
+import CloseDialog from '@/components/transactions/CloseDialog'
+import AgentsSection from '@/components/transactions/AgentsSection'
+import BrokeragesSection from '@/components/transactions/BrokeragesSection'
+import {
+  getTransactionTypeLabel,
+  TRANSACTION_TYPE_OPTIONS,
+} from '@/lib/transactions/transactionTypes'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -80,22 +85,7 @@ const isLease = (txnType: string | null) => {
 }
 
 const formatTransactionType = (type: string | null) => {
-  if (!type) return '--'
-  const typeMap: Record<string, string> = {
-    'buyer_v2': 'Buyer',
-    'seller_v2': 'Seller',
-    'tenant_apt_v2': 'Tenant (apartment)',
-    'tenant_other_v2': 'Tenant (not apartment)',
-    'tenant_simplyhome_v2': 'Tenant (SimplyHome Rental)',
-    'tenant_commercial_v2': 'Tenant (commercial lease)',
-    'landlord_v2': 'Landlord',
-    'new_construction_buyer_v2': 'New Construction Buyer',
-    'land_lot_buyer_v2': 'Land/Lot Buyer',
-    'commercial_buyer_v2': 'Commercial Buyer',
-    'land_lot_seller_v2': 'Land/Lot Seller',
-    'referred_out_v2': 'Referred Out',
-  }
-  return typeMap[type] || type
+  return getTransactionTypeLabel(type)
 }
 
 const STATUS_OPTIONS = [
@@ -350,37 +340,15 @@ export default function AdminTransactionDetailPage() {
   const [expandedChecks, setExpandedChecks] = useState<Record<string, boolean>>({}) // checkId -> expanded
   const [addingCheck, setAddingCheck] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
-  const [showCloseModal, setShowCloseModal] = useState(false)
-  const [showPayoutModal, setShowPayoutModal] = useState(false)
-  const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
 
-  // Mark Paid modal state
-  const [markPaidModal, setMarkPaidModal] = useState<{
-    open: boolean
-    agent: any
-    debts: any[]
-    loadingDebts: boolean
-    selectedDebts: Record<string, number>  // debt_id -> amount to apply
-    paymentDate: string
-    paymentMethod: string
-    paymentReference: string
-    fundingSource: string
-    countsTowardProgress: boolean
-  }>({
-    open: false,
-    agent: null,
-    debts: [],
-    loadingDebts: false,
-    selectedDebts: {},
-    paymentDate: new Date().toISOString().split('T')[0],
-    paymentMethod: 'ACH',
-    paymentReference: '',
-    fundingSource: 'crc',
-    countsTowardProgress: true,
-  })
+  // External brokerages — fetched at page level for the payout reconciliation
+  // calc (totalExternalCommissions). BrokeragesSection on the Check tab fetches
+  // its own copy for rendering; minor duplication is OK.
+  const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
 
   // Right panel section toggles
   const [expandedSections, setExpandedSections] = useState({
@@ -393,15 +361,7 @@ export default function AdminTransactionDetailPage() {
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>({})
   const toggleAgent = (id: string) => setExpandedAgents(p => ({ ...p, [id]: !p[id] }))
 
-  // Smart calc state (Commissions tab)
-  const [smartCalcData, setSmartCalcData] = useState<{
-    commission_plans: any[]
-    processing_fee_types: any[]
-  } | null>(null)
-  const [agentCalcData, setAgentCalcData] = useState<Record<string, any>>({}) // agent_id -> calc result
-  const [agentLeadSources, setAgentLeadSources] = useState<Record<string, string>>({}) // agent_id -> lead_source
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [autoCalcApplied, setAutoCalcApplied] = useState<Set<string>>(new Set()) // Track which agents have had auto-calc applied
 
   // Contacts state
   const [contacts, setContacts] = useState<any[]>([])
@@ -446,6 +406,11 @@ export default function AdminTransactionDetailPage() {
         setEditChecksData(editStates)
         setExpandedChecks(expandStates)
       }
+      // Fetch external brokerages for payoutBalance reconciliation calc
+      fetch(`/api/admin/transactions/${id}?section=external_brokerages`, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : { external_brokerages: [] })
+        .then(d => setPayoutBrokerages(d.external_brokerages || []))
+        .catch(() => setPayoutBrokerages([]))
     } catch {
       alert('Failed to load transaction')
     } finally {
@@ -456,14 +421,6 @@ export default function AdminTransactionDetailPage() {
   useEffect(() => {
     if (user) loadData()
   }, [user, loadData])
-
-  useEffect(() => {
-    if (activeTab !== 'check_payouts' || !id) return
-    fetch(`/api/admin/transactions/${id}?section=external_brokerages`, { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : { external_brokerages: [] })
-      .then(d => setPayoutBrokerages(d.external_brokerages || []))
-      .catch(() => {})
-  }, [activeTab, id])
 
   // Load contacts when switching to contacts tab
   useEffect(() => {
@@ -476,117 +433,7 @@ export default function AdminTransactionDetailPage() {
       .finally(() => setLoadingContacts(false))
   }, [activeTab, id])
 
-  // Fetch smart calc reference data on mount
-  useEffect(() => {
-    fetch('/api/admin/transactions/smart-calc')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d) setSmartCalcData({ commission_plans: d.commission_plans, processing_fee_types: d.processing_fee_types })
-      })
-      .catch(() => {})
-  }, [])
-
-  // Auto-calculate and auto-apply agent splits when data loads and office_gross exists
-  useEffect(() => {
-    if (!data?.transaction?.office_gross || !data?.agents?.length) return
-    const agentsList = data.agents || []
-    const txn = data.transaction
-    const officeGross = parseFloat(txn.office_gross || 0)
-    if (officeGross <= 0) return
-
-    // Calculate and apply for each agent that doesn't have values yet
-    agentsList.forEach(async (a: any) => {
-      // Skip if already applied or has values saved
-      if (autoCalcApplied.has(a.id) || parseFloat(a.agent_gross || 0) > 0) return
-      // Skip if already paid
-      if (a.payment_status === 'paid') return
-
-      try {
-        const res = await fetch('/api/admin/transactions/smart-calc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agent_id: a.agent_id,
-            office_gross: officeGross,
-            transaction_type: txn.transaction_type,
-            lead_source: agentLeadSources[a.agent_id] || 'own',
-            is_lease: isLease(txn.transaction_type),
-          }),
-        })
-        if (res.ok) {
-          const result = await res.json()
-          setAgentCalcData(prev => ({ ...prev, [a.agent_id]: result }))
-          
-          // Auto-apply the values to the database
-          await fetch(`/api/admin/transactions/${id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'update_internal_agent',
-              internal_agent_id: a.id,
-              updates: {
-                agent_gross: result.agent_gross,
-                brokerage_split: result.brokerage_split,
-                processing_fee: result.processing_fee,
-                coaching_fee: result.coaching_fee,
-                team_lead_commission: result.team_lead_payout || 0,
-                agent_net: result.agent_net,
-                split_percentage: result.agent_split_pct,
-              },
-            }),
-          })
-          setAutoCalcApplied(prev => new Set([...prev, a.id]))
-        }
-      } catch {}
-    })
-  }, [data?.transaction?.office_gross, data?.agents, agentLeadSources, id, autoCalcApplied])
-
   // ── Actions ─────────────────────────────────────────────────────────────────
-
-  // Recalculate and apply agent split (called when lead source changes)
-  const recalculateAgentSplit = async (agentId: string, internalAgentId: string) => {
-    const txn = data?.transaction
-    if (!txn?.office_gross) return
-
-    try {
-      const res = await fetch('/api/admin/transactions/smart-calc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_id: agentId,
-          office_gross: parseFloat(txn.office_gross || 0),
-          transaction_type: txn.transaction_type,
-          lead_source: agentLeadSources[agentId] || 'own',
-          is_lease: isLease(txn.transaction_type),
-        }),
-      })
-      if (res.ok) {
-        const result = await res.json()
-        setAgentCalcData(prev => ({ ...prev, [agentId]: result }))
-        
-        // Auto-apply the values
-        await fetch(`/api/admin/transactions/${id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'update_internal_agent',
-            internal_agent_id: internalAgentId,
-            updates: {
-              agent_gross: result.agent_gross,
-              brokerage_split: result.brokerage_split,
-              processing_fee: result.processing_fee,
-              coaching_fee: result.coaching_fee,
-              team_lead_commission: result.team_lead_payout || 0,
-              agent_net: result.agent_net,
-              split_percentage: result.agent_split_pct,
-            },
-          }),
-        })
-        // Reload data to show updated values
-        loadData()
-      }
-    } catch {}
-  }
 
   const deleteInternalAgent = async (internalAgentId: string) => {
     setSaving(true)
@@ -680,153 +527,6 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setAddingCheck(false)
     }
-  }
-
-  const updateInternalAgent = async (internalAgentId: string, updates: any) => {
-    setSaving(true)
-    try {
-      await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_internal_agent', internal_agent_id: internalAgentId, updates }),
-      })
-      setData((prev: any) => ({
-        ...prev,
-        agents: prev.agents.map((a: any) =>
-          a.id === internalAgentId ? { ...a, ...updates } : a
-        ),
-      }))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // ── Mark Paid Modal Functions ────────────────────────────────────────────────
-
-  const openMarkPaidModal = async (agent: any) => {
-    // Determine default for countsTowardProgress based on plan and transaction type
-    const plan = (agent.user?.commission_plan || '').toLowerCase()
-    const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
-    const txnType = data?.transaction_type || ''
-    const txnIsLease = isLease(txnType)
-    
-    // For New Agent Plan: sales count, leases don't by default
-    const defaultCountsToward = isNewAgentPlan ? !txnIsLease : true
-
-    setMarkPaidModal(prev => ({
-      ...prev,
-      open: true,
-      agent,
-      loadingDebts: true,
-      debts: [],
-      selectedDebts: {},
-      paymentDate: new Date().toISOString().split('T')[0],
-      paymentMethod: 'ACH',
-      paymentReference: '',
-      fundingSource: 'crc',
-      countsTowardProgress: defaultCountsToward,
-    }))
-
-    // Load outstanding debts for this agent
-    try {
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_agent_debts', agent_id: agent.agent_id }),
-      })
-      const json = await res.json()
-      setMarkPaidModal(prev => ({
-        ...prev,
-        loadingDebts: false,
-        debts: json.debts || [],
-      }))
-    } catch {
-      setMarkPaidModal(prev => ({ ...prev, loadingDebts: false }))
-    }
-  }
-
-  const closeMarkPaidModal = () => {
-    setMarkPaidModal(prev => ({ ...prev, open: false, agent: null }))
-  }
-
-  const submitMarkPaid = async () => {
-    const { agent, selectedDebts, paymentDate, paymentMethod, paymentReference, fundingSource, countsTowardProgress } = markPaidModal
-    if (!agent) return
-
-    setSaving(true)
-    try {
-      // Convert selectedDebts to array format
-      const debtsToApply = Object.entries(selectedDebts)
-        .filter(([, amount]) => (amount as number) > 0)
-        .map(([debtId, amount]) => ({ debt_id: debtId, amount }))
-
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'mark_paid',
-          internal_agent_id: agent.id,
-          transaction_type: txn?.transaction_type || null,
-          payment_date: paymentDate,
-          payment_method: paymentMethod,
-          payment_reference: paymentReference,
-          funding_source: fundingSource,
-          debts_to_apply: debtsToApply,
-          counts_toward_progress: countsTowardProgress,
-        }),
-      })
-      
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Failed to mark paid')
-      }
-
-      const result = await res.json()
-
-      // Update local state
-      setData((prev: any) => ({
-        ...prev,
-        agents: prev.agents.map((a: any) =>
-          a.id === agent.id
-            ? { 
-                ...a, 
-                payment_status: 'paid',
-                payment_date: paymentDate,
-                payment_method: paymentMethod,
-                payment_reference: paymentReference,
-                funding_source: fundingSource,
-                amount_1099_reportable: result.updates?.amount_1099_reportable,
-                debts_deducted: result.updates?.debts_deducted,
-                agent_net: result.updates?.agent_net,
-              }
-            : a
-        ),
-        // Clear agent_billing since debts may have been applied
-        agent_billing: null,
-      }))
-
-      closeMarkPaidModal()
-      // Reload to get fresh data including updated billing
-      loadData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to mark paid')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const toggleDebt = (debtId: string, maxAmount: number) => {
-    setMarkPaidModal(prev => {
-      const current = prev.selectedDebts[debtId]
-      if (current) {
-        // Remove it
-        const { [debtId]: _, ...rest } = prev.selectedDebts
-        return { ...prev, selectedDebts: rest }
-      } else {
-        // Add it with full amount
-        return { ...prev, selectedDebts: { ...prev.selectedDebts, [debtId]: maxAmount } }
-      }
-    })
   }
 
   const toggleChecklist = async (itemId: string, currentlyComplete: boolean) => {
@@ -1121,7 +821,7 @@ export default function AdminTransactionDetailPage() {
             <div className="flex items-center gap-2">
               {txn.status !== 'closed' && (
                 <button
-                  onClick={() => setShowCloseModal(true)}
+                  onClick={() => setShowCloseDialog(true)}
                   className="btn btn-primary text-xs px-3 py-1.5"
                 >
                   Close Transaction
@@ -1244,20 +944,7 @@ export default function AdminTransactionDetailPage() {
                     value={txn.transaction_type}
                     field="transaction_type"
                     type="select"
-                    options={[
-                      { value: 'buyer_v2', label: 'Buyer' },
-                      { value: 'seller_v2', label: 'Seller' },
-                      { value: 'nc_buyer_v2', label: 'New Construction Buyer' },
-                      { value: 'land_buyer_v2', label: 'Land Buyer' },
-                      { value: 'land_seller_v2', label: 'Land Seller' },
-                      { value: 'commercial_buyer_v2', label: 'Commercial Buyer' },
-                      { value: 'tenant_apt_v2', label: 'Tenant (Apartment)' },
-                      { value: 'tenant_non_apt_v2', label: 'Tenant (Non-Apartment)' },
-                      { value: 'tenant_simplyhome_v2', label: 'Tenant (SimplyHome)' },
-                      { value: 'tenant_commercial_v2', label: 'Tenant (Commercial)' },
-                      { value: 'landlord_v2', label: 'Landlord' },
-                      { value: 'referred_out_v2', label: 'Referred Out' },
-                    ]}
+                    options={TRANSACTION_TYPE_OPTIONS}
                     onSave={(f, v) => updateTransaction({ [f]: v })}
                   />
                   <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
@@ -1562,15 +1249,7 @@ export default function AdminTransactionDetailPage() {
           {/* ── COMMISSIONS TAB ──────────────────────────────────────────── */}
           {activeTab === 'commissions' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h1 className="page-title">COMMISSIONS</h1>
-                <button
-                  onClick={() => setShowCloseModal(true)}
-                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
-                >
-                  + Add Agent
-                </button>
-              </div>
+              <h1 className="page-title">COMMISSIONS</h1>
 
               {/* Summary cards */}
               <div className="container-card">
@@ -1595,195 +1274,12 @@ export default function AdminTransactionDetailPage() {
                   </div>
                 </div>
 
-                {agents.length === 0 ? (
-                  <p className="text-xs text-luxury-gray-3 text-center py-4">
-                    No agents on this transaction. Click "Add Agent" to add one.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {agents.map((a: any) => {
-                      const isPaid = a.payment_status === 'paid'
-                      const calc = agentCalcData[a.agent_id]
-                      const agentGross = parseFloat(a.agent_gross || calc?.agent_gross || 0)
-                      const processingFee = parseFloat(a.processing_fee || calc?.processing_fee || 0)
-                      const coachingFee = parseFloat(a.coaching_fee || calc?.coaching_fee || 0)
-                      const otherFees = parseFloat(a.other_fees || 0)
-                      const brokerageSplit = parseFloat(a.brokerage_split || calc?.brokerage_split || 0)
-                      const teamLeadComm = parseFloat(a.team_lead_commission || calc?.team_lead_payout || 0)
-                      const debtsDeducted = parseFloat(a.debts_deducted || 0)
-                      const salesVolume = parseFloat(a.sales_volume || 0)
-                      const agentNet = parseFloat(a.agent_net || calc?.agent_net || 0)
-                      const amount1099 = a.amount_1099_reportable || (agentGross - processingFee - coachingFee - otherFees)
-                      const isDeleting = deleteConfirm === a.id
-
-                      return (
-                        <div key={a.id} className="inner-card">
-                          {/* Header with actions */}
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              {a.user?.headshot_url && (
-                                <img
-                                  src={a.user.headshot_url}
-                                  alt=""
-                                  className="w-10 h-10 rounded-full object-cover object-top border border-luxury-gray-5"
-                                />
-                              )}
-                              <div>
-                                <p className="text-sm font-semibold text-luxury-gray-1">
-                                  {fmtName(a.user)}
-                                </p>
-                                <p className="text-xs text-luxury-gray-3">
-                                  {a.agent_role?.replace(/_/g, ' ')} · {a.user?.commission_plan || a.commission_plan || '--'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {/* Delete button */}
-                              {!isPaid && (
-                                <button
-                                  onClick={() => setDeleteConfirm(a.id)}
-                                  className="p-1.5 rounded border border-luxury-gray-5 hover:border-red-300 hover:bg-red-50 transition-colors"
-                                  title="Remove agent"
-                                >
-                                  <Trash2 size={14} className="text-luxury-gray-3 hover:text-red-500" />
-                                </button>
-                              )}
-                              {/* Payment status */}
-                              {isPaid ? (
-                                <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
-                                  Paid
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => openMarkPaidModal(a)}
-                                  className="btn-primary text-xs px-3 py-1"
-                                >
-                                  Mark Paid
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Delete confirmation */}
-                          {isDeleting && (
-                            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                              <p className="text-xs text-red-700 mb-2">
-                                Remove {fmtName(a.user)} from this transaction?
-                              </p>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => deleteInternalAgent(a.id)}
-                                  disabled={saving}
-                                  className="btn text-xs px-3 py-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                                >
-                                  {saving ? 'Removing...' : 'Remove'}
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirm(null)}
-                                  className="btn btn-secondary text-xs px-3 py-1"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Team member lead source picker */}
-                          {calc?.is_team_member && !isPaid && (
-                            <div className="mb-3 p-3 bg-purple-50/50 border border-purple-200 rounded-lg">
-                              <p className="text-xs text-purple-700 mb-2">
-                                {fmtName(a.user)} is on {calc.team_lead_name ? `${calc.team_lead_name}'s team` : 'a team'}. Who sourced this lead?
-                              </p>
-                              <div className="flex gap-2">
-                                {['team_lead', 'own', 'firm'].map(src => (
-                                  <button
-                                    key={src}
-                                    onClick={() => {
-                                      setAgentLeadSources(p => ({ ...p, [a.agent_id]: src }))
-                                      // Recalculate and apply with new lead source
-                                      setTimeout(() => recalculateAgentSplit(a.agent_id, a.id), 100)
-                                    }}
-                                    className={`flex-1 text-xs px-3 py-1.5 rounded border transition-colors ${
-                                      (agentLeadSources[a.agent_id] || 'own') === src
-                                        ? 'bg-purple-600 text-white border-purple-600'
-                                        : 'border-purple-300 text-purple-700 hover:bg-purple-100'
-                                    }`}
-                                  >
-                                    {src === 'team_lead' ? 'Team Lead' : src === 'own' ? "Agent's Own" : 'Firm Lead'}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Momentum partner display */}
-                          {calc?.momentum_partner_name && calc.momentum_partner_payout > 0 && (
-                            <div className="mb-3 p-3 bg-green-50/50 border border-green-200 rounded-lg">
-                              <p className="text-xs text-green-700">
-                                <span className="font-semibold">{calc.momentum_partner_name}</span> earns {calc.momentum_partner_pct}% momentum partner fee: {fmt$(calc.momentum_partner_payout)}
-                                <span className="text-green-600 ml-1">(from brokerage side)</span>
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Financial breakdown */}
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            <FieldRow label="Sales Volume" value={salesVolume > 0 ? fmt$(salesVolume) : null} />
-                            <FieldRow label="Office Gross (100%)" value={fmt$(txn.office_gross)} />
-                            <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : (calc?.agent_split_pct ? `${calc.agent_split_pct}%` : null)} />
-                            <FieldRow label="Agent Gross" value={fmt$(agentGross)} />
-                            <FieldRow label="Brokerage Split" value={brokerageSplit > 0 ? fmt$(brokerageSplit) : null} />
-                            <FieldRow label="Processing Fee" value={processingFee > 0 ? `-${fmt$(processingFee)}` : null} />
-                            <FieldRow label="Coaching Fee" value={coachingFee > 0 ? `-${fmt$(coachingFee)}` : null} />
-                            {teamLeadComm > 0 && (
-                              <FieldRow label="Team Lead Comm" value={`-${fmt$(teamLeadComm)}`} />
-                            )}
-                            <FieldRow label="Other Fees" value={otherFees > 0 ? `-${fmt$(otherFees)}` : null} />
-                            <FieldRow label="Rebate" value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null} />
-                            <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
-                          </div>
-
-                          {/* Totals */}
-                          <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-luxury-gray-3">1099 Amount</span>
-                              <span className="text-xs text-luxury-gray-2">{fmt$(amount1099)}</span>
-                            </div>
-                            {debtsDeducted > 0 && (
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs text-luxury-gray-3">Debts Deducted</span>
-                                <span className="text-xs text-red-500">-{fmt$(debtsDeducted)}</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
-                              <span className="text-xs font-semibold text-luxury-gray-2">Agent Net</span>
-                              <span className="text-sm font-bold text-luxury-accent">{fmt$(agentNet)}</span>
-                            </div>
-                          </div>
-
-                          {/* Payment details (if paid) */}
-                          {isPaid && (
-                            <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 text-xs text-luxury-gray-3 space-y-0.5">
-                              {a.payment_date && <p>Paid: {fmtDate(a.payment_date)}</p>}
-                              {a.payment_method && <p>Method: {a.payment_method}</p>}
-                              {a.payment_reference && <p>Reference: {a.payment_reference}</p>}
-                              {a.funding_source && a.funding_source !== 'crc' && (
-                                <p>Funding: {a.funding_source === 'title_direct' ? 'Title paid directly' : a.funding_source}</p>
-                              )}
-                              <button
-                                onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
-                                className="mt-2 flex items-center gap-1.5 text-xs text-luxury-accent hover:text-luxury-accent/80 font-medium"
-                              >
-                                <FileText size={12} />
-                                Generate Statement
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                <AgentsSection
+                  transactionId={id}
+                  transaction={txn}
+                  agents={agents}
+                  onRefresh={loadData}
+                />
 
                 {/* Document generation buttons */}
                 {agents.length > 0 && (
@@ -2183,26 +1679,10 @@ export default function AdminTransactionDetailPage() {
                     )}
 
                     {/* External brokerages */}
-                    {payoutBrokerages.length > 0 && (
-                      <div className="space-y-2 mb-2">
-                        {payoutBrokerages.map((b: any) => (
-                          <div key={b.id} className="inner-card flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-semibold text-luxury-gray-1">{b.brokerage_name}</p>
-                              <p className="text-xs text-luxury-gray-3">
-                                {b.brokerage_role?.replace(/_/g, ' ')} · {b.payment_status || 'pending'}
-                              </p>
-                              {b.payment_date && (
-                                <p className="text-xs text-luxury-gray-3">{fmtDate(b.payment_date)}</p>
-                              )}
-                            </div>
-                            <span className="text-xs font-semibold text-luxury-gray-1">
-                              {fmt$(parseFloat(b.commission_amount || 0))}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <BrokeragesSection
+                      transactionId={id}
+                      onRefresh={loadData}
+                    />
 
                     {/* Existing manual check_payouts from all checks */}
                     {checks.flatMap(c => c.check_payouts || []).length > 0 && (
@@ -2246,13 +1726,6 @@ export default function AdminTransactionDetailPage() {
                         No payouts recorded yet.
                       </p>
                     )}
-
-                    <button
-                      onClick={() => setShowPayoutModal(true)}
-                      className="w-full text-xs text-luxury-accent hover:underline text-center py-1"
-                    >
-                      + Add Payout
-                    </button>
                   </div>
 
                   {/* Checklist */}
@@ -2906,263 +2379,16 @@ export default function AdminTransactionDetailPage() {
         </div>
       )}
 
-      {/* ── Mark Paid Modal ─────────────────────────────────────────────────── */}
-      {markPaidModal.open && markPaidModal.agent && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-luxury-gray-5">
-              <h2 className="text-sm font-semibold text-luxury-gray-1">Mark Paid</h2>
-              <p className="text-xs text-luxury-gray-3">{fmtName(markPaidModal.agent.user)}</p>
-            </div>
 
-            <div className="p-4 space-y-4">
-              {/* Financial Summary */}
-              <div className="inner-card">
-                <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment Summary</p>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">Agent Gross</span>
-                    <span>{fmt$(markPaidModal.agent.agent_gross)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">- Fees</span>
-                    <span className="text-red-500">
-                      -{fmt$(
-                        parseFloat(markPaidModal.agent.processing_fee || 0) +
-                        parseFloat(markPaidModal.agent.coaching_fee || 0) +
-                        parseFloat(markPaidModal.agent.other_fees || 0)
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-luxury-gray-5/30">
-                    <span className="font-semibold">1099 Amount</span>
-                    <span className="font-semibold">
-                      {fmt$(
-                        parseFloat(markPaidModal.agent.agent_gross || 0) -
-                        parseFloat(markPaidModal.agent.processing_fee || 0) -
-                        parseFloat(markPaidModal.agent.coaching_fee || 0) -
-                        parseFloat(markPaidModal.agent.other_fees || 0)
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Outstanding Debts */}
-              {markPaidModal.loadingDebts ? (
-                <p className="text-xs text-luxury-gray-3 text-center py-2">Loading debts...</p>
-              ) : markPaidModal.debts.length > 0 ? (
-                <div className="inner-card">
-                  <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Apply Outstanding Debts</p>
-                  <div className="space-y-2">
-                    {markPaidModal.debts.map((debt: any) => {
-                      const remaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
-                      const isSelected = markPaidModal.selectedDebts[debt.id] != null
-                      return (
-                        <label
-                          key={debt.id}
-                          className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'border-luxury-accent bg-luxury-accent/5'
-                              : 'border-luxury-gray-5 hover:border-luxury-gray-4'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleDebt(debt.id, remaining)}
-                              className="rounded"
-                            />
-                            <div>
-                              <p className="text-xs font-medium text-luxury-gray-1">
-                                {debt.debt_type?.replace(/_/g, ' ')}
-                              </p>
-                              <p className="text-xs text-luxury-gray-3">
-                                {debt.description || fmtDate(debt.date_incurred)}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-red-500">{fmt$(remaining)}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {Object.keys(markPaidModal.selectedDebts).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 flex justify-between text-xs">
-                      <span className="text-luxury-gray-3">Total Deductions</span>
-                      <span className="font-semibold text-red-500">
-                        -{fmt$(Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {/* Final Amount */}
-              <div className="inner-card bg-luxury-accent/5 border-luxury-accent">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-luxury-gray-2">Agent Will Receive</span>
-                  <span className="text-lg font-bold text-luxury-accent">
-                    {fmt$(
-                    parseFloat(markPaidModal.agent.agent_gross || 0) -
-                    parseFloat(markPaidModal.agent.processing_fee || 0) -
-                    parseFloat(markPaidModal.agent.coaching_fee || 0) -
-                    parseFloat(markPaidModal.agent.other_fees || 0) -
-                    parseFloat(markPaidModal.agent.debts_deducted || 0) -
-                    Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0)
-                  )}
-                  </span>
-                </div>
-              </div>
-
-              {/* Payment Details */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="field-label">Payment Date</label>
-                  <input
-                    type="date"
-                    value={markPaidModal.paymentDate}
-                    onChange={e =>
-                      setMarkPaidModal(prev => ({ ...prev, paymentDate: e.target.value }))
-                    }
-                    className="input-luxury text-xs w-full"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Method</label>
-                  <select
-                    value={markPaidModal.paymentMethod}
-                    onChange={e =>
-                      setMarkPaidModal(prev => ({ ...prev, paymentMethod: e.target.value }))
-                    }
-                    className="input-luxury text-xs w-full"
-                  >
-                    <option value="ACH">ACH</option>
-                    <option value="check">Check</option>
-                    <option value="Zelle">Zelle</option>
-                    <option value="wire">Wire</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="field-label">Reference / Check #</label>
-                  <input
-                    type="text"
-                    value={markPaidModal.paymentReference}
-                    onChange={e =>
-                      setMarkPaidModal(prev => ({ ...prev, paymentReference: e.target.value }))
-                    }
-                    placeholder="Optional"
-                    className="input-luxury text-xs w-full"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Funding Source</label>
-                  <select
-                    value={markPaidModal.fundingSource}
-                    onChange={e =>
-                      setMarkPaidModal(prev => ({ ...prev, fundingSource: e.target.value }))
-                    }
-                    className="input-luxury text-xs w-full"
-                  >
-                    <option value="crc">CRC Paid Agent</option>
-                    <option value="title_direct">Title Paid Directly</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Plan Progress Toggle - only show for relevant plans */}
-              {(() => {
-                const plan = (markPaidModal.agent?.user?.commission_plan || '').toLowerCase()
-                const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
-                const isCapPlan = plan.includes('85') || plan.includes('100') || plan.includes('capped')
-                const txnType = data?.transaction_type || ''
-                const txnIsLease = isLease(txnType)
-
-                if (!isNewAgentPlan && !isCapPlan) return null
-
-                return (
-                  <div className="inner-card bg-luxury-light">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={markPaidModal.countsTowardProgress}
-                        onChange={e =>
-                          setMarkPaidModal(prev => ({ ...prev, countsTowardProgress: e.target.checked }))
-                        }
-                        className="mt-0.5 rounded"
-                      />
-                      <div>
-                        <p className="text-xs font-medium text-luxury-gray-1">
-                          {isNewAgentPlan 
-                            ? 'Count toward 5 qualifying sales'
-                            : 'Count toward cap'
-                          }
-                        </p>
-                        <p className="text-xs text-luxury-gray-3 mt-0.5">
-                          {isNewAgentPlan ? (
-                            txnIsLease 
-                              ? 'Leases do not count toward the 5 sales needed to upgrade to 85/15'
-                              : 'This sale will count toward the 5 needed to upgrade to 85/15'
-                          ) : (
-                            `The $${parseFloat(markPaidModal.agent?.brokerage_split || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} brokerage split will be added to cap progress`
-                          )}
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-                )
-              })()}
-            </div>
-
-            <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
-              <button
-                onClick={submitMarkPaid}
-                disabled={saving}
-                className="btn-primary text-xs flex-1 disabled:opacity-50"
-              >
-                {saving ? 'Processing...' : 'Confirm Payment'}
-              </button>
-              <button
-                onClick={closeMarkPaidModal}
-                className="btn-secondary text-xs"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Close Transaction Modal ─────────────────────────────────────────── */}
-      {showCloseModal && (
-        <CloseTransactionModal
+      {/* ── Close Transaction Dialog ────────────────────────────────────────── */}
+      {showCloseDialog && (
+        <CloseDialog
           transactionId={id}
           transaction={data.transaction}
           agents={data.agents || []}
-          check={data.check || null}
-          userId={user?.id || ''}
-          onClose={() => setShowCloseModal(false)}
-          onSaved={() => { setShowCloseModal(false); loadData() }}
-        />
-      )}
-
-      {showPayoutModal && (
-        <PayoutModal
-          transactionId={id}
-          agents={data.agents || []}
-          onClose={() => setShowPayoutModal(false)}
-          onSaved={() => {
-            setShowPayoutModal(false)
-            loadData()
-            fetch(`/api/admin/transactions/${id}?section=external_brokerages`)
-              .then(r => r.ok ? r.json() : { external_brokerages: [] })
-              .then(d => setPayoutBrokerages(d.external_brokerages || []))
-              .catch(() => {})
-          }}
+          userId={user?.id || null}
+          onClose={() => setShowCloseDialog(false)}
+          onClosed={() => { setShowCloseDialog(false); loadData() }}
         />
       )}
     </div>

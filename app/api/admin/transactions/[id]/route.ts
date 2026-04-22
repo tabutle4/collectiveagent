@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,232 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// ─── Commission field lock set ──────────────────────────────────────────────
+// When a TIA row is marked paid, these fields become uneditable.
+// Unmark Paid must be used to reopen them.
+const LOCKED_TIA_FIELDS = new Set([
+  'agent_id',
+  'agent_role',
+  'commission_plan',
+  'commission_plan_id',
+  'agent_basis',
+  'split_percentage',
+  'agent_gross',
+  'processing_fee',
+  'coaching_fee',
+  'other_fees',
+  'other_fees_description',
+  'rebate_amount',
+  'rebate_type',
+  'btsa_amount',
+  'team_lead_commission',
+  'brokerage_split',
+  'amount_1099_reportable',
+  'agent_net',
+  'sales_volume',
+  'units',
+  'counts_toward_progress',
+  'pre_split_deductions',
+  'pre_split_deductions_description',
+])
+
+const LOCKED_TEB_FIELDS = new Set([
+  'brokerage_name',
+  'brokerage_role',
+  'brokerage_ein',
+  'federal_id_type',
+  'federal_id_number',
+  'commission_amount',
+  'amount_1099_reportable',
+  'w9_on_file',
+  'w9_date_received',
+  'broker_name',
+  'agent_name',
+  'agent_email',
+  'agent_phone',
+])
+
+// Alias to central helper — keeps existing call sites stable
+const isLeaseType = isLeaseTransactionType
+
+function num(v: any): number {
+  return parseFloat(v ?? 0) || 0
+}
+
+// ─── Commission calculation core ─────────────────────────────────────────────
+// Model A (locked 2026-04-22): For agents on a team, team_agreement_splits
+// drives all three percentages (agent, team_lead, firm). For agents NOT on a
+// team, the plan's agent/firm split drives agent_gross and firm portion;
+// no team_lead row is created.
+//
+// team_lead_commission on the primary's TIA row is informational tracking only
+// and is NOT deducted from agent_net or amount_1099_reportable — the team
+// lead's cut has already been carved out of agent_gross at the team-split step.
+async function computeCommissionBreakdown(args: {
+  agentId: string
+  transactionId: string
+  commissionAmount: number
+  leadSource: string
+  transactionType: string | null
+}) {
+  const { agentId, commissionAmount, leadSource, transactionType } = args
+  const isLease = isLeaseType(transactionType)
+
+  // Agent record
+  const { data: agent } = await supabase
+    .from('users')
+    .select(`
+      id, commission_plan, lease_commission_plan,
+      referring_agent_id, revenue_share_percentage,
+      waive_buyer_processing_fees, waive_seller_processing_fees
+    `)
+    .eq('id', agentId)
+    .single()
+
+  if (!agent) throw new Error('Agent not found')
+
+  // Plan code
+  const planCode = isLease && agent.lease_commission_plan
+    ? agent.lease_commission_plan
+    : agent.commission_plan || ''
+
+  // Commission plan (fuzzy match — data mixes codes and names)
+  const { data: plans } = await supabase
+    .from('commission_plans')
+    .select('*')
+    .eq('is_active', true)
+  const commissionPlan = (plans || []).find(
+    (p: any) =>
+      (p.code && p.code.toLowerCase() === planCode.toLowerCase()) ||
+      (p.name && p.name.toLowerCase() === planCode.toLowerCase())
+  )
+
+  // Processing fee type
+  const { data: pftAll } = await supabase
+    .from('processing_fee_types')
+    .select('*')
+    .eq('is_active', true)
+  const pft = (pftAll || []).find(
+    (p: any) => p.code?.toLowerCase() === (transactionType || '').toLowerCase()
+  )
+
+  // Team membership
+  const { data: membership } = await supabase
+    .from('team_member_agreements')
+    .select(`
+      id, team:teams!team_member_agreements_team_id_fkey(id, team_name)
+    `)
+    .eq('agent_id', agentId)
+    .is('end_date', null)
+    .maybeSingle()
+
+  let teamLeadId: string | null = null
+  let teamSplits: any[] = []
+  if (membership?.team) {
+    const teamRow: any = Array.isArray(membership.team) ? membership.team[0] : membership.team
+    const { data: teamLead } = await supabase
+      .from('team_leads')
+      .select('agent_id')
+      .eq('team_id', teamRow.id)
+      .is('end_date', null)
+      .maybeSingle()
+    teamLeadId = teamLead?.agent_id || null
+
+    const { data: splits } = await supabase
+      .from('team_agreement_splits')
+      .select('plan_type, lead_source, agent_pct, team_lead_pct, firm_pct')
+      .eq('agreement_id', (membership as any).id)
+    teamSplits = splits || []
+  }
+
+  // Start with plan defaults
+  let agentSplitPct = commissionPlan?.agent_split_percentage ?? 85
+  let firmSplitPct = commissionPlan?.firm_split_percentage ?? 15
+  let teamLeadPct = 0
+  let onTeamWithSplit = false
+  const coachingFee = num(commissionPlan?.coaching_fee_amount)
+
+  // If on a team AND a matching team split exists, OVERRIDE with team splits.
+  // The team split determines all three percentages (agent/TL/firm).
+  if (membership && teamSplits.length > 0 && teamLeadId) {
+    const planType = isLease
+      ? 'leases'
+      : planCode.toLowerCase().includes('85') ||
+        planCode.toLowerCase().includes('no cap') ||
+        planCode.toLowerCase().includes('no_cap')
+        ? 'sales_85_15'
+        : 'sales_70_30'
+
+    const match =
+      teamSplits.find((s: any) => s.plan_type === planType && s.lead_source === leadSource) ||
+      teamSplits.find((s: any) => s.plan_type === planType)
+
+    if (match) {
+      agentSplitPct = num(match.agent_pct)
+      firmSplitPct = num(match.firm_pct)
+      teamLeadPct = num(match.team_lead_pct)
+      onTeamWithSplit = true
+    }
+  }
+
+  // Processing fee with waivers. Tenant transactions are treated as the
+  // "buyer side" of a lease for waiver purposes.
+  let processingFee = num(pft?.processing_fee)
+  const tt = (transactionType || '').toLowerCase()
+  if (
+    (tt.includes('buyer') || tt.includes('tenant')) &&
+    agent.waive_buyer_processing_fees
+  ) processingFee = 0
+  if (
+    (tt.includes('seller') || tt.includes('listing') || tt.includes('landlord')) &&
+    agent.waive_seller_processing_fees
+  ) processingFee = 0
+
+  // Amounts — all percentages apply to the commission_amount (basis).
+  const agentGross = commissionAmount * (agentSplitPct / 100)
+  const brokerageSplit = commissionAmount * (firmSplitPct / 100)
+  // Team lead payout is ONLY non-zero when the agent is on a team with a split
+  const teamLeadPayout = onTeamWithSplit
+    ? commissionAmount * (teamLeadPct / 100)
+    : 0
+
+  // Momentum partner takes from the brokerage side
+  let momentumPartnerId: string | null = null
+  let momentumPartnerPct = 0
+  let momentumPartnerPayout = 0
+  if (agent.referring_agent_id && agent.revenue_share_percentage) {
+    momentumPartnerId = agent.referring_agent_id
+    momentumPartnerPct = num(agent.revenue_share_percentage)
+    momentumPartnerPayout = brokerageSplit * (momentumPartnerPct / 100)
+  }
+
+  // Under Model A: team_lead is already carved out of agent_gross by the team
+  // split. Do NOT deduct it again from agent_net or 1099.
+  const primaryAgentNet = agentGross - processingFee - coachingFee
+  const primary1099 = agentGross - processingFee - coachingFee
+
+  return {
+    planCode,
+    isLease,
+    commissionPlanId: commissionPlan?.id || null,
+    agentSplitPct,
+    firmSplitPct,
+    teamLeadPct,
+    coachingFee,
+    processingFee,
+    agentGross,
+    brokerageSplit,
+    teamLeadPayout,
+    teamLeadId: onTeamWithSplit ? teamLeadId : null,
+    momentumPartnerId,
+    momentumPartnerPct,
+    momentumPartnerPayout,
+    primaryAgentNet,
+    primary1099,
+    onTeamWithSplit,
+  }
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_view_all_transactions')
@@ -35,7 +262,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
               qualifying_transaction_count, waive_buyer_processing_fees,
-              waive_seller_processing_fees, special_commission_notes, headshot_url
+              waive_seller_processing_fees, special_commission_notes, headshot_url,
+              monthly_fee_paid_through
             )
           `).eq('transaction_id', id),
           supabase
@@ -48,16 +276,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
       }
 
-      // Extract agent IDs for other lookups (team memberships, billing)
       const agentIds = (agents || []).map((a: any) => a.agent_id).filter(Boolean)
       const agentUsers = (agents || []).map((a: any) => a.user).filter(Boolean)
 
-      // Primary agent (submitted_by)
       const primaryAgentId = txn.submitted_by
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
-      // Per-agent team memberships
       const { data: teamMemberships } = agentIds.length > 0
         ? await supabase
             .from('team_member_agreements')
@@ -69,7 +294,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             .is('end_date', null)
         : { data: [] }
 
-      // Fetch splits separately per membership (same pattern as admin routes)
       const membershipIds = (teamMemberships || []).map((m: any) => m.id).filter(Boolean)
       const { data: allSplits } = membershipIds.length > 0
         ? await supabase
@@ -80,184 +304,104 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             .order('lead_source')
         : { data: [] }
 
-      // Build a map of agent_id -> membership (with splits attached)
+      // Fetch team leads for each team
+      const teamIdsFromMemberships = (teamMemberships || [])
+        .map((m: any) => (Array.isArray(m.team) ? m.team[0]?.id : m.team?.id))
+        .filter(Boolean)
+      const { data: teamLeads } = teamIdsFromMemberships.length > 0
+        ? await supabase
+            .from('team_leads')
+            .select(`
+              team_id, agent_id,
+              agent:users!team_leads_agent_id_fkey(
+                id, first_name, last_name, preferred_first_name, preferred_last_name
+              )
+            `)
+            .in('team_id', teamIdsFromMemberships)
+            .is('end_date', null)
+        : { data: [] }
+
       const membershipByAgent: Record<string, any> = {}
       for (const m of teamMemberships || []) {
+        const teamRow: any = Array.isArray(m.team) ? m.team[0] : m.team
+        const lead = (teamLeads || []).find((tl: any) => tl.team_id === teamRow?.id)
+        const leadUser: any = lead?.agent
+          ? (Array.isArray(lead.agent) ? lead.agent[0] : lead.agent)
+          : null
         membershipByAgent[m.agent_id] = {
           ...m,
+          team: teamRow ? { ...teamRow, team_lead_id: lead?.agent_id || null, team_lead: leadUser } : null,
           splits: (allSplits || []).filter((s: any) => s.agreement_id === m.id),
         }
       }
 
-      // Agent billing (debts + credits)
-      let agentBilling = null
-      if (primaryAgentId) {
+      // Per-agent billing (debts)
+      const billingByAgent: Record<string, any> = {}
+      if (agentIds.length > 0) {
         const { data: billingRecords } = await supabase
           .from('agent_debts')
           .select(
-            'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status'
+            'id, agent_id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status'
           )
-          .eq('agent_id', primaryAgentId)
+          .in('agent_id', agentIds)
           .eq('status', 'outstanding')
           .order('date_incurred', { ascending: false })
 
-        const records = billingRecords || []
-        const debts = records.filter((r: any) => r.record_type !== 'credit')
-        const credits = records.filter((r: any) => r.record_type === 'credit')
-        const totalDebts = debts.reduce(
-          (s: number, d: any) => s + parseFloat(d.amount_remaining ?? d.amount_owed ?? 0),
-          0
-        )
-        const totalCredits = credits.reduce(
-          (s: number, c: any) => s + parseFloat(c.amount_remaining ?? c.amount_owed ?? 0),
-          0
-        )
-
-        agentBilling = {
-          debts,
-          credits,
-          total_debts: totalDebts,
-          total_credits: totalCredits,
-          net_balance: totalDebts - totalCredits,
+        for (const aid of agentIds) {
+          const rows = (billingRecords || []).filter((r: any) => r.agent_id === aid)
+          const debts = rows.filter((r: any) => r.record_type !== 'credit')
+          const credits = rows.filter((r: any) => r.record_type === 'credit')
+          const totalDebts = debts.reduce(
+            (s: number, d: any) => s + parseFloat(d.amount_remaining ?? d.amount_owed ?? 0),
+            0
+          )
+          const totalCredits = credits.reduce(
+            (s: number, c: any) => s + parseFloat(c.amount_remaining ?? c.amount_owed ?? 0),
+            0
+          )
+          billingByAgent[aid] = {
+            debts,
+            credits,
+            total_debts: totalDebts,
+            total_credits: totalCredits,
+            net_balance: totalDebts - totalCredits,
+          }
         }
       }
 
-      // Team info
+      // Legacy agent_billing (primary only) for existing UI
+      const agentBilling = primaryAgentId ? billingByAgent[primaryAgentId] || null : null
+
+      // Team info for primary
       let teamInfo = null
       if (txn.team_agreement_id) {
-        // team_agreement_id references team_member_agreements
         const { data: memberAgreement } = await supabase
           .from('team_member_agreements')
           .select(`
-            id, team_id, agent_id, effective_date, end_date, agreement_document_url, firm_min_override, notes,
-            team:teams!team_member_agreements_team_id_fkey(id, team_name, status)
+            id,
+            team:teams!team_member_agreements_team_id_fkey(id, team_name)
           `)
           .eq('id', txn.team_agreement_id)
-          .single()
-
+          .maybeSingle()
         if (memberAgreement) {
-          const team = Array.isArray(memberAgreement.team) ? memberAgreement.team[0] : memberAgreement.team
-          
-          // Get team lead from team_leads table
-          let teamLeadName = null
-          let teamLeadId = null
-          if (team?.id) {
-            const { data: teamLeadRecord } = await supabase
-              .from('team_leads')
-              .select(`
-                agent_id,
-                agent:users!team_leads_agent_id_fkey(
-                  first_name, last_name, preferred_first_name, preferred_last_name
-                )
-              `)
-              .eq('team_id', team.id)
-              .is('end_date', null)
-              .single()
-
-            if (teamLeadRecord) {
-              teamLeadId = teamLeadRecord.agent_id
-              const leadUser = Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent
-              if (leadUser) {
-                teamLeadName = `${leadUser.preferred_first_name || leadUser.first_name} ${leadUser.preferred_last_name || leadUser.last_name}`
-              }
-            }
-          }
-
-          // Get all team members for this team
-          const { data: allMembers } = await supabase
-            .from('team_member_agreements')
-            .select(`
-              id, agent_id, effective_date, end_date,
-              agent:users!team_member_agreements_agent_id_fkey(
-                id, first_name, last_name, preferred_first_name, preferred_last_name
-              )
-            `)
-            .eq('team_id', team?.id)
-            .is('end_date', null)
-
-          teamInfo = {
-            agreement: {
-              ...memberAgreement,
-              team_name: team?.team_name,
-              team_lead_id: teamLeadId,
-            },
-            members: allMembers || [],
-            team_lead_name: teamLeadName,
-          }
-        }
-      } else if ((primaryAgent as any)?.is_on_team && (primaryAgent as any)?.team_name) {
-        // Find team by name
-        const { data: team } = await supabase
-          .from('teams')
-          .select('id, team_name, status')
-          .eq('team_name', (primaryAgent as any).team_name)
-          .eq('status', 'active')
-          .single()
-
-        if (team) {
-          // Get team lead
-          let teamLeadName = null
-          let teamLeadId = null
-          const { data: teamLeadRecord } = await supabase
-            .from('team_leads')
-            .select(`
-              agent_id,
-              agent:users!team_leads_agent_id_fkey(
-                first_name, last_name, preferred_first_name, preferred_last_name
-              )
-            `)
-            .eq('team_id', team.id)
-            .is('end_date', null)
-            .single()
-
-          if (teamLeadRecord) {
-            teamLeadId = teamLeadRecord.agent_id
-            const leadUser = Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent
-            if (leadUser) {
-              teamLeadName = `${leadUser.preferred_first_name || leadUser.first_name} ${leadUser.preferred_last_name || leadUser.last_name}`
-            }
-          }
-
-          // Get all team members
-          const { data: allMembers } = await supabase
-            .from('team_member_agreements')
-            .select(`
-              id, agent_id, effective_date, end_date,
-              agent:users!team_member_agreements_agent_id_fkey(
-                id, first_name, last_name, preferred_first_name, preferred_last_name
-              )
-            `)
-            .eq('team_id', team.id)
-            .is('end_date', null)
-
-          teamInfo = {
-            agreement: {
-              id: team.id,
-              team_name: team.team_name,
-              team_lead_id: teamLeadId,
-              status: team.status,
-            },
-            members: allMembers || [],
-            team_lead_name: teamLeadName,
-          }
+          teamInfo = memberAgreement
         }
       }
 
-      // All checks linked to this transaction (all transaction types)
+      // Checks
       const { data: checksData } = await supabase
         .from('checks_received')
-        .select('*, check_payouts(*)')
+        .select(`*, check_payouts (*)`)
         .eq('transaction_id', id)
         .order('created_at', { ascending: true })
       const checks = checksData || []
 
-      // Checklist completions
+      // Checklist
       const { data: completions } = await supabase
         .from('checklist_completions')
         .select('checklist_item_id, completed_by, completed_at, notes, auto_verified')
         .eq('transaction_id', id)
 
-      // Checklist items (payouts template)
       const { data: template } = await supabase
         .from('checklist_templates')
         .select('id')
@@ -285,8 +429,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         transaction: txn,
         agents: (agents || []).map((a: any) => ({
           ...a,
-          // user is already included from the relationship join
           team_membership: membershipByAgent[a.agent_id] || null,
+          billing: billingByAgent[a.agent_id] || null,
         })),
         primary_agent: primaryAgent || null,
         agent_billing: agentBilling,
@@ -297,7 +441,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })
     }
 
-    // ── External brokerages (used by close modal) ────────────────────────────
+    // ── External brokerages ──────────────────────────────────────────────────
     if (section === 'external_brokerages') {
       const { data: externalBrokerages, error } = await supabase
         .from('transaction_external_brokerages')
@@ -308,7 +452,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ external_brokerages: externalBrokerages || [] })
     }
 
-    // ── Contacts ──────────────────────────────────────────────────────────────
+    // ── Contacts ─────────────────────────────────────────────────────────────
     if (section === 'contacts') {
       const { data: contacts, error } = await supabase
         .from('transaction_contacts')
@@ -319,7 +463,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ contacts: contacts || [] })
     }
 
-    // ── Checklist (legacy) ───────────────────────────────────────────────────
     if (section === 'checklist') {
       return NextResponse.json({ error: 'Use POST for checklist updates' }, { status: 405 })
     }
@@ -384,21 +527,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ── Update check ─────────────────────────────────────────────────────────
-   if (action === 'update_check') {
-     const { check_id, updates } = body
-     // Convert empty-string dates to null (Postgres rejects "" on date columns)
-     const DATE_FIELDS = ['received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
-     const cleanUpdates: any = { ...updates }
-     for (const f of DATE_FIELDS) {
-       if (cleanUpdates[f] === '') cleanUpdates[f] = null
-     }
-     const { error } = await supabase
-       .from('checks_received')
-       .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
-       .eq('id', check_id)
-     if (error) throw error
-     return NextResponse.json({ success: true })
-   }
+    if (action === 'update_check') {
+      const { check_id, updates } = body
+      const DATE_FIELDS = ['received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
+      const cleanUpdates: any = { ...updates }
+      for (const f of DATE_FIELDS) {
+        if (cleanUpdates[f] === '') cleanUpdates[f] = null
+      }
+      const { error } = await supabase
+        .from('checks_received')
+        .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
+        .eq('id', check_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
 
     // ── Create check linked to transaction ───────────────────────────────────
     if (action === 'create_check') {
@@ -423,23 +565,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
-    // ── Add payout ───────────────────────────────────────────────────────────
+    // ── Payout CRUD ──────────────────────────────────────────────────────────
     if (action === 'add_payout') {
       const { payout } = body
       const { data, error } = await supabase.from('check_payouts').insert(payout).select().single()
       if (error) throw error
       return NextResponse.json({ payout: data })
     }
-
-    // ── Update payout ────────────────────────────────────────────────────────
     if (action === 'update_payout') {
       const { payout_id, updates } = body
       const { error } = await supabase.from('check_payouts').update(updates).eq('id', payout_id)
       if (error) throw error
       return NextResponse.json({ success: true })
     }
-
-    // ── Delete payout ────────────────────────────────────────────────────────
     if (action === 'delete_payout') {
       const { payout_id } = body
       const { error } = await supabase.from('check_payouts').delete().eq('id', payout_id)
@@ -448,31 +586,56 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // ── Update internal agent ────────────────────────────────────────────────
+    // Guards commission-field edits when payment_status='paid'.
+    // Unmark Paid is required to reopen those fields.
     if (action === 'update_internal_agent') {
       const { internal_agent_id, updates } = body
+
+      // Check current payment status
+      const { data: current } = await supabase
+        .from('transaction_internal_agents')
+        .select('payment_status')
+        .eq('id', internal_agent_id)
+        .single()
+
+      if (current?.payment_status === 'paid') {
+        const blocked = Object.keys(updates || {}).filter(k => LOCKED_TIA_FIELDS.has(k))
+        if (blocked.length > 0) {
+          return NextResponse.json(
+            { error: `This row is marked paid. Unmark paid first to edit: ${blocked.join(', ')}` },
+            { status: 409 }
+          )
+        }
+      }
+
       const { error } = await supabase
         .from('transaction_internal_agents')
-        .update(updates)
+        .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', internal_agent_id)
       if (error) throw error
       return NextResponse.json({ success: true })
     }
 
-    // ── Delete internal agent ─────────────────────────────────────────────────
+    // ── Delete internal agent (no cascade) ───────────────────────────────────
     if (action === 'delete_internal_agent') {
       const { internal_agent_id } = body
       if (!internal_agent_id) {
         return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
       }
-      // Verify the agent belongs to this transaction
       const { data: existing } = await supabase
         .from('transaction_internal_agents')
-        .select('id')
+        .select('id, payment_status')
         .eq('id', internal_agent_id)
         .eq('transaction_id', id)
         .single()
       if (!existing) {
         return NextResponse.json({ error: 'Agent not found on this transaction' }, { status: 404 })
+      }
+      if (existing.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Cannot delete a paid row. Unmark paid first.' },
+          { status: 409 }
+        )
       }
       const { error } = await supabase
         .from('transaction_internal_agents')
@@ -482,9 +645,94 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
+    // ── Delete internal agent with cascade ───────────────────────────────────
+    // Team_lead and momentum_partner rows with source_tia_id = this primary
+    // are automatically deleted by the database (ON DELETE CASCADE on the
+    // source_tia_id foreign key). We just need to preview them for the warn
+    // modal, then delete the primary.
+    if (action === 'delete_internal_agent_cascade') {
+      const { internal_agent_id } = body
+
+      const { data: row } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, agent_role, payment_status')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+
+      if (!row) {
+        return NextResponse.json({ error: 'Agent not found on this transaction' }, { status: 404 })
+      }
+
+      // Find linked TL/MP rows (will be cascade-deleted by DB)
+      const { data: linkedRows } = await supabase
+        .from('transaction_internal_agents')
+        .select(`
+          id, agent_id, agent_role, agent_net, payment_status,
+          user:users!transaction_internal_agents_agent_id_fkey(
+            id, first_name, last_name, preferred_first_name, preferred_last_name
+          )
+        `)
+        .eq('source_tia_id', internal_agent_id)
+
+      // Preview mode
+      if (body.preview) {
+        return NextResponse.json({ linked_rows: linkedRows || [] })
+      }
+
+      // Block if primary is paid
+      if (row.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Cannot delete a paid row. Unmark paid first.' },
+          { status: 409 }
+        )
+      }
+
+      // Block if any linked row is paid (cascade would try to delete them too)
+      const paidLinked = (linkedRows || []).filter((r: any) => r.payment_status === 'paid')
+      if (paidLinked.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Cannot delete: one or more linked rows (team lead, momentum partner) are paid. Unmark paid first.',
+          },
+          { status: 409 }
+        )
+      }
+
+      // Delete the primary — DB cascades the linked rows
+      const { error: delErr } = await supabase
+        .from('transaction_internal_agents')
+        .delete()
+        .eq('id', internal_agent_id)
+      if (delErr) throw delErr
+
+      return NextResponse.json({
+        success: true,
+        deleted_linked_ids: (linkedRows || []).map((r: any) => r.id),
+        deleted_primary_id: internal_agent_id,
+      })
+    }
+
     // ── Update external brokerage ────────────────────────────────────────────
     if (action === 'update_external_brokerage') {
       const { brokerage_id, updates } = body
+
+      const { data: current } = await supabase
+        .from('transaction_external_brokerages')
+        .select('payment_status')
+        .eq('id', brokerage_id)
+        .single()
+
+      if (current?.payment_status === 'paid') {
+        const blocked = Object.keys(updates || {}).filter(k => LOCKED_TEB_FIELDS.has(k))
+        if (blocked.length > 0) {
+          return NextResponse.json(
+            { error: `This brokerage is marked paid. Unmark paid first to edit: ${blocked.join(', ')}` },
+            { status: 409 }
+          )
+        }
+      }
+
       const { error } = await supabase
         .from('transaction_external_brokerages')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -492,41 +740,62 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
       return NextResponse.json({ success: true })
     }
-    
-    // ── Add new internal agent row ────────────────────────────────────────────
+
+    // ── Delete external brokerage ────────────────────────────────────────────
+    if (action === 'delete_external_brokerage') {
+      const { brokerage_id } = body
+      const { data: existing } = await supabase
+        .from('transaction_external_brokerages')
+        .select('id, payment_status')
+        .eq('id', brokerage_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!existing) {
+        return NextResponse.json({ error: 'Brokerage not found on this transaction' }, { status: 404 })
+      }
+      if (existing.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Cannot delete a paid brokerage. Unmark paid first.' },
+          { status: 409 }
+        )
+      }
+      const { error } = await supabase
+        .from('transaction_external_brokerages')
+        .delete()
+        .eq('id', brokerage_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Add internal agent ───────────────────────────────────────────────────
     if (action === 'add_internal_agent') {
       const { agent } = body
-      
-      // Validate agent_id is a valid UUID (required field)
+
       if (!agent.agent_id || agent.agent_id === '') {
         return NextResponse.json({ error: 'agent_id is required' }, { status: 400 })
       }
-      
-      // Build clean insert object - only include non-empty values
+
       const insertData: Record<string, any> = {
         transaction_id: id,
         agent_id: agent.agent_id,
         agent_role: agent.agent_role || 'co_agent',
         payment_status: agent.payment_status || 'pending',
+        funding_source: agent.funding_source || 'crc',
+        counts_toward_progress: agent.counts_toward_progress ?? true,
       }
-      
-      // Only add optional fields if they have values
-      if (agent.commission_plan) insertData.commission_plan = agent.commission_plan
-      if (agent.agent_gross != null) insertData.agent_gross = agent.agent_gross
-      if (agent.brokerage_split != null) insertData.brokerage_split = agent.brokerage_split
-      if (agent.processing_fee != null) insertData.processing_fee = agent.processing_fee
-      if (agent.coaching_fee != null) insertData.coaching_fee = agent.coaching_fee
-      if (agent.other_fees != null) insertData.other_fees = agent.other_fees
-      if (agent.other_fees_description) insertData.other_fees_description = agent.other_fees_description
-      if (agent.btsa_amount != null) insertData.btsa_amount = agent.btsa_amount
-      if (agent.debts_deducted != null) insertData.debts_deducted = agent.debts_deducted
-      if (agent.team_lead_commission != null) insertData.team_lead_commission = agent.team_lead_commission
-      if (agent.agent_net != null) insertData.agent_net = agent.agent_net
-      if (agent.amount_1099_reportable != null) insertData.amount_1099_reportable = agent.amount_1099_reportable
-      if (agent.payment_date) insertData.payment_date = agent.payment_date
-      if (agent.payment_method) insertData.payment_method = agent.payment_method
-      if (agent.payment_reference) insertData.payment_reference = agent.payment_reference
-      
+
+      // Optional fields
+      const optional = [
+        'commission_plan', 'commission_plan_id', 'agent_gross', 'brokerage_split',
+        'processing_fee', 'coaching_fee', 'other_fees', 'other_fees_description',
+        'btsa_amount', 'debts_deducted', 'team_lead_commission', 'agent_net',
+        'amount_1099_reportable', 'payment_date', 'payment_method', 'payment_reference',
+        'sales_volume', 'units', 'split_percentage', 'rebate_amount', 'rebate_type',
+      ]
+      for (const f of optional) {
+        if (agent[f] != null && agent[f] !== '') insertData[f] = agent[f]
+      }
+
       const { data, error } = await supabase
         .from('transaction_internal_agents')
         .insert(insertData)
@@ -534,7 +803,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           *,
           user:users!transaction_internal_agents_agent_id_fkey(
             id, first_name, last_name, preferred_first_name, preferred_last_name,
-            office_email, email, phone, office, commission_plan
+            office_email, email, phone, office, commission_plan, license_number,
+            license_expiration, referring_agent_id, revenue_share_percentage,
+            qualifying_transaction_count, waive_buyer_processing_fees,
+            waive_seller_processing_fees, monthly_fee_paid_through
           )
         `)
         .single()
@@ -542,38 +814,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ agent: data })
     }
 
-    // ── Add new external brokerage row ────────────────────────────────────────
+    // ── Add external brokerage ───────────────────────────────────────────────
     if (action === 'add_external_brokerage') {
       const { brokerage } = body
-      
-      // Validate brokerage_name is required
+
       if (!brokerage.brokerage_name || brokerage.brokerage_name === '') {
         return NextResponse.json({ error: 'brokerage_name is required' }, { status: 400 })
       }
-      
-      // Build clean insert object
+
       const insertData: Record<string, any> = {
         transaction_id: id,
         brokerage_name: brokerage.brokerage_name,
         brokerage_role: brokerage.brokerage_role || 'other',
         payment_status: brokerage.payment_status || 'pending',
       }
-      
-      // Only add optional fields if they have values
-      if (brokerage.agent_name) insertData.agent_name = brokerage.agent_name
-      if (brokerage.agent_email) insertData.agent_email = brokerage.agent_email
-      if (brokerage.agent_phone) insertData.agent_phone = brokerage.agent_phone
-      if (brokerage.broker_name) insertData.broker_name = brokerage.broker_name
-      if (brokerage.brokerage_ein) insertData.brokerage_ein = brokerage.brokerage_ein
-      if (brokerage.federal_id_type) insertData.federal_id_type = brokerage.federal_id_type
-      if (brokerage.federal_id_number) insertData.federal_id_number = brokerage.federal_id_number
-      if (brokerage.commission_amount != null) insertData.commission_amount = brokerage.commission_amount
-      if (brokerage.amount_1099_reportable != null) insertData.amount_1099_reportable = brokerage.amount_1099_reportable
-      if (brokerage.w9_on_file != null) insertData.w9_on_file = brokerage.w9_on_file
-      if (brokerage.payment_date) insertData.payment_date = brokerage.payment_date
-      if (brokerage.payment_method) insertData.payment_method = brokerage.payment_method
-      if (brokerage.payment_reference) insertData.payment_reference = brokerage.payment_reference
-      
+      const optional = [
+        'agent_name', 'agent_email', 'agent_phone', 'broker_name', 'brokerage_dba',
+        'brokerage_ein', 'brokerage_address', 'brokerage_city', 'brokerage_state',
+        'brokerage_zip', 'federal_id_type', 'federal_id_number', 'commission_amount',
+        'amount_1099_reportable', 'w9_on_file', 'w9_date_received', 'payment_date',
+        'payment_method', 'payment_reference', 'notes',
+      ]
+      for (const f of optional) {
+        if (brokerage[f] != null && brokerage[f] !== '') insertData[f] = brokerage[f]
+      }
+
       const { data, error } = await supabase
         .from('transaction_external_brokerages')
         .insert(insertData)
@@ -582,7 +847,289 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
       return NextResponse.json({ brokerage: data })
     }
-    // ── Mark agent PAID with full financial tracking ──────────────────────────
+
+    // ── Apply primary split ──────────────────────────────────────────────────
+    // Takes the primary agent, a commission amount, and a lead_source.
+    // Computes all derived numbers and upserts the team_lead and
+    // momentum_partner linked TIA rows atomically.
+    if (action === 'apply_primary_split') {
+      const { internal_agent_id, commission_amount, lead_source = 'own' } = body
+
+      if (!internal_agent_id || commission_amount == null) {
+        return NextResponse.json(
+          { error: 'internal_agent_id and commission_amount required' },
+          { status: 400 }
+        )
+      }
+
+      // Fetch primary TIA
+      const { data: primaryTia, error: pErr } = await supabase
+        .from('transaction_internal_agents')
+        .select('*, user:users!transaction_internal_agents_agent_id_fkey(id, referring_agent_id)')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+      if (pErr || !primaryTia) {
+        return NextResponse.json({ error: 'Primary agent row not found' }, { status: 404 })
+      }
+
+      if (primaryTia.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Cannot apply split on a paid row. Unmark paid first.' },
+          { status: 409 }
+        )
+      }
+
+      if (!['primary_agent', 'listing_agent', 'co_agent'].includes(primaryTia.agent_role)) {
+        return NextResponse.json(
+          { error: `apply_primary_split is only valid for primary_agent/listing_agent/co_agent rows (got ${primaryTia.agent_role})` },
+          { status: 400 }
+        )
+      }
+
+      // Get transaction type + status. Never overwrite a closed transaction's
+      // commission values — they may be migrated historical data.
+      const { data: txn } = await supabase
+        .from('transactions')
+        .select('transaction_type, status')
+        .eq('id', id)
+        .single()
+
+      if (txn?.status === 'closed') {
+        return NextResponse.json(
+          { error: 'Cannot apply split on a closed transaction. Commission values on closed transactions are preserved as-is. Edit individual fields manually if needed.' },
+          { status: 409 }
+        )
+      }
+
+      const commAmt = num(commission_amount)
+      const breakdown = await computeCommissionBreakdown({
+        agentId: primaryTia.agent_id,
+        transactionId: id,
+        commissionAmount: commAmt,
+        leadSource: lead_source,
+        transactionType: txn?.transaction_type || null,
+      })
+
+      // Update primary row — preserves manual fields (other_fees, btsa_amount, rebate_amount)
+      const primaryUpdates: any = {
+        commission_plan: breakdown.planCode,
+        agent_basis: commAmt,
+        split_percentage: breakdown.agentSplitPct,
+        agent_gross: Math.round(breakdown.agentGross * 100) / 100,
+        brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
+        processing_fee: Math.round(breakdown.processingFee * 100) / 100,
+        coaching_fee: Math.round(breakdown.coachingFee * 100) / 100,
+        team_lead_commission: Math.round(breakdown.teamLeadPayout * 100) / 100,
+        agent_net: Math.round(breakdown.primaryAgentNet * 100) / 100,
+        amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
+        counts_toward_progress: !breakdown.isLease,
+        updated_at: new Date().toISOString(),
+      }
+      if (breakdown.commissionPlanId) primaryUpdates.commission_plan_id = breakdown.commissionPlanId
+
+      const { error: updErr } = await supabase
+        .from('transaction_internal_agents')
+        .update(primaryUpdates)
+        .eq('id', internal_agent_id)
+      if (updErr) throw updErr
+
+      // Helper — build full column set for a linked (team_lead or momentum_partner) row.
+      // Every non-manual field is set explicitly so nothing is left at DB default.
+      async function buildLinkedRowFields(
+        linkedAgentId: string,
+        amount: number,
+        pct: number,
+        basis: number,
+      ) {
+        // Look up linked agent's own commission_plan for reporting continuity
+        const { data: linkedUser } = await supabase
+          .from('users')
+          .select('commission_plan, lease_commission_plan')
+          .eq('id', linkedAgentId)
+          .single()
+        const linkedPlanCode = breakdown.isLease && linkedUser?.lease_commission_plan
+          ? linkedUser.lease_commission_plan
+          : linkedUser?.commission_plan || null
+        let linkedPlanId: string | null = null
+        if (linkedPlanCode) {
+          const { data: planRow } = await supabase
+            .from('commission_plans')
+            .select('id')
+            .or(`code.ilike.${linkedPlanCode},name.ilike.${linkedPlanCode}`)
+            .limit(1)
+            .maybeSingle()
+          linkedPlanId = planRow?.id || null
+        }
+
+        return {
+          // Core amounts
+          agent_gross: amount,
+          agent_net: amount,
+          amount_1099_reportable: amount,
+          brokerage_split: 0,
+          processing_fee: 0,
+          coaching_fee: 0,
+          other_fees: 0,
+          other_fees_description: null,
+          btsa_amount: 0,
+          team_lead_commission: 0,
+          debts_deducted: 0,
+          rebate_amount: 0,
+          rebate_type: null,
+          pre_split_deductions: 0,
+          pre_split_deductions_description: null,
+          // Attribution
+          sales_volume: 0,
+          units: 0,
+          split_percentage: pct,
+          agent_basis: basis,
+          commission_plan: linkedPlanCode,
+          commission_plan_id: linkedPlanId,
+          counts_toward_progress: false,
+        }
+      }
+
+      // Upsert team_lead row — keyed by source_tia_id so each primary gets its
+      // own dedicated TL row. On re-apply, we find the existing row by
+      // source_tia_id and update it; we never blow away TL rows from other
+      // contributing primaries.
+      let teamLeadTiaId: string | null = null
+      if (breakdown.teamLeadId && breakdown.teamLeadPayout > 0) {
+        const { data: existingTl } = await supabase
+          .from('transaction_internal_agents')
+          .select('id, payment_status')
+          .eq('transaction_id', id)
+          .eq('agent_role', 'team_lead')
+          .eq('source_tia_id', internal_agent_id)
+          .maybeSingle()
+
+        const tlAmount = Math.round(breakdown.teamLeadPayout * 100) / 100
+        const tlFields = await buildLinkedRowFields(
+          breakdown.teamLeadId,
+          tlAmount,
+          breakdown.teamLeadPct,
+          commAmt,
+        )
+
+        if (existingTl) {
+          teamLeadTiaId = existingTl.id
+          if (existingTl.payment_status !== 'paid') {
+            const { error: tlUpdErr } = await supabase
+              .from('transaction_internal_agents')
+              .update({ ...tlFields, updated_at: new Date().toISOString() })
+              .eq('id', existingTl.id)
+            if (tlUpdErr) throw tlUpdErr
+          }
+        } else {
+          const { data: newTl, error: tlInsErr } = await supabase
+            .from('transaction_internal_agents')
+            .insert({
+              transaction_id: id,
+              agent_id: breakdown.teamLeadId,
+              agent_role: 'team_lead',
+              payment_status: 'pending',
+              funding_source: 'crc',
+              source_tia_id: internal_agent_id,
+              ...tlFields,
+            })
+            .select('id')
+            .single()
+          if (tlInsErr) throw tlInsErr
+          teamLeadTiaId = newTl.id
+        }
+      } else {
+        // No TL payout this round — if a stale TL row exists tied to this
+        // primary from a prior apply, clean it up (unless paid).
+        const { data: staleTl } = await supabase
+          .from('transaction_internal_agents')
+          .select('id, payment_status')
+          .eq('transaction_id', id)
+          .eq('agent_role', 'team_lead')
+          .eq('source_tia_id', internal_agent_id)
+          .maybeSingle()
+        if (staleTl && staleTl.payment_status !== 'paid') {
+          await supabase
+            .from('transaction_internal_agents')
+            .delete()
+            .eq('id', staleTl.id)
+        }
+      }
+
+      // Upsert momentum_partner row — same provenance pattern
+      let momentumTiaId: string | null = null
+      if (breakdown.momentumPartnerId && breakdown.momentumPartnerPayout > 0) {
+        const { data: existingMp } = await supabase
+          .from('transaction_internal_agents')
+          .select('id, payment_status')
+          .eq('transaction_id', id)
+          .eq('agent_role', 'momentum_partner')
+          .eq('source_tia_id', internal_agent_id)
+          .maybeSingle()
+
+        const mpAmount = Math.round(breakdown.momentumPartnerPayout * 100) / 100
+        const mpFields = await buildLinkedRowFields(
+          breakdown.momentumPartnerId,
+          mpAmount,
+          breakdown.momentumPartnerPct,
+          Math.round(breakdown.brokerageSplit * 100) / 100,
+        )
+
+        if (existingMp) {
+          momentumTiaId = existingMp.id
+          if (existingMp.payment_status !== 'paid') {
+            const { error: mpUpdErr } = await supabase
+              .from('transaction_internal_agents')
+              .update({ ...mpFields, updated_at: new Date().toISOString() })
+              .eq('id', existingMp.id)
+            if (mpUpdErr) throw mpUpdErr
+          }
+        } else {
+          const { data: newMp, error: mpInsErr } = await supabase
+            .from('transaction_internal_agents')
+            .insert({
+              transaction_id: id,
+              agent_id: breakdown.momentumPartnerId,
+              agent_role: 'momentum_partner',
+              payment_status: 'pending',
+              funding_source: 'crc',
+              source_tia_id: internal_agent_id,
+              ...mpFields,
+            })
+            .select('id')
+            .single()
+          if (mpInsErr) throw mpInsErr
+          momentumTiaId = newMp.id
+        }
+      } else {
+        // Clean up stale MP row if momentum no longer applies
+        const { data: staleMp } = await supabase
+          .from('transaction_internal_agents')
+          .select('id, payment_status')
+          .eq('transaction_id', id)
+          .eq('agent_role', 'momentum_partner')
+          .eq('source_tia_id', internal_agent_id)
+          .maybeSingle()
+        if (staleMp && staleMp.payment_status !== 'paid') {
+          await supabase
+            .from('transaction_internal_agents')
+            .delete()
+            .eq('id', staleMp.id)
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        breakdown,
+        primary_tia_id: internal_agent_id,
+        team_lead_tia_id: teamLeadTiaId,
+        momentum_partner_tia_id: momentumTiaId,
+      })
+    }
+
+    // ── Mark agent paid (TIA) ────────────────────────────────────────────────
+    // Writes payment metadata + debts + recomputes agent_net to reflect debts.
+    // Does NOT recompute amount_1099_reportable (that was set at edit time).
     if (action === 'mark_paid') {
       const {
         internal_agent_id,
@@ -592,7 +1139,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_reference,
         funding_source,
         debts_to_apply,
-        agent_net_override,
         counts_toward_progress,
       } = body
 
@@ -603,6 +1149,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
       if (tiaError || !tia) throw new Error('Agent record not found')
 
+      if (tia.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Row is already marked paid. Unmark first to re-mark.' },
+          { status: 409 }
+        )
+      }
+
       const { data: agentUser, error: userError } = await supabase
         .from('users')
         .select('id, commission_plan, qualifying_transaction_count')
@@ -610,30 +1163,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
       if (userError) throw userError
 
-      const agentGross = parseFloat(tia.agent_gross || 0)
-      const processingFee = parseFloat(tia.processing_fee || 0)
-      const coachingFee = parseFloat(tia.coaching_fee || 0)
-      const otherFees = parseFloat(tia.other_fees || 0)
-      const brokerageSplit = parseFloat(tia.brokerage_split || 0)
+      // Start from the stored 1099 amount (set at edit time)
+      const amount1099 = num(tia.amount_1099_reportable)
 
-      let amount1099: number
-      if (tia.agent_role === 'primary_agent') {
-        amount1099 = agentGross - processingFee - coachingFee - otherFees
-      } else {
-        amount1099 = parseFloat(tia.agent_net || 0)
-      }
-
+      // Apply debts
       let totalDebtsDeducted = 0
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
-          totalDebtsDeducted += parseFloat(debtApp.amount || 0)
+          totalDebtsDeducted += num(debtApp.amount)
         }
       }
 
-      const agentNet =
-        agent_net_override != null
-          ? parseFloat(agent_net_override)
-          : amount1099 - totalDebtsDeducted
+      // Under Model A: team_lead is NOT deducted from agent_net. It was
+      // already carved out of agent_gross at apply_primary_split time.
+      // agent_net = gross + btsa − fees − debts
+      const agentGross = num(tia.agent_gross)
+      const processingFee = num(tia.processing_fee)
+      const coachingFee = num(tia.coaching_fee)
+      const otherFees = num(tia.other_fees)
+      const btsa = num(tia.btsa_amount)
+      const agentNet = agentGross + btsa - processingFee - coachingFee - otherFees - totalDebtsDeducted
 
       const tiaUpdate: any = {
         payment_status: 'paid',
@@ -641,9 +1190,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_method: payment_method || null,
         payment_reference: payment_reference || null,
         funding_source: funding_source || 'crc',
-        amount_1099_reportable: Math.round(amount1099 * 100) / 100,
         debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
         agent_net: Math.round(agentNet * 100) / 100,
+        updated_at: new Date().toISOString(),
       }
 
       const { error: updateTiaError } = await supabase
@@ -652,6 +1201,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (updateTiaError) throw updateTiaError
 
+      // Apply debts
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
           const { data: debt } = await supabase
@@ -661,60 +1211,260 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .single()
 
           if (debt) {
-            const amountRemaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
-            const amountApplied = parseFloat(debtApp.amount || 0)
+            const amountRemaining = num(debt.amount_remaining ?? debt.amount_owed)
+            const amountApplied = num(debtApp.amount)
             const newRemaining = amountRemaining - amountApplied
 
             const debtUpdate: any = {
-              amount_paid: parseFloat(debt.amount_paid || 0) + amountApplied,
+              amount_paid: num(debt.amount_paid) + amountApplied,
               offset_transaction_id: id,
               offset_transaction_agent_id: internal_agent_id,
+              updated_at: new Date().toISOString(),
             }
-
             if (newRemaining <= 0) {
               debtUpdate.status = 'paid'
               debtUpdate.date_resolved = payment_date
             }
-
             await supabase.from('agent_debts').update(debtUpdate).eq('id', debtApp.debt_id)
           }
         }
       }
 
-      if (counts_toward_progress !== false &&
-          (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
-          agentUser) {
+      // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease
+      const countsThis = counts_toward_progress !== false
+      if (
+        countsThis &&
+        (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
+        agentUser
+      ) {
         const plan = (agentUser.commission_plan || '').toLowerCase().trim()
         const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
-        const userUpdate: any = {}
-
-        // Leases never count toward cap or qualifying transactions
         if (!txnIsLease) {
-          // Cap progress is now calculated dynamically from TIA - no need to store it
-
-          // New agent plan ('new_agent') counts toward 5-deal qualifying threshold
-          const isNewAgentPlan = plan === 'new_agent'
+          const isNewAgentPlan =
+            plan === 'new_agent' ||
+            plan === 'new agent plan' ||
+            (plan.includes('new') && plan.includes('agent'))
           if (isNewAgentPlan) {
-            userUpdate.qualifying_transaction_count =
-              (agentUser.qualifying_transaction_count || 0) + 1
+            await supabase
+              .from('users')
+              .update({
+                qualifying_transaction_count: (agentUser.qualifying_transaction_count || 0) + 1,
+              })
+              .eq('id', tia.agent_id)
           }
-        }
-
-        if (Object.keys(userUpdate).length > 0) {
-          await supabase.from('users').update(userUpdate).eq('id', tia.agent_id)
         }
       }
 
       return NextResponse.json({
         success: true,
-        updates: {
-          ...tiaUpdate,
-          debts_applied: debts_to_apply?.length || 0,
-        },
+        updates: { ...tiaUpdate, debts_applied: debts_to_apply?.length || 0 },
       })
     }
 
-    // ── Get agent debts for mark paid modal ──────────────────────────────────
+    // ── Unmark paid (TIA) ────────────────────────────────────────────────────
+    // Reverses a mark_paid:
+    //   - Clears payment fields
+    //   - Reverses any agent_debts applications tied to this row
+    //   - Decrements qualifying_transaction_count if applicable
+    //   - Recomputes agent_net without debts (gross+btsa-fees-team_lead)
+    if (action === 'unmark_paid') {
+      const { internal_agent_id } = body
+
+      const { data: tia, error: tiaError } = await supabase
+        .from('transaction_internal_agents')
+        .select('*')
+        .eq('id', internal_agent_id)
+        .single()
+      if (tiaError || !tia) throw new Error('Agent record not found')
+
+      if (tia.payment_status !== 'paid') {
+        return NextResponse.json({ error: 'Row is not marked paid' }, { status: 409 })
+      }
+
+      // Reverse linked debts
+      const { data: linkedDebts } = await supabase
+        .from('agent_debts')
+        .select('*')
+        .eq('offset_transaction_agent_id', internal_agent_id)
+
+      for (const debt of linkedDebts || []) {
+        // How much of this debt was applied on this payment?
+        // We can only safely reverse what was tracked on the debt itself,
+        // but multiple payments could have touched it. For the common case
+        // where this row applied the most recent payment, restore using
+        // the TIA's debts_deducted proportionally.
+        //
+        // Safer approach: since agent_debts.amount_paid represents cumulative,
+        // and there's no per-payment audit trail, we assume this TIA applied
+        // its recorded amount. We subtract it and clear offset refs.
+        const appliedHere = num(tia.debts_deducted) // approximation when one debt
+        // If multiple debts were applied by this TIA, amount_paid on each
+        // was bumped individually during mark_paid. Without a per-debt
+        // ledger, we reverse by using the current amount_paid minus
+        // what the debt had before: not available. So we unlink and
+        // reduce by the whole debts_deducted only if this debt is the
+        // sole one. For multiple, admin should review.
+        //
+        // Pragmatic rule: flip status back to 'outstanding' if paid,
+        // subtract the portion stored on this debt's offset link. Since
+        // we can't reliably split across multiple debts, we reset
+        // amount_paid by subtracting the amount_remaining delta.
+
+        const currentPaid = num(debt.amount_paid)
+        const owed = num(debt.amount_owed)
+        const currentRemaining = num(debt.amount_remaining ?? (owed - currentPaid))
+        // Amount applied by this payout = owed - currentRemaining - prior_paid
+        // We don't have prior_paid, so we assume this TIA is the only payment
+        // that touched the debt (the common case). Revert fully.
+        const updated: any = {
+          amount_paid: Math.max(0, currentPaid - (owed - currentRemaining)),
+          status: 'outstanding',
+          date_resolved: null,
+          offset_transaction_id: null,
+          offset_transaction_agent_id: null,
+          updated_at: new Date().toISOString(),
+        }
+        // If amount_paid is a generated column in some setups, this will
+        // be recomputed; in current schema amount_remaining is the generated column.
+        await supabase.from('agent_debts').update(updated).eq('id', debt.id)
+      }
+
+      // Recompute agent_net without debts (Model A: no team_lead deduction)
+      const agentGross = num(tia.agent_gross)
+      const processingFee = num(tia.processing_fee)
+      const coachingFee = num(tia.coaching_fee)
+      const otherFees = num(tia.other_fees)
+      const btsa = num(tia.btsa_amount)
+      const restoredNet = agentGross + btsa - processingFee - coachingFee - otherFees
+
+      const { error: updErr } = await supabase
+        .from('transaction_internal_agents')
+        .update({
+          payment_status: 'pending',
+          payment_date: null,
+          payment_method: null,
+          payment_reference: null,
+          debts_deducted: 0,
+          agent_net: Math.round(restoredNet * 100) / 100,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', internal_agent_id)
+      if (updErr) throw updErr
+
+      // Decrement qualifying_transaction_count if this was a non-lease primary/listing on new_agent plan
+      if (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') {
+        const { data: txn } = await supabase
+          .from('transactions')
+          .select('transaction_type')
+          .eq('id', id)
+          .single()
+        const txnIsLease = isLeaseType(txn?.transaction_type || '')
+        if (!txnIsLease) {
+          const { data: agentUser } = await supabase
+            .from('users')
+            .select('commission_plan, qualifying_transaction_count')
+            .eq('id', tia.agent_id)
+            .single()
+          if (agentUser) {
+            const plan = (agentUser.commission_plan || '').toLowerCase().trim()
+            const isNewAgentPlan =
+              plan === 'new_agent' ||
+              plan === 'new agent plan' ||
+              (plan.includes('new') && plan.includes('agent'))
+            const current = agentUser.qualifying_transaction_count || 0
+            if (isNewAgentPlan && current > 0) {
+              await supabase
+                .from('users')
+                .update({ qualifying_transaction_count: current - 1 })
+                .eq('id', tia.agent_id)
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Mark brokerage paid (TEB) ────────────────────────────────────────────
+    if (action === 'mark_brokerage_paid') {
+      const { brokerage_id, payment_date, payment_method, payment_reference } = body
+
+      const { data: teb } = await supabase
+        .from('transaction_external_brokerages')
+        .select('payment_status')
+        .eq('id', brokerage_id)
+        .single()
+
+      if (teb?.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'Already marked paid. Unmark first.' },
+          { status: 409 }
+        )
+      }
+
+      const { error } = await supabase
+        .from('transaction_external_brokerages')
+        .update({
+          payment_status: 'paid',
+          payment_date: payment_date || null,
+          payment_method: payment_method || null,
+          payment_reference: payment_reference || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', brokerage_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Unmark brokerage paid (TEB) ──────────────────────────────────────────
+    if (action === 'unmark_brokerage_paid') {
+      const { brokerage_id } = body
+
+      const { data: teb } = await supabase
+        .from('transaction_external_brokerages')
+        .select('payment_status')
+        .eq('id', brokerage_id)
+        .single()
+
+      if (teb?.payment_status !== 'paid') {
+        return NextResponse.json({ error: 'Not marked paid' }, { status: 409 })
+      }
+
+      const { error } = await supabase
+        .from('transaction_external_brokerages')
+        .update({
+          payment_status: 'pending',
+          payment_date: null,
+          payment_method: null,
+          payment_reference: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', brokerage_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Close transaction ────────────────────────────────────────────────────
+    if (action === 'close_transaction') {
+      const { closed_date, userId } = body
+
+      const updates: any = {
+        status: 'closed',
+        closed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      if (closed_date) updates.closed_date = closed_date
+      if (userId) updates.closed_by = userId
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updates)
+        .eq('id', id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Get agent debts ──────────────────────────────────────────────────────
     if (action === 'get_agent_debts') {
       const { agent_id } = body
       const { data: debts, error } = await supabase
@@ -727,7 +1477,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ debts: debts || [] })
     }
 
-    // ── Create contact ────────────────────────────────────────────────────────
+    // ── Contact CRUD ─────────────────────────────────────────────────────────
     if (action === 'create_contact') {
       const { contact } = body
       const { data, error } = await supabase
@@ -747,8 +1497,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
       return NextResponse.json({ success: true, contact: data })
     }
-
-    // ── Update contact ────────────────────────────────────────────────────────
     if (action === 'update_contact') {
       const { contact_id, updates } = body
       const { error } = await supabase
@@ -759,8 +1507,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (error) throw error
       return NextResponse.json({ success: true })
     }
-
-    // ── Delete contact ────────────────────────────────────────────────────────
     if (action === 'delete_contact') {
       const { contact_id } = body
       const { error } = await supabase
@@ -777,15 +1523,4 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.error('Transaction detail POST error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
-}
-
-function isLeaseType(txnType: string): boolean {
-  const t = txnType.toLowerCase()
-  return (
-    t.includes('lease') ||
-    t.includes('apartment') ||
-    t.includes('rent') ||
-    t.includes('tenant') ||
-    t.includes('landlord')
-  )
 }

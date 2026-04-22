@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
+import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,16 +27,7 @@ const fmtDate = (d: string | null | undefined): string => {
 }
 
 const formatType = (type: string | null): string => {
-  if (!type) return '--'
-  const typeMap: Record<string, string> = {
-    'buyer_v2': 'Buyer',
-    'seller_v2': 'Seller',
-    'tenant_apt_v2': 'Tenant',
-    'tenant_other_v2': 'Tenant',
-    'landlord_v2': 'Landlord',
-    'new_construction_buyer_v2': 'Buyer (New Construction)',
-  }
-  return typeMap[type] || type.replace(/_v2$/, '').replace(/_/g, ' ')
+  return getTransactionTypeLabel(type)
 }
 
 const isCapPlan = (plan: string | null): boolean => {

@@ -6,6 +6,7 @@ import { Search, Plus } from 'lucide-react'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
 import { STATUS_GROUPS } from '@/lib/transactions/constants'
+import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 export default function TransactionsPage() {
   const router = useRouter()
@@ -61,22 +62,7 @@ export default function TransactionsPage() {
   }
 
   const formatTransactionType = (type: string | null) => {
-    if (!type) return ''
-    const typeMap: Record<string, string> = {
-      'buyer_v2': 'Buyer',
-      'seller_v2': 'Seller',
-      'tenant_apt_v2': 'Tenant (apartment)',
-      'tenant_other_v2': 'Tenant (not apartment)',
-      'tenant_simplyhome_v2': 'Tenant (SimplyHome Rental)',
-      'tenant_commercial_v2': 'Tenant (commercial lease)',
-      'landlord_v2': 'Landlord',
-      'new_construction_buyer_v2': 'New Construction Buyer',
-      'land_lot_buyer_v2': 'Land/Lot Buyer',
-      'commercial_buyer_v2': 'Commercial Buyer',
-      'land_lot_seller_v2': 'Land/Lot Seller',
-      'referred_out_v2': 'Referred Out',
-    }
-    return typeMap[type] || type
+    return getTransactionTypeLabel(type)
   }
 
   const filtered = useMemo(() => {
