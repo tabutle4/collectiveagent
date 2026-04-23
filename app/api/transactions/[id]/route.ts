@@ -29,8 +29,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
-              qualifying_transaction_count, waive_buyer_processing_fees,
-              waive_seller_processing_fees, special_commission_notes, headshot_url
+              qualifying_transaction_count, qualifying_transaction_target,
+              waive_buyer_processing_fees,
+              waive_seller_processing_fees, waive_coaching_fee,
+              cap_amount_override, post_cap_split_override,
+              special_commission_notes, headshot_url
             )
           `).eq('transaction_id', id),
           supabase
@@ -503,7 +506,10 @@ if (action === 'add_external_brokerage') {
           // Keeping this commented for reference:
           // const isCapPlan = plan.includes('cap') && !plan.includes('no cap')
 
-          // New agent plan ('new_agent') counts toward 5-deal qualifying threshold
+          // New agent plan ('new_agent') counts toward qualifying threshold.
+          // The threshold amount is per-agent (users.qualifying_transaction_target,
+          // default 5). We just increment the counter here; UI/statements render
+          // the threshold against the per-agent target.
           const isNewAgentPlan = plan === 'new_agent'
           if (isNewAgentPlan) {
             userUpdate.qualifying_transaction_count =

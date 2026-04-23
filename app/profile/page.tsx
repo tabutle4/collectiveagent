@@ -110,6 +110,9 @@ export default function ProfilePage({
     full_nav_access: false,
     is_licensed_agent: true,
     special_commission_notes: '',
+    qualifying_transaction_target: 5,
+    cap_amount_override: '',
+    post_cap_split_override: '',
     referring_agent: '',
     referring_agent_id: '',
   })
@@ -127,6 +130,7 @@ export default function ProfilePage({
     monthly_fee_waived: false,
     waive_buyer_processing_fees: false,
     waive_seller_processing_fees: false,
+    waive_coaching_fee: false,
     admin_notes: '',
     accepted_trec: false,
     w9_completed: false,
@@ -320,6 +324,13 @@ export default function ProfilePage({
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
         special_commission_notes: freshUserData.special_commission_notes || '',
+        qualifying_transaction_target:
+          freshUserData.qualifying_transaction_target ?? 5,
+        cap_amount_override:
+          freshUserData.cap_amount_override != null
+            ? String(freshUserData.cap_amount_override)
+            : '',
+        post_cap_split_override: freshUserData.post_cap_split_override || '',
         referring_agent: freshUserData.referring_agent || '',
         referring_agent_id: freshUserData.referring_agent_id || '',
       })
@@ -339,6 +350,7 @@ export default function ProfilePage({
         monthly_fee_waived: freshUserData.monthly_fee_waived || false,
         waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
         waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
+        waive_coaching_fee: freshUserData.waive_coaching_fee || false,
         admin_notes: freshUserData.admin_notes || '',
         accepted_trec: freshUserData.accepted_trec || false,
         w9_completed: freshUserData.w9_completed || false,
@@ -456,6 +468,23 @@ export default function ProfilePage({
       if (sanitized.referring_agent_id === '') sanitized.referring_agent_id = null as any
       if (sanitized.referring_agent === '') sanitized.referring_agent = null as any
       if (sanitized.status === '') sanitized.status = null as any
+      // Qualifying target: coerce to integer, default 5 if empty. Never null.
+      const qtRaw = (sanitized as any).qualifying_transaction_target
+      const qtNum = qtRaw === '' || qtRaw == null ? 5 : parseInt(String(qtRaw), 10)
+      ;(sanitized as any).qualifying_transaction_target =
+        Number.isFinite(qtNum) && qtNum > 0 ? qtNum : 5
+      // Cap amount override: empty string = null (use plan default)
+      const capRaw = (sanitized as any).cap_amount_override
+      if (capRaw === '' || capRaw == null) {
+        ;(sanitized as any).cap_amount_override = null
+      } else {
+        const capNum = parseFloat(String(capRaw))
+        ;(sanitized as any).cap_amount_override = Number.isFinite(capNum) ? capNum : null
+      }
+      // Post-cap split override: empty string = null (use plan default)
+      if ((sanitized as any).post_cap_split_override === '') {
+        ;(sanitized as any).post_cap_split_override = null
+      }
       // Convert division string back to array for text[] column
       sanitized.division = sanitized.division
         ? (sanitized.division as string).split('|').map((d: string) => d.trim()).filter(Boolean) as any
@@ -521,6 +550,7 @@ export default function ProfilePage({
             monthly_fee_waived: billingForm.monthly_fee_waived,
             waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
             waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
+            waive_coaching_fee: billingForm.waive_coaching_fee,
             admin_notes: billingForm.admin_notes,
             accepted_trec: billingForm.accepted_trec,
             w9_completed: billingForm.w9_completed,
@@ -1258,6 +1288,74 @@ export default function ProfilePage({
                 </div>
 
                 <div className="pt-4 border-t border-luxury-gray-5/30">
+                  <h3 className="text-sm font-medium text-luxury-gray-1 mb-3">Custom Terms</h3>
+                  <p className="text-xs text-luxury-gray-3 mb-4">
+                    Override standard commission plan terms for this agent. Leave at defaults to use standard terms.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <label className="text-xs text-luxury-gray-2 block mb-1.5">
+                        New Agent Plan Qualifying Deals
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={realEstateForm.qualifying_transaction_target}
+                        onChange={e =>
+                          handleRealEstateChange(
+                            'qualifying_transaction_target',
+                            e.target.value === '' ? '' : parseInt(e.target.value, 10)
+                          )
+                        }
+                        placeholder="5"
+                        className="input-luxury"
+                      />
+                      <p className="text-xs text-luxury-gray-3 mt-1">
+                        Deals on New Agent Plan before graduating. Standard: 5.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-luxury-gray-2 block mb-1.5">
+                        Cap Amount Override
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={realEstateForm.cap_amount_override}
+                        onChange={e =>
+                          handleRealEstateChange('cap_amount_override', e.target.value)
+                        }
+                        placeholder="18000"
+                        className="input-luxury"
+                      />
+                      <p className="text-xs text-luxury-gray-3 mt-1">
+                        Dollar cap. Leave empty to use standard $18,000.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-luxury-gray-2 block mb-1.5">
+                        Post-Cap Split Override
+                      </label>
+                      <input
+                        type="text"
+                        value={realEstateForm.post_cap_split_override}
+                        onChange={e =>
+                          handleRealEstateChange('post_cap_split_override', e.target.value)
+                        }
+                        placeholder="97/3"
+                        className="input-luxury"
+                      />
+                      <p className="text-xs text-luxury-gray-3 mt-1">
+                        Format: agent/agency. Leave empty to use standard 97/3.
+                      </p>
+                    </div>
+                  </div>
+
                   <label className="text-sm font-medium text-luxury-gray-1 block mb-2">Special Commission Notes</label>
                   <textarea
                     value={realEstateForm.special_commission_notes}
@@ -1724,6 +1822,27 @@ export default function ProfilePage({
                       />
                     </button>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Coaching Fee Waived</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        New Agent coaching/training fee will not be deducted on any transaction
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          waive_coaching_fee: !prev.waive_coaching_fee,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.waive_coaching_fee ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.waive_coaching_fee ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
                 </div>
                 <div className="pt-4 border-t border-luxury-gray-5/30">
                     <label className="text-sm font-medium text-luxury-gray-1 block mb-2">
@@ -1821,6 +1940,36 @@ export default function ProfilePage({
                       <p className="text-xs text-luxury-gray-3 mb-1">Seller Processing Fees</p>
                       <p className="text-sm font-medium text-luxury-gray-1">
                         {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Coaching Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_coaching_fee ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Coaching Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_coaching_fee ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Coaching Fees</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_coaching_fee ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Coaching Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_coaching_fee ? 'Waived' : 'Standard'}
+                      </p>
+                    </div>
+                    <div className="inner-card">
+                      <p className="text-xs text-luxury-gray-3 mb-1">Coaching Fee</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">
+                        {user.waive_coaching_fee ? 'Waived' : 'Standard'}
                       </p>
                     </div>
                     {user.admin_notes && (

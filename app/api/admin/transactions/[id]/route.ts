@@ -102,7 +102,8 @@ async function computeCommissionBreakdown(args: {
     .select(`
       id, commission_plan, lease_commission_plan,
       referring_agent_id, revenue_share_percentage,
-      waive_buyer_processing_fees, waive_seller_processing_fees
+      waive_buyer_processing_fees, waive_seller_processing_fees,
+      waive_coaching_fee
     `)
     .eq('id', agentId)
     .single()
@@ -168,7 +169,12 @@ async function computeCommissionBreakdown(args: {
   let firmSplitPct = commissionPlan?.firm_split_percentage ?? 15
   let teamLeadPct = 0
   let onTeamWithSplit = false
-  const coachingFee = num(commissionPlan?.coaching_fee_amount)
+  // Coaching fee comes from the commission plan, but can be waived per-agent.
+  // When agent.waive_coaching_fee is true, force the fee to 0 regardless of
+  // the plan default. Used for custom arrangements (e.g., Glenn Amakwe).
+  const coachingFee = agent.waive_coaching_fee === true
+    ? 0
+    : num(commissionPlan?.coaching_fee_amount)
 
   // If on a team AND a matching team split exists, OVERRIDE with team splits.
   // The team split determines all three percentages (agent/TL/firm).
@@ -505,8 +511,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
-              qualifying_transaction_count, waive_buyer_processing_fees,
-              waive_seller_processing_fees, special_commission_notes, headshot_url,
+              qualifying_transaction_count, qualifying_transaction_target,
+              waive_buyer_processing_fees,
+              waive_seller_processing_fees, waive_coaching_fee,
+              cap_amount_override, post_cap_split_override,
+              special_commission_notes, headshot_url,
               monthly_fee_paid_through
             )
           `).eq('transaction_id', id),
@@ -1096,8 +1105,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             id, first_name, last_name, preferred_first_name, preferred_last_name,
             office_email, email, phone, office, commission_plan, license_number,
             license_expiration, referring_agent_id, revenue_share_percentage,
-            qualifying_transaction_count, waive_buyer_processing_fees,
-            waive_seller_processing_fees, monthly_fee_paid_through
+            qualifying_transaction_count, qualifying_transaction_target,
+            waive_buyer_processing_fees,
+            waive_seller_processing_fees, waive_coaching_fee,
+            cap_amount_override, post_cap_split_override,
+            monthly_fee_paid_through
           )
         `)
         .single()
@@ -1457,7 +1469,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const { data: agentUser, error: userError } = await supabase
         .from('users')
-        .select('id, commission_plan, qualifying_transaction_count')
+        .select('id, commission_plan, qualifying_transaction_count, qualifying_transaction_target')
         .eq('id', tia.agent_id)
         .single()
       if (userError) throw userError

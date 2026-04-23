@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateAgreementPDF } from '@/lib/documents/generate-pdf'
-import { getICAContent } from '@/lib/documents/ica-content'
+import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import {
   getCommissionPlanContent,
   getCommissionPlanKey,
+  extractOverridesFromUser,
 } from '@/lib/documents/commission-plan-content'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip'
+        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override'
       )
       .eq('campaign_token', token)
       .single()
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
           effectiveDate,
           mailingAddress: mailingParts,
           email: prospect.email,
+          overrides: extractICAOverridesFromUser(prospect),
         })
       }
       fileName = `ICA_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
@@ -112,6 +114,7 @@ export async function POST(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        overrides: extractOverridesFromUser(prospect),
       })
       fileName = `Commission_Plan_Agreement_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`
     } else {

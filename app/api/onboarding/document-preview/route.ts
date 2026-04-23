@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getICAContent } from '@/lib/documents/ica-content'
+import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
-import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
+import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('first_name, last_name, email, commission_plan, mls_choice, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip')
+      .select('first_name, last_name, email, commission_plan, mls_choice, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override')
       .eq('campaign_token', token)
       .single()
 
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
           effectiveDate,
           mailingAddress,
           email: prospect.email,
+          overrides: extractICAOverridesFromUser(prospect),
         })
       }
     } else if (documentType === 'commission_plan') {
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        overrides: extractOverridesFromUser(prospect),
       })
     } else if (documentType === 'policy_manual') {
       content = getPolicyAcknowledgmentContent({ agentName, effectiveDate })

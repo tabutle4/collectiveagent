@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { generateAgreementPDF, AuditTrailEntry } from '@/lib/documents/generate-pdf'
-import { getICAContent } from '@/lib/documents/ica-content'
+import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
-import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
+import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
 import { uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status, payload_payee_id'
+        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status, payload_payee_id, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override'
       )
       .eq('id', userId)
       .single()
@@ -170,12 +170,18 @@ export async function POST(request: NextRequest) {
             effectiveDate,
             mailingAddress: mailingParts,
             email: agent.email,
+            overrides: extractICAOverridesFromUser(agent),
           })
           fileName = `ICA_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
         }
       } else {
         const planKey = getCommissionPlanKey(agent.commission_plan || '')
-        pdfContent = getCommissionPlanContent({ agentName, effectiveDate, plan: planKey })
+        pdfContent = getCommissionPlanContent({
+          agentName,
+          effectiveDate,
+          plan: planKey,
+          overrides: extractOverridesFromUser(agent),
+        })
         fileName = `Commission_Plan_Agreement_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
       }
 

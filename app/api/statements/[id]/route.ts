@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
-import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,7 +26,16 @@ const fmtDate = (d: string | null | undefined): string => {
 }
 
 const formatType = (type: string | null): string => {
-  return getTransactionTypeLabel(type)
+  if (!type) return '--'
+  const typeMap: Record<string, string> = {
+    'buyer_v2': 'Buyer',
+    'seller_v2': 'Seller',
+    'tenant_apt_v2': 'Tenant',
+    'tenant_other_v2': 'Tenant',
+    'landlord_v2': 'Landlord',
+    'new_construction_buyer_v2': 'Buyer (New Construction)',
+  }
+  return typeMap[type] || type.replace(/_v2$/, '').replace(/_/g, ' ')
 }
 
 const isCapPlan = (plan: string | null): boolean => {
@@ -63,7 +71,7 @@ export async function GET(
         transaction:transactions(*),
         agent:users(
           id, first_name, last_name, preferred_first_name, preferred_last_name,
-          commission_plan, office, qualifying_transaction_count
+          commission_plan, office, qualifying_transaction_count, qualifying_transaction_target
         )
       `)
       .eq('id', internalAgentId)
@@ -132,6 +140,7 @@ export async function GET(
     const capProgress = calculatedCapProgress
     const capAmount = 18000
     const qualifyingCount = agent?.qualifying_transaction_count || 0
+    const qualifyingTarget = agent?.qualifying_transaction_target ?? 5
 
     const agentName = agent
       ? `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
@@ -189,6 +198,7 @@ export async function GET(
       cap_percentage: Math.min(100, Math.round((capProgress / capAmount) * 100)),
       show_new_agent_progress: showNewAgentProgress,
       qualifying_count: qualifyingCount,
+      qualifying_target: qualifyingTarget,
     })
 
     if (format === 'pdf') {
@@ -226,10 +236,10 @@ function generateStatementHTML(data: Record<string, any>): string {
   <div style="background: #f9f7f4; border: 1px solid #e5ddd3; border-radius: 6px; padding: 12px 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
     <div>
       <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a7a60; margin-bottom: 2px;">New Agent Plan progress</div>
-      <div style="font-size: 13px; color: #333;">After 5 qualifying sales, you'll upgrade to the <strong>85/15 plan</strong></div>
+      <div style="font-size: 13px; color: #333;">After ${data.qualifying_target} qualifying sales, you'll upgrade to the <strong>85/15 plan</strong></div>
     </div>
     <div style="text-align: right;">
-      <div style="font-size: 24px; font-weight: 600; color: #333;">${data.qualifying_count} <span style="font-size: 14px; font-weight: 400; color: #666;">of 5</span></div>
+      <div style="font-size: 24px; font-weight: 600; color: #333;">${data.qualifying_count} <span style="font-size: 14px; font-weight: 400; color: #666;">of ${data.qualifying_target}</span></div>
       <div style="font-size: 9px; color: #888;">qualifying sales</div>
     </div>
   </div>` : ''

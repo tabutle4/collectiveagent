@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
-import { getICAContent } from '@/lib/documents/ica-content'
+import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-content'
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
-import { getCommissionPlanContent, getCommissionPlanKey } from '@/lib/documents/commission-plan-content'
+import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, preferred_first_name, preferred_last_name, email, commission_plan, mls_choice, onboarding_fee_paid, onboarding_fee_paid_date, ica_signed_at, commission_plan_agreement_signed_at, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, onedrive_folder_url'
+        'id, first_name, last_name, preferred_first_name, preferred_last_name, email, commission_plan, mls_choice, onboarding_fee_paid, onboarding_fee_paid_date, ica_signed_at, commission_plan_agreement_signed_at, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, onedrive_folder_url, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override'
       )
       .eq('id', userId)
       .single()
@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
         effectiveDate,
         mailingAddress,
         email: agent.email,
+        overrides: extractICAOverridesFromUser(agent),
       })
     }
 
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        overrides: extractOverridesFromUser(agent),
       })
     }
 

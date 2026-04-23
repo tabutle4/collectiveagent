@@ -42,6 +42,7 @@ interface SalesGoalWidgetProps {
   capAmount?: number
   hasCap?: boolean
   qualifyingCount?: number
+  qualifyingTarget?: number
   commissionPlan?: string
   onUpdate?: () => void
 }
@@ -59,6 +60,7 @@ export default function SalesGoalWidget({
   capAmount,
   hasCap,
   qualifyingCount,
+  qualifyingTarget = 5,
   commissionPlan,
   onUpdate,
 }: SalesGoalWidgetProps) {
@@ -288,7 +290,7 @@ export default function SalesGoalWidget({
         )}
         {commissionPlan?.toLowerCase().includes('new') && (
           <div className="text-center">
-            <p className="text-lg font-bold text-luxury-gray-1">{qualifyingCount || 0} / 5</p>
+            <p className="text-lg font-bold text-luxury-gray-1">{qualifyingCount || 0} / {qualifyingTarget}</p>
             <p className="text-xs text-luxury-gray-3">Deals to Upgrade</p>
           </div>
         )}

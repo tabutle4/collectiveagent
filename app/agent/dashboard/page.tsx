@@ -7,7 +7,6 @@ import SalesGoalWidget from '@/components/transactions/SalesGoalWidget'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import { TransactionStatus } from '@/lib/transactions/types'
 import { useAuth } from '@/lib/context/AuthContext'
-import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 export default function AgentDashboard() {
   const router = useRouter()
@@ -28,6 +27,7 @@ export default function AgentDashboard() {
     capAmount: 0,
     hasCap: false,
     qualifyingCount: 0,
+    qualifyingTarget: 5,
     commissionPlan: '',
   })
   const [recentTransactions, setRecentTransactions] = useState<any[]>([])
@@ -140,6 +140,7 @@ export default function AgentDashboard() {
         capAmount,
         hasCap,
         qualifyingCount: freshUser.qualifying_transaction_count || 0,
+        qualifyingTarget: freshUser.qualifying_transaction_target ?? 5,
         commissionPlan: freshUser.commission_plan || '',
       })
 
@@ -184,6 +185,7 @@ export default function AgentDashboard() {
         capAmount={stats.capAmount}
         hasCap={stats.hasCap}
         qualifyingCount={stats.qualifyingCount}
+        qualifyingTarget={stats.qualifyingTarget}
         commissionPlan={stats.commissionPlan}
         onUpdate={loadDashboard}
       />
@@ -269,7 +271,7 @@ export default function AgentDashboard() {
                         {t.property_address || 'No address'}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
-                        {getTransactionTypeLabel(t.transaction_type)}
+                        {t.transaction_type || ''}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
                         {formatDate(t.closing_date)}
@@ -301,7 +303,7 @@ export default function AgentDashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-luxury-gray-3">
-                    {getTransactionTypeLabel(t.transaction_type)}
+                    {t.transaction_type}
                     {t.closing_date ? ` · ${formatDate(t.closing_date)}` : ''}
                   </p>
                 </div>

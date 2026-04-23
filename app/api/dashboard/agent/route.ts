@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from('users')
         .select(
-          'id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, commission_plan, qualifying_transaction_count, sales_volume_goal, units_goal, agent_net_goal, active_goals, division, monthly_fee_paid_through, full_nav_access'
+          'id, first_name, last_name, preferred_first_name, preferred_last_name, email, office, commission_plan, qualifying_transaction_count, qualifying_transaction_target, sales_volume_goal, units_goal, agent_net_goal, active_goals, division, monthly_fee_paid_through, full_nav_access'
         )
         .eq('id', userId)
         .single(),
