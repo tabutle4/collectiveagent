@@ -26,14 +26,17 @@
 --
 --     cap_amount_override            numeric  NULL
 --       Per-agent override for the Cap Plan dollar cap. NULL = use plan
---       default ($18,000). Used by: commission plan document.
+--       default. Used by: commission plan document.
 --
 --     post_cap_split_override        text  NULL
 --       Per-agent override for the Cap Plan post-cap split string, e.g.
---       '95/5'. NULL = use plan default ('97/3'). Used by: commission plan
---       document.
+--       '95/5'. NULL = use plan default. Used by: commission plan document.
 --
--- All columns are additive, safe to run multiple times, and existing agents
+-- Plan default values (coaching fee, cap amount, post-cap split) move from
+-- hardcoded strings in the document templates to rows in company_settings,
+-- with sensible seeded defaults matching the firm's current standard.
+--
+-- All changes are additive, safe to run multiple times, and existing agents
 -- are unaffected (defaults match current behavior).
 
 ALTER TABLE users
@@ -55,7 +58,26 @@ COMMENT ON COLUMN users.waive_coaching_fee IS
   'If true, coaching/training fee is zeroed on all this agents TIA rows regardless of the commission plan default.';
 
 COMMENT ON COLUMN users.cap_amount_override IS
-  'Per-agent Cap Plan dollar cap override. NULL = use plan default ($18,000).';
+  'Per-agent Cap Plan dollar cap override. NULL = use company default.';
 
 COMMENT ON COLUMN users.post_cap_split_override IS
-  'Per-agent Cap Plan post-cap split override, e.g. "95/5". NULL = use plan default ("97/3").';
+  'Per-agent Cap Plan post-cap split override, e.g. "95/5". NULL = use company default.';
+
+-- Firm-wide standard plan defaults (previously hardcoded in document templates)
+ALTER TABLE company_settings
+  ADD COLUMN IF NOT EXISTS standard_new_agent_coaching_fee NUMERIC NOT NULL DEFAULT 500;
+
+ALTER TABLE company_settings
+  ADD COLUMN IF NOT EXISTS standard_cap_amount NUMERIC NOT NULL DEFAULT 18000;
+
+ALTER TABLE company_settings
+  ADD COLUMN IF NOT EXISTS standard_post_cap_split TEXT NOT NULL DEFAULT '97/3';
+
+COMMENT ON COLUMN company_settings.standard_new_agent_coaching_fee IS
+  'Standard New Agent Plan coaching/training fee charged per transaction. Agents can have this waived individually via users.waive_coaching_fee.';
+
+COMMENT ON COLUMN company_settings.standard_cap_amount IS
+  'Standard Cap Plan dollar cap amount. Agents can override individually via users.cap_amount_override.';
+
+COMMENT ON COLUMN company_settings.standard_post_cap_split IS
+  'Standard Cap Plan post-cap split (agent/agency), e.g. "97/3". Agents can override individually via users.post_cap_split_override.';

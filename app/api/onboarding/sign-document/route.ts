@@ -9,6 +9,7 @@ import {
   getCommissionPlanKey,
   extractOverridesFromUser,
 } from '@/lib/documents/commission-plan-content'
+import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 import { createAgentFolder, uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
     let pdfContent: any
     let fileName: string
 
+    const standardDefaults = await getStandardPlanDefaults(supabaseAdmin)
+
     if (documentType === 'ica') {
       if (isReferralAgent) {
         const referralSettings = await getReferralSettings()
@@ -104,6 +107,7 @@ export async function POST(request: NextRequest) {
           effectiveDate,
           mailingAddress: mailingParts,
           email: prospect.email,
+          standardDefaults,
           overrides: extractICAOverridesFromUser(prospect),
         })
       }
@@ -114,6 +118,7 @@ export async function POST(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        standardDefaults,
         overrides: extractOverridesFromUser(prospect),
       })
       fileName = `Commission_Plan_Agreement_${prospect.first_name}_${prospect.last_name}_${today.toISOString().split('T')[0]}.pdf`

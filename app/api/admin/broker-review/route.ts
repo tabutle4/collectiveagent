@@ -5,6 +5,7 @@ import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
+import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +52,8 @@ export async function GET(request: NextRequest) {
 
     // Get correct ICA content based on agent type
     let icaContent
+    const standardDefaults = await getStandardPlanDefaults(supabaseAdmin)
+
     if (isReferralAgent) {
       const settings = await getReferralSettings()
       icaContent = getReferralICAContent({
@@ -67,6 +70,7 @@ export async function GET(request: NextRequest) {
         effectiveDate,
         mailingAddress,
         email: agent.email,
+        standardDefaults,
         overrides: extractICAOverridesFromUser(agent),
       })
     }
@@ -79,6 +83,7 @@ export async function GET(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        standardDefaults,
         overrides: extractOverridesFromUser(agent),
       })
     }

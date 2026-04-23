@@ -1,11 +1,13 @@
+import type { StandardPlanDefaults } from './plan-defaults'
+
 export interface ICAOverrides {
   /** How many sales transactions on New Agent Plan before graduation. Default 5. */
   qualifyingTransactionTarget?: number | null
   /** If true, no coaching/training fee applies. Default false. */
   waiveCoachingFee?: boolean | null
-  /** Dollar override for Cap Plan cap. Default $18,000. */
+  /** Dollar override for Cap Plan cap. Default from firm settings. */
   capAmountOverride?: number | null
-  /** Post-cap split string override, e.g. '95/5'. Default '97/3'. */
+  /** Post-cap split string override, e.g. '95/5'. Default from firm settings. */
   postCapSplitOverride?: string | null
 }
 
@@ -15,6 +17,8 @@ export interface ICAFields {
   effectiveDate: string
   mailingAddress: string
   email: string
+  /** Firm-wide defaults read from company_settings. Required. */
+  standardDefaults: StandardPlanDefaults
   /** Optional per-agent overrides. Omitted = standard terms. */
   overrides?: ICAOverrides
 }
@@ -26,7 +30,10 @@ const fmtMoney = (n: number): string =>
  * Build the New Agent Plan line in the "Available Commission Plans" block.
  * Substitutes the qualifying target and coaching fee based on overrides.
  */
-function buildNewAgentPlanLine(overrides?: ICAOverrides): string {
+function buildNewAgentPlanLine(
+  overrides: ICAOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string {
   const target = overrides?.qualifyingTransactionTarget ?? 5
   const waive = overrides?.waiveCoachingFee === true
 
@@ -34,25 +41,28 @@ function buildNewAgentPlanLine(overrides?: ICAOverrides): string {
     target === 1 ? 'the first sales transaction' : `the first ${target} sales transactions`
   const feeLine = waive
     ? 'New Agent Training Fee: Waived.'
-    : 'Required New Agent Training Fee: $500/Transaction.'
+    : `Required New Agent Training Fee: ${fmtMoney(defaults.coachingFee)}/Transaction.`
 
   return `New Agent Plan - Applies to ${dealPhrase} for newly licensed agents. Split: 70/30. Cap: None. ${feeLine} Brokerage processing fees may apply.`
 }
 
 /** Build the Cap Plan line with optional overrides. */
-function buildCapPlanLine(overrides?: ICAOverrides): string {
-  const capAmt = overrides?.capAmountOverride ?? 18000
-  const postCap = overrides?.postCapSplitOverride || '97/3'
+function buildCapPlanLine(
+  overrides: ICAOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string {
+  const capAmt = overrides?.capAmountOverride ?? defaults.capAmount
+  const postCap = overrides?.postCapSplitOverride || defaults.postCapSplit
   const [, agencyPct] = postCap.split('/').map(s => s.trim())
   return `Cap Plan - Applies to all buyer deals, commercial deals, and listing transactions. Split: 70/30. Cap: ${fmtMoney(capAmt)}. Post-Cap Split: ${postCap} (the ${agencyPct}% represents the post-cap processing fee). Brokerage processing fees may apply.`
 }
 
 export function getICAContent(fields: ICAFields) {
-  const { agentFirstName, agentLastName, effectiveDate, mailingAddress, email, overrides } = fields
+  const { agentFirstName, agentLastName, effectiveDate, mailingAddress, email, overrides, standardDefaults } = fields
   const agentName = `${agentFirstName} ${agentLastName}`
 
-  const newAgentPlanLine = buildNewAgentPlanLine(overrides)
-  const capPlanLine = buildCapPlanLine(overrides)
+  const newAgentPlanLine = buildNewAgentPlanLine(overrides, standardDefaults)
+  const capPlanLine = buildCapPlanLine(overrides, standardDefaults)
 
   const availablePlansBlock = `Available Commission Plans:\n\n${newAgentPlanLine}\n\nNo Cap Plan - Applies to all buyer deals, commercial deals, and listing transactions. Split: 85/15. Cap: None. Brokerage processing fees may apply.\n\n${capPlanLine}\n\nApartment and Lease Plan - Applies to all apartment and lease transactions. Split: 85/15. Cap: None.\n\nBrokerage Lead Referral Plan - Buyer - Applies to buyer deals referred by the brokerage. Split: 50/50. Cap: None. Required Transaction Coordinator Fee: $250/Transaction. Brokerage processing fees may apply.\n\nBrokerage Lead Referral Plan - Apartment and Lease - Applies to apartment and lease transactions referred by the brokerage. Split: 75/25. Cap: None.\n\nRealtor Self-Investment Plan - Applies to (3) deals per year for agents investing in their own real estate. Split: 95/5. Cap: None. Required Brokerage Processing Fee: $250.\n\nComplete plan details, processing fees, and additional terms are provided in the Agent Training Center and welcome communications. Brokerage processing fees are subject to change; refer to the Agent Training Center for the current fee schedule.`
 

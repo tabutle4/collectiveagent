@@ -4,6 +4,7 @@ import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
+import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
 import { getPolicyAcknowledgmentContent } from '@/lib/documents/policy-acknowledgment-content'
 
 export const dynamic = 'force-dynamic'
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
     let content: any
 
     const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'
+    const standardDefaults = await getStandardPlanDefaults(supabaseAdmin)
     
     if (documentType === 'ica') {
       if (isReferralAgent) {
@@ -59,6 +61,7 @@ export async function GET(request: NextRequest) {
           effectiveDate,
           mailingAddress,
           email: prospect.email,
+          standardDefaults,
           overrides: extractICAOverridesFromUser(prospect),
         })
       }
@@ -68,6 +71,7 @@ export async function GET(request: NextRequest) {
         agentName,
         effectiveDate,
         plan: planKey,
+        standardDefaults,
         overrides: extractOverridesFromUser(prospect),
       })
     } else if (documentType === 'policy_manual') {

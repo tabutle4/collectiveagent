@@ -1329,11 +1329,11 @@ export default function ProfilePage({
                         onChange={e =>
                           handleRealEstateChange('cap_amount_override', e.target.value)
                         }
-                        placeholder="18000"
+                        placeholder="Firm standard"
                         className="input-luxury"
                       />
                       <p className="text-xs text-luxury-gray-3 mt-1">
-                        Dollar cap. Leave empty to use standard $18,000.
+                        Dollar cap. Leave empty to use firm standard.
                       </p>
                     </div>
 
@@ -1347,11 +1347,11 @@ export default function ProfilePage({
                         onChange={e =>
                           handleRealEstateChange('post_cap_split_override', e.target.value)
                         }
-                        placeholder="97/3"
+                        placeholder="e.g. 95/5"
                         className="input-luxury"
                       />
                       <p className="text-xs text-luxury-gray-3 mt-1">
-                        Format: agent/agency. Leave empty to use standard 97/3.
+                        Format: agent/agency. Leave empty to use firm standard.
                       </p>
                     </div>
                   </div>

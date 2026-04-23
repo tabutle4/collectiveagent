@@ -1,3 +1,5 @@
+import type { StandardPlanDefaults } from './plan-defaults'
+
 export type CommissionPlanKey = 'new_agent' | 'no_cap' | 'cap'
 
 export interface CommissionPlanOverrides {
@@ -5,9 +7,9 @@ export interface CommissionPlanOverrides {
   qualifyingTransactionTarget?: number | null
   /** If true, no coaching/training fee applies. Default false. */
   waiveCoachingFee?: boolean | null
-  /** Dollar override for Cap Plan cap. Default $18,000. */
+  /** Dollar override for Cap Plan cap. Default comes from firm settings. */
   capAmountOverride?: number | null
-  /** Post-cap split string override, e.g. '95/5'. Default '97/3'. */
+  /** Post-cap split string override, e.g. '95/5'. Default from firm settings. */
   postCapSplitOverride?: string | null
 }
 
@@ -15,7 +17,12 @@ export interface CommissionPlanFields {
   agentName: string
   effectiveDate: string
   plan: CommissionPlanKey
-  /** Optional overrides pulled from the users table. Omitted = standard terms. */
+  /**
+   * Firm-wide defaults read from company_settings. Required so document
+   * templates never hardcode dollar amounts or split strings.
+   */
+  standardDefaults: StandardPlanDefaults
+  /** Optional per-agent overrides pulled from the users table. */
   overrides?: CommissionPlanOverrides
 }
 
@@ -23,12 +30,21 @@ export interface CommissionPlanFields {
 const fmtMoney = (n: number): string =>
   '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 
-const hasCustomTerms = (o?: CommissionPlanOverrides): boolean => {
+/**
+ * Returns true when the agent has any override that differs from firm standard.
+ * The comparison uses firm defaults rather than hardcoded values so that if
+ * ops raises the standard cap, agents on that new standard are not falsely
+ * marked "Custom".
+ */
+const hasCustomTerms = (
+  o: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): boolean => {
   if (!o) return false
   if (o.qualifyingTransactionTarget != null && o.qualifyingTransactionTarget !== 5) return true
   if (o.waiveCoachingFee === true) return true
-  if (o.capAmountOverride != null && o.capAmountOverride !== 18000) return true
-  if (o.postCapSplitOverride && o.postCapSplitOverride !== '97/3') return true
+  if (o.capAmountOverride != null && o.capAmountOverride !== defaults.capAmount) return true
+  if (o.postCapSplitOverride && o.postCapSplitOverride !== defaults.postCapSplit) return true
   return false
 }
 
@@ -57,7 +73,7 @@ This Agreement is incorporated into and made part of the Real Estate Agent Indep
 
 Both parties hereto represent that they have read this Agreement, understand it, and agree to be bound by all terms and conditions stated herein.`
 
-// ── Plan content builders — overrides are applied inside these ────────────
+// ── Plan content builders ─────────────────────────────────────────────────
 
 function buildNewAgentIntro(target: number, customized: boolean): string {
   const first = customized
@@ -72,7 +88,10 @@ function buildNewAgentIntro(target: number, customized: boolean): string {
   return `${first} This plan applies to agents new to the firm who have fewer than 5 sales transactions in the last 12 months, and covers ${dealPhrase} completed while at the Agency. This plan is part of the Agency's New Agent Training Program and is designed to support agents in the early stages of their career at Collective Realty Co.`
 }
 
-function buildNewAgentRows(overrides: CommissionPlanOverrides | undefined): string[] {
+function buildNewAgentRows(
+  overrides: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string[] {
   const target = overrides?.qualifyingTransactionTarget ?? 5
   const waive = overrides?.waiveCoachingFee === true
 
@@ -81,7 +100,7 @@ function buildNewAgentRows(overrides: CommissionPlanOverrides | undefined): stri
 
   const coachingLine = waive
     ? 'New Agent Training Fee: Waived under the Salespersons customized arrangement'
-    : 'New Agent Training Fee: $500 per transaction'
+    : `New Agent Training Fee: ${fmtMoney(defaults.coachingFee)} per transaction`
 
   return [
     'Commission Split: 70 / 30 (Agent / Agency)',
@@ -92,9 +111,12 @@ function buildNewAgentRows(overrides: CommissionPlanOverrides | undefined): stri
   ]
 }
 
-function buildCapRows(overrides: CommissionPlanOverrides | undefined): string[] {
-  const capAmt = overrides?.capAmountOverride ?? 18000
-  const postCap = overrides?.postCapSplitOverride || '97/3'
+function buildCapRows(
+  overrides: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string[] {
+  const capAmt = overrides?.capAmountOverride ?? defaults.capAmount
+  const postCap = overrides?.postCapSplitOverride || defaults.postCapSplit
   const [agentPct, agencyPct] = postCap.split('/').map(s => s.trim())
 
   return [
@@ -106,16 +128,22 @@ function buildCapRows(overrides: CommissionPlanOverrides | undefined): string[] 
   ]
 }
 
-function buildCapIntro(overrides: CommissionPlanOverrides | undefined): string {
-  const postCap = overrides?.postCapSplitOverride || '97/3'
+function buildCapIntro(
+  overrides: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string {
+  const postCap = overrides?.postCapSplitOverride || defaults.postCapSplit
   const [, agencyPct] = postCap.split('/').map(s => s.trim())
   return `The Salesperson has selected the Cap Plan. This plan applies to all buyer deals, commercial deals, and listing transactions. Starting with a competitive split, once the Salesperson has paid a predetermined amount to the Agency, they will benefit from a ${postCap} split for the remainder of the cap year. The ${agencyPct}% in the post-cap split represents the post-cap processing fee - no additional brokerage processing fee is charged on post-cap transactions.`
 }
 
-function buildPlanProgression(overrides: CommissionPlanOverrides | undefined): string {
+function buildPlanProgression(
+  overrides: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string {
   const target = overrides?.qualifyingTransactionTarget ?? 5
-  const capAmt = overrides?.capAmountOverride ?? 18000
-  const postCap = overrides?.postCapSplitOverride || '97/3'
+  const capAmt = overrides?.capAmountOverride ?? defaults.capAmount
+  const postCap = overrides?.postCapSplitOverride || defaults.postCapSplit
   const [, agencyPct] = postCap.split('/').map(s => s.trim())
 
   const threshold =
@@ -135,8 +163,8 @@ This Agreement does not expire and remains in effect until the Salespersons comm
 
 // ── Main content builder ──────────────────────────────────────────────────
 export function getCommissionPlanContent(fields: CommissionPlanFields) {
-  const { agentName, effectiveDate, plan, overrides } = fields
-  const customized = hasCustomTerms(overrides)
+  const { agentName, effectiveDate, plan, overrides, standardDefaults } = fields
+  const customized = hasCustomTerms(overrides, standardDefaults)
   const target = overrides?.qualifyingTransactionTarget ?? 5
 
   let intro: string
@@ -144,7 +172,7 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
 
   if (plan === 'new_agent') {
     intro = buildNewAgentIntro(target, customized)
-    tableRows = buildNewAgentRows(overrides)
+    tableRows = buildNewAgentRows(overrides, standardDefaults)
   } else if (plan === 'no_cap') {
     intro = `The Salesperson has selected the No Cap Plan. This plan applies to all buyer deals, commercial deals, and listing transactions. It guarantees a consistently higher commission split, allowing the Salesperson to concentrate on growing their business without concerns about commission caps.`
     tableRows = [
@@ -154,8 +182,8 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
       'Brokerage Processing Fee: May apply based on transaction type',
     ]
   } else {
-    intro = buildCapIntro(overrides)
-    tableRows = buildCapRows(overrides)
+    intro = buildCapIntro(overrides, standardDefaults)
+    tableRows = buildCapRows(overrides, standardDefaults)
   }
 
   const planLabel =
@@ -167,11 +195,9 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
       ? 'No Cap Plan'
       : 'Cap Plan'
 
-  // Customized terms summary — only shown for New Agent Plan with overrides,
-  // since that's where the differences from standard are most material.
   const customizedSummary =
     plan === 'new_agent' && customized
-      ? buildNewAgentCustomSummary(overrides)
+      ? buildNewAgentCustomSummary(overrides, standardDefaults)
       : null
 
   const sections: { heading: string | null; body: string }[] = [
@@ -188,7 +214,7 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
     { heading: null, body: SPECIAL_ARRANGEMENTS },
     { heading: null, body: PROCESSING_FEES_SECTION },
     ...(plan === 'new_agent'
-      ? [{ heading: null, body: buildPlanProgression(overrides) }]
+      ? [{ heading: null, body: buildPlanProgression(overrides, standardDefaults) }]
       : []),
     { heading: null, body: GENERAL_TERMS },
   ]
@@ -202,7 +228,10 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
   }
 }
 
-function buildNewAgentCustomSummary(overrides?: CommissionPlanOverrides): string {
+function buildNewAgentCustomSummary(
+  overrides: CommissionPlanOverrides | undefined,
+  defaults: StandardPlanDefaults
+): string {
   const bits: string[] = []
   const target = overrides?.qualifyingTransactionTarget ?? 5
   if (target !== 5) {
@@ -213,13 +242,19 @@ function buildNewAgentCustomSummary(overrides?: CommissionPlanOverrides): string
     )
   }
   if (overrides?.waiveCoachingFee === true) {
-    bits.push('the New Agent Training Fee of $500 per transaction is waived for all transactions under this Agreement')
+    bits.push(
+      `the New Agent Training Fee of ${fmtMoney(defaults.coachingFee)} per transaction is waived for all transactions under this Agreement`
+    )
   }
-  if (overrides?.capAmountOverride != null && overrides.capAmountOverride !== 18000) {
-    bits.push(`the Cap Plan cap amount is ${fmtMoney(overrides.capAmountOverride)} instead of $18,000`)
+  if (overrides?.capAmountOverride != null && overrides.capAmountOverride !== defaults.capAmount) {
+    bits.push(
+      `the Cap Plan cap amount is ${fmtMoney(overrides.capAmountOverride)} instead of ${fmtMoney(defaults.capAmount)}`
+    )
   }
-  if (overrides?.postCapSplitOverride && overrides.postCapSplitOverride !== '97/3') {
-    bits.push(`the Cap Plan post-cap split is ${overrides.postCapSplitOverride} instead of 97/3`)
+  if (overrides?.postCapSplitOverride && overrides.postCapSplitOverride !== defaults.postCapSplit) {
+    bits.push(
+      `the Cap Plan post-cap split is ${overrides.postCapSplitOverride} instead of ${defaults.postCapSplit}`
+    )
   }
 
   if (bits.length === 0) return ''
@@ -239,7 +274,7 @@ export function getCommissionPlanKey(commissionPlan: string): CommissionPlanKey 
   if (plan.includes('new') || plan.includes('70_30_new')) return 'new_agent'
   if (plan.includes('no cap') || plan.includes('85_15_no_cap')) return 'no_cap'
   if (plan.includes('cap') || plan.includes('70_30_cap')) return 'cap'
-  return 'no_cap' // default
+  return 'no_cap'
 }
 
 /**

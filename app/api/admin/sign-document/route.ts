@@ -6,6 +6,7 @@ import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
+import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
 import { uploadAgentDocument } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
@@ -152,6 +153,9 @@ export async function POST(request: NextRequest) {
       let pdfContent: any
       let fileName: string
 
+      // Read firm-wide plan defaults once per request.
+      const standardDefaults = await getStandardPlanDefaults(supabaseAdmin)
+
       if (docType === 'ica') {
         if (isReferralAgent) {
           const referralSettings = await getReferralSettings()
@@ -170,6 +174,7 @@ export async function POST(request: NextRequest) {
             effectiveDate,
             mailingAddress: mailingParts,
             email: agent.email,
+            standardDefaults,
             overrides: extractICAOverridesFromUser(agent),
           })
           fileName = `ICA_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
@@ -180,6 +185,7 @@ export async function POST(request: NextRequest) {
           agentName,
           effectiveDate,
           plan: planKey,
+          standardDefaults,
           overrides: extractOverridesFromUser(agent),
         })
         fileName = `Commission_Plan_Agreement_${agent.first_name}_${agent.last_name}_${today.toISOString().split('T')[0]}.pdf`
