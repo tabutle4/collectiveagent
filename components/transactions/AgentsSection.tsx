@@ -216,15 +216,28 @@ export default function AgentsSection({
         </div>
       )}
 
-      {sortedAgents.map(agent => (
-        <AgentCard
-          key={agent.id}
-          tia={agent}
-          transactionId={transactionId}
-          transaction={transaction}
-          onRefresh={onRefresh}
-        />
-      ))}
+      {sortedAgents.map(agent => {
+        const src = agent.source_tia_id
+          ? agents.find(a => a.id === agent.source_tia_id)
+          : null
+        const sourceTiaName = src
+          ? fmtName(src.user)
+          : null
+        const updatedAt = agent.updated_at ? new Date(agent.updated_at).getTime() : 0
+        const recentlyUpdated = Boolean(
+          agent.source_tia_id && updatedAt > Date.now() - 5 * 60 * 1000
+        )
+        return (
+          <AgentCard
+            key={agent.id}
+            tia={{ ...agent, source_tia_name: sourceTiaName }}
+            transactionId={transactionId}
+            transaction={transaction}
+            onRefresh={onRefresh}
+            recentlyUpdated={recentlyUpdated}
+          />
+        )
+      })}
     </div>
   )
 }

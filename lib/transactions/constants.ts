@@ -55,7 +55,8 @@ export const LOAN_TYPES = [
 ]
 
 // ===== Lead Sources =====
-// Original 16, external_agent_referral changed to external_brokerage_referral
+// 15 options. kvcore_lead removed 2026-04-22 (no longer in use).
+// `external_brokerage_referral` was formerly `external_agent_referral`.
 export const LEAD_SOURCES = [
   { value: 'brokerage_referral', label: 'Brokerage Referral' },
   { value: 'team_lead_referral', label: 'Team Lead Referral' },
@@ -65,7 +66,6 @@ export const LEAD_SOURCES = [
   { value: 'friend_family', label: 'Friend/Family' },
   { value: 'personal_referral', label: 'Personal Referral' },
   { value: 'ig_lead', label: 'IG Lead' },
-  { value: 'kvcore_lead', label: 'kvCORE Lead' },
   { value: 'har_lead', label: 'HAR Lead' },
   { value: 'ntreis_lead', label: 'NTREIS Lead' },
   { value: 'other_social_media', label: 'Other Social Media Lead' },
@@ -74,6 +74,52 @@ export const LEAD_SOURCES = [
   { value: 'client_referral', label: 'Client Referral' },
   { value: 'other', label: 'Other' },
 ]
+
+export type LeadSourceBucket = 'own' | 'team_lead' | 'firm'
+
+/**
+ * Maps a user-facing lead source code to the 3 buckets used by
+ * `team_agreement_splits.lead_source` (own, team_lead, firm).
+ *
+ * Rules:
+ *   - brokerage_referral => firm (CRC generated the lead)
+ *   - team_lead_referral => team_lead (obvious)
+ *   - internal_agent_referral => team_lead IF the referring agent IS the
+ *     agent's team lead; else own
+ *   - everything else => own
+ *
+ * Non-team agents don't hit the team_agreement_splits lookup at all, but the
+ * bucket is still stored for reporting (firm vs team_lead vs own lead source
+ * analytics across the whole brokerage).
+ */
+export function getLeadSourceBucket(
+  leadSource: string | null | undefined,
+  referredAgentId?: string | null,
+  teamLeadAgentId?: string | null
+): LeadSourceBucket {
+  if (!leadSource) return 'own'
+  if (leadSource === 'brokerage_referral') return 'firm'
+  if (leadSource === 'team_lead_referral') return 'team_lead'
+  if (leadSource === 'internal_agent_referral') {
+    if (
+      referredAgentId &&
+      teamLeadAgentId &&
+      referredAgentId === teamLeadAgentId
+    ) {
+      return 'team_lead'
+    }
+    return 'own'
+  }
+  return 'own'
+}
+
+/**
+ * Lead sources that require a secondary `referred_agent_id` to be set.
+ * Used by UI to block save when the picker is empty.
+ */
+export const LEAD_SOURCES_REQUIRING_AGENT = new Set([
+  'internal_agent_referral',
+])
 
 // ===== Flyer Divisions =====
 // Matches CDA request form, HOU/DFW kept separate, Collective Access added

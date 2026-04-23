@@ -28,6 +28,7 @@ interface CompanySettings {
   brokerage_state: string
   brokerage_zip: string
   brokerage_main_email: string
+  executive_email: string
   // Standard Agent
   standard_onboarding_fee: number
   standard_monthly_fee: number
@@ -367,6 +368,21 @@ export default function SettingsPage() {
                       onChange={(e) => updateSetting('brokerage_main_email', e.target.value)}
                       className="input-luxury"
                     />
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      Agent-facing inbox (e.g. office@).
+                    </p>
+                  </div>
+                  <div>
+                    <label className="field-label">Executive Email</label>
+                    <input
+                      type="email"
+                      value={settings.executive_email || ''}
+                      onChange={(e) => updateSetting('executive_email', e.target.value)}
+                      className="input-luxury"
+                    />
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      CC'd on commission statements and CDAs. Owner and ops only.
+                    </p>
                   </div>
                 </div>
               </div>

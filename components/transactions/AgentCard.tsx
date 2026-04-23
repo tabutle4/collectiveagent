@@ -1,549 +1,164 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import {
-  ChevronDown, ChevronUp, Trash2, AlertCircle, Edit, Lock,
-  DollarSign, Clock, Calendar, User,
-} from 'lucide-react'
+import { Send, Loader2 } from 'lucide-react'
+import InlineField from './InlineField'
+import LeadSourceField from './LeadSourceField'
+import MarkPaidPanel from './MarkPaidPanel'
+import EmailPreviewModal from './EmailPreviewModal'
+import { LEAD_SOURCES } from '@/lib/transactions/constants'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const fmt$ = (n: number | null | undefined) => {
-  if (n == null || (typeof n === 'number' && isNaN(n))) return '--'
-  return new Intl.NumberFormat('en-US', {
+const fmt$ = (n: any): string =>
+  new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
-  }).format(Number(n))
-}
+  }).format(parseFloat(String(n ?? 0)) || 0)
 
-const fmtDate = (d: string | null | undefined) => {
-  if (!d) return '--'
-  const dateStr = d.length === 10 ? d + 'T12:00:00' : d
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  })
+const fmtDate = (d: string | null | undefined): string => {
+  if (!d) return ''
+  try {
+    return new Date(d).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  } catch {
+    return ''
+  }
 }
 
 const fmtName = (u: any) =>
   u
-    ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
+    ? `${u.preferred_first_name || u.first_name || ''} ${
+        u.preferred_last_name || u.last_name || ''
+      }`.trim()
     : ''
 
-const num = (v: any): number => parseFloat(v ?? 0) || 0
+type Plan = { id: string; plan_code: string; plan_name: string }
 
-const AGENT_ROLE_OPTIONS = [
-  { value: 'primary_agent', label: 'Primary Agent' },
-  { value: 'listing_agent', label: 'Listing Agent' },
-  { value: 'co_agent', label: 'Co-Agent' },
-  { value: 'team_lead', label: 'Team Lead' },
-  { value: 'referral_agent', label: 'Referral Agent' },
-  { value: 'momentum_partner', label: 'Momentum Partner' },
-]
+// Agent roles that use the full math tree (primary/listing/co + referral)
+const FULL_TREE_ROLES = new Set([
+  'primary_agent',
+  'listing_agent',
+  'co_agent',
+  'referral_agent',
+])
 
-const LEAD_SOURCE_OPTIONS = [
-  { value: 'own', label: 'Own Lead' },
-  { value: 'team_lead', label: 'Team Lead Lead' },
-  { value: 'firm', label: 'Firm Lead' },
-]
-
-const PAYMENT_METHODS = [
-  { value: 'check', label: 'Check' },
-  { value: 'zelle', label: 'Zelle' },
-  { value: 'ach', label: 'ACH' },
-  { value: 'wire', label: 'Wire' },
-  { value: 'payload', label: 'Payload' },
-]
-
-const FUNDING_SOURCES = [
-  { value: 'crc', label: 'CRC' },
-  { value: 'rc', label: 'RC' },
-]
-
-// ─── Editable field row ──────────────────────────────────────────────────────
-
-function FieldRow({
-  label, value, onSave, locked, type = 'text', money, options, placeholder,
-}: {
-  label: string
-  value: any
-  onSave: (v: any) => void | Promise<void>
-  locked?: boolean
-  type?: 'text' | 'number' | 'date' | 'select' | 'checkbox'
-  money?: boolean
-  options?: { value: string; label: string }[]
-  placeholder?: string
-}) {
-  const [editing, setEditing] = useState(false)
-  const [local, setLocal] = useState<any>(value ?? '')
-
-  useEffect(() => { setLocal(value ?? '') }, [value])
-
-  const save = () => {
-    const v = type === 'number' ? (local === '' ? null : parseFloat(local)) : local
-    onSave(v)
-    setEditing(false)
-  }
-
-  const display = () => {
-    if (type === 'checkbox') return value ? 'Yes' : 'No'
-    if (type === 'select' && options) return options.find(o => o.value === value)?.label || value || '--'
-    if (money) return fmt$(value)
-    if (type === 'date') return fmtDate(value)
-    return value ?? '--'
-  }
-
-  if (locked) {
-    return (
-      <div className="flex justify-between items-center py-1.5 border-b border-luxury-gray-5/30 last:border-0">
-        <span className="text-xs text-luxury-gray-3 flex items-center gap-1">
-          <Lock size={10} className="opacity-50" /> {label}
-        </span>
-        <span className="text-xs text-luxury-gray-1">{display()}</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex justify-between items-center py-1.5 border-b border-luxury-gray-5/30 last:border-0 group">
-      <span className="text-xs text-luxury-gray-3">{label}</span>
-      {editing ? (
-        <div className="flex items-center gap-1">
-          {type === 'checkbox' ? (
-            <input
-              type="checkbox"
-              checked={!!local}
-              onChange={e => setLocal(e.target.checked)}
-              className="h-3 w-3"
-            />
-          ) : type === 'select' && options ? (
-            <select
-              className="select-luxury text-xs"
-              value={local}
-              onChange={e => setLocal(e.target.value)}
-            >
-              <option value="">--</option>
-              {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          ) : (
-            <input
-              type={type}
-              value={local}
-              onChange={e => setLocal(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') save()
-                if (e.key === 'Escape') { setLocal(value ?? ''); setEditing(false) }
-              }}
-              className="input-luxury text-xs w-32"
-              placeholder={placeholder}
-              autoFocus
-            />
-          )}
-          <button onClick={save} className="text-luxury-accent text-xs">Save</button>
-          <button onClick={() => { setLocal(value ?? ''); setEditing(false) }} className="text-luxury-gray-3 text-xs">X</button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setEditing(true)}
-          className="text-xs text-luxury-gray-1 hover:text-luxury-accent flex items-center gap-1"
-        >
-          {display()}
-          <Edit size={10} className="opacity-0 group-hover:opacity-70" />
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ─── Context panel (warnings, cap progress, debts) ───────────────────────────
-
-function ContextPanel({ user, membership, billing }: { user: any; membership?: any; billing?: any }) {
-  const warnings: { kind: 'warn' | 'info'; text: string }[] = []
-
-  if (user?.license_expiration) {
-    const daysLeft = Math.ceil((new Date(user.license_expiration + 'T12:00:00').getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    if (daysLeft < 0) warnings.push({ kind: 'warn', text: `License EXPIRED ${fmtDate(user.license_expiration)}` })
-    else if (daysLeft <= 60) warnings.push({ kind: 'warn', text: `License expires ${fmtDate(user.license_expiration)} (${daysLeft}d)` })
-  }
-
-  if (user?.monthly_fee_paid_through) {
-    const daysBehind = Math.ceil((Date.now() - new Date(user.monthly_fee_paid_through + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24))
-    if (daysBehind > 0) warnings.push({ kind: 'warn', text: `Monthly fee overdue (paid through ${fmtDate(user.monthly_fee_paid_through)})` })
-  }
-
-  if (billing && billing.total_debts > 0) {
-    warnings.push({ kind: 'warn', text: `${billing.debts.length} outstanding debt${billing.debts.length !== 1 ? 's' : ''}: ${fmt$(billing.total_debts)}` })
-  }
-
-  if (user?.waive_buyer_processing_fees) warnings.push({ kind: 'info', text: 'Buyer processing fees waived' })
-  if (user?.waive_seller_processing_fees) warnings.push({ kind: 'info', text: 'Seller/listing processing fees waived' })
-
-  if (user?.special_commission_notes) {
-    warnings.push({ kind: 'info', text: `Note: ${user.special_commission_notes}` })
-  }
-
-  if (membership?.team?.team_name) {
-    const leadName = membership.team?.team_lead ? fmtName(membership.team.team_lead) : 'no lead set'
-    warnings.push({ kind: 'info', text: `Team: ${membership.team.team_name} · Lead: ${leadName}` })
-  }
-
-  if (user?.referring_agent_id && user?.revenue_share_percentage) {
-    warnings.push({ kind: 'info', text: `Momentum partner set (${user.revenue_share_percentage}%)` })
-  }
-
-  if (warnings.length === 0) return null
-
-  return (
-    <div className="mb-3 space-y-1">
-      {warnings.map((w, i) => (
-        <div
-          key={i}
-          className={`flex items-start gap-2 px-2 py-1 rounded text-xs ${
-            w.kind === 'warn'
-              ? 'bg-amber-50 text-amber-900 border border-amber-200'
-              : 'bg-luxury-gray-5/40 text-luxury-gray-2'
-          }`}
-        >
-          <AlertCircle size={11} className="mt-0.5 shrink-0" />
-          <span>{w.text}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Mark Paid sub-section ──────────────────────────────────────────────────
-
-function MarkPaidSection({
-  tia, transactionId, transactionType, debts, onDone, onCancel,
-}: {
-  tia: any
-  transactionId: string
-  transactionType: string | null
-  debts: any[]
-  onDone: () => void
-  onCancel: () => void
-}) {
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10))
-  const [paymentMethod, setPaymentMethod] = useState('')
-  const [paymentRef, setPaymentRef] = useState('')
-  const [fundingSource, setFundingSource] = useState('crc')
-  const [countsProgress, setCountsProgress] = useState(tia.counts_toward_progress !== false)
-  const [selected, setSelected] = useState<Record<string, number>>({})
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const totalDebts = Object.values(selected).reduce((s, v) => s + v, 0)
-  const amount1099 = num(tia.amount_1099_reportable)
-  // Under Model A, team_lead is already carved out of agent_gross, so
-  // agent_net = amount_1099_reportable - debts (no TL deduction).
-  const netPreview = amount1099 - totalDebts
-
-  const toggleDebt = (id: string, maxAmount: number) => {
-    setSelected(prev => {
-      if (id in prev) {
-        const { [id]: _, ...rest } = prev
-        return rest
-      }
-      return { ...prev, [id]: maxAmount }
-    })
-  }
-
-  const updateDebtAmount = (id: string, amount: number, max: number) => {
-    const clamped = Math.max(0, Math.min(amount, max))
-    setSelected(prev => ({ ...prev, [id]: clamped }))
-  }
-
-  const submit = async () => {
-    if (!paymentDate) { setError('Payment date required'); return }
-    if (!paymentMethod) { setError('Payment method required'); return }
-    if ((paymentMethod === 'check' || paymentMethod === 'wire') && !paymentRef) {
-      setError('Reference required for check or wire'); return
-    }
-
-    setSaving(true)
-    setError(null)
-    try {
-      const debts_to_apply = Object.entries(selected)
-        .filter(([, amt]) => amt > 0)
-        .map(([debt_id, amount]) => ({ debt_id, amount }))
-
-      const res = await fetch(`/api/admin/transactions/${transactionId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'mark_paid',
-          internal_agent_id: tia.id,
-          transaction_type: transactionType,
-          payment_date: paymentDate,
-          payment_method: paymentMethod,
-          payment_reference: paymentRef || null,
-          funding_source: fundingSource,
-          debts_to_apply,
-          counts_toward_progress: countsProgress,
-        }),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error || 'Mark paid failed')
-      }
-      onDone()
-    } catch (e: any) {
-      setError(e.message || 'Failed to mark paid')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="mt-3 p-3 rounded-lg bg-luxury-gray-5/20 border border-luxury-gray-5">
-      <p className="text-xs font-semibold text-luxury-gray-1 mb-3">Mark Paid</p>
-
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <div>
-          <label className="field-label">Payment Date</label>
-          <input
-            type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)}
-            className="input-luxury text-xs w-full"
-          />
-        </div>
-        <div>
-          <label className="field-label">Method</label>
-          <select
-            value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-            className="select-luxury text-xs w-full"
-          >
-            <option value="">--</option>
-            {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-          </select>
-        </div>
-        <div className="col-span-2">
-          <label className="field-label">Reference</label>
-          <input
-            value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
-            className="input-luxury text-xs w-full"
-            placeholder={paymentMethod === 'check' ? 'Check #' : paymentMethod === 'wire' ? 'Wire ref' : 'Optional'}
-          />
-        </div>
-        <div>
-          <label className="field-label">Funding Source</label>
-          <select
-            value={fundingSource} onChange={e => setFundingSource(e.target.value)}
-            className="select-luxury text-xs w-full"
-          >
-            {FUNDING_SOURCES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-        </div>
-        <div className="flex items-end">
-          <label className="flex items-center gap-1.5 text-xs text-luxury-gray-2">
-            <input
-              type="checkbox" checked={countsProgress}
-              onChange={e => setCountsProgress(e.target.checked)}
-              className="h-3 w-3"
-            />
-            Counts toward cap/qualifying
-          </label>
-        </div>
-      </div>
-
-      {debts.length > 0 && (
-        <div className="mb-3">
-          <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Apply Debts</p>
-          <div className="space-y-1">
-            {debts.map(debt => {
-              const max = num(debt.amount_remaining ?? debt.amount_owed)
-              const selectedAmt = selected[debt.id]
-              const isSel = selectedAmt != null
-              return (
-                <div key={debt.id} className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox" checked={isSel}
-                    onChange={() => toggleDebt(debt.id, max)}
-                    className="h-3 w-3"
-                  />
-                  <span className="flex-1 text-luxury-gray-2">
-                    {debt.debt_type_other || debt.debt_type}: {debt.description || fmt$(max)}
-                  </span>
-                  {isSel && (
-                    <input
-                      type="number" value={selectedAmt}
-                      onChange={e => updateDebtAmount(debt.id, parseFloat(e.target.value) || 0, max)}
-                      step="0.01" min="0" max={max}
-                      className="input-luxury text-xs w-20 text-right"
-                    />
-                  )}
-                  {!isSel && <span className="text-luxury-gray-3">{fmt$(max)}</span>}
-                </div>
-              )
-            })}
-          </div>
-          {totalDebts > 0 && (
-            <p className="text-xs text-luxury-gray-3 mt-1">Debts total: −{fmt$(totalDebts)}</p>
-          )}
-        </div>
-      )}
-
-      <div className="bg-white rounded px-3 py-2 mb-3 border border-luxury-gray-5">
-        <div className="flex justify-between text-xs">
-          <span className="text-luxury-gray-3">1099 reportable</span>
-          <span className="text-luxury-gray-1">{fmt$(amount1099)}</span>
-        </div>
-        {totalDebts > 0 && (
-          <div className="flex justify-between text-xs">
-            <span className="text-luxury-gray-3">Debts</span>
-            <span className="text-luxury-gray-1">−{fmt$(totalDebts)}</span>
-          </div>
-        )}
-        <div className="flex justify-between text-xs pt-1 mt-1 border-t border-luxury-gray-5 font-semibold">
-          <span>Net to pay</span>
-          <span className="text-luxury-accent">{fmt$(netPreview)}</span>
-        </div>
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-600 mb-2">{error}</p>
-      )}
-
-      <div className="flex gap-2 justify-end">
-        <button
-          onClick={onCancel}
-          disabled={saving}
-          className="btn btn-secondary text-xs px-3 py-1.5"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={submit}
-          disabled={saving}
-          className="btn btn-primary text-xs px-3 py-1.5"
-        >
-          {saving ? 'Saving...' : 'Mark Paid'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Main AgentCard ─────────────────────────────────────────────────────────
+// Agent roles that are derived from a primary/listing/co via source_tia_id
+const DERIVED_ROLES = new Set(['team_lead', 'momentum_partner'])
 
 export default function AgentCard({
-  tia, transactionId, transaction, onRefresh,
+  tia,
+  transactionId,
+  transaction,
+  onRefresh,
+  recentlyUpdated = false,
 }: {
   tia: any
   transactionId: string
   transaction: any
   onRefresh: () => void
+  recentlyUpdated?: boolean
 }) {
-  const [expanded, setExpanded] = useState(false)
   const [showMarkPaid, setShowMarkPaid] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [linkedPreview, setLinkedPreview] = useState<any[]>([])
-  const [applying, setApplying] = useState(false)
-  const [applyError, setApplyError] = useState<string | null>(null)
-  const [leadSource, setLeadSource] = useState<string>('own')
-  const [commissionAmount, setCommissionAmount] = useState<string>(
-    tia.agent_basis ? String(tia.agent_basis) : (transaction?.office_gross ? String(transaction.office_gross) : '')
-  )
-  const [debts, setDebts] = useState<any[]>([])
+  const [deletePreview, setDeletePreview] = useState<any[]>([])
+  const [deleting, setDeleting] = useState(false)
+  const [unmarking, setUnmarking] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [emailPreview, setEmailPreview] = useState<'statement' | 'cda' | null>(null)
+  const [plans, setPlans] = useState<Plan[]>([])
+  const [showSentToast, setShowSentToast] = useState(false)
 
   const user = tia.user
   const membership = tia.team_membership
-  const billing = tia.billing
   const paid = tia.payment_status === 'paid'
+  const role = tia.agent_role as string
 
-  const canApplySplit =
-    (tia.agent_role === 'primary_agent' ||
-      tia.agent_role === 'listing_agent' ||
-      tia.agent_role === 'co_agent') &&
-    transaction?.status !== 'closed'
-  const txnType = transaction?.transaction_type || null
+  const isFullTree = FULL_TREE_ROLES.has(role)
+  const isDerived = DERIVED_ROLES.has(role)
+  const isLease = isLeaseTransactionType(transaction?.transaction_type)
 
-  // Fetch debts when opening mark paid
-  const loadDebts = useCallback(async () => {
-    if (!tia.agent_id) return
-    try {
+  // Load available commission plans (for the Plan inline-edit dropdown)
+  useEffect(() => {
+    if (!isFullTree) return
+    fetch('/api/admin/commission-plans', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { plans: [] }))
+      .then((d) => setPlans(d.plans || []))
+      .catch(() => {})
+  }, [isFullTree])
+
+  const hasAllDrivers =
+    (tia.agent_basis && parseFloat(tia.agent_basis) > 0) &&
+    tia.commission_plan &&
+    tia.lead_source
+
+  const updateTia = useCallback(
+    async (updates: Record<string, any>) => {
+      setActionError(null)
       const res = await fetch(`/api/admin/transactions/${transactionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_agent_debts', agent_id: tia.agent_id }),
+        body: JSON.stringify({
+          action: 'update_internal_agent',
+          internal_agent_id: tia.id,
+          updates,
+        }),
       })
-      if (res.ok) {
-        const d = await res.json()
-        setDebts(d.debts || [])
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setActionError(d.error || 'Update failed')
+        throw new Error(d.error || 'Update failed')
       }
-    } catch {}
-  }, [tia.agent_id, transactionId])
-
-  const openMarkPaid = async () => {
-    await loadDebts()
-    setShowMarkPaid(true)
-  }
-
-  const updateField = async (field: string, value: any) => {
-    const res = await fetch(`/api/admin/transactions/${transactionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'update_internal_agent',
-        internal_agent_id: tia.id,
-        updates: { [field]: value },
-      }),
-    })
-    if (res.ok) {
       onRefresh()
-    } else {
-      const d = await res.json().catch(() => ({}))
-      alert(d.error || 'Update failed')
-    }
+    },
+    [tia.id, transactionId, onRefresh]
+  )
+
+  const saveBasis = (v: string) =>
+    updateTia({ agent_basis: parseFloat(v.replace(/[^0-9.-]/g, '')) || 0 })
+
+  const savePlan = (v: string) => updateTia({ commission_plan: v })
+
+  const saveLeadSource = async (v: {
+    lead_source: string
+    referred_agent_id: string | null
+  }) => {
+    await updateTia({
+      lead_source: v.lead_source,
+      referred_agent_id: v.referred_agent_id,
+    })
   }
 
-  const applySplit = async () => {
-    if (!canApplySplit) return
-    const amt = parseFloat(commissionAmount)
-    if (!amt || amt <= 0) { setApplyError('Enter commission amount first'); return }
-    setApplying(true)
-    setApplyError(null)
+  const unmarkPaid = async () => {
+    setUnmarking(true)
+    setActionError(null)
     try {
       const res = await fetch(`/api/admin/transactions/${transactionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'apply_primary_split',
+          action: 'unmark_paid',
           internal_agent_id: tia.id,
-          commission_amount: amt,
-          lead_source: leadSource,
         }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        throw new Error(d.error || 'Apply split failed')
+        throw new Error(d.error || 'Unmark failed')
       }
       onRefresh()
     } catch (e: any) {
-      setApplyError(e.message || 'Apply split failed')
+      setActionError(e.message)
     } finally {
-      setApplying(false)
+      setUnmarking(false)
     }
   }
 
-  const unmarkPaid = async () => {
-    if (!confirm('Unmark this row as paid? This will reverse the payment and any debts applied.')) return
-    const res = await fetch(`/api/admin/transactions/${transactionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'unmark_paid', internal_agent_id: tia.id }),
-    })
-    if (res.ok) {
-      onRefresh()
-    } else {
-      const d = await res.json().catch(() => ({}))
-      alert(d.error || 'Unmark paid failed')
-    }
-  }
-
-  const beginDelete = async () => {
-    // Preview linked rows
-    if (canApplySplit) {
+  const loadDeletePreview = async () => {
+    setShowDeleteConfirm(true)
+    try {
       const res = await fetch(`/api/admin/transactions/${transactionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -553,239 +168,546 @@ export default function AgentCard({
           preview: true,
         }),
       })
-      if (res.ok) {
-        const d = await res.json()
-        setLinkedPreview(d.linked_rows || [])
-      }
+      const d = await res.json()
+      setDeletePreview(d.linked_rows || [])
+    } catch {
+      setDeletePreview([])
     }
-    setShowDeleteConfirm(true)
   }
 
   const confirmDelete = async () => {
-    const action = canApplySplit ? 'delete_internal_agent_cascade' : 'delete_internal_agent'
-    const res = await fetch(`/api/admin/transactions/${transactionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, internal_agent_id: tia.id }),
-    })
-    if (res.ok) {
+    setDeleting(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_internal_agent_cascade',
+          internal_agent_id: tia.id,
+          preview: false,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Delete failed')
+      }
       onRefresh()
-    } else {
-      const d = await res.json().catch(() => ({}))
-      alert(d.error || 'Delete failed')
+    } catch (e: any) {
+      setActionError(e.message)
+      setDeleting(false)
     }
-    setShowDeleteConfirm(false)
   }
 
-  const roleLabel = AGENT_ROLE_OPTIONS.find(r => r.value === tia.agent_role)?.label || tia.agent_role
+  const planOptions = plans.map((p) => ({
+    value: p.plan_code || p.plan_name,
+    label: p.plan_name,
+  }))
+
+  const displayName = fmtName(user)
+  const team = membership?.team
+  const teamLead = team?.team_lead
+  const teamLeadName = fmtName(teamLead)
+  const teamLine = team
+    ? `${team.team_name || ''}${teamLeadName ? ` · lead ${teamLeadName}` : ''}`
+    : null
+
+  // Header right side — big dollar + status text
+  const headerRight = () => {
+    if (isDerived) {
+      // derived cards show payout (agent_gross)
+      return (
+        <>
+          <p
+            className="text-xl font-semibold text-luxury-gray-1"
+            style={{ lineHeight: 1 }}
+          >
+            {fmt$(tia.agent_gross || tia.agent_net)}
+          </p>
+          <p className="text-xs mt-1" style={{ color: paid ? '#3B6D11' : '#854F0B', fontWeight: 500 }}>
+            {paid ? `Paid ${fmtDate(tia.payment_date)}` : 'Pending payment'}
+          </p>
+        </>
+      )
+    }
+
+    if (!hasAllDrivers) {
+      return (
+        <p className="text-xs italic text-luxury-gray-3">
+          Fill in the 3 fields to calculate
+        </p>
+      )
+    }
+
+    return (
+      <>
+        <p
+          className="text-xl font-semibold text-luxury-gray-1"
+          style={{ lineHeight: 1 }}
+        >
+          {fmt$(tia.agent_net)}
+        </p>
+        <p className="text-xs mt-1" style={{ color: paid ? '#3B6D11' : '#854F0B', fontWeight: 500 }}>
+          {paid ? `Paid ${fmtDate(tia.payment_date)}` : 'Pending payment'}
+        </p>
+      </>
+    )
+  }
+
+  // Role subtitle line
+  const subtitle = () => {
+    const roleLabel = String(role).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    const officeLabel = user?.office ? ` · ${user.office}` : ''
+    return `${roleLabel}${officeLabel}`
+  }
+
+  // Third line: team info OR "From X · Updated"
+  const tertiary = () => {
+    if (isDerived && tia.source_tia_name) {
+      return (
+        <p className="text-xs text-luxury-gray-3 mt-1">
+          From {tia.source_tia_name}
+          {recentlyUpdated && (
+            <span className="ml-1" style={{ color: '#854F0B', fontWeight: 600 }}>
+              · Updated
+            </span>
+          )}
+        </p>
+      )
+    }
+    if (teamLine) {
+      return <p className="text-xs text-luxury-gray-3 mt-1">{teamLine}</p>
+    }
+    return null
+  }
 
   return (
-    <div className={`container-card mb-3 ${paid ? 'border-l-4 border-l-green-500' : ''}`}>
-      {/* ── Header (always visible) ── */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="flex items-center gap-2 text-left w-full"
-          >
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-luxury-gray-1 truncate">
-                {fmtName(user) || '(no agent selected)'}
-              </p>
-              <p className="text-xs text-luxury-gray-3 truncate">
-                {roleLabel} · {tia.commission_plan || 'no plan'}
-                {membership?.team?.team_name ? ` · ${membership.team.team_name}` : ''}
-              </p>
-            </div>
-          </button>
-        </div>
-        <div className="text-right shrink-0">
-          <p className="text-sm font-semibold text-luxury-gray-1">{fmt$(tia.agent_net)}</p>
-          <p className={`text-xs ${paid ? 'text-green-700 font-semibold' : 'text-amber-700'}`}>
-            {paid ? `Paid ${fmtDate(tia.payment_date)}` : 'Pending'}
+    <div className="container-card">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <p className="font-semibold text-luxury-gray-1" style={{ fontSize: '15px' }}>
+            {displayName}
           </p>
+          <p className="text-xs text-luxury-gray-2 mt-1">{subtitle()}</p>
+          {tertiary()}
+        </div>
+        <div className="text-right" style={{ minWidth: '140px' }}>
+          {headerRight()}
         </div>
       </div>
 
-      {/* ── Expanded content ── */}
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-luxury-gray-5/50">
-          <ContextPanel user={user} membership={membership} billing={billing} />
+      {/* Body varies by role */}
+      {isFullTree && <FullTreeBody
+        tia={tia}
+        transaction={transaction}
+        paid={paid}
+        hasAllDrivers={hasAllDrivers}
+        planOptions={planOptions}
+        saveBasis={saveBasis}
+        savePlan={savePlan}
+        saveLeadSource={saveLeadSource}
+        updateTia={updateTia}
+      />}
+      {isDerived && <DerivedBody tia={tia} />}
 
-          {/* Apply split controls (primary/listing only, not paid) */}
-          {canApplySplit && !paid && (
-            <div className="mb-3 p-2 rounded bg-luxury-accent/5 border border-luxury-accent/20">
-              <p className="text-xs font-semibold text-luxury-gray-1 mb-2 flex items-center gap-1">
-                <DollarSign size={12} /> Apply Split
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="field-label">Commission amount</label>
-                  <input
-                    type="number" step="0.01" min="0"
-                    value={commissionAmount}
-                    onChange={e => setCommissionAmount(e.target.value)}
-                    className="input-luxury text-xs w-full"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Lead source</label>
-                  <select
-                    value={leadSource}
-                    onChange={e => setLeadSource(e.target.value)}
-                    className="select-luxury text-xs w-full"
-                  >
-                    {LEAD_SOURCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-              </div>
-              {applyError && (
-                <p className="text-xs text-red-600 mt-1">{applyError}</p>
-              )}
-              <button
-                onClick={applySplit}
-                disabled={applying}
-                className="btn btn-secondary text-xs mt-2 w-full"
-              >
-                {applying ? 'Applying...' : 'Apply Split (uses plan + team + momentum)'}
-              </button>
-              <p className="text-xs text-luxury-gray-3 mt-1">
-                Creates/updates linked team lead and momentum partner rows automatically.
-              </p>
-            </div>
-          )}
-
-          {/* Commission details */}
-          <div className="mb-3">
-            <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Commission</p>
-            <FieldRow label="Role" value={tia.agent_role} type="select" options={AGENT_ROLE_OPTIONS} locked={paid} onSave={v => updateField('agent_role', v)} />
-            <FieldRow label="Commission plan" value={tia.commission_plan} locked={paid} onSave={v => updateField('commission_plan', v)} />
-            <FieldRow label="Sales volume" value={tia.sales_volume} type="number" money locked={paid} onSave={v => updateField('sales_volume', v)} />
-            <FieldRow label="Units" value={tia.units} type="number" locked={paid} onSave={v => updateField('units', v)} />
-            <FieldRow label="Split %" value={tia.split_percentage} type="number" locked={paid} onSave={v => updateField('split_percentage', v)} />
-            <FieldRow label="Agent gross" value={tia.agent_gross} type="number" money locked={paid} onSave={v => updateField('agent_gross', v)} />
-            <FieldRow label="Processing fee" value={tia.processing_fee} type="number" money locked={paid} onSave={v => updateField('processing_fee', v)} />
-            <FieldRow label="Coaching fee" value={tia.coaching_fee} type="number" money locked={paid} onSave={v => updateField('coaching_fee', v)} />
-            <FieldRow label="Other fees" value={tia.other_fees} type="number" money locked={paid} onSave={v => updateField('other_fees', v)} />
-            {num(tia.other_fees) > 0 && (
-              <FieldRow label="Other fees description" value={tia.other_fees_description} locked={paid} onSave={v => updateField('other_fees_description', v)} />
-            )}
-            {transaction?.has_btsa && (
-              <FieldRow label="BTSA amount" value={tia.btsa_amount} type="number" money locked={paid} onSave={v => updateField('btsa_amount', v)} />
-            )}
-            <FieldRow label="Team lead commission" value={tia.team_lead_commission} type="number" money locked={paid} onSave={v => updateField('team_lead_commission', v)} />
-            <FieldRow label="Brokerage split" value={tia.brokerage_split} type="number" money locked={paid} onSave={v => updateField('brokerage_split', v)} />
-            <FieldRow label="Counts toward progress" value={tia.counts_toward_progress} type="checkbox" locked={paid} onSave={v => updateField('counts_toward_progress', v)} />
-          </div>
-
-          {/* Totals */}
-          <div className="mb-3 p-2 bg-luxury-gray-5/20 rounded">
-            <FieldRow label="Agent net" value={tia.agent_net} type="number" money locked={paid} onSave={v => updateField('agent_net', v)} />
-            <FieldRow label="1099 reportable" value={tia.amount_1099_reportable} type="number" money locked={paid} onSave={v => updateField('amount_1099_reportable', v)} />
-            {paid && num(tia.debts_deducted) > 0 && (
-              <div className="flex justify-between py-1.5 text-xs">
-                <span className="text-luxury-gray-3">Debts deducted at payment</span>
-                <span className="text-luxury-gray-1">{fmt$(tia.debts_deducted)}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Payment details (visible when paid) */}
-          {paid && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-luxury-gray-2 mb-1">Payment</p>
-              <FieldRow label="Date" value={tia.payment_date} type="date" onSave={v => updateField('payment_date', v)} />
-              <FieldRow label="Method" value={tia.payment_method} type="select" options={PAYMENT_METHODS} onSave={v => updateField('payment_method', v)} />
-              <FieldRow label="Reference" value={tia.payment_reference} onSave={v => updateField('payment_reference', v)} />
-              <FieldRow label="Funding source" value={tia.funding_source} type="select" options={FUNDING_SOURCES} onSave={v => updateField('funding_source', v)} />
-            </div>
-          )}
-
-          {/* Mark Paid inline section */}
-          {showMarkPaid && !paid && (
-            <MarkPaidSection
-              tia={tia}
-              transactionId={transactionId}
-              transactionType={txnType}
-              debts={debts}
-              onDone={() => { setShowMarkPaid(false); onRefresh() }}
-              onCancel={() => setShowMarkPaid(false)}
-            />
-          )}
-
-          {/* Action bar */}
-          <div className="flex items-center justify-between pt-3 border-t border-luxury-gray-5/50">
-            <button
-              onClick={beginDelete}
-              className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
-            >
-              <Trash2 size={12} /> Delete
-            </button>
+      {/* Action row */}
+      {!showMarkPaid && !showDeleteConfirm && (
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-luxury-gray-5">
+          {/* Left cluster: Send statement / Send CDA on full-tree roles */}
+          {isFullTree ? (
             <div className="flex gap-2">
-              {paid ? (
-                <button
-                  onClick={unmarkPaid}
-                  className="btn btn-secondary text-xs px-3 py-1.5"
-                >
-                  Unmark Paid
-                </button>
-              ) : (
-                !showMarkPaid && (
-                  <button
-                    onClick={openMarkPaid}
-                    className="btn btn-primary text-xs px-3 py-1.5"
-                  >
-                    Mark Paid
-                  </button>
-                )
-              )}
+              <button
+                onClick={() => setEmailPreview('statement')}
+                className="btn btn-secondary text-xs flex items-center gap-1.5"
+              >
+                <Send size={12} />
+                Send statement
+              </button>
+              <button
+                onClick={() => setEmailPreview('cda')}
+                className="btn btn-secondary text-xs flex items-center gap-1.5"
+              >
+                <Send size={12} />
+                Send CDA
+              </button>
             </div>
+          ) : (
+            <p className="text-xs text-luxury-gray-3">
+              {isDerived && tia.source_tia_name
+                ? `Auto-calculated from ${tia.source_tia_name}.`
+                : ''}
+            </p>
+          )}
+
+          {/* Right cluster: destructive + edit + paid */}
+          <div className="flex gap-2">
+            {!isDerived && (
+              <button
+                onClick={loadDeletePreview}
+                className="btn text-xs"
+                style={{
+                  background: 'white',
+                  border: '1px solid #b91c1c',
+                  color: '#b91c1c',
+                }}
+              >
+                Delete
+              </button>
+            )}
+            {paid ? (
+              <button
+                onClick={unmarkPaid}
+                disabled={unmarking}
+                className="btn btn-secondary text-xs"
+              >
+                {unmarking ? 'Working...' : 'Unmark paid'}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowMarkPaid(true)}
+                disabled={!hasAllDrivers && isFullTree}
+                className="btn btn-primary text-xs"
+              >
+                Mark paid
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Delete confirm modal */}
+      {actionError && (
+        <p className="text-xs text-red-600 mt-2">{actionError}</p>
+      )}
+
+      {showMarkPaid && (
+        <MarkPaidPanel
+          transactionId={transactionId}
+          tia={{ ...tia, transaction_type: transaction?.transaction_type }}
+          onCancel={() => setShowMarkPaid(false)}
+          onMarked={() => {
+            setShowMarkPaid(false)
+            onRefresh()
+          }}
+        />
+      )}
+
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4">
-            <p className="text-sm font-semibold text-luxury-gray-1 mb-2">Delete {fmtName(user) || 'agent'}?</p>
-            {canApplySplit && linkedPreview.length > 0 && (
-              <>
-                <p className="text-xs text-luxury-gray-2 mb-2">
-                  This will also delete {linkedPreview.length} linked row{linkedPreview.length !== 1 ? 's' : ''}:
-                </p>
-                <ul className="text-xs space-y-1 mb-3 max-h-40 overflow-y-auto">
-                  {linkedPreview.map((r: any) => (
-                    <li key={r.id} className="flex justify-between bg-luxury-gray-5/30 px-2 py-1 rounded">
-                      <span>{fmtName(r.user) || '(unknown)'} · {r.agent_role?.replace(/_/g, ' ')}</span>
-                      <span className="text-luxury-gray-3">{fmt$(r.agent_net)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {canApplySplit && linkedPreview.length === 0 && (
-              <p className="text-xs text-luxury-gray-3 mb-3">No linked rows.</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="btn btn-secondary text-xs px-3 py-1.5"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="btn text-xs px-3 py-1.5 bg-white border border-red-600 text-red-600 hover:bg-red-50 rounded"
-              >
-                Delete {canApplySplit && linkedPreview.length > 0 ? `${linkedPreview.length + 1} rows` : ''}
-              </button>
+        <div className="inner-card mt-4">
+          <p className="field-label mb-2">Confirm delete</p>
+          <p className="text-xs text-luxury-gray-2 mb-2">
+            This will remove {displayName} from the transaction.
+          </p>
+          {deletePreview.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs text-luxury-gray-3 mb-1">
+                Also removes {deletePreview.length} linked row
+                {deletePreview.length === 1 ? '' : 's'}:
+              </p>
+              <ul className="text-xs text-luxury-gray-3 list-disc pl-5">
+                {deletePreview.map((r: any) => (
+                  <li key={r.id}>
+                    {String(r.agent_role).replace(/_/g, ' ')} · {fmt$(r.agent_net)}
+                  </li>
+                ))}
+              </ul>
             </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="btn btn-secondary text-xs"
+              disabled={deleting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="btn text-xs"
+              style={{
+                background: '#b91c1c',
+                border: '1px solid #b91c1c',
+                color: 'white',
+              }}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
           </div>
         </div>
       )}
+
+      {emailPreview && (
+        <EmailPreviewModal
+          transactionId={transactionId}
+          internalAgentId={tia.id}
+          emailType={emailPreview}
+          onClose={() => setEmailPreview(null)}
+          onSent={() => {
+            setShowSentToast(true)
+            setTimeout(() => setShowSentToast(false), 3000)
+          }}
+        />
+      )}
+
+      {showSentToast && (
+        <p className="text-xs mt-2" style={{ color: '#3B6D11', fontWeight: 500 }}>
+          Email sent.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ─── Full tree body (primary / listing / co / referral) ────────────────── */
+
+function FullTreeBody({
+  tia,
+  transaction,
+  paid,
+  hasAllDrivers,
+  planOptions,
+  saveBasis,
+  savePlan,
+  saveLeadSource,
+  updateTia,
+}: {
+  tia: any
+  transaction: any
+  paid: boolean
+  hasAllDrivers: boolean
+  planOptions: { value: string; label: string }[]
+  saveBasis: (v: string) => Promise<void>
+  savePlan: (v: string) => Promise<void>
+  saveLeadSource: (v: { lead_source: string; referred_agent_id: string | null }) => Promise<void>
+  updateTia: (updates: Record<string, any>) => Promise<void>
+}) {
+  const saveFee = (field: string) => async (v: string) => {
+    const n = parseFloat(v.replace(/[^0-9.-]/g, '')) || 0
+    await updateTia({ [field]: n })
+  }
+
+  const leadSourceLabel =
+    LEAD_SOURCES.find((s) => s.value === tia.lead_source)?.label || ''
+
+  return (
+    <div className="border-t border-luxury-gray-5 pt-3">
+      {/* Driver fields */}
+      <table style={{ width: '100%', fontSize: '13px', borderSpacing: 0 }}>
+        <tbody>
+          <tr>
+            <td className="field-label" style={{ padding: '4px 0', width: '55%' }}>
+              Commission basis
+            </td>
+            <td style={{ textAlign: 'right', padding: '4px 0' }}>
+              <InlineField
+                value={tia.agent_basis || 0}
+                displayValue={fmt$(tia.agent_basis || 0)}
+                type="currency"
+                onSave={saveBasis}
+                locked={paid}
+                placeholder="$0.00"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td className="field-label" style={{ padding: '4px 0' }}>
+              Commission plan
+            </td>
+            <td style={{ textAlign: 'right', padding: '4px 0' }}>
+              <InlineField
+                value={tia.commission_plan || ''}
+                displayValue={tia.commission_plan || '--'}
+                type="select"
+                options={planOptions}
+                onSave={savePlan}
+                locked={paid}
+                width="200px"
+              />
+            </td>
+          </tr>
+          <tr>
+            <td className="field-label" style={{ padding: '4px 0' }}>
+              Lead source
+            </td>
+            <td style={{ textAlign: 'right', padding: '4px 0' }}>
+              <LeadSourceField
+                leadSource={tia.lead_source}
+                referredAgentId={tia.referred_agent_id}
+                locked={paid}
+                onSave={saveLeadSource}
+                excludeAgentId={tia.agent_id}
+              />
+            </td>
+          </tr>
+
+          {hasAllDrivers && (
+            <>
+              <tr>
+                <td className="field-label" style={{ padding: '4px 0' }}>
+                  Split
+                </td>
+                <td style={{ textAlign: 'right', padding: '4px 0', color: '#555' }}>
+                  {tia.split_percentage || 0}%
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: '10px 0 4px', fontWeight: 600, color: '#333' }}>
+                  Agent gross
+                </td>
+                <td style={{ textAlign: 'right', padding: '10px 0 4px', fontWeight: 600, color: '#333' }}>
+                  {fmt$(tia.agent_gross)}
+                </td>
+              </tr>
+
+              {parseFloat(tia.btsa_amount || 0) > 0 && (
+                <tr>
+                  <td className="pl-4" style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px' }}>
+                    + BTSA from buyer
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px' }}>
+                    <InlineField
+                      value={tia.btsa_amount || 0}
+                      displayValue={`+${fmt$(tia.btsa_amount || 0)}`}
+                      type="currency"
+                      onSave={saveFee('btsa_amount')}
+                      locked={paid}
+                    />
+                  </td>
+                </tr>
+              )}
+              {parseFloat(tia.processing_fee || 0) > 0 && (
+                <tr>
+                  <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px' }}>
+                    − Processing fee
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px' }}>
+                    <InlineField
+                      value={tia.processing_fee || 0}
+                      displayValue={`−${fmt$(tia.processing_fee || 0)}`}
+                      type="currency"
+                      onSave={saveFee('processing_fee')}
+                      locked={paid}
+                    />
+                  </td>
+                </tr>
+              )}
+              {parseFloat(tia.coaching_fee || 0) > 0 && (
+                <tr>
+                  <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px' }}>
+                    − Coaching fee
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px' }}>
+                    <InlineField
+                      value={tia.coaching_fee || 0}
+                      displayValue={`−${fmt$(tia.coaching_fee || 0)}`}
+                      type="currency"
+                      onSave={saveFee('coaching_fee')}
+                      locked={paid}
+                    />
+                  </td>
+                </tr>
+              )}
+              {parseFloat(tia.other_fees || 0) > 0 && (
+                <tr>
+                  <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px' }}>
+                    − {tia.other_fees_description || 'Other fees'}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px' }}>
+                    <InlineField
+                      value={tia.other_fees || 0}
+                      displayValue={`−${fmt$(tia.other_fees || 0)}`}
+                      type="currency"
+                      onSave={saveFee('other_fees')}
+                      locked={paid}
+                    />
+                  </td>
+                </tr>
+              )}
+              {parseFloat(tia.team_lead_commission || 0) > 0 && (
+                <tr>
+                  <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px', fontStyle: 'italic' }}>
+                    Team lead payout (informational)
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px', fontStyle: 'italic' }}>
+                    {fmt$(tia.team_lead_commission)}
+                  </td>
+                </tr>
+              )}
+            </>
+          )}
+        </tbody>
+      </table>
+
+      {hasAllDrivers && (
+        <>
+          <div className="flex justify-between pt-3 mt-3 border-t border-luxury-gray-5">
+            <span className="text-sm font-semibold text-luxury-gray-1">Agent net</span>
+            <span className="text-sm font-semibold text-luxury-gray-1">{fmt$(tia.agent_net)}</span>
+          </div>
+          <div className="flex justify-between pt-1">
+            <span className="text-xs text-luxury-gray-2">1099 reportable</span>
+            <span className="text-xs text-luxury-gray-2">
+              {fmt$(tia.amount_1099_reportable)}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/* ─── Derived body (team_lead / momentum_partner) ──────────────────────── */
+
+function DerivedBody({ tia }: { tia: any }) {
+  const isTL = tia.agent_role === 'team_lead'
+  return (
+    <div className="border-t border-luxury-gray-5 pt-3">
+      <table style={{ width: '100%', fontSize: '13px', borderSpacing: 0 }}>
+        <tbody>
+          {isTL ? (
+            <>
+              <tr>
+                <td className="field-label" style={{ padding: '4px 0', width: '55%' }}>
+                  Primary's basis
+                </td>
+                <td style={{ textAlign: 'right', padding: '4px 0', color: '#333' }}>
+                  {fmt$(tia.agent_basis || 0)}
+                </td>
+              </tr>
+              <tr>
+                <td className="field-label" style={{ padding: '4px 0' }}>
+                  Team lead %
+                </td>
+                <td style={{ textAlign: 'right', padding: '4px 0', color: '#555' }}>
+                  {tia.split_percentage || 0}%
+                </td>
+              </tr>
+            </>
+          ) : (
+            <tr>
+              <td className="field-label" style={{ padding: '4px 0', width: '55%' }}>
+                Momentum referral fee
+              </td>
+              <td style={{ textAlign: 'right', padding: '4px 0', color: '#333' }}>
+                {fmt$(tia.agent_gross || tia.agent_net)}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <div className="flex justify-between pt-3 mt-3 border-t border-luxury-gray-5">
+        <span className="text-sm font-semibold text-luxury-gray-1">Payout</span>
+        <span className="text-sm font-semibold text-luxury-gray-1">
+          {fmt$(tia.agent_gross || tia.agent_net)}
+        </span>
+      </div>
+      <div className="flex justify-between pt-1">
+        <span className="text-xs text-luxury-gray-2">1099 reportable</span>
+        <span className="text-xs text-luxury-gray-2">
+          {fmt$(tia.amount_1099_reportable || tia.agent_gross || tia.agent_net)}
+        </span>
+      </div>
     </div>
   )
 }

@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
       brokerage_city: 'Houston',
       brokerage_state: 'Texas',
       brokerage_zip: '77040',
-      brokerage_main_email: 'info@collectiverealtyco.com',
+      brokerage_main_email: 'office@collectiverealtyco.com',
+      executive_email: 'info@collectiverealtyco.com',
       // Standard Agent
       standard_onboarding_fee: 399,
       standard_monthly_fee: 50,

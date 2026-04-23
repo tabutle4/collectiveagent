@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ServiceConfiguration } from '@/types/listing-coordination'
+import { LEAD_SOURCES } from '@/lib/transactions/constants'
 
 export default function PublicPreListingForm() {
   const params = useParams()
@@ -376,14 +377,9 @@ export default function PublicPreListingForm() {
                 required
               >
                 <option value="">Select a source</option>
-                <option value="brokerage_referral">Brokerage Referral</option>
-                <option value="client_referral">Client Referral</option>
-                <option value="other_referral">Other Referral</option>
-                <option value="kvcore_lead">kvCORE Lead</option>
-                <option value="mls_lead">MLS Lead</option>
-                <option value="ig_lead">IG Lead</option>
-                <option value="repeat_client">Repeat Client</option>
-                <option value="print_advertising">Print Advertising</option>
+                {LEAD_SOURCES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
               </select>
             </div>
 

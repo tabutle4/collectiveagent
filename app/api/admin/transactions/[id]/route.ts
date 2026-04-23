@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@supabase/supabase-js'
+import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { getLeadSourceBucket } from '@/lib/transactions/constants'
+import {
+  buildStatementEmail,
+  buildCdaEmail,
+} from '@/lib/email/buildTransactionEmails'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +15,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // ─── Commission field lock set ──────────────────────────────────────────────
 // When a TIA row is marked paid, these fields become uneditable.
@@ -76,9 +84,16 @@ async function computeCommissionBreakdown(args: {
   transactionId: string
   commissionAmount: number
   leadSource: string
+  referredAgentId?: string | null
   transactionType: string | null
 }) {
-  const { agentId, commissionAmount, leadSource, transactionType } = args
+  const {
+    agentId,
+    commissionAmount,
+    leadSource,
+    referredAgentId,
+    transactionType,
+  } = args
   const isLease = isLeaseType(transactionType)
 
   // Agent record
@@ -166,8 +181,17 @@ async function computeCommissionBreakdown(args: {
         ? 'sales_85_15'
         : 'sales_70_30'
 
+    // Translate the user-facing lead source into one of the 3 buckets that
+    // team_agreement_splits.lead_source uses: own | team_lead | firm.
+    const bucket = getLeadSourceBucket(
+      leadSource,
+      referredAgentId ?? null,
+      teamLeadId
+    )
+
     const match =
-      teamSplits.find((s: any) => s.plan_type === planType && s.lead_source === leadSource) ||
+      teamSplits.find((s: any) => s.plan_type === planType && s.lead_source === bucket) ||
+      teamSplits.find((s: any) => s.plan_type === planType && s.lead_source === 'own') ||
       teamSplits.find((s: any) => s.plan_type === planType)
 
     if (match) {
@@ -233,6 +257,226 @@ async function computeCommissionBreakdown(args: {
     primaryAgentNet,
     primary1099,
     onTeamWithSplit,
+  }
+}
+
+/**
+ * cascadePrimarySplit — shared helper used by both the apply_primary_split
+ * action and the update_internal_agent auto-cascade. Recomputes the primary
+ * row's commission math AND upserts the linked team_lead / momentum_partner
+ * rows so derived payouts stay consistent.
+ *
+ * Intentionally does NOT block on closed transactions; callers validate that
+ * themselves. Does skip paid linked rows (they're frozen).
+ */
+async function cascadePrimarySplit(args: {
+  transactionId: string
+  internalAgentId: string
+  commissionAmount: number
+  leadSource: string
+  referredAgentId: string | null
+}): Promise<void> {
+  const {
+    transactionId,
+    internalAgentId,
+    commissionAmount,
+    leadSource,
+    referredAgentId,
+  } = args
+
+  const { data: primaryTia } = await supabase
+    .from('transaction_internal_agents')
+    .select('id, agent_id, agent_role, payment_status')
+    .eq('id', internalAgentId)
+    .eq('transaction_id', transactionId)
+    .single()
+  if (!primaryTia) return
+  if (primaryTia.payment_status === 'paid') return
+
+  const { data: txn } = await supabase
+    .from('transactions')
+    .select('transaction_type, status')
+    .eq('id', transactionId)
+    .single()
+  if (txn?.status === 'closed') return
+
+  const breakdown = await computeCommissionBreakdown({
+    agentId: primaryTia.agent_id,
+    transactionId,
+    commissionAmount,
+    leadSource,
+    referredAgentId,
+    transactionType: txn?.transaction_type || null,
+  })
+
+  // Update primary row — commission math only. Manual fields (other_fees,
+  // btsa_amount) are NOT overwritten here so ad-hoc adjustments survive.
+  const primaryUpdates: any = {
+    commission_plan: breakdown.planCode,
+    agent_basis: commissionAmount,
+    split_percentage: breakdown.agentSplitPct,
+    agent_gross: Math.round(breakdown.agentGross * 100) / 100,
+    brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
+    processing_fee: Math.round(breakdown.processingFee * 100) / 100,
+    coaching_fee: Math.round(breakdown.coachingFee * 100) / 100,
+    team_lead_commission: Math.round(breakdown.teamLeadPayout * 100) / 100,
+    agent_net: Math.round(breakdown.primaryAgentNet * 100) / 100,
+    amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
+    updated_at: new Date().toISOString(),
+  }
+  if (breakdown.commissionPlanId) {
+    primaryUpdates.commission_plan_id = breakdown.commissionPlanId
+  }
+  await supabase
+    .from('transaction_internal_agents')
+    .update(primaryUpdates)
+    .eq('id', internalAgentId)
+
+  async function buildLinkedRowFields(
+    linkedAgentId: string,
+    amount: number,
+    pct: number,
+    basis: number
+  ): Promise<any> {
+    const { data: linkedUser } = await supabase
+      .from('users')
+      .select('commission_plan, lease_commission_plan')
+      .eq('id', linkedAgentId)
+      .single()
+    const linkedPlanCode = breakdown.isLease && linkedUser?.lease_commission_plan
+      ? linkedUser.lease_commission_plan
+      : linkedUser?.commission_plan || null
+    let linkedPlanId: string | null = null
+    if (linkedPlanCode) {
+      const { data: planRow } = await supabase
+        .from('commission_plans')
+        .select('id')
+        .or(`code.ilike.${linkedPlanCode},name.ilike.${linkedPlanCode}`)
+        .limit(1)
+        .maybeSingle()
+      linkedPlanId = planRow?.id || null
+    }
+    return {
+      agent_gross: amount,
+      agent_net: amount,
+      amount_1099_reportable: amount,
+      brokerage_split: 0,
+      processing_fee: 0,
+      coaching_fee: 0,
+      other_fees: 0,
+      other_fees_description: null,
+      btsa_amount: 0,
+      team_lead_commission: 0,
+      debts_deducted: 0,
+      rebate_amount: 0,
+      rebate_type: null,
+      pre_split_deductions: 0,
+      pre_split_deductions_description: null,
+      sales_volume: 0,
+      units: 0,
+      split_percentage: pct,
+      agent_basis: basis,
+      commission_plan: linkedPlanCode,
+      commission_plan_id: linkedPlanId,
+      counts_toward_progress: false,
+    }
+  }
+
+  // Team lead row upsert
+  if (breakdown.teamLeadId && breakdown.teamLeadPayout > 0) {
+    const { data: existingTl } = await supabase
+      .from('transaction_internal_agents')
+      .select('id, payment_status')
+      .eq('transaction_id', transactionId)
+      .eq('agent_role', 'team_lead')
+      .eq('source_tia_id', internalAgentId)
+      .maybeSingle()
+    const tlAmount = Math.round(breakdown.teamLeadPayout * 100) / 100
+    const tlFields = await buildLinkedRowFields(
+      breakdown.teamLeadId,
+      tlAmount,
+      breakdown.teamLeadPct,
+      commissionAmount
+    )
+    if (existingTl && existingTl.payment_status !== 'paid') {
+      await supabase
+        .from('transaction_internal_agents')
+        .update({ ...tlFields, updated_at: new Date().toISOString() })
+        .eq('id', existingTl.id)
+    } else if (!existingTl) {
+      await supabase.from('transaction_internal_agents').insert({
+        transaction_id: transactionId,
+        agent_id: breakdown.teamLeadId,
+        agent_role: 'team_lead',
+        payment_status: 'pending',
+        funding_source: 'crc',
+        source_tia_id: internalAgentId,
+        ...tlFields,
+      })
+    }
+  } else {
+    // Remove stale TL if not paid
+    const { data: staleTl } = await supabase
+      .from('transaction_internal_agents')
+      .select('id, payment_status')
+      .eq('transaction_id', transactionId)
+      .eq('agent_role', 'team_lead')
+      .eq('source_tia_id', internalAgentId)
+      .maybeSingle()
+    if (staleTl && staleTl.payment_status !== 'paid') {
+      await supabase
+        .from('transaction_internal_agents')
+        .delete()
+        .eq('id', staleTl.id)
+    }
+  }
+
+  // Momentum partner row upsert
+  if (breakdown.momentumPartnerId && breakdown.momentumPartnerPayout > 0) {
+    const { data: existingMp } = await supabase
+      .from('transaction_internal_agents')
+      .select('id, payment_status')
+      .eq('transaction_id', transactionId)
+      .eq('agent_role', 'momentum_partner')
+      .eq('source_tia_id', internalAgentId)
+      .maybeSingle()
+    const mpAmount = Math.round(breakdown.momentumPartnerPayout * 100) / 100
+    const mpFields = await buildLinkedRowFields(
+      breakdown.momentumPartnerId,
+      mpAmount,
+      breakdown.momentumPartnerPct,
+      Math.round(breakdown.brokerageSplit * 100) / 100
+    )
+    if (existingMp && existingMp.payment_status !== 'paid') {
+      await supabase
+        .from('transaction_internal_agents')
+        .update({ ...mpFields, updated_at: new Date().toISOString() })
+        .eq('id', existingMp.id)
+    } else if (!existingMp) {
+      await supabase.from('transaction_internal_agents').insert({
+        transaction_id: transactionId,
+        agent_id: breakdown.momentumPartnerId,
+        agent_role: 'momentum_partner',
+        payment_status: 'pending',
+        funding_source: 'crc',
+        source_tia_id: internalAgentId,
+        ...mpFields,
+      })
+    }
+  } else {
+    const { data: staleMp } = await supabase
+      .from('transaction_internal_agents')
+      .select('id, payment_status')
+      .eq('transaction_id', transactionId)
+      .eq('agent_role', 'momentum_partner')
+      .eq('source_tia_id', internalAgentId)
+      .maybeSingle()
+    if (staleMp && staleMp.payment_status !== 'paid') {
+      await supabase
+        .from('transaction_internal_agents')
+        .delete()
+        .eq('id', staleMp.id)
+    }
   }
 }
 
@@ -591,10 +835,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === 'update_internal_agent') {
       const { internal_agent_id, updates } = body
 
-      // Check current payment status
+      // Check current row + payment status
       const { data: current } = await supabase
         .from('transaction_internal_agents')
-        .select('payment_status')
+        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id')
         .eq('id', internal_agent_id)
         .single()
 
@@ -613,6 +857,53 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', internal_agent_id)
       if (error) throw error
+
+      // ── Auto-cascade on primary driver changes ──────────────────────────────
+      // If this row is a primary/listing/co_agent AND the update touched a
+      // driver field (basis, plan, lead_source, referred_agent_id), re-run the
+      // primary-split calculation so linked team_lead and momentum_partner
+      // rows stay consistent without requiring a separate Apply Split click.
+      const DRIVER_FIELDS = ['agent_basis', 'commission_plan', 'commission_plan_id', 'lead_source', 'referred_agent_id']
+      const touchedDriver = Object.keys(updates || {}).some(k => DRIVER_FIELDS.includes(k))
+      const cascadeRoles = ['primary_agent', 'listing_agent', 'co_agent']
+      if (
+        touchedDriver &&
+        current &&
+        cascadeRoles.includes(current.agent_role)
+      ) {
+        try {
+          // Merge current + updates to get effective values. Check key
+          // PRESENCE (via 'in') rather than value, so an explicit null in
+          // updates (e.g. clearing referred_agent_id when user moves off
+          // internal_agent_referral) overrides the stored value.
+          const effectiveBasis = 'agent_basis' in (updates || {})
+            ? num(updates.agent_basis)
+            : num(current.agent_basis)
+          const effectiveLeadSource = 'lead_source' in (updates || {})
+            ? (updates.lead_source || 'own')
+            : (current.lead_source || 'own')
+          const effectiveReferredAgent = 'referred_agent_id' in (updates || {})
+            ? (updates.referred_agent_id || null)
+            : (current.referred_agent_id || null)
+
+          // Only cascade when we have a real basis (>0) — otherwise nothing to
+          // compute and we'd write zero values into linked rows.
+          if (effectiveBasis > 0) {
+            await cascadePrimarySplit({
+              transactionId: id,
+              internalAgentId: internal_agent_id,
+              commissionAmount: effectiveBasis,
+              leadSource: effectiveLeadSource,
+              referredAgentId: effectiveReferredAgent,
+            })
+          }
+        } catch (cascadeErr: any) {
+          // Log but don't fail the user's field update — the primary row IS
+          // updated; the cascade can be re-triggered by editing again.
+          console.error('Auto-cascade failed:', cascadeErr)
+        }
+      }
+
       return NextResponse.json({ success: true })
     }
 
@@ -853,7 +1144,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Computes all derived numbers and upserts the team_lead and
     // momentum_partner linked TIA rows atomically.
     if (action === 'apply_primary_split') {
-      const { internal_agent_id, commission_amount, lead_source = 'own' } = body
+      const {
+        internal_agent_id,
+        commission_amount,
+        lead_source = 'own',
+        referred_agent_id = null,
+      } = body
 
       if (!internal_agent_id || commission_amount == null) {
         return NextResponse.json(
@@ -908,6 +1204,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         transactionId: id,
         commissionAmount: commAmt,
         leadSource: lead_source,
+        referredAgentId: referred_agent_id,
         transactionType: txn?.transaction_type || null,
       })
 
@@ -924,6 +1221,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         agent_net: Math.round(breakdown.primaryAgentNet * 100) / 100,
         amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
         counts_toward_progress: !breakdown.isLease,
+        lead_source,
+        referred_agent_id: referred_agent_id || null,
         updated_at: new Date().toISOString(),
       }
       if (breakdown.commissionPlanId) primaryUpdates.commission_plan_id = breakdown.commissionPlanId
@@ -1516,6 +1815,81 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('transaction_id', id)
       if (error) throw error
       return NextResponse.json({ success: true })
+    }
+
+    // ── Preview a statement or CDA email ─────────────────────────────────────
+    // Returns { preview: { subject, html, to, cc, replyTo } } without sending.
+    // Used by EmailPreviewModal to show a read-only rendered preview before
+    // the user confirms with Send.
+    if (action === 'preview_email') {
+      const { email_type, internal_agent_id } = body
+      if (!internal_agent_id || !email_type) {
+        return NextResponse.json(
+          { error: 'email_type and internal_agent_id required' },
+          { status: 400 }
+        )
+      }
+      let preview
+      if (email_type === 'statement') {
+        preview = await buildStatementEmail(id, internal_agent_id)
+      } else if (email_type === 'cda') {
+        preview = await buildCdaEmail(id, internal_agent_id)
+      } else {
+        return NextResponse.json(
+          { error: `Unknown email_type: ${email_type}` },
+          { status: 400 }
+        )
+      }
+      return NextResponse.json({ preview })
+    }
+
+    // ── Send a statement or CDA email ────────────────────────────────────────
+    // Rebuilds the preview from fresh DB data (never trusts client copy), then
+    // fires via Resend. Requires either brokerage_main_email (CRC) or
+    // referral_brokerage_email (RC) to be configured for the cc.
+    if (action === 'send_email') {
+      const { email_type, internal_agent_id } = body
+      if (!internal_agent_id || !email_type) {
+        return NextResponse.json(
+          { error: 'email_type and internal_agent_id required' },
+          { status: 400 }
+        )
+      }
+      let preview
+      if (email_type === 'statement') {
+        preview = await buildStatementEmail(id, internal_agent_id)
+      } else if (email_type === 'cda') {
+        preview = await buildCdaEmail(id, internal_agent_id)
+      } else {
+        return NextResponse.json(
+          { error: `Unknown email_type: ${email_type}` },
+          { status: 400 }
+        )
+      }
+
+      if (!preview.to) {
+        return NextResponse.json(
+          { error: 'Agent has no email address on file' },
+          { status: 400 }
+        )
+      }
+
+      const { error: sendError } = await resend.emails.send({
+        from: 'Collective Realty Co. <transactions@coachingbrokeragetools.com>',
+        to: [preview.to],
+        cc: preview.cc ? [preview.cc] : undefined,
+        replyTo: preview.replyTo,
+        subject: preview.subject,
+        html: preview.html,
+      })
+      if (sendError) {
+        return NextResponse.json(
+          { error: sendError.message || 'Send failed' },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({ success: true, sent_to: preview.to, cc: preview.cc })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
