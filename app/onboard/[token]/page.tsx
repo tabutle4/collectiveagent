@@ -1452,15 +1452,6 @@ const checkout = new window.Payload.Checkout({
               </h2>
               <div className="space-y-2 text-sm text-luxury-gray-2">
                 <p>Credit/debit card or bank account (ACH). Click Pay & Continue below.</p>
-                <p>
-                  Zelle: send to{' '}
-                  <span className="font-medium text-luxury-gray-1">info@collectiverealtyco.com</span>{' '}
-                  with your name, then email{' '}
-                  <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
-                    office@collectiverealtyco.com
-                  </a>{' '}
-                  to confirm.
-                </p>
               </div>
             </div>
 
