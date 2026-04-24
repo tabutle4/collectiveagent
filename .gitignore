@@ -4,3 +4,4 @@ node_modules
 .next
 public/videos/*.mp4
 public/videos/*.MP4
+tsconfig.tsbuildinfo

@@ -8,6 +8,7 @@ import MarkPaidPanel from './MarkPaidPanel'
 import EmailPreviewModal from './EmailPreviewModal'
 import { LEAD_SOURCES } from '@/lib/transactions/constants'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { computeCommission } from '@/lib/transactions/math'
 
 const fmt$ = (n: any): string =>
   new Intl.NumberFormat('en-US', {
@@ -80,6 +81,7 @@ export default function AgentCard({
   const isFullTree = FULL_TREE_ROLES.has(role)
   const isDerived = DERIVED_ROLES.has(role)
   const isLease = isLeaseTransactionType(transaction?.transaction_type)
+  const usesCanonicalMath = !!tia.uses_canonical_math
 
   // Load available commission plans (for the Plan inline-edit dropdown)
   useEffect(() => {
@@ -288,6 +290,14 @@ export default function AgentCard({
         <div>
           <p className="font-semibold text-luxury-gray-1" style={{ fontSize: '15px' }}>
             {displayName}
+            {!usesCanonicalMath && (
+              <span
+                className="ml-2 text-[10px] font-normal text-luxury-gray-3 bg-luxury-light px-1.5 py-0.5 rounded"
+                title="Imported row. To use updated math, remove and re-add this agent."
+              >
+                Imported
+              </span>
+            )}
           </p>
           <p className="text-xs text-luxury-gray-2 mt-1">{subtitle()}</p>
           {tertiary()}
@@ -297,12 +307,18 @@ export default function AgentCard({
         </div>
       </div>
 
+      {/* Mini-tree for canonical rows with complete drivers */}
+      {isFullTree && usesCanonicalMath && hasAllDrivers && (
+        <MiniTreeCanonical tia={tia} />
+      )}
+
       {/* Body varies by role */}
       {isFullTree && <FullTreeBody
         tia={tia}
         transaction={transaction}
         paid={paid}
         hasAllDrivers={hasAllDrivers}
+        usesCanonicalMath={usesCanonicalMath}
         planOptions={planOptions}
         saveBasis={saveBasis}
         savePlan={savePlan}
@@ -466,6 +482,7 @@ function FullTreeBody({
   transaction,
   paid,
   hasAllDrivers,
+  usesCanonicalMath,
   planOptions,
   saveBasis,
   savePlan,
@@ -476,6 +493,7 @@ function FullTreeBody({
   transaction: any
   paid: boolean
   hasAllDrivers: boolean
+  usesCanonicalMath: boolean
   planOptions: { value: string; label: string }[]
   saveBasis: (v: string) => Promise<void>
   savePlan: (v: string) => Promise<void>
@@ -489,6 +507,15 @@ function FullTreeBody({
 
   const leadSourceLabel =
     LEAD_SOURCES.find((s) => s.value === tia.lead_source)?.label || ''
+
+  // For canonical-math rows, compute derived values live from inputs.
+  // For legacy rows, stored agent_net/amount_1099 are displayed as-is.
+  const liveAgentNet = usesCanonicalMath
+    ? computeCommission(tia).agent_net
+    : parseFloat(tia.agent_net || 0) || 0
+  const live1099 = usesCanonicalMath
+    ? computeCommission(tia).amount_1099
+    : parseFloat(tia.amount_1099_reportable || 0) || 0
 
   return (
     <div className="border-t border-luxury-gray-5 pt-3">
@@ -624,6 +651,28 @@ function FullTreeBody({
                   </td>
                 </tr>
               )}
+              {/* Rebate — only shown for canonical rows; deducts from 1099 + net */}
+              {usesCanonicalMath && (
+                <tr>
+                  <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px' }}>
+                    − Rebate to client
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '3px 0', color: '#999', fontSize: '12px' }}>
+                    <InlineField
+                      value={tia.rebate_amount || 0}
+                      displayValue={
+                        parseFloat(tia.rebate_amount || 0) > 0
+                          ? `−${fmt$(tia.rebate_amount || 0)}`
+                          : '--'
+                      }
+                      type="currency"
+                      onSave={saveFee('rebate_amount')}
+                      locked={paid}
+                      placeholder="$0.00"
+                    />
+                  </td>
+                </tr>
+              )}
               {parseFloat(tia.team_lead_commission || 0) > 0 && (
                 <tr>
                   <td style={{ padding: '3px 0 3px 14px', color: '#999', fontSize: '12px', fontStyle: 'italic' }}>
@@ -643,12 +692,14 @@ function FullTreeBody({
         <>
           <div className="flex justify-between pt-3 mt-3 border-t border-luxury-gray-5">
             <span className="text-sm font-semibold text-luxury-gray-1">Agent net</span>
-            <span className="text-sm font-semibold text-luxury-gray-1">{fmt$(tia.agent_net)}</span>
+            <span className="text-sm font-semibold text-luxury-gray-1">
+              {fmt$(usesCanonicalMath ? liveAgentNet : tia.agent_net)}
+            </span>
           </div>
           <div className="flex justify-between pt-1">
             <span className="text-xs text-luxury-gray-2">1099 reportable</span>
             <span className="text-xs text-luxury-gray-2">
-              {fmt$(tia.amount_1099_reportable)}
+              {fmt$(usesCanonicalMath ? live1099 : tia.amount_1099_reportable)}
             </span>
           </div>
         </>
@@ -707,6 +758,82 @@ function DerivedBody({ tia }: { tia: any }) {
         <span className="text-xs text-luxury-gray-2">
           {fmt$(tia.amount_1099_reportable || tia.agent_gross || tia.agent_net)}
         </span>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Mini-tree for canonical-math rows ──────────────────────────────────── */
+
+function MiniTreeCanonical({ tia }: { tia: any }) {
+  const gross = parseFloat(tia.agent_gross || 0) || 0
+  const basis = parseFloat(tia.agent_basis || 0) || 0
+  const split = parseFloat(tia.split_percentage || 0) || 0
+  const processing = parseFloat(tia.processing_fee || 0) || 0
+  const coaching = parseFloat(tia.coaching_fee || 0) || 0
+  const other = parseFloat(tia.other_fees || 0) || 0
+  const rebate = parseFloat(tia.rebate_amount || 0) || 0
+  const btsa = parseFloat(tia.btsa_amount || 0) || 0
+
+  const result = computeCommission(tia)
+
+  // Human-readable deduction summary shown on the arrow between gross and net
+  const deductionParts: string[] = []
+  if (btsa > 0) deductionParts.push(`+${fmt$(btsa)} BTSA`)
+  if (processing > 0) deductionParts.push(`−${fmt$(processing)} proc`)
+  if (coaching > 0) deductionParts.push(`−${fmt$(coaching)} coach`)
+  if (other > 0) deductionParts.push(`−${fmt$(other)} other`)
+  if (rebate > 0) deductionParts.push(`−${fmt$(rebate)} rebate`)
+  const deductionLabel = deductionParts.length > 0
+    ? deductionParts.join(' · ')
+    : 'no deductions'
+
+  const splitLabel = split > 0 ? `× ${split}%` : ''
+
+  return (
+    <div className="bg-luxury-light rounded-md p-2 mb-3 flex items-center gap-1.5 overflow-x-auto">
+      {/* Source: commission basis */}
+      <div className="bg-chart-gold-2 border border-chart-gold-7 rounded px-2 py-1.5 flex-shrink-0">
+        <p className="text-[9px] uppercase tracking-wider text-chart-gold-10">
+          Basis
+        </p>
+        <p className="text-xs font-medium text-chart-gold-10 whitespace-nowrap">
+          {fmt$(basis)}
+        </p>
+      </div>
+
+      {/* Arrow with split label */}
+      <div className="text-luxury-gray-3 flex flex-col items-center flex-shrink-0">
+        {splitLabel && (
+          <span className="text-[9px] whitespace-nowrap">{splitLabel}</span>
+        )}
+        <span className="text-xs">→</span>
+      </div>
+
+      {/* Agent gross */}
+      <div className="bg-chart-gold-5 border border-chart-gold-7 rounded px-2 py-1.5 flex-shrink-0">
+        <p className="text-[9px] uppercase tracking-wider text-white/85">
+          Agent gross
+        </p>
+        <p className="text-xs font-medium text-white whitespace-nowrap">
+          {fmt$(gross)}
+        </p>
+      </div>
+
+      {/* Arrow with deduction summary */}
+      <div className="text-luxury-gray-3 flex flex-col items-center flex-shrink-0">
+        <span className="text-[9px] whitespace-nowrap">{deductionLabel}</span>
+        <span className="text-xs">→</span>
+      </div>
+
+      {/* Agent net */}
+      <div className="bg-chart-gold-8 border border-chart-gold-10 rounded px-2 py-1.5 flex-shrink-0">
+        <p className="text-[9px] uppercase tracking-wider text-white/85">
+          Agent net
+        </p>
+        <p className="text-xs font-medium text-white whitespace-nowrap">
+          {fmt$(result.agent_net)}
+        </p>
       </div>
     </div>
   )

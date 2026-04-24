@@ -82,6 +82,11 @@ export default function AgentsSection({
             units: 1,
             funding_source: 'crc',
             payment_status: 'pending',
+            // NEW (2026-04-24): rows created through the updated transaction
+            // page use the canonical commission formula for display and
+            // recomputation. Legacy rows (pre-deploy) stay on their stored
+            // values. Admin can toggle this column via SQL if needed.
+            uses_canonical_math: true,
           },
         }),
       })

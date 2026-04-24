@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import StatusBadge from '@/components/transactions/StatusBadge'
-import CloseDialog from '@/components/transactions/CloseDialog'
+import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -3140,7 +3140,7 @@ export default function AdminTransactionDetailPage() {
 
       {/* ── Close Transaction Modal ─────────────────────────────────────────── */}
       {showCloseModal && (
-        <CloseDialog
+        <CloseTransactionModal
           transactionId={id}
           transaction={data.transaction}
           agents={data.agents || []}

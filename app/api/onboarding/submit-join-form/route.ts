@@ -117,15 +117,20 @@ export async function POST(request: NextRequest) {
         .eq('id', prospect.id)
         .single()
 
-      if (userData?.email && userData?.campaign_token) {
+if (userData?.email && userData?.campaign_token) {
         const user = userData as { preferred_first_name: string; first_name: string; email: string; campaign_token: string; mls_choice: string | null }
-        sendOnboardingNextStepsEmail({
-          preferred_first_name: user.preferred_first_name || '',
-          first_name: user.first_name || '',
-          email: user.email,
-          campaign_token: user.campaign_token,
-          mls_choice: user.mls_choice || '',
-        }).catch(err => console.error('Failed to send next steps email:', err))
+        try {
+          const result = await sendOnboardingNextStepsEmail({
+            preferred_first_name: user.preferred_first_name || '',
+            first_name: user.first_name || '',
+            email: user.email,
+            campaign_token: user.campaign_token,
+            mls_choice: user.mls_choice || '',
+          })
+          console.log('Next steps email sent for user', prospect.id, result)
+        } catch (err) {
+          console.error('Failed to send next steps email for user', prospect.id, err)
+        }
       }
     }
 
