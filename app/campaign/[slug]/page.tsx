@@ -66,7 +66,7 @@ function CampaignContent() {
       <div className="min-h-screen bg-white">
         <LuxuryHeader />
         <div className="max-w-2xl mx-auto px-6 py-12 text-center">
-          <div className="card-section">
+          <div className="container-card">
             <h2 className="text-2xl font-light mb-4 tracking-luxury text-red-600">Access Denied</h2>
             <p className="text-luxury-gray-1 mb-6">{error}</p>
             <p className="text-sm text-luxury-gray-2">

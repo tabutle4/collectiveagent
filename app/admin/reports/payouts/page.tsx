@@ -152,7 +152,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
   const notes = cleanNotes(row.notes)
 
   return (
-    <div className="card-luxury rounded-lg overflow-hidden">
+    <div className="container-card rounded-lg overflow-hidden">
       {/* Header row - address + total */}
       <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-2">
         <div className="flex-1 min-w-0">
@@ -441,7 +441,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
               displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
             )}
             {rows.length > 0 && (
-              <div className="card-luxury rounded-lg flex items-center justify-between px-4 py-2 mt-1">
+              <div className="container-card rounded-lg flex items-center justify-between px-4 py-2 mt-1">
                 <span className="text-xs font-semibold text-luxury-gray-1">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</span>
                 <span className="text-xs font-semibold text-luxury-accent">{fmt(agentTot)}</span>
               </div>

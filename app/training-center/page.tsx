@@ -1012,7 +1012,7 @@ export default function TrainingCenterPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => handleResultClick(e, rec.webUrl)}
-                          className="card-luxury rounded-lg overflow-hidden hover:shadow-md transition-shadow block touch-manipulation"
+                          className="container-card rounded-lg overflow-hidden hover:shadow-md transition-shadow block touch-manipulation"
                         >
                           <div
                             className="relative bg-luxury-dark-3"

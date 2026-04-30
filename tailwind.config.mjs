@@ -18,6 +18,7 @@ const config = {
           'gray-3': '#999999',
           'gray-4': '#aaaaaa',
           'gray-5': '#cccccc',
+          'gray-6': '#E5E5E5',
           light: '#F9F9F9',
           'page-bg': '#EBEBEB',
           white: '#ffffff',

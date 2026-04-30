@@ -152,7 +152,7 @@ export default function PublicJustListedForm() {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Validating access...</p>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function PublicJustListedForm() {
     return (
       <div className="min-h-screen bg-luxury-light py-8 px-4">
         <div className="max-w-3xl mx-auto">
-          <div className="card-section text-center py-12">
+          <div className="container-card text-center py-12">
             <h2 className="text-xl font-medium mb-4 text-luxury-gray-1">Access Denied</h2>
             <p className="text-luxury-gray-2 mb-6">This form link is invalid or has expired.</p>
             <p className="text-sm text-luxury-gray-2">
@@ -179,7 +179,7 @@ export default function PublicJustListedForm() {
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+        <div className="container-card">
           <h1 className="text-2xl font-light mb-2 tracking-luxury">Just Listed Form</h1>
           <p className="text-sm text-luxury-gray-2 mb-6">
             Submit this form when you have a new active listing

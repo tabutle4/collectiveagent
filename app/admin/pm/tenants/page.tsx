@@ -50,7 +50,7 @@ export default function TenantsListPage() {
   const getStatusBadge = (status: string) => {
     if (status === 'active') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700">
+        <span className="badge badge-success inline-flex items-center gap-1">
           <CheckCircle size={12} /> Active
         </span>
       )

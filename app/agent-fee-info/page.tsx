@@ -150,7 +150,7 @@ export default function AgentFeeInfoPage() {
   if (loading) {
     return (
       <PageContainer>
-        <div className="card-section text-center py-12">
+        <div className="container-card text-center py-12">
           <p className="text-luxury-gray-2">Loading...</p>
         </div>
       </PageContainer>
@@ -168,7 +168,7 @@ export default function AgentFeeInfoPage() {
         <p className="text-luxury-gray-2">Review your fee breakdown</p>
       </div>
 
-      <div className="card-section mb-6">
+      <div className="container-card mb-6">
         {/* One-Time Onboarding Fee */}
         <div className="flex-between-border">
           <div className="flex items-center gap-2">
@@ -333,7 +333,7 @@ export default function AgentFeeInfoPage() {
       </div>
 
       {/* How It Works */}
-      <div className="card-section bg-yellow-50 border-yellow-200 border-2">
+      <div className="container-card bg-yellow-50 border-yellow-200 border-2">
         <h3 className="text-base font-semibold text-luxury-gray-1 mb-3">How It Works</h3>
         <p className="text-sm text-luxury-gray-2 leading-relaxed">
           Click "Pay" above to process your payment of {formatCurrency(total)}. Your payment will be

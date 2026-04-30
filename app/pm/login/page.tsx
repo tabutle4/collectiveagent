@@ -100,7 +100,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 text-red-700 text-sm mb-4">
+              <div className="alert-error flex items-center gap-2 mb-4">
                 <AlertCircle size={16} />
                 {error}
               </div>

@@ -4,7 +4,7 @@ export default function FormSuccessPage() {
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="card-section text-center py-12">
+        <div className="container-card text-center py-12">
           <div className="mb-6">
             <svg
               className="w-16 h-16 mx-auto text-green-600"

@@ -114,7 +114,7 @@ function MLSSetupCard({
                 {item.label}
               </span>
               {item.priority === 'high' && !isCompleted && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                <span className="badge badge-error">
                   Priority
                 </span>
               )}
@@ -497,7 +497,7 @@ export default function AgentChecklistPage() {
                               {item.label}
                             </span>
                             {item.priority === 'high' && !isCompleted && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                              <span className="badge badge-error">
                                 Priority
                               </span>
                             )}

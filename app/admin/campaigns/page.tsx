@@ -61,7 +61,7 @@ export default function AdminCampaignsPage() {
                     <div className="flex items-center gap-3 mb-1.5">
                       <h3 className="text-sm font-semibold text-luxury-gray-1">{campaign.name}</h3>
                       <span
-                        className={`text-xs px-2.5 py-1 rounded font-medium ${campaign.is_active ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/40 text-luxury-gray-3'}`}
+                        className={`badge ${campaign.is_active ? 'badge-success' : 'badge-neutral'}`}
                       >
                         {campaign.is_active ? 'Active' : 'Inactive'}
                       </span>

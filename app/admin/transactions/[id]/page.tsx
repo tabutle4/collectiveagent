@@ -1650,7 +1650,7 @@ export default function AdminTransactionDetailPage() {
                               )}
                               {/* Payment status */}
                               {isPaid ? (
-                                <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
+                                <span className="badge badge-success">
                                   Paid
                                 </span>
                               ) : (

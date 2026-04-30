@@ -145,7 +145,7 @@ export default function ProspectDetailPage() {
       </div>
 
       <div className="space-y-8">
-        <div className="card-section">
+        <div className="container-card">
           <h3 className="text-lg font-medium mb-4 tracking-luxury">Contact Information</h3>
           <div className="grid md:grid-cols-2 gap-4 text-base">
             <div>
@@ -171,7 +171,7 @@ export default function ProspectDetailPage() {
           </div>
         </div>
 
-        <div className="card-section">
+        <div className="container-card">
           <h3 className="text-lg font-medium mb-4 tracking-luxury">MLS Information</h3>
           <div className="space-y-3 text-base">
             <div>
@@ -195,7 +195,7 @@ export default function ProspectDetailPage() {
           </div>
         </div>
 
-        <div className="card-section">
+        <div className="container-card">
           <h3 className="text-lg font-medium mb-4 tracking-luxury">Expectations</h3>
           <div className="space-y-4 text-base">
             <div>
@@ -225,7 +225,7 @@ export default function ProspectDetailPage() {
           </div>
         </div>
 
-        <div className="card-section">
+        <div className="container-card">
           <h3 className="text-lg font-medium mb-4 tracking-luxury">Referral & Team Information</h3>
           <div className="space-y-3 text-base">
             <div>
@@ -247,7 +247,7 @@ export default function ProspectDetailPage() {
         </div>
 
         {/* ── Reset & Resend Steps ── */}
-        <div className="card-section">
+        <div className="container-card">
           <h3 className="text-lg font-medium mb-2 tracking-luxury">Reset &amp; Resend Steps</h3>
           <p className="text-sm text-luxury-gray-2 mb-5">
             Select steps to reset and send the agent an email to redo them.

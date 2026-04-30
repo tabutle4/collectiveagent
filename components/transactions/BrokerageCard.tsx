@@ -141,7 +141,7 @@ function WarningPanel({ teb }: { teb: any }) {
   return (
     <div className="mb-3 space-y-1">
       {warnings.map((w, i) => (
-        <div key={i} className="flex items-start gap-2 px-2 py-1 rounded text-xs bg-amber-50 text-amber-900 border border-amber-200">
+        <div key={i} className="alert-warning flex items-start gap-2">
           <AlertCircle size={11} className="mt-0.5 shrink-0" />
           <span>{w}</span>
         </div>

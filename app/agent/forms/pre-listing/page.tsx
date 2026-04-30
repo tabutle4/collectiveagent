@@ -149,7 +149,7 @@ export default function PreListingForm() {
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+        <div className="container-card">
           <h1 className="text-2xl font-light mb-2 tracking-luxury">Pre-Listing Form</h1>
           <p className="text-sm text-luxury-gray-2 mb-6">
             Submit this form when you have executed a new listing agreement

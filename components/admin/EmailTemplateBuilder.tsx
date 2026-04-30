@@ -592,7 +592,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
         {activeTab === 'code' ? (
           <div>
             {!htmlEditMode ? (
-              <div className="border border-luxury-gray-5 rounded p-6 bg-luxury-light">
+             <div className="inner-card">
                 <p className="text-sm text-luxury-gray-2 mb-4">
                   HTML content is protected to prevent accidental edits.
                 </p>
@@ -631,7 +631,7 @@ export default function EmailTemplateBuilder({ template, onSave }: EmailTemplate
             )}
           </div>
         ) : (
-          <div className="border border-luxury-gray-5 rounded p-4 bg-white">
+          <div className="container-card">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-luxury-gray-2">
                 {previewEditMode

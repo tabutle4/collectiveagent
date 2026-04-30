@@ -419,10 +419,10 @@ export default function CoordinationDetailPage() {
             ← Back to Dashboard
           </button>
           <div className="flex items-center space-x-2">
-            <span className={`px-3 py-1 text-xs rounded ${coordination.is_active ? 'bg-green-100 text-green-800' : 'bg-luxury-gray-5 text-luxury-gray-2'}`}>
+            <span className={`badge ${coordination.is_active ? 'badge-success' : 'badge-neutral'}`}>
               {coordination.is_active ? 'Active' : 'Inactive'}
             </span>
-            <span className={`px-3 py-1 text-xs rounded ${coordination.service_paid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+            <span className={`badge ${coordination.service_paid ? 'badge-success' : 'badge-error'}`}>
               {coordination.service_paid ? 'Paid' : 'Unpaid'}
             </span>
           </div>
@@ -647,7 +647,7 @@ export default function CoordinationDetailPage() {
                       <p className="text-xs text-luxury-gray-2 mt-1">To: {email.recipient_email}</p>
                       <p className="text-xs text-luxury-gray-2">Subject: {email.subject}</p>
                     </div>
-                    <span className={`px-2 py-1 text-xs rounded ${email.status === 'sent' ? 'bg-green-100 text-green-800' : email.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>{email.status}</span>
+                    <span className={`badge ${email.status === 'sent' ? 'badge-success' : email.status === 'failed' ? 'badge-error' : 'badge-warning'}`}>{email.status}</span>
                   </div>
                   <div className="mt-2 pt-2 border-t border-luxury-gray-5">
                     <p className="text-xs text-luxury-gray-2">Sent: {formatDate(email.sent_at)}</p>

@@ -584,7 +584,7 @@ export default function CampaignForm({
         <>
           {/* Step 1: Information */}
           {currentStep === 1 && (
-            <div className="card-section">
+            <div className="container-card">
               {/* Progress Bar - Thin Gold Band */}
               {currentStep < 5 && (
                 <div
@@ -714,7 +714,7 @@ export default function CampaignForm({
           {/* Step 2: Profile Update */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div className="card-section">
+              <div className="container-card">
                 {/* Progress Bar - Thin Gold Band */}
                 {currentStep < 5 && (
                   <div
@@ -1389,7 +1389,7 @@ export default function CampaignForm({
 
           {/* Step 3: Luncheon RSVP */}
           {currentStep === 3 && (
-            <div className="card-section">
+            <div className="container-card">
               {/* Progress Bar - Thin Gold Band */}
               {currentStep < 5 && (
                 <div
@@ -1528,7 +1528,7 @@ export default function CampaignForm({
 
           {/* Step 4: Feedback Survey */}
           {currentStep === 4 && (
-            <div className="card-section">
+            <div className="container-card">
               {/* Progress Bar - Thin Gold Band */}
               {currentStep < 5 && (
                 <div
@@ -1683,7 +1683,7 @@ export default function CampaignForm({
 
       {/* Thank You Page (both legacy and dynamic) */}
       {(currentStep > totalSteps || (useLegacyFlow && currentStep === 5)) && (
-        <div className="card-section text-center">
+        <div className="container-card text-center">
           <div className="max-w-2xl mx-auto">
             <h2 className="text-3xl font-light mb-6 tracking-luxury">Thank You!</h2>
 

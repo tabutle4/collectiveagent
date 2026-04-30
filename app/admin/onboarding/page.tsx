@@ -401,7 +401,7 @@ export default function AdminOnboardingPage() {
                                       : <Circle size={15} className="text-luxury-gray-3 flex-shrink-0" />}
                                   <span className={`text-sm flex-1 ${isCompleted ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-2'}`}>{item.label}</span>
                                   {item.priority === 'high' && !isCompleted && (
-                                    <span className="text-xs px-1 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">Priority</span>
+                                    <span className="badge badge-error">Priority</span>
                                   )}
                                 </div>
                               )

@@ -162,7 +162,7 @@ export default function AgentFormResponsesPage() {
           </p>
         </div>
 
-        <div className="card-section mb-6">
+        <div className="container-card mb-6">
           {/* Tabs */}
           <div className="flex space-x-2 border-b border-luxury-gray-5">
             <button
@@ -209,11 +209,11 @@ export default function AgentFormResponsesPage() {
         </div>
 
         {loading ? (
-          <div className="card-section text-center py-12">
+          <div className="container-card text-center py-12">
             <p className="text-luxury-gray-2">Loading...</p>
           </div>
         ) : (
-          <div className="card-section">
+          <div className="container-card">
             {/* Active Listings */}
             {activeTab === 'active' && (
               <div className="overflow-x-auto">

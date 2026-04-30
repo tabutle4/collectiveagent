@@ -738,7 +738,7 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         </div>
 
         <div className="max-h-[70vh] overflow-y-auto px-6 py-4">
-          {error && <div className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+          {error && <div className="alert-error mb-4">{error}</div>}
 
           {activeTab === 'basic' && (
             <div className="space-y-6">

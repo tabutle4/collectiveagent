@@ -145,7 +145,7 @@ export default function JustListedForm() {
   return (
     <div className="min-h-screen bg-luxury-light py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="card-section">
+        <div className="container-card">
           <h1 className="text-2xl font-light mb-2 tracking-luxury">Just Listed Form</h1>
           <p className="text-sm text-luxury-gray-2 mb-6">
             Submit this form when you have a new active listing

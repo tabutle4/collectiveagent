@@ -94,7 +94,7 @@ export function InfoStep({
     ) || ''
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
         <div
@@ -418,7 +418,7 @@ export function ProfileStep({
 
   return (
     <div className="space-y-6">
-      <div className="card-section">
+      <div className="container-card">
         {/* Progress Bar */}
         {currentStep <= totalSteps && (
           <div
@@ -557,7 +557,7 @@ export function RsvpStep({
   const content = step.content || {}
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
         <div
@@ -863,7 +863,7 @@ export function SurveyStep({
   }
 
   return (
-    <div className="card-section">
+    <div className="container-card">
       {/* Progress Bar */}
       {currentStep <= totalSteps && (
         <div

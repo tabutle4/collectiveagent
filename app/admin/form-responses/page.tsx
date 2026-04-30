@@ -1414,7 +1414,7 @@ export default function FormResponsesPage() {
 
   return (
     <>
-      <div className="card-section mb-6">
+      <div className="container-card mb-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <h1 className="page-title">Form Responses</h1>
           <div className="flex gap-2">
@@ -1510,7 +1510,7 @@ export default function FormResponsesPage() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="card-section mb-6">
+      <div className="container-card mb-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-luxury-gray-2 w-5 h-5" />
@@ -1563,11 +1563,11 @@ export default function FormResponsesPage() {
       </div>
 
       {loading ? (
-        <div className="card-section text-center py-12">
+        <div className="container-card text-center py-12">
           <p className="text-luxury-gray-2">Loading...</p>
         </div>
       ) : (
-        <div className="card-section">
+        <div className="container-card">
           {/* Prospective Agent Form Table */}
           {activeTab === 'prospects' && (
             <div className="overflow-x-auto">

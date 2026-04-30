@@ -152,7 +152,7 @@ export default function SendTestModal({
             />
           </div>
 
-          <div className="rounded-md border border-luxury-gray-5 bg-luxury-light p-3">
+          <div className="inner-card">
             <p className="text-[11px] text-luxury-gray-2 leading-relaxed">
               Placeholder values substitute for client, property, agent, and
               TC merge fields. Office settings, preferred vendors, and the
@@ -161,7 +161,7 @@ export default function SendTestModal({
           </div>
 
           {warnings.length > 0 && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-1.5">
+            <div className="alert-warning space-y-1.5">
               {warnings.map((w, i) => (
                 <p
                   key={i}
@@ -179,7 +179,7 @@ export default function SendTestModal({
           )}
 
           {errorMsg && (
-            <div className="rounded-md border border-red-300 bg-red-50 p-3">
+            <div className="alert-error">
               <p className="text-[11px] text-red-700 flex items-start gap-1.5">
                 <AlertCircle
                   size={11}
@@ -192,7 +192,7 @@ export default function SendTestModal({
           )}
 
           {successMsg && (
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3">
+            <div className="alert-success">
               <p className="text-[11px] text-emerald-800 flex items-start gap-1.5">
                 <CheckCircle2
                   size={11}

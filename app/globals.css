@@ -43,26 +43,25 @@
     @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
   }
 
-  /* Cards */
+ /* Cards */
   .container-card {
-    @apply bg-white rounded-lg shadow-lg border border-gray-200 p-5;
+    @apply bg-white rounded-md border border-luxury-gray-6 p-5;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .container-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.06);
   }
 
   .inner-card {
-    @apply bg-luxury-light rounded-md p-4;
-  }
-
-  .card-luxury {
-    @apply bg-white shadow-sm border border-luxury-gray-5 rounded;
-  }
-
-  .card-section {
-    @apply bg-white p-6 border border-luxury-gray-5 rounded shadow-sm;
+    @apply bg-luxury-light rounded p-4;
   }
 
   .card-dark {
     @apply bg-luxury-dark-3 p-6 text-white rounded;
   }
+
 
   /* Sidebar */
   .sidebar-logo {
@@ -75,15 +74,24 @@
 
   /* Inputs */
   .input-luxury {
-    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
+    @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
+  }
+  .input-luxury:focus {
+    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
   }
 
   .textarea-luxury {
-    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 min-h-[80px] resize-y rounded;
+    @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 min-h-[80px] resize-y rounded;
+  }
+  .textarea-luxury:focus {
+    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
   }
 
   .select-luxury {
-    @apply w-full px-3 py-2 text-sm bg-luxury-light border border-luxury-gray-5 focus:border-luxury-black focus:outline-none focus:ring-1 focus:ring-luxury-black transition-colors duration-200 rounded;
+    @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
+  }
+  .select-luxury:focus {
+    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
   }
 
   /* Layout Helpers */
@@ -285,8 +293,30 @@
   }
 
   .tr-luxury-clickable {
-    @apply border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer;
+    @apply border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer border-l-2 border-l-transparent;
   }
+
+  .tr-luxury-clickable.is-active,
+  .tr-luxury.is-active {
+    @apply bg-luxury-light;
+    border-left-color: #C5A278;
+  }
+
+  /* Hero number — for prominent monetary/count values */
+  .hero-number {
+    @apply text-2xl font-bold text-luxury-black tracking-tight;
+  }
+
+  /* Flat text badges (no fill, no border, just colored text) */
+  .badge {
+    @apply inline-block text-xs font-semibold uppercase tracking-wider;
+  }
+  .badge-success { @apply text-green-700; }
+  .badge-warning { @apply text-amber-700; }
+  .badge-error   { @apply text-red-700; }
+  .badge-info    { @apply text-blue-700; }
+  .badge-neutral { @apply text-luxury-gray-3; }
+  .badge-accent  { @apply text-luxury-accent; }
 
   /* Tab Navigation */
   .tab-item {

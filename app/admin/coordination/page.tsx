@@ -435,7 +435,7 @@ export default function AdminCoordinationDashboard() {
                       </td>
                       <td className="py-3 px-4">
                         <span
-                          className={`text-xs px-2.5 py-1 rounded font-medium ${coordination.is_active ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/40 text-luxury-gray-3'}`}
+                          className={`badge ${coordination.is_active ? 'badge-success' : 'badge-neutral'}`}
                         >
                           {coordination.is_active ? 'Active' : 'Inactive'}
                         </span>

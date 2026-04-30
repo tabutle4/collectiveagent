@@ -118,7 +118,7 @@ export default function AllPayoutsPage() {
               setMarkPaidDate(new Date().toISOString().split('T')[0])
               setMarkPaidMethod(row.payment_method || 'ach')
             }}
-            className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded hover:bg-amber-100 cursor-pointer"
+            className="badge badge-warning cursor-pointer hover:opacity-70"
           >
             Pending
           </button>

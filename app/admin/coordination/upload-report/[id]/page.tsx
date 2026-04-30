@@ -259,11 +259,7 @@ export default function UploadWeeklyReportPage() {
                 onDragOver={e => handleDragOver(e, 1)}
                 onDragLeave={e => handleDragLeave(e, 1)}
                 onDrop={e => handleDrop(e, 1)}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  isDragging1
-                    ? 'border-luxury-black bg-luxury-light'
-                    : 'border-luxury-gray-5 hover:border-luxury-gray-3'
-                }`}
+                className={isDragging1 ? 'upload-zone-active' : 'upload-zone'}
               >
                 {file1 ? (
                   <div className="space-y-2">
@@ -309,11 +305,7 @@ export default function UploadWeeklyReportPage() {
                   onDragOver={e => handleDragOver(e, 2)}
                   onDragLeave={e => handleDragLeave(e, 2)}
                   onDrop={e => handleDrop(e, 2)}
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    isDragging2
-                      ? 'border-luxury-black bg-luxury-light'
-                      : 'border-luxury-gray-5 hover:border-luxury-gray-3'
-                  }`}
+                  className={isDragging2 ? 'upload-zone-active' : 'upload-zone'}
                 >
                   {file2 ? (
                     <div className="space-y-2">

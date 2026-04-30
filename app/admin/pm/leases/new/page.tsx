@@ -305,7 +305,7 @@ function NewLeaseContent() {
               </div>
             </div>
             {invoiceCount > 0 && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+              <div className="alert-info mt-4 flex items-start gap-2">
                 <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
                 <div className="text-sm text-blue-800">
                   <p className="font-medium">{invoiceCount} invoices will be auto-generated</p>
