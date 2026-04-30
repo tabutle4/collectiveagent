@@ -77,7 +77,10 @@
   .card-dark {
     @apply bg-luxury-dark-3 p-6 text-white rounded;
   }
-
+  
+.danger-zone-card {
+    border-color: #D89999;
+  }
 
   /* Sidebar */
   .sidebar-logo {
