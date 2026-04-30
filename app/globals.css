@@ -27,20 +27,36 @@
 @layer components {
   /* Buttons */
   .btn {
-    @apply inline-block px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center;
+    @apply inline-block px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded text-center font-medium;
+    transition: all 0.15s ease;
+  }
+  .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.12);
+  }
+  .btn:active {
+    transform: scale(0.98);
   }
 
   .btn-primary {
     @apply bg-luxury-accent text-white hover:opacity-90;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
   }
 
   .btn-secondary {
-    @apply bg-white border border-luxury-gray-3 text-luxury-gray-2 hover:border-luxury-black;
+    @apply bg-white text-luxury-gray-1 hover:border-luxury-black border border-luxury-gray-6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  .btn-secondary:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   }
 
   /* Page Title */
   .page-title {
-    @apply text-lg font-semibold text-luxury-gray-1 uppercase tracking-wider;
+    @apply text-xl font-bold text-luxury-black uppercase tracking-wider;
   }
 
  /* Cards */
