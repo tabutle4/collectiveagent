@@ -501,7 +501,7 @@ export default function CoordinationDetailPage() {
           <button
             onClick={handleSendWelcomeEmail}
             disabled={sendingEmail !== null}
-            className="btn btn-primary disabled:opacity-50"
+            className="btn btn-primary disabled:opacity-50 flex items-center gap-1.5"
           >
             <Mail size={14} />
             {sendingEmail === 'welcome'
@@ -513,19 +513,19 @@ export default function CoordinationDetailPage() {
           <button
             onClick={handleSendWeeklyEmail}
             disabled={sendingEmail !== null}
-            className="btn btn-primary disabled:opacity-50"
+            className="btn btn-primary disabled:opacity-50 flex items-center gap-1.5"
           >
             <Calendar size={14} />
             {sendingEmail === 'weekly' ? 'Sending...' : 'Send Weekly Report'}
           </button>
           <button
             onClick={() => router.push(`/admin/coordination/upload-report/${coordinationId}`)}
-            className="btn btn-secondary"
+            className="btn btn-secondary flex items-center gap-1.5"
           >
             <Upload size={14} /> Upload Weekly Report
           </button>
           {coordination.seller_magic_link && (
-            <button onClick={handleCopyMagicLink} className="btn btn-secondary">
+            <button onClick={handleCopyMagicLink} className="btn btn-secondary flex items-center gap-1.5">
               {copiedMagic ? <Check size={14} /> : <Copy size={14} />}
               {copiedMagic ? 'Copied!' : 'Copy Magic Link'}
             </button>
@@ -810,7 +810,7 @@ export default function CoordinationDetailPage() {
                 type="button"
                 onClick={handleRegenerateFolderLink}
                 disabled={regenerating}
-                className="btn btn-secondary disabled:opacity-50 whitespace-nowrap"
+                className="btn btn-secondary disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5"
               >
                 <RefreshCw size={14} className={regenerating ? 'animate-spin' : ''} />
                 {regenerating ? 'Regenerating...' : 'Regenerate Link'}
@@ -863,7 +863,7 @@ export default function CoordinationDetailPage() {
                 value={`${BASE_URL}/seller/${coordination.seller_magic_link}`}
                 className="input-luxury flex-1"
               />
-              <button onClick={handleCopyMagicLink} className="btn btn-primary">
+              <button onClick={handleCopyMagicLink} className="btn btn-primary flex items-center gap-1.5">
                 {copiedMagic ? <Check size={14} /> : <Copy size={14} />}
                 {copiedMagic ? 'Copied!' : 'Copy'}
               </button>
