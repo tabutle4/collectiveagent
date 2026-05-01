@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react'
 
-type Tab = 'brokerage' | 'standard' | 'referral' | 'plans' | 'rules'
+type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'plans' | 'rules'
 
 interface CompanySettings {
   // Brokerage
@@ -29,6 +29,32 @@ interface CompanySettings {
   brokerage_zip: string
   brokerage_main_email: string
   executive_email: string
+  website?: string
+  // Offices — Houston / DFW / Referral Collective (used by email signature)
+  houston_address_line1?: string
+  houston_address_line2?: string
+  houston_city?: string
+  houston_state?: string
+  houston_zip?: string
+  houston_phone?: string
+  houston_fax?: string
+  dfw_address_line1?: string
+  dfw_address_line2?: string
+  dfw_city?: string
+  dfw_state?: string
+  dfw_zip?: string
+  dfw_phone?: string
+  dfw_fax?: string
+  rc_brand_name?: string
+  rc_address_line1?: string
+  rc_address_line2?: string
+  rc_city?: string
+  rc_state?: string
+  rc_zip?: string
+  rc_phone?: string
+  rc_fax?: string
+  rc_logo_url?: string
+  rc_website?: string
   // Standard Agent
   standard_onboarding_fee: number
   standard_monthly_fee: number
@@ -83,6 +109,7 @@ interface CommissionRule {
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'brokerage', label: 'Brokerage', icon: Building2 },
+  { id: 'offices', label: 'Office Locations', icon: Building2 },
   { id: 'standard', label: 'Standard Agent', icon: Users },
   { id: 'referral', label: 'Referral Agent', icon: Users },
   { id: 'plans', label: 'Commission Plans', icon: DollarSign },
@@ -383,6 +410,144 @@ export default function SettingsPage() {
                     <p className="text-xs text-luxury-gray-3 mt-1">
                       CC'd on commission statements and CDAs. Owner and ops only.
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Office Locations — Houston / DFW / Referral Collective */}
+            {activeTab === 'offices' && settings && (
+              <div className="container-card">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="section-title">Office Locations</h2>
+                  <button onClick={saveSettings} disabled={saving} className="btn btn-primary text-sm flex items-center gap-2">
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    Save Changes
+                  </button>
+                </div>
+
+                <p className="text-sm text-luxury-gray-3 mb-6">
+                  These locations populate the Office dropdown in the agent email signature builder.
+                </p>
+
+                {/* CRC Houston */}
+                <div className="mb-8">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">CRC Houston Office</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 1</label>
+                      <input type="text" value={settings.houston_address_line1 || ''} onChange={(e) => updateSetting('houston_address_line1', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 2</label>
+                      <input type="text" value={settings.houston_address_line2 || ''} onChange={(e) => updateSetting('houston_address_line2', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">City</label>
+                      <input type="text" value={settings.houston_city || ''} onChange={(e) => updateSetting('houston_city', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">State</label>
+                      <input type="text" value={settings.houston_state || ''} onChange={(e) => updateSetting('houston_state', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">ZIP</label>
+                      <input type="text" value={settings.houston_zip || ''} onChange={(e) => updateSetting('houston_zip', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Phone</label>
+                      <input type="text" value={settings.houston_phone || ''} onChange={(e) => updateSetting('houston_phone', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Fax</label>
+                      <input type="text" value={settings.houston_fax || ''} onChange={(e) => updateSetting('houston_fax', e.target.value)} className="input-luxury" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* CRC DFW */}
+                <div className="mb-8">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">CRC DFW Office (Irving)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 1</label>
+                      <input type="text" value={settings.dfw_address_line1 || ''} onChange={(e) => updateSetting('dfw_address_line1', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 2</label>
+                      <input type="text" value={settings.dfw_address_line2 || ''} onChange={(e) => updateSetting('dfw_address_line2', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">City</label>
+                      <input type="text" value={settings.dfw_city || ''} onChange={(e) => updateSetting('dfw_city', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">State</label>
+                      <input type="text" value={settings.dfw_state || ''} onChange={(e) => updateSetting('dfw_state', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">ZIP</label>
+                      <input type="text" value={settings.dfw_zip || ''} onChange={(e) => updateSetting('dfw_zip', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Phone</label>
+                      <input type="text" value={settings.dfw_phone || ''} onChange={(e) => updateSetting('dfw_phone', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Fax</label>
+                      <input type="text" value={settings.dfw_fax || ''} onChange={(e) => updateSetting('dfw_fax', e.target.value)} className="input-luxury" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Referral Collective */}
+                <div>
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Referral Collective</h3>
+                  <p className="text-xs text-luxury-gray-3 mb-4">
+                    Auto-selected for agents with mls_choice = "Referral Collective (No MLS)". Swaps brand, logo, and website on the signature.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="field-label">Brand Name (shown above contact info)</label>
+                      <input type="text" value={settings.rc_brand_name || ''} onChange={(e) => updateSetting('rc_brand_name', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Logo URL</label>
+                      <input type="text" value={settings.rc_logo_url || ''} onChange={(e) => updateSetting('rc_logo_url', e.target.value)} className="input-luxury" />
+                      <p className="text-xs text-luxury-gray-3 mt-1">Public URL of the logo image (paste a Supabase Storage public-assets URL).</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Website</label>
+                      <input type="text" value={settings.rc_website || ''} onChange={(e) => updateSetting('rc_website', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 1</label>
+                      <input type="text" value={settings.rc_address_line1 || ''} onChange={(e) => updateSetting('rc_address_line1', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Address Line 2</label>
+                      <input type="text" value={settings.rc_address_line2 || ''} onChange={(e) => updateSetting('rc_address_line2', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">City</label>
+                      <input type="text" value={settings.rc_city || ''} onChange={(e) => updateSetting('rc_city', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">State</label>
+                      <input type="text" value={settings.rc_state || ''} onChange={(e) => updateSetting('rc_state', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">ZIP</label>
+                      <input type="text" value={settings.rc_zip || ''} onChange={(e) => updateSetting('rc_zip', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Phone</label>
+                      <input type="text" value={settings.rc_phone || ''} onChange={(e) => updateSetting('rc_phone', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Fax (optional)</label>
+                      <input type="text" value={settings.rc_fax || ''} onChange={(e) => updateSetting('rc_fax', e.target.value)} className="input-luxury" />
+                    </div>
                   </div>
                 </div>
               </div>

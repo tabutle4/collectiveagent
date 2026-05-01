@@ -400,6 +400,7 @@ export default function WebSignatureGenerator() {
   const [savingToAccount, setSavingToAccount] = useState(false);
   const [accountSaveStatus, setAccountSaveStatus] = useState(null); // 'saved' | 'error' | null
   const [loadedFromAccount, setLoadedFromAccount] = useState(false);
+  const [officeData, setOfficeData] = useState(null); // { houston, irving, referral, crc } from API
   const fileInputRef = useRef(null);
   const ctaInputRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -950,10 +951,12 @@ export default function WebSignatureGenerator() {
     const officePhone = formData.officePhone || "(281) 638-9407";
     const officeFax = formData.officeFax || "(281) 516-5806";
     
-    // Office addresses - all on one line
+    // Office addresses — pulled from officeData state (loaded from company_settings).
+    // Falls back to hardcoded values until officeData is loaded.
     const officeAddresses = {
-      houston: "13201 Northwest Fwy Ste 450, Houston, TX 77040",
-      irving: "2300 Valley View Ln Ste 518, Irving, TX 75062"
+      houston: officeData?.houston?.address || "13201 Northwest Fwy Ste 450, Houston, TX 77040",
+      irving: officeData?.irving?.address || "2300 Valley View Ln Ste 518, Irving, TX 75062",
+      referral: officeData?.referral?.address || "13201 Northwest Fwy Ste 450, Houston, TX 77040"
     };
     
     // Format address for mobile layout - street on one line, city/state/zip on next line
@@ -984,6 +987,8 @@ export default function WebSignatureGenerator() {
         fullAddress = formatAddressForMobile(officeAddresses.houston);
       } else if (formData.selectedOffice === "Irving Office") {
         fullAddress = formatAddressForMobile(officeAddresses.irving);
+      } else if (formData.selectedOffice === "Referral Collective") {
+        fullAddress = formatAddressForMobile(officeAddresses.referral);
       } else if (formData.selectedOffice === "Both Offices") {
         fullAddress = `${formatAddressForMobile(officeAddresses.houston)}<br>${formatAddressForMobile(officeAddresses.irving)}`;
       } else if (!hasPersonalData) {
@@ -996,6 +1001,8 @@ export default function WebSignatureGenerator() {
         fullAddress = formatAddressForMobile(officeAddresses.houston);
       } else if (formData.selectedOffice === "Irving Office") {
         fullAddress = formatAddressForMobile(officeAddresses.irving);
+      } else if (formData.selectedOffice === "Referral Collective") {
+        fullAddress = formatAddressForMobile(officeAddresses.referral);
       } else if (formData.selectedOffice === "Both Offices") {
         fullAddress = `${formatAddressForMobile(officeAddresses.houston)}<br>${formatAddressForMobile(officeAddresses.irving)}`;
       } else if (!hasPersonalData) {
@@ -1008,6 +1015,8 @@ export default function WebSignatureGenerator() {
         fullAddress = officeAddresses.houston;
       } else if (formData.selectedOffice === "Irving Office") {
         fullAddress = officeAddresses.irving;
+      } else if (formData.selectedOffice === "Referral Collective") {
+        fullAddress = officeAddresses.referral;
       } else if (formData.selectedOffice === "Both Offices") {
         fullAddress = `${officeAddresses.houston}<br>${officeAddresses.irving}`;
       } else if (!hasPersonalData) {
@@ -1122,6 +1131,8 @@ export default function WebSignatureGenerator() {
         fullAddressStacked = formatAddressForStacked(officeAddresses.houston);
       } else if (formData.selectedOffice === "Irving Office") {
         fullAddressStacked = formatAddressForStacked(officeAddresses.irving);
+      } else if (formData.selectedOffice === "Referral Collective") {
+        fullAddressStacked = formatAddressForStacked(officeAddresses.referral);
       } else if (formData.selectedOffice === "Both Offices") {
         fullAddressStacked = `${formatAddressForStacked(officeAddresses.houston)}<br>${formatAddressForStacked(officeAddresses.irving)}`;
       } else if (!hasPersonalData) {
@@ -1180,6 +1191,8 @@ export default function WebSignatureGenerator() {
         fullAddressNoLogo = formatAddressForMobile(officeAddresses.houston);
       } else if (formData.selectedOffice === "Irving Office") {
         fullAddressNoLogo = formatAddressForMobile(officeAddresses.irving);
+      } else if (formData.selectedOffice === "Referral Collective") {
+        fullAddressNoLogo = formatAddressForMobile(officeAddresses.referral);
       } else if (formData.selectedOffice === "Both Offices") {
         fullAddressNoLogo = `${formatAddressForMobile(officeAddresses.houston)}<br>${formatAddressForMobile(officeAddresses.irving)}`;
       } else if (!hasPersonalData) {
@@ -1355,8 +1368,12 @@ export default function WebSignatureGenerator() {
         const res = await fetch(`/api/email-signature?layout=${signatureLayout}`, { cache: 'no-store' });
         if (!res.ok || cancelled) return;
         const data = await res.json();
-        if (!data.success || !data.signature || cancelled) return;
+        if (!data.success || cancelled) return;
 
+        // Capture office data (always returned, regardless of saved/default)
+        if (data.office_data) setOfficeData(data.office_data);
+
+        if (!data.signature) return;
         const sig = data.signature;
         if (sig.form_data) setFormData(prev => ({ ...prev, ...sig.form_data }));
         if (sig.photo_url) setPhotoUrl(sig.photo_url);
@@ -1368,13 +1385,55 @@ export default function WebSignatureGenerator() {
         if (sig.border_color) setBorderColor(sig.border_color);
         if (typeof sig.show_border === 'boolean') setShowBorder(sig.show_border);
         if (sig.signature_type) setSignatureType(sig.signature_type);
-        setLoadedFromAccount(true);
+        if (sig.id) setLoadedFromAccount(true);
       } catch (e) {
         // Silent — auto-populated defaults remain
       }
     })();
     return () => { cancelled = true; };
   }, [signatureLayout]);
+
+  // ──────────────────────────────────────────────────────────
+  // When user changes selectedOffice, swap company name + logo + website + phone + fax
+  // ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!officeData) return;
+    const sel = formData.selectedOffice;
+    if (sel === "Referral Collective") {
+      setFormData(prev => ({
+        ...prev,
+        companyName: officeData.referral.brandName,
+        officePhone: officeData.referral.phone,
+        officeFax: officeData.referral.fax,
+        website: officeData.referral.website,
+      }));
+      if (officeData.referral.logoUrl) {
+        setLogoUrl(officeData.referral.logoUrl);
+        setLogoUrlSquare(officeData.referral.logoUrl);
+      }
+    } else if (sel === "Houston Office" || sel === "Irving Office" || sel === "Both Offices") {
+      // CRC branding
+      const phone = sel === "Irving Office" && officeData.irving.phone
+        ? officeData.irving.phone
+        : officeData.houston.phone;
+      const fax = sel === "Irving Office" && officeData.irving.fax
+        ? officeData.irving.fax
+        : officeData.houston.fax;
+      setFormData(prev => ({
+        ...prev,
+        companyName: officeData.crc.companyName,
+        officePhone: phone,
+        officeFax: fax,
+        website: officeData.crc.website,
+      }));
+      // Restore CRC logo if currently using RC logo
+      if (officeData.referral.logoUrl && (logoUrl === officeData.referral.logoUrl || logoUrlSquare === officeData.referral.logoUrl)) {
+        setLogoUrl(CRC_LOGO_CIRCLE_URL);
+        setLogoUrlSquare(CRC_LOGO_URL);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.selectedOffice, officeData]);
 
   // ──────────────────────────────────────────────────────────
   // Save current signature to account (per-layout)
@@ -1994,9 +2053,10 @@ export default function WebSignatureGenerator() {
                     onBlur={(e) => e.target.style.borderColor = "#e5e5e5"}
                   >
                     <option value="">-- Select Office --</option>
-                    <option value="Houston Office">Houston Office</option>
-                    <option value="Irving Office">Irving Office</option>
-                    <option value="Both Offices">Both Offices</option>
+                    <option value="Houston Office">CRC — Houston Office</option>
+                    <option value="Irving Office">CRC — Irving Office</option>
+                    <option value="Both Offices">CRC — Both Offices</option>
+                    <option value="Referral Collective">Referral Collective</option>
                   </select>
                 </div>
               </div>
