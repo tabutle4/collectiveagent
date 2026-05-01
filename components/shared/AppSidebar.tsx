@@ -29,6 +29,7 @@ import {
   BookOpen,
   Building2,
   Workflow,
+  Mail,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -128,6 +129,7 @@ const adminNavEntries: NavEntry[] = [
       items: [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
+        { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
       ],
     },
   },
@@ -186,6 +188,7 @@ const tcNavEntries: NavEntry[] = [
       items: [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
+        { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
       ],
     },
   },
@@ -241,6 +244,7 @@ const supportNavEntries: NavEntry[] = [
       items: [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
+        { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
       ],
     },
   },
@@ -265,6 +269,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/reports', label: 'Reports', icon: BarChart3, disabled: true },
   { href: '/training-center', label: 'Training Center', icon: BookOpen },
   { href: '/agent/settings', label: 'Settings', icon: Settings, disabled: true },
+  { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },
 ]
 
 // ============================================================================
@@ -309,6 +314,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
     { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
+    { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },
     {
       href: 'https://agent.collectiverealtyco.com/roster',
       label: 'Roster',
