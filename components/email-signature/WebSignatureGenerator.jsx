@@ -1228,11 +1228,12 @@ export default function WebSignatureGenerator() {
     // Classic Layout (with-photo or without-photo)
     else if (signatureType === "with-photo" || signatureLayout === "classic") {
       const photoHtml = photoSrc
-        ? `<img src="${photoSrc}" alt="Profile" width="120" height="120" style="border-radius:50%;display:block;margin-bottom:1px;width:120px;max-width:100%;height:auto;object-fit:cover;" />`
+        ? `<img src="${photoSrc}" alt="Profile" width="120" height="120" style="border-radius:50%;display:block;margin-bottom:1px;width:120px;height:120px;object-fit:cover;" />`
         : "";
 
       const logoHtml = logoSrc 
-        ? `<div style="margin-top:1px;text-align:right;"><img src="${logoSrc}" alt="${companyName || "Company"}" width="90" height="90" style="border-radius:50%;display:inline-block;width:90px;max-width:100%;height:auto;object-fit:cover;background-color:transparent;" /></div>`
+                ? `<div style="margin-top:1px;text-align:right;"><img src="${logoSrc}" alt="${companyName || "Company"}" width="90" height="90" style="border-radius:50%;display:inline-block;width:90px;height:90px;object-fit:cover;background-color:transparent;" /></div>`
+
         : "";
 
       html = `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:420px;font-family:Arial,sans-serif;border-collapse:collapse;border:none;mso-table-lspace:0pt;mso-table-rspace:0pt;">
@@ -1264,7 +1265,7 @@ export default function WebSignatureGenerator() {
     } else {
       // Without photo layout - use logo only
       const logoHtmlNoPhoto = logoSrc 
-        ? `<div style="margin-top:12px;text-align:right;"><img src="${logoSrc}" alt="${companyName || "Company"}" width="90" height="90" style="border-radius:50%;display:inline-block;width:90px;max-width:100%;height:auto;object-fit:cover;" /></div>`
+        ? `<div style="margin-top:12px;text-align:right;"><img src="${logoSrc}" alt="${companyName || "Company"}" width="90" height="90" style="border-radius:50%;display:inline-block;width:90px;height:90px;object-fit:cover;" /></div>`
         : "";
       
       html = `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:420px;font-family:Arial,sans-serif;border-collapse:collapse;border:none;mso-table-lspace:0pt;mso-table-rspace:0pt;">
