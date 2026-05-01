@@ -1541,7 +1541,7 @@ export default function WebSignatureGenerator() {
   }, [signatureLayout, signatureType, ctaImageUrl, ctaLink, formData, photoUrl, photoUrlSquare, logoUrl, logoUrlSquare, borderColor]);
 
   return (
-    <div className="font-sans overflow-x-hidden">
+    <div className="font-sans overflow-x-hidden p-4 lg:p-6">
       {/* Mobile-only message */}
   <div className="md:hidden bg-white rounded-lg p-4 mb-4 text-center border border-[#e5e5e5]">
     <p className="text-base text-[#666]">
