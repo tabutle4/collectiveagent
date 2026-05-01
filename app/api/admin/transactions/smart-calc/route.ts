@@ -298,7 +298,7 @@ export async function POST(request: NextRequest) {
     const teamLeadPayout = officeGross * (teamLeadPct / 100)
 
     // Processing fee (check waiver)
-    let processingFee = processingFeeType?.fee_amount || 0
+    let processingFee = processingFeeType?.processing_fee || 0
     const txType = (transaction_type || '').toLowerCase()
     if (txType.includes('buyer') && agent.waive_buyer_processing_fees) {
       processingFee = 0
