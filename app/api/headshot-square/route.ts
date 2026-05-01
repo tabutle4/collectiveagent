@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const cacheKey = `${userId}:${headshotUrl}:${crop.offsetX}:${crop.offsetY}:${crop.scale}`
     const cached = CACHE.get(cacheKey)
     if (cached && Date.now() - cached.mtime < CACHE_TTL_MS) {
-      return new NextResponse(cached.buffer, {
+      return new NextResponse(new Uint8Array(cached.buffer), {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     const etag = `"${userId}-${Date.now()}"`
     CACHE.set(cacheKey, { buffer: cropped, etag, mtime: Date.now() })
 
-    return new NextResponse(cropped, {
+    return new NextResponse(new Uint8Array(cropped), {
       status: 200,
       headers: {
         'Content-Type': 'image/png',
