@@ -705,7 +705,14 @@ export default function ProfilePage({
           ? `${user.preferred_first_name || user.first_name} ${user.preferred_last_name || user.last_name}`
           : 'MY PROFILE'}
       </h1>
-
+      <div className="mb-4">
+        
+         <a href="/email-signature"
+          className="text-sm text-luxury-accent hover:underline inline-flex items-center gap-1"
+        >
+          📧 Build your email signature →
+        </a>
+      </div>
       {/* Admin - Revert to Prospect */}
       {isAdmin && user?.status !== 'prospect' && (
         <div className="container-card mb-5 border border-red-100">
