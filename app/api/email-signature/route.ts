@@ -4,6 +4,18 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 const VALID_LAYOUTS = ['classic', 'stacked', 'noLogo', 'mobile']
 
+// Format raw phone digits to (XXX) XXX-XXXX
+function formatPhone(value: string | null | undefined): string {
+  if (!value) return ''
+  const digits = String(value).replace(/\D/g, '')
+  const cleaned = digits.length === 11 && digits[0] === '1' ? digits.slice(1) : digits
+  if (cleaned.length === 0) return ''
+  if (cleaned.length === 10) {
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
+  }
+  return value // return original if not a clean 10-digit number
+}
+
 // Map users.office values to the signature tool's expected office labels
 function mapOfficeToSignatureLabel(office: string | null | undefined): string {
   if (!office) return ''
@@ -43,11 +55,12 @@ function buildDefaults(user: any, company: any) {
     user?.preferred_last_name || user?.last_name || '',
   ].join(' ').trim()
 
-  const mobile =
+  const rawMobile =
     user?.business_phone ||
     user?.personal_phone ||
     user?.phone ||
     ''
+  const mobile = formatPhone(rawMobile)
 
   return {
     name: fullName,
