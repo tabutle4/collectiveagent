@@ -35,6 +35,7 @@ const PUBLIC_PATHS = [
   '/logo.png',
   '/logo-white.png',
   '/onboard',
+  '/api/headshot-square',
 ]
 
 // Paths accessible to all authenticated users regardless of role
