@@ -707,7 +707,7 @@ export default function ProfilePage({
       </h1>
       <div className="mb-4">
         
-         <a href="/email-signature"
+         <a href="/agent/email-signature"
           className="text-sm text-luxury-accent hover:underline inline-flex items-center gap-1"
         >
           📧 Build your email signature →
