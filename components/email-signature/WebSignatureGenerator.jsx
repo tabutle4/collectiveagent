@@ -1755,7 +1755,7 @@ export default function WebSignatureGenerator() {
     e.preventDefault();
     setSignatureLayout("mobile");
   }}
-  className={`cursor-pointer px-15 md:px-4 py-4 rounded-lg bg-white flex flex-row items-start gap-2 transition-all duration-200 ${
+  className={`cursor-pointer px-4 py-4 rounded-lg bg-white flex flex-row items-start gap-2 transition-all duration-200 ${
     signatureLayout === "mobile" 
       ? "border-2 border-[#B8860B] shadow-[0_4px_12px_rgba(184,134,11,0.2)]" 
       : "border-2 border-[#e5e5e5] shadow-[0_2px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
