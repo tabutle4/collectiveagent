@@ -302,8 +302,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
     { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
-    {
-      href: 'https://agent.collectiverealtyco.com/roster',
+    { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },
+    { href: 'https://agent.collectiverealtyco.com/roster',
       label: 'Roster',
       icon: FileText,
       external: true,
@@ -315,8 +315,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },
-    {
-      href: 'https://agent.collectiverealtyco.com/roster',
+    { href: 'https://agent.collectiverealtyco.com/roster',
       label: 'Roster',
       icon: FileText,
       external: true,
