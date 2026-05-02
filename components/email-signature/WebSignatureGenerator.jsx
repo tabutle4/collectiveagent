@@ -1608,7 +1608,8 @@ export default function WebSignatureGenerator() {
       📱 For mobile email apps. <span className="font-semibold">Visit on desktop for additional layout options.</span>
     </p>
   </div>
-      <div className="max-w-[1600px] mx-auto flex flex-col lg:grid lg:grid-cols-2 gap-8 h-auto lg:h-[calc(100vh-40px)]">
+            <div className="max-w-[1600px] mx-auto flex flex-col lg:grid lg:grid-cols-2 gap-8 h-auto lg:h-[calc(100dvh-150px)]">
+
         {/* LEFT COLUMN - Form */}
         <div className="flex flex-col overflow-visible lg:overflow-hidden order-2 lg:order-1 w-full lg:w-auto">
           {/* How to Use Instructions */}
