@@ -1228,7 +1228,7 @@ export default function WebSignatureGenerator() {
     // Classic Layout (with-photo or without-photo)
     else if (signatureType === "with-photo" || signatureLayout === "classic") {
       const photoHtml = photoSrc
-        ? `<img src="${photoSrc}" alt="Profile" width="120" height="120" style="border-radius:50%;display:block;margin-bottom:1px;width:120px;height:120px;object-fit:cover;" />`
+        ? `<img src="${photoSrc}" alt="Profile" width="120" height="120" style="border-radius:50%;display:block;margin-bottom:1px;width:120px;height:120px;min-width:120px;max-width:120px;object-fit:cover;flex-shrink:0;" />`
         : "";
 
       const logoHtml = logoSrc 
