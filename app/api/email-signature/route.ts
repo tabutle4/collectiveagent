@@ -167,9 +167,11 @@ function buildDefaults(user: any, company: any) {
     linkText1: '',
     linkUrl1: '',
     includeLink2: false,
-    linkText2: '',
+        linkText2: '',
     linkUrl2: '',
   }
+
+  return formData
 }
 
 // GET — return saved signature for the user + layout, or auto-populated defaults if none
@@ -243,8 +245,8 @@ export async function GET(request: NextRequest) {
       user_id: auth.user.id,
       layout,
       form_data: formData,
-      photo_url: userRow?.headshot_url ? `/api/headshot-square?user_id=${auth.user.id}` : null,
-      photo_url_square: userRow?.headshot_url ? `/api/headshot-square?user_id=${auth.user.id}` : null,
+            photo_url: userRow?.headshot_url ? `${request.nextUrl.origin}/api/headshot-square?user_id=${auth.user.id}` : null,
+      photo_url_square: userRow?.headshot_url ? `${request.nextUrl.origin}/api/headshot-square?user_id=${auth.user.id}` : null,
       logo_url: isRC ? officeData.referral.logoUrl : null,
       logo_url_square: isRC ? officeData.referral.logoUrl : null,
       cta_image_url: null,
