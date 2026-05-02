@@ -174,7 +174,7 @@ function buildDefaults(user: any, company: any) {
   return formData
 }
 
-// GET — return saved signature for the user + layout, or auto-populated defaults if none
+// GET - return saved signature for the user + layout, or auto-populated defaults if none
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -200,7 +200,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    // Fetch user + company in parallel — needed for office_data regardless of whether a saved signature exists
+    // Fetch user + company in parallel - needed for office_data regardless of whether a saved signature exists
     const [{ data: userRow }, { data: companyRow }] = await Promise.all([
       supabaseAdmin
         .from('users')
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // No saved signature — auto-populate defaults from users + company_settings
+    // No saved signature - auto-populate defaults from users + company_settings
     const formData = buildDefaults(userRow, companyRow)
     applyOfficeOverrides(formData, userRow, officeData)
 
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — upsert signature for user + layout
+// POST - upsert signature for user + layout
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -328,7 +328,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE — reset for the user + layout (delete the row)
+// DELETE - reset for the user + layout (delete the row)
 export async function DELETE(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error

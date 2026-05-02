@@ -951,7 +951,7 @@ export default function WebSignatureGenerator() {
     const officePhone = formData.officePhone || "(281) 638-9407";
     const officeFax = formData.officeFax || "(281) 516-5806";
     
-    // Office addresses — pulled from officeData state (loaded from company_settings).
+    // Office addresses - pulled from officeData state (loaded from company_settings).
     // Falls back to hardcoded values until officeData is loaded.
     const officeAddresses = {
       houston: officeData?.houston?.address || "13201 Northwest Fwy Ste 450, Houston, TX 77040",
@@ -1388,7 +1388,7 @@ export default function WebSignatureGenerator() {
         if (sig.signature_type) setSignatureType(sig.signature_type);
         if (sig.id) setLoadedFromAccount(true);
       } catch (e) {
-        // Silent — auto-populated defaults remain
+        // Silent - auto-populated defaults remain
       }
     })();
     return () => { cancelled = true; };
@@ -2054,9 +2054,9 @@ export default function WebSignatureGenerator() {
                     onBlur={(e) => e.target.style.borderColor = "#e5e5e5"}
                   >
                     <option value="">-- Select Office --</option>
-                    <option value="Houston Office">CRC — Houston Office</option>
-                    <option value="Irving Office">CRC — Irving Office</option>
-                    <option value="Both Offices">CRC — Both Offices</option>
+                    <option value="Houston Office">CRC - Houston Office</option>
+                    <option value="Irving Office">CRC - Irving Office</option>
+                    <option value="Both Offices">CRC - Both Offices</option>
                     <option value="Referral Collective">Referral Collective</option>
                   </select>
                 </div>
@@ -2451,7 +2451,7 @@ export default function WebSignatureGenerator() {
                 : accountSaveStatus === 'saved'
                 ? '✓ Saved to your account'
                 : accountSaveStatus === 'error'
-                ? '⚠ Save failed — try again'
+                ? '⚠ Save failed - try again'
                 : (loadedFromAccount ? '💾 Update saved signature' : '💾 Save to account')}
             </button>
 

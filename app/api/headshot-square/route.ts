@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     //   3. Visible area is the 128×128 frame.
     //
     // Replicated in sharp:
-    //   - Step 1: resize+cover to 128×128 (this is the "base" — the image as it sits before transform)
+    //   - Step 1: resize+cover to 128×128 (this is the "base" - the image as it sits before transform)
     //   - Step 2: scale up by `scale` factor → larger image
     //   - Step 3: extract a 128×128 region. The "center" of the original (64,64) maps to
     //             the center of the scaled image (64*scale, 64*scale), then offset by (offsetX, offsetY).
