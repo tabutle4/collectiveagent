@@ -574,10 +574,28 @@ export default function AdminTransactionDetailPage() {
   const [recalcRowId, setRecalcRowId] = useState<string | null>(null)
   const recalculateRow = async (a: any, leadSourceOverride?: string) => {
     const leadSource = leadSourceOverride ?? a.lead_source ?? 'own'
-    if (!a.agent_basis || !a.commission_plan) {
-      alert('Set basis and commission plan before recalculating.')
+    const txn = data?.transaction
+
+    // Derive basis: prefer existing agent_basis, then side commission for the
+    // agent's side, then office_gross. This lets the lead-source-picker work
+    // even on a TIA row that hasn't been initialized yet.
+    let basis = parseFloat(a.agent_basis || 0)
+    if (!basis) {
+      if (a.side === 'seller' || a.side === 'landlord') {
+        basis = parseFloat(txn?.listing_side_commission || 0)
+      } else if (a.side === 'buyer' || a.side === 'tenant') {
+        basis = parseFloat(txn?.buying_side_commission || 0)
+      }
+    }
+    if (!basis) {
+      basis = parseFloat(txn?.office_gross || 0)
+    }
+
+    if (!basis) {
+      alert('Set the office gross or side commission before recalculating.')
       return
     }
+
     setRecalcRowId(a.id)
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
@@ -586,7 +604,7 @@ export default function AdminTransactionDetailPage() {
         body: JSON.stringify({
           action: 'apply_primary_split',
           internal_agent_id: a.id,
-          commission_amount: parseFloat(a.agent_basis || 0),
+          commission_amount: basis,
           lead_source: leadSource,
           referred_agent_id: a.referred_agent_id || null,
         }),
@@ -1133,10 +1151,6 @@ export default function AdminTransactionDetailPage() {
                 {txn.office_location}
               </span>
             )}
-            {(() => {
-              const ib = intermediaryBadgeProps(txn)
-              return ib.show ? <span className={ib.className}>{ib.label}</span> : null
-            })()}
           </div>
         </div>
         <div className="flex overflow-x-auto px-3 pb-0 gap-0 border-t border-luxury-gray-5/50">

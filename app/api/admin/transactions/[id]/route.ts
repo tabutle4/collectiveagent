@@ -1158,6 +1158,63 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         `)
         .single()
       if (error) throw error
+
+      // Auto-stamp commission math when adding a roleable agent on a
+      // commission-bearing role. Derives basis from the agent's side commission
+      // (when known) or falls back to office_gross. Skipped silently if no
+      // basis available — admin can click Recalculate later.
+      if (data && ['primary_agent', 'listing_agent', 'co_agent'].includes(data.agent_role)) {
+        const { data: txn } = await supabase
+          .from('transactions')
+          .select('listing_side_commission, buying_side_commission, office_gross, status')
+          .eq('id', id)
+          .single()
+
+        if (txn && txn.status !== 'closed') {
+          let basis = 0
+          if (data.side === 'seller' || data.side === 'landlord') {
+            basis = num(txn.listing_side_commission)
+          } else if (data.side === 'buyer' || data.side === 'tenant') {
+            basis = num(txn.buying_side_commission)
+          }
+          if (!basis) basis = num(txn.office_gross)
+
+          if (basis > 0) {
+            try {
+              await cascadePrimarySplit({
+                transactionId: id,
+                internalAgentId: data.id,
+                commissionAmount: basis,
+                leadSource: data.lead_source || 'own',
+                referredAgentId: data.referred_agent_id || null,
+              })
+              // Re-fetch the now-stamped row so the response reflects the math
+              const { data: stamped } = await supabase
+                .from('transaction_internal_agents')
+                .select(`
+                  *,
+                  user:users!transaction_internal_agents_agent_id_fkey(
+                    id, first_name, last_name, preferred_first_name, preferred_last_name,
+                    office_email, email, phone, office, commission_plan, license_number,
+                    license_expiration, referring_agent_id, revenue_share_percentage,
+                    qualifying_transaction_count, qualifying_transaction_target,
+                    waive_buyer_processing_fees,
+                    waive_seller_processing_fees, waive_coaching_fee,
+                    cap_amount_override, post_cap_split_override,
+                    monthly_fee_paid_through
+                  )
+                `)
+                .eq('id', data.id)
+                .single()
+              if (stamped) return NextResponse.json({ agent: stamped })
+            } catch (err) {
+              // Auto-stamp failed but row was inserted; admin can Recalculate.
+              console.error('Auto-stamp on agent add failed:', err)
+            }
+          }
+        }
+      }
+
       return NextResponse.json({ agent: data })
     }
 
