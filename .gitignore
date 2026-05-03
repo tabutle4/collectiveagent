@@ -5,3 +5,5 @@ node_modules
 public/videos/*.mp4
 public/videos/*.MP4
 tsconfig.tsbuildinfo
+phase*_patch/
+phase*_patch.zip
