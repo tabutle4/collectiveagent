@@ -1133,6 +1133,10 @@ export default function AdminTransactionDetailPage() {
                 {txn.office_location}
               </span>
             )}
+            {(() => {
+              const ib = intermediaryBadgeProps(txn)
+              return ib.show ? <span className={ib.className}>{ib.label}</span> : null
+            })()}
           </div>
         </div>
         <div className="flex overflow-x-auto px-3 pb-0 gap-0 border-t border-luxury-gray-5/50">

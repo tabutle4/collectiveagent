@@ -57,7 +57,7 @@ export default function AddAgentModal({
 
   // Load roster
   useEffect(() => {
-    fetch('/api/admin/users?active=true', { cache: 'no-store' })
+    fetch('/api/users/list', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { users: [] })
       .then(d => setAllUsers(d.users || []))
       .catch(() => {})
