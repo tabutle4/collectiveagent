@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getLeadSourceBucket } from '@/lib/transactions/constants'
-import { computeCommission } from '@/lib/transactions/math'
+import { computeCommission, computeOfficeNet } from '@/lib/transactions/math'
 import {
   buildStatementEmail,
   buildCdaEmail,
@@ -290,6 +290,47 @@ async function computeCommissionBreakdown(args: {
  * Intentionally does NOT block on closed transactions; callers validate that
  * themselves. Does skip paid linked rows (they're frozen).
  */
+/**
+ * Recompute and write office_net for a transaction. Call this after any
+ * mutation that changes office_gross, TIA.agent_net, or TEB.amount_1099_reportable.
+ *
+ * Formula (canonical):
+ *   office_net = office_gross − sum(TIA.agent_net) − sum(TEB.amount_1099_reportable)
+ *
+ * Idempotent and safe to call repeatedly. Failures are logged but never throw —
+ * office_net display being stale is preferable to blocking the upstream save.
+ */
+async function recomputeOfficeNet(transactionId: string): Promise<void> {
+  try {
+    const [{ data: txn }, { data: tias }, { data: tebs }] = await Promise.all([
+      supabase.from('transactions').select('office_gross').eq('id', transactionId).single(),
+      supabase
+        .from('transaction_internal_agents')
+        .select('agent_net')
+        .eq('transaction_id', transactionId),
+      supabase
+        .from('transaction_external_brokerages')
+        .select('amount_1099_reportable')
+        .eq('transaction_id', transactionId),
+    ])
+
+    if (!txn) return
+
+    const officeNet = computeOfficeNet({
+      office_gross: txn.office_gross,
+      internal_agents: tias || [],
+      external_brokerages: tebs || [],
+    })
+
+    await supabase
+      .from('transactions')
+      .update({ office_net: officeNet, updated_at: new Date().toISOString() })
+      .eq('id', transactionId)
+  } catch (err) {
+    console.error('recomputeOfficeNet failed for', transactionId, err)
+  }
+}
+
 async function cascadePrimarySplit(args: {
   transactionId: string
   internalAgentId: string
@@ -504,6 +545,10 @@ async function cascadePrimarySplit(args: {
         .eq('id', staleMp.id)
     }
   }
+
+  // Office_net depends on every TIA agent_net; recompute now that the cascade
+  // has finished writing primary + linked rows.
+  await recomputeOfficeNet(transactionId)
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -764,6 +809,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', id)
       if (error) throw error
+      // Office_net depends on office_gross. Recompute if it (or any input) was touched.
+      if ('office_gross' in (updates || {})) await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
@@ -951,6 +998,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // Office_net depends on every TIA agent_net.
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({ success: true })
     }
 
@@ -980,6 +1030,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .delete()
         .eq('id', internal_agent_id)
       if (error) throw error
+      await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
@@ -1044,6 +1095,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (delErr) throw delErr
 
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({
         success: true,
         deleted_linked_ids: (linkedRows || []).map((r: any) => r.id),
@@ -1076,6 +1129,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq('id', brokerage_id)
       if (error) throw error
+      await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
@@ -1102,6 +1156,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .delete()
         .eq('id', brokerage_id)
       if (error) throw error
+      await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
@@ -1215,6 +1270,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // Cascade may not have run (no basis or non-roleable role). Office_net
+      // still depends on this row's agent_net (which may be 0).
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({ agent: data })
     }
 
@@ -1250,6 +1309,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .select()
         .single()
       if (error) throw error
+      await recomputeOfficeNet(id)
       return NextResponse.json({ brokerage: data })
     }
 
@@ -1633,6 +1693,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ notes: newNotes })
         .eq('id', id)
 
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({
         success: true,
         side: targetSide,
@@ -1728,6 +1790,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ notes: newNotes })
         .eq('id', id)
 
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({
         success: true,
         side: targetSide,
@@ -1735,6 +1799,90 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         new_btsa_amount: newBtsa,
         tia_id,
       })
+    }
+
+    // ── Reverse mark paid for a single debt or credit ────────────────────────
+    // Triggered when admin unchecks a debt/credit on a paid TIA. Reverses
+    // the agent_debts row (status → outstanding, amount_paid reduced, offset
+    // links cleared) AND reverts the TIA to pending so it can be re-paid.
+    //
+    // body: { internal_agent_id, debt_id?, credit_id? }  (one of debt_id|credit_id)
+    if (action === 'reverse_mark_paid') {
+      const { internal_agent_id, debt_id, credit_id } = body
+      const recordId = debt_id || credit_id
+      if (!internal_agent_id || !recordId) {
+        return NextResponse.json(
+          { error: 'internal_agent_id and (debt_id or credit_id) required' },
+          { status: 400 }
+        )
+      }
+
+      // Load the agent_debts row that was applied
+      const { data: rec } = await supabase
+        .from('agent_debts')
+        .select('*')
+        .eq('id', recordId)
+        .single()
+
+      if (!rec) {
+        return NextResponse.json({ error: 'Billing record not found' }, { status: 404 })
+      }
+      if (rec.offset_transaction_id !== id || rec.offset_transaction_agent_id !== internal_agent_id) {
+        return NextResponse.json(
+          { error: 'This record was not applied to this transaction/agent.' },
+          { status: 400 }
+        )
+      }
+
+      const amountApplied = num(rec.amount_paid)
+
+      // Reverse the agent_debts row
+      await supabase
+        .from('agent_debts')
+        .update({
+          amount_paid: 0,
+          status: 'outstanding',
+          offset_transaction_id: null,
+          offset_transaction_agent_id: null,
+          date_resolved: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', recordId)
+
+      // Revert the TIA to pending and adjust agent_net.
+      const { data: tia } = await supabase
+        .from('transaction_internal_agents')
+        .select('*')
+        .eq('id', internal_agent_id)
+        .single()
+
+      if (tia) {
+        const isCredit = rec.record_type === 'credit'
+        const currentNet = num(tia.agent_net)
+        const newAgentNet = isCredit
+          ? currentNet - amountApplied
+          : currentNet + amountApplied
+        const newDebtsDeducted = isCredit
+          ? num(tia.debts_deducted)
+          : Math.max(0, num(tia.debts_deducted) - amountApplied)
+
+        await supabase
+          .from('transaction_internal_agents')
+          .update({
+            agent_net: Math.round(newAgentNet * 100) / 100,
+            debts_deducted: newDebtsDeducted,
+            payment_status: 'pending',
+            payment_date: null,
+            payment_method: null,
+            payment_reference: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', internal_agent_id)
+      }
+
+      await recomputeOfficeNet(id)
+
+      return NextResponse.json({ success: true, reversed_id: recordId })
     }
 
     // ── Mark agent paid (TIA) ────────────────────────────────────────────────
@@ -1749,6 +1897,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_reference,
         funding_source,
         debts_to_apply,
+        credits_to_apply,
         counts_toward_progress,
       } = body
 
@@ -1784,15 +1933,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // Apply credits — credits ADD to agent_net (refund of prior overpayments).
+      let totalCreditsApplied = 0
+      if (credits_to_apply && credits_to_apply.length > 0) {
+        for (const creditApp of credits_to_apply) {
+          totalCreditsApplied += num(creditApp.amount)
+        }
+      }
+
       // Under Model A: team_lead is NOT deducted from agent_net. It was
       // already carved out of agent_gross at apply_primary_split time.
-      // agent_net = gross + btsa − fees − debts
+      // agent_net = gross + btsa − fees − debts + credits
       const agentGross = num(tia.agent_gross)
       const processingFee = num(tia.processing_fee)
       const coachingFee = num(tia.coaching_fee)
       const otherFees = num(tia.other_fees)
       const btsa = num(tia.btsa_amount)
-      const agentNet = agentGross + btsa - processingFee - coachingFee - otherFees - totalDebtsDeducted
+      const agentNet = agentGross + btsa - processingFee - coachingFee - otherFees - totalDebtsDeducted + totalCreditsApplied
 
       const tiaUpdate: any = {
         payment_status: 'paid',
@@ -1840,6 +1997,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // Apply credits — same agent_debts table, record_type='credit'.
+      // Mark the credit row as paid (consumed) and link to this transaction.
+      if (credits_to_apply && credits_to_apply.length > 0) {
+        for (const creditApp of credits_to_apply) {
+          const { data: credit } = await supabase
+            .from('agent_debts')
+            .select('*')
+            .eq('id', creditApp.credit_id)
+            .single()
+
+          if (credit) {
+            const amountRemaining = num(credit.amount_remaining ?? credit.amount_owed)
+            const amountApplied = num(creditApp.amount)
+            const newRemaining = amountRemaining - amountApplied
+
+            const creditUpdate: any = {
+              amount_paid: num(credit.amount_paid) + amountApplied,
+              offset_transaction_id: id,
+              offset_transaction_agent_id: internal_agent_id,
+              updated_at: new Date().toISOString(),
+            }
+            if (newRemaining <= 0) {
+              creditUpdate.status = 'paid'
+              creditUpdate.date_resolved = payment_date
+            }
+            await supabase.from('agent_debts').update(creditUpdate).eq('id', creditApp.credit_id)
+          }
+        }
+      }
+
       // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease
       const countsThis = counts_toward_progress !== false
       if (
@@ -1864,6 +2051,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }
         }
       }
+
+      await recomputeOfficeNet(id)
 
       return NextResponse.json({
         success: true,
@@ -1991,6 +2180,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           }
         }
       }
+
+      await recomputeOfficeNet(id)
 
       return NextResponse.json({ success: true })
     }

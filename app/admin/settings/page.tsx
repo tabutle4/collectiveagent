@@ -16,7 +16,7 @@ import {
   X
 } from 'lucide-react'
 
-type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'plans' | 'rules'
+type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'plans' | 'fees' | 'rules'
 
 interface CompanySettings {
   // Brokerage
@@ -113,6 +113,7 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'standard', label: 'Standard Agent', icon: Users },
   { id: 'referral', label: 'Referral Agent', icon: Users },
   { id: 'plans', label: 'Commission Plans', icon: DollarSign },
+  { id: 'fees', label: 'Processing Fees', icon: DollarSign },
   { id: 'rules', label: 'Commission Rules', icon: Settings2 },
 ]
 
@@ -126,12 +127,16 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<CompanySettings | null>(null)
   const [plans, setPlans] = useState<CommissionPlan[]>([])
   const [rules, setRules] = useState<CommissionRule[]>([])
-  
+  const [processingFees, setProcessingFees] = useState<any[]>([])
+  const [editingFee, setEditingFee] = useState<any | null>(null)
+  const [savingFee, setSavingFee] = useState(false)
+
   const [editingPlan, setEditingPlan] = useState<CommissionPlan | null>(null)
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null)
 
   useEffect(() => {
     fetchSettings()
+    fetchProcessingFees()
   }, [])
 
   async function fetchSettings() {
@@ -150,6 +155,56 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function fetchProcessingFees() {
+    try {
+      const res = await fetch('/api/admin/processing-fees')
+      const data = await res.json()
+      if (res.ok) setProcessingFees(data.processing_fees || [])
+    } catch {
+      // Silent — page can render without
+    }
+  }
+
+  async function saveProcessingFee(updated: any) {
+    setSavingFee(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch('/api/admin/processing-fees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: updated.id,
+          updates: {
+            name: updated.name,
+            code: updated.code,
+            processing_fee: updated.processing_fee,
+            is_lease: updated.is_lease,
+            is_active: updated.is_active,
+            display_order: updated.display_order,
+            counts_toward_cap: updated.counts_toward_cap,
+            counts_toward_upgrade: updated.counts_toward_upgrade,
+            fee_type: updated.fee_type,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Save failed')
+      setProcessingFees(prev => prev.map(f => f.id === updated.id ? data.processing_fee : f))
+      setEditingFee(null)
+      setSuccess('Saved')
+      setTimeout(() => setSuccess(''), 2000)
+    } catch (err: any) {
+      setError(err.message || 'Save failed')
+    } finally {
+      setSavingFee(false)
+    }
+  }
+
+  async function toggleProcessingFeeActive(fee: any) {
+    await saveProcessingFee({ ...fee, is_active: !fee.is_active })
   }
 
   async function saveSettings() {
@@ -1084,6 +1139,175 @@ export default function SettingsPage() {
                         <button onClick={() => savePlan(editingPlan)} disabled={saving} className="btn btn-primary flex items-center gap-2">
                           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                           Save Plan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Processing Fees */}
+            {activeTab === 'fees' && (
+              <div className="container-card">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="section-title">Processing Fees</h2>
+                  <p className="text-xs text-luxury-gray-3">Edit-only. Toggle on/off to deactivate.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {processingFees.map((fee) => (
+                    <div key={fee.id} className={`inner-card ${!fee.is_active ? 'opacity-50' : ''}`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-semibold text-luxury-gray-1">{fee.name}</h3>
+                            <span className="text-xs text-luxury-gray-3 bg-luxury-gray-5/40 px-2 py-0.5 rounded font-mono">
+                              {fee.code}
+                            </span>
+                            {fee.is_lease && (
+                              <span className="text-xs text-luxury-gray-2 bg-luxury-gray-5/40 px-2 py-0.5 rounded">Lease</span>
+                            )}
+                            {!fee.is_active && (
+                              <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded">Inactive</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-luxury-gray-2 mt-1">
+                            ${fee.processing_fee} · {fee.fee_type || 'flat'}
+                            {fee.display_order != null && ` · order ${fee.display_order}`}
+                            {fee.counts_toward_cap && ' · counts toward cap'}
+                            {fee.counts_toward_upgrade && ' · counts toward upgrade'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleProcessingFeeActive(fee)}
+                            disabled={savingFee}
+                            className={`text-xs px-2 py-1 rounded border transition-colors ${
+                              fee.is_active
+                                ? 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-gray-5/40'
+                                : 'border-green-300 text-green-700 hover:bg-green-50'
+                            }`}
+                          >
+                            {fee.is_active ? 'Turn off' : 'Turn on'}
+                          </button>
+                          <button
+                            onClick={() => setEditingFee({ ...fee })}
+                            className="p-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {processingFees.length === 0 && (
+                    <p className="text-xs text-luxury-gray-3 text-center py-6">No processing fees configured.</p>
+                  )}
+                </div>
+
+                {/* Edit modal */}
+                {editingFee && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-5 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                      <h3 className="section-title mb-4">Edit Processing Fee</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="field-label">Name</label>
+                          <input
+                            type="text"
+                            value={editingFee.name || ''}
+                            onChange={(e) => setEditingFee({ ...editingFee, name: e.target.value })}
+                            className="input-luxury w-full text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">Code</label>
+                          <input
+                            type="text"
+                            value={editingFee.code || ''}
+                            onChange={(e) => setEditingFee({ ...editingFee, code: e.target.value })}
+                            className="input-luxury w-full text-xs font-mono"
+                          />
+                          <p className="text-[10px] text-luxury-gray-3 mt-0.5">Used to match transaction_type. Change with caution.</p>
+                        </div>
+                        <div>
+                          <label className="field-label">Processing Fee ($)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editingFee.processing_fee ?? ''}
+                            onChange={(e) => setEditingFee({ ...editingFee, processing_fee: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                            className="input-luxury w-full text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">Fee Type</label>
+                          <select
+                            value={editingFee.fee_type || 'flat'}
+                            onChange={(e) => setEditingFee({ ...editingFee, fee_type: e.target.value })}
+                            className="select-luxury w-full text-xs"
+                          >
+                            <option value="flat">Flat</option>
+                            <option value="percentage">Percentage</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="field-label">Display Order</label>
+                          <input
+                            type="number"
+                            value={editingFee.display_order ?? ''}
+                            onChange={(e) => setEditingFee({ ...editingFee, display_order: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                            className="input-luxury w-full text-xs"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-luxury-gray-2">
+                          <input
+                            type="checkbox"
+                            checked={!!editingFee.is_lease}
+                            onChange={(e) => setEditingFee({ ...editingFee, is_lease: e.target.checked })}
+                          />
+                          Is lease transaction
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-luxury-gray-2">
+                          <input
+                            type="checkbox"
+                            checked={!!editingFee.counts_toward_cap}
+                            onChange={(e) => setEditingFee({ ...editingFee, counts_toward_cap: e.target.checked })}
+                          />
+                          Counts toward cap
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-luxury-gray-2">
+                          <input
+                            type="checkbox"
+                            checked={!!editingFee.counts_toward_upgrade}
+                            onChange={(e) => setEditingFee({ ...editingFee, counts_toward_upgrade: e.target.checked })}
+                          />
+                          Counts toward upgrade
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-luxury-gray-2">
+                          <input
+                            type="checkbox"
+                            checked={!!editingFee.is_active}
+                            onChange={(e) => setEditingFee({ ...editingFee, is_active: e.target.checked })}
+                          />
+                          Active
+                        </label>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-5">
+                        <button
+                          onClick={() => setEditingFee(null)}
+                          disabled={savingFee}
+                          className="btn btn-secondary text-xs"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => saveProcessingFee(editingFee)}
+                          disabled={savingFee}
+                          className="btn btn-primary text-xs"
+                        >
+                          {savingFee ? 'Saving...' : 'Save'}
                         </button>
                       </div>
                     </div>

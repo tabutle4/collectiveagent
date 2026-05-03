@@ -32,6 +32,7 @@ import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
 import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagPanel'
 import AddAgentModal from '@/components/transactions/AddAgentModal'
+import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS } from '@/lib/transactions/constants'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -572,6 +573,19 @@ export default function AdminTransactionDetailPage() {
   // formula and re-stamps linked TL/MP rows. Called by per-row Recalculate
   // button AND by the lead-source picker (which passes leadSourceOverride).
   const [recalcRowId, setRecalcRowId] = useState<string | null>(null)
+
+  // Per-agent applied billing: which debts/credits are checked on each agent
+  // card. Local UI state only — applied to agent_debts at Mark Paid.
+  // Map of internal_agent_id -> { debts, credits, debt_ids, credit_ids }
+  const [billingApplied, setBillingApplied] = useState<Record<string, {
+    debts: number; credits: number; debt_ids: string[]; credit_ids: string[]
+  }>>({})
+
+  const handleBillingChange = useCallback((tiaId: string) => (
+    applied: { debts: number; credits: number; debt_ids: string[]; credit_ids: string[] }
+  ) => {
+    setBillingApplied(prev => ({ ...prev, [tiaId]: applied }))
+  }, [])
   const recalculateRow = async (a: any, leadSourceOverride?: string) => {
     const leadSource = leadSourceOverride ?? a.lead_source ?? 'own'
     const txn = data?.transaction
@@ -762,15 +776,43 @@ export default function AdminTransactionDetailPage() {
   }
 
   const submitMarkPaid = async () => {
-    const { agent, selectedDebts, paymentDate, paymentMethod, paymentReference, fundingSource, countsTowardProgress } = markPaidModal
+    const { agent, paymentDate, paymentMethod, paymentReference, fundingSource, countsTowardProgress } = markPaidModal
     if (!agent) return
 
     setSaving(true)
     try {
-      // Convert selectedDebts to array format
-      const debtsToApply = Object.entries(selectedDebts)
-        .filter(([, amount]) => (amount as number) > 0)
-        .map(([debtId, amount]) => ({ debt_id: debtId, amount }))
+      // Pull selections from the per-card billing panel (UI state).
+      // Selected debts and credits each come with their full remaining amount.
+      const applied = billingApplied[agent.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
+
+      // Look up each id's amount from the just-loaded billing data.
+      // We re-fetch quickly to make sure amounts are current.
+      let billingRecords: any[] = []
+      try {
+        const r = await fetch(`/api/billing?agent_id=${agent.agent_id}&status=outstanding`, { cache: 'no-store' })
+        if (r.ok) {
+          const d = await r.json()
+          billingRecords = d?.records || []
+        }
+      } catch {
+        // Fall through with empty list — the apply loop will skip ids that don't match
+      }
+
+      const debtsToApply = applied.debt_ids
+        .map(id => {
+          const rec = billingRecords.find((x: any) => x.id === id)
+          if (!rec) return null
+          return { debt_id: id, amount: rec.amount_remaining ?? rec.amount_owed }
+        })
+        .filter(Boolean)
+
+      const creditsToApply = applied.credit_ids
+        .map(id => {
+          const rec = billingRecords.find((x: any) => x.id === id)
+          if (!rec) return null
+          return { credit_id: id, amount: rec.amount_remaining ?? rec.amount_owed }
+        })
+        .filter(Boolean)
 
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
@@ -784,6 +826,7 @@ export default function AdminTransactionDetailPage() {
           payment_reference: paymentReference,
           funding_source: fundingSource,
           debts_to_apply: debtsToApply,
+          credits_to_apply: creditsToApply,
           counts_toward_progress: countsTowardProgress,
         }),
       })
@@ -1846,22 +1889,54 @@ export default function AdminTransactionDetailPage() {
                             <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
                           </div>
 
+                          {/* Billing — debts and credits, above totals */}
+                          <AgentBillingPanel
+                            agentId={a.agent_id}
+                            tiaId={a.id}
+                            transactionId={id}
+                            isPaid={isPaid}
+                            onAppliedChange={handleBillingChange(a.id)}
+                            onReversedTia={loadData}
+                          />
+
                           {/* Totals */}
                           <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 space-y-1">
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-luxury-gray-3">1099 Amount</span>
                               <span className="text-xs text-luxury-gray-2">{fmt$(amount1099)}</span>
                             </div>
-                            {debtsDeducted > 0 && (
-                              <div className="flex justify-between items-center">
-                                <span className="text-xs text-luxury-gray-3">Debts Deducted</span>
-                                <span className="text-xs text-red-500">-{fmt$(debtsDeducted)}</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
-                              <span className="text-xs font-semibold text-luxury-gray-2">Agent Net</span>
-                              <span className="text-sm font-bold text-luxury-accent">{fmt$(agentNet)}</span>
-                            </div>
+                            {(() => {
+                              const applied = billingApplied[a.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
+                              const persistedDebts = debtsDeducted // already-saved on row
+                              return (
+                                <>
+                                  {persistedDebts > 0 && (
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs text-luxury-gray-3">Debts (saved)</span>
+                                      <span className="text-xs text-red-500">-{fmt$(persistedDebts)}</span>
+                                    </div>
+                                  )}
+                                  {applied.debts > 0 && (
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs text-luxury-gray-3">Debts (selected)</span>
+                                      <span className="text-xs text-orange-600">-{fmt$(applied.debts)}</span>
+                                    </div>
+                                  )}
+                                  {applied.credits > 0 && (
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-xs text-luxury-gray-3">Credits (selected)</span>
+                                      <span className="text-xs text-green-600">+{fmt$(applied.credits)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
+                                    <span className="text-xs font-semibold text-luxury-gray-2">Agent Net{applied.debts > 0 || applied.credits > 0 ? ' (preview)' : ''}</span>
+                                    <span className="text-sm font-bold text-luxury-accent">
+                                      {fmt$(agentNet - applied.debts + applied.credits)}
+                                    </span>
+                                  </div>
+                                </>
+                              )
+                            })()}
                           </div>
 
                           {/* Payment details (if paid) */}

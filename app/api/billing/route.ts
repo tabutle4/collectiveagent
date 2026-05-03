@@ -21,18 +21,20 @@ export async function GET(request: NextRequest) {
     const supabase = createClient()
     const status = searchParams.get('status')
     const debtType = searchParams.get('debt_type')
+    const offsetTransactionId = searchParams.get('offset_transaction_id')
 
     // Called with agent_id (explicit or auto-filled) - return records for that agent
     if (effectiveAgentId) {
       let query = supabase
         .from('agent_debts')
         .select(
-          'id, record_type, debt_type, description, amount_owed, amount_remaining, date_incurred, status, notes, agent_id'
+          'id, record_type, debt_type, description, amount_owed, amount_paid, amount_remaining, date_incurred, due_date, status, notes, agent_id, offset_transaction_id, offset_transaction_agent_id'
         )
         .eq('agent_id', effectiveAgentId)
         .order('date_incurred', { ascending: false })
 
       if (status) query = query.eq('status', status)
+      if (offsetTransactionId) query = query.eq('offset_transaction_id', offsetTransactionId)
 
       const { data: records } = await query
       return NextResponse.json({ records: records || [] })

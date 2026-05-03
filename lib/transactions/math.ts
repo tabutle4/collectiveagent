@@ -116,3 +116,34 @@ export function deductionLines(
   add('Debts', num(inputs.debts_deducted), '−')
   return lines
 }
+
+/**
+ * Office_net formula:
+ *   office_net = office_gross − sum(TIA.agent_net) − sum(TEB.amount_1099_reportable)
+ *
+ * Compute the brokerage's net cash position on a transaction. Pass in the
+ * stored office_gross plus the rows from transaction_internal_agents (TIA)
+ * and transaction_external_brokerages (TEB).
+ *
+ * Used at every event that mutates inputs so the stored office_net column
+ * stays in sync. Sources of truth for inputs:
+ *   • office_gross — transactions table
+ *   • agent_net — each TIA row
+ *   • amount_1099_reportable — each TEB row (post-fee net to outside brokerage)
+ */
+export function computeOfficeNet(args: {
+  office_gross: number | string | null | undefined
+  internal_agents: Array<{ agent_net?: number | string | null }>
+  external_brokerages: Array<{ amount_1099_reportable?: number | string | null }>
+}): number {
+  const gross = num(args.office_gross)
+  const tiaTotal = (args.internal_agents || []).reduce(
+    (sum, a) => sum + num(a.agent_net),
+    0
+  )
+  const tebTotal = (args.external_brokerages || []).reduce(
+    (sum, b) => sum + num(b.amount_1099_reportable),
+    0
+  )
+  return round2(gross - tiaTotal - tebTotal)
+}
