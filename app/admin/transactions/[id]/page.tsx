@@ -26,11 +26,13 @@ import {
   Pencil,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
-import { intermediaryBadgeProps } from '@/lib/transactions/sides'
+import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
 import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagPanel'
+import AddAgentModal from '@/components/transactions/AddAgentModal'
+import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS } from '@/lib/transactions/constants'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -354,6 +356,7 @@ export default function AdminTransactionDetailPage() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [showPayoutModal, setShowPayoutModal] = useState(false)
+  const [showAddAgentModal, setShowAddAgentModal] = useState(false)
   const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -545,51 +548,6 @@ export default function AdminTransactionDetailPage() {
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
-  // Recalculate and apply agent split (called when lead source changes)
-  const recalculateAgentSplit = async (agentId: string, internalAgentId: string) => {
-    const txn = data?.transaction
-    if (!txn?.office_gross) return
-
-    try {
-      const res = await fetch('/api/admin/transactions/smart-calc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_id: agentId,
-          office_gross: parseFloat(txn.office_gross || 0),
-          transaction_type: txn.transaction_type,
-          lead_source: agentLeadSources[agentId] || 'own',
-          is_lease: isLease(txn.transaction_type),
-        }),
-      })
-      if (res.ok) {
-        const result = await res.json()
-        setAgentCalcData(prev => ({ ...prev, [agentId]: result }))
-        
-        // Auto-apply the values
-        await fetch(`/api/admin/transactions/${id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'update_internal_agent',
-            internal_agent_id: internalAgentId,
-            updates: {
-              agent_gross: result.agent_gross,
-              brokerage_split: result.brokerage_split,
-              processing_fee: result.processing_fee,
-              coaching_fee: result.coaching_fee,
-              team_lead_commission: result.team_lead_payout || 0,
-              agent_net: result.agent_net,
-              split_percentage: result.agent_split_pct,
-            },
-          }),
-        })
-        // Reload data to show updated values
-        loadData()
-      }
-    } catch {}
-  }
-
   const deleteInternalAgent = async (internalAgentId: string) => {
     setSaving(true)
     try {
@@ -607,6 +565,40 @@ export default function AdminTransactionDetailPage() {
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Phase 2.2: recalculate via apply_primary_split which uses the canonical
+  // formula and re-stamps linked TL/MP rows. Called by per-row Recalculate
+  // button AND by the lead-source picker (which passes leadSourceOverride).
+  const [recalcRowId, setRecalcRowId] = useState<string | null>(null)
+  const recalculateRow = async (a: any, leadSourceOverride?: string) => {
+    const leadSource = leadSourceOverride ?? a.lead_source ?? 'own'
+    if (!a.agent_basis || !a.commission_plan) {
+      alert('Set basis and commission plan before recalculating.')
+      return
+    }
+    setRecalcRowId(a.id)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'apply_primary_split',
+          internal_agent_id: a.id,
+          commission_amount: parseFloat(a.agent_basis || 0),
+          lead_source: leadSource,
+          referred_agent_id: a.referred_agent_id || null,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Recalculate failed')
+      } else {
+        loadData()
+      }
+    } finally {
+      setRecalcRowId(null)
     }
   }
 
@@ -1618,7 +1610,7 @@ export default function AdminTransactionDetailPage() {
               <div className="flex items-center justify-between">
                 <h1 className="page-title">COMMISSIONS</h1>
                 <button
-                  onClick={() => setShowCloseModal(true)}
+                  onClick={() => setShowAddAgentModal(true)}
                   className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
                 >
                   + Add Agent
@@ -1686,11 +1678,51 @@ export default function AdminTransactionDetailPage() {
                                   {fmtName(a.user)}
                                 </p>
                                 <p className="text-xs text-luxury-gray-3">
-                                  {a.agent_role?.replace(/_/g, ' ')} · {a.user?.commission_plan || a.commission_plan || '--'}
+                                  {a.agent_role?.replace(/_/g, ' ')}
+                                  {a.side ? ` · ${sideLabel(a.side)} side` : ''}
+                                  {' · '}{a.user?.commission_plan || a.commission_plan || '--'}
                                 </p>
+                                {!isPaid && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <select
+                                      value={a.agent_role || 'co_agent'}
+                                      onChange={e => {
+                                        const newRole = e.target.value
+                                        if (newRole === a.agent_role) return
+                                        if (!confirm(`Change role from ${(a.agent_role || '').replace(/_/g, ' ')} to ${newRole.replace(/_/g, ' ')}?\n\nThis may affect commission math and linked rows.`)) return
+                                        updateInternalAgent(a.id, { agent_role: newRole })
+                                      }}
+                                      className="text-xs bg-transparent border border-luxury-gray-5 rounded px-1.5 py-0.5 text-luxury-gray-1"
+                                    >
+                                      {AGENT_ROLE_OPTIONS.map(r => (
+                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={a.side || ''}
+                                      onChange={e => updateInternalAgent(a.id, { side: e.target.value || null })}
+                                      className="text-xs bg-transparent border border-luxury-gray-5 rounded px-1.5 py-0.5 text-luxury-gray-1"
+                                    >
+                                      {SIDE_OPTIONS.map(s => (
+                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              {/* Recalculate */}
+                              {!isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
+                                <button
+                                  onClick={() => recalculateRow(a)}
+                                  disabled={recalcRowId === a.id}
+                                  className="btn btn-secondary text-xs px-2 py-1"
+                                  title="Recompute split + linked rows from current basis, plan, and lead source"
+                                >
+                                  {recalcRowId === a.id ? 'Recalculating...' : 'Recalculate'}
+                                </button>
+                              )}
                               {/* Delete button */}
                               {!isPaid && (
                                 <button
@@ -1753,8 +1785,8 @@ export default function AdminTransactionDetailPage() {
                                     key={src}
                                     onClick={() => {
                                       setAgentLeadSources(p => ({ ...p, [a.agent_id]: src }))
-                                      // Recalculate and apply with new lead source
-                                      setTimeout(() => recalculateAgentSplit(a.agent_id, a.id), 100)
+                                      // Recalculate immediately with the new lead source
+                                      recalculateRow(a, src)
                                     }}
                                     className={`flex-1 text-xs px-3 py-1.5 rounded border transition-colors ${
                                       (agentLeadSources[a.agent_id] || 'own') === src
@@ -3216,6 +3248,16 @@ export default function AdminTransactionDetailPage() {
               .then(d => setPayoutBrokerages(d.external_brokerages || []))
               .catch(() => {})
           }}
+        />
+      )}
+
+      {showAddAgentModal && (
+        <AddAgentModal
+          transactionId={id}
+          transaction={data.transaction}
+          existingAgents={data.agents || []}
+          onClose={() => setShowAddAgentModal(false)}
+          onAdded={() => { setShowAddAgentModal(false); loadData() }}
         />
       )}
     </div>
