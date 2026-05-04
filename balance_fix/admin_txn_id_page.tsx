@@ -1248,7 +1248,30 @@ export default function AdminTransactionDetailPage() {
   )
   const totalCheckAmount = checks.reduce((s: number, c: any) => s + parseFloat(c.check_amount || 0), 0)
   const totalBrokerageAmount = checks.reduce((s: number, c: any) => s + parseFloat(c.brokerage_amount || 0), 0)
-  const totalAgentNets = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
+  // For each agent, the actual cash payout = agent_net minus staged debts plus
+  // staged credits. Staged debts are paid out of brokerage funds (not the
+  // agent's pocket), so they reduce what we cut to the agent.
+  const totalAgentNets = agents.reduce((s: number, a: any) => {
+    const baseNet = parseFloat(a.agent_net || 0)
+    const stagedRows = ((a.billing?.staged as any[]) || []).filter(
+      (r: any) => r.offset_transaction_agent_id === a.id
+    )
+    const stagedDebtAmt = stagedRows
+      .filter((r: any) => r.record_type !== 'credit')
+      .reduce(
+        (sum: number, d: any) =>
+          sum + (parseFloat(d.amount_owed ?? 0) - parseFloat(d.amount_remaining ?? 0)),
+        0
+      )
+    const stagedCreditAmt = stagedRows
+      .filter((r: any) => r.record_type === 'credit')
+      .reduce(
+        (sum: number, c: any) =>
+          sum + (parseFloat(c.amount_owed ?? 0) - parseFloat(c.amount_remaining ?? 0)),
+        0
+      )
+    return s + (baseNet - stagedDebtAmt + stagedCreditAmt)
+  }, 0)
   const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
   const payoutBalance = totalCheckAmount - totalBrokerageAmount - totalAgentNets - totalExternalCommissions - totalCheckPayouts
 
