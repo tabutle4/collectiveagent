@@ -381,12 +381,27 @@ export default function AgentCardFinancials({
 
   // Resolved field values (live overlay → row → calc fallback)
   const agentBasis = num(liveVal('agent_basis', a.agent_basis ?? calc?.agent_basis))
+  // brokerage_split_percentage and team_lead_percentage are NOT real columns
+  // on transaction_internal_agents — they're derived from the dollar amounts.
+  // split_percentage IS a real column.
   const splitPct = num(liveVal('split_percentage', a.split_percentage ?? calc?.agent_split_pct))
-  const brokerageSplitPct = num(liveVal('brokerage_split_percentage', a.brokerage_split_percentage ?? (100 - splitPct)))
   const agentGross = num(liveVal('agent_gross', a.agent_gross ?? calc?.agent_gross))
   const brokerageSplit = num(liveVal('brokerage_split', a.brokerage_split ?? calc?.brokerage_split))
-  const teamLeadPct = num(liveVal('team_lead_percentage', a.team_lead_percentage ?? calc?.team_lead_pct))
   const teamLeadComm = num(a.team_lead_commission ?? calc?.team_lead_payout)
+  // Derive %s from the $ amounts and basis. Always accurate since every
+  // recalc writes the dollars.
+  const brokerageSplitPct = num(
+    liveVal(
+      'brokerage_split_percentage',
+      agentBasis > 0 ? (brokerageSplit / agentBasis) * 100 : (100 - splitPct)
+    )
+  )
+  const teamLeadPct = num(
+    liveVal(
+      'team_lead_percentage',
+      agentBasis > 0 ? (teamLeadComm / agentBasis) * 100 : (calc?.team_lead_pct ?? 0)
+    )
+  )
   const otherFees = num(liveVal('other_fees', a.other_fees))
   const rebate = num(liveVal('rebate_amount', a.rebate_amount))
   const btsa = num(liveVal('btsa_amount', a.btsa_amount))

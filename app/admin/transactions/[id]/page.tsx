@@ -859,14 +859,18 @@ export default function AdminTransactionDetailPage() {
       const newGross = (basis * value) / 100
       updates.agent_gross = Math.round(newGross * 100) / 100
       updates.brokerage_split = Math.round((basis - newGross) * 100) / 100
-      updates.brokerage_split_percentage = 100 - value
     }
     if (field === 'brokerage_split_percentage' && value != null) {
+      // brokerage_split_percentage is not a real column; translate the user's
+      // % edit into a brokerage_split (dollar) write. Cascade updates the
+      // agent side accordingly.
       const basis = parseFloat(agent?.agent_basis || 0)
       const newBrokerage = (basis * value) / 100
       updates.brokerage_split = Math.round(newBrokerage * 100) / 100
       updates.agent_gross = Math.round((basis - newBrokerage) * 100) / 100
       updates.split_percentage = 100 - value
+      // Drop the synthetic field so it does not get sent to the DB.
+      delete (updates as any).brokerage_split_percentage
     }
     if (field === 'agent_basis' && value != null) {
       const sp = parseFloat(agent?.split_percentage || 0)
@@ -880,21 +884,22 @@ export default function AdminTransactionDetailPage() {
         const newPct = (value / basis) * 100
         updates.split_percentage = Math.round(newPct * 100) / 100
         updates.brokerage_split = Math.round((basis - value) * 100) / 100
-        updates.brokerage_split_percentage = Math.round((100 - newPct) * 100) / 100
       }
     }
     if (field === 'brokerage_split' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
       if (basis > 0) {
         const newPct = (value / basis) * 100
-        updates.brokerage_split_percentage = Math.round(newPct * 100) / 100
         updates.agent_gross = Math.round((basis - value) * 100) / 100
         updates.split_percentage = Math.round((100 - newPct) * 100) / 100
       }
     }
     if (field === 'team_lead_percentage' && value != null) {
+      // team_lead_percentage is not a real column; translate to a dollar
+      // write on team_lead_commission.
       const basis = parseFloat(agent?.agent_basis || 0)
       updates.team_lead_commission = Math.round((basis * value) / 100 * 100) / 100
+      delete (updates as any).team_lead_percentage
     }
 
     await updateInternalAgent(internalAgentId, updates)
