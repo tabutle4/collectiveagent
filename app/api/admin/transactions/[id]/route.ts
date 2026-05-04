@@ -596,7 +596,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             *,
             user:users!transaction_internal_agents_agent_id_fkey(
               id, first_name, last_name, preferred_first_name, preferred_last_name,
-              office_email, email, phone, office, commission_plan, license_number,
+              office_email, email, phone, office, commission_plan, lease_commission_plan, license_number,
               license_expiration, nrds_id, mls_id, association, join_date,
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
@@ -617,6 +617,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       if (txnError || !txn) {
         return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
       }
+
+      // Build a code→friendly-name map for commission plans so the UI can
+      // display "Custom - 85/15 Cap" instead of the raw code "Custom Plan".
+      // Plans store user-facing names in `name`; codes in `code`. Some rows
+      // mix the two, so the lookup tries both directions.
+      const { data: allPlans } = await supabase
+        .from('commission_plans')
+        .select('code, name')
+        .eq('is_active', true)
+      const planFriendly = new Map<string, string>()
+      for (const p of allPlans || []) {
+        if (p.code) planFriendly.set(String(p.code).toLowerCase(), p.name || p.code)
+        if (p.name) planFriendly.set(String(p.name).toLowerCase(), p.name)
+      }
+      const friendlyPlanLabel = (code: string | null | undefined): string | null => {
+        if (!code) return null
+        const hit = planFriendly.get(String(code).toLowerCase())
+        return hit || code
+      }
+      const txnIsLease = isLeaseTransactionType(txn.transaction_type)
 
       const agentIds = (agents || []).map((a: any) => a.agent_id).filter(Boolean)
       const agentUsers = (agents || []).map((a: any) => a.user).filter(Boolean)
@@ -788,11 +808,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
       return NextResponse.json({
         transaction: txn,
-        agents: (agents || []).map((a: any) => ({
-          ...a,
-          team_membership: membershipByAgent[a.agent_id] || null,
-          billing: billingByAgent[a.agent_id] || null,
-        })),
+        agents: (agents || []).map((a: any) => {
+          // For lease transactions, prefer the agent's lease_commission_plan
+          // (falling back to commission_plan). For sales, always commission_plan.
+          // Then resolve to the friendly name from commission_plans.
+          const u = a.user || {}
+          const planCode = txnIsLease
+            ? (u.lease_commission_plan || u.commission_plan)
+            : u.commission_plan
+          return {
+            ...a,
+            team_membership: membershipByAgent[a.agent_id] || null,
+            billing: billingByAgent[a.agent_id] || null,
+            commission_plan_friendly: friendlyPlanLabel(planCode),
+          }
+        }),
         primary_agent: primaryAgent || null,
         agent_billing: agentBilling,
         team_info: teamInfo,

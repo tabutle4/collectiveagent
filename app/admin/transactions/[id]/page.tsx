@@ -556,17 +556,23 @@ export default function AdminTransactionDetailPage() {
   const deleteInternalAgent = async (internalAgentId: string) => {
     setSaving(true)
     try {
+      // Use the cascade variant so any linked team_lead / momentum_partner
+      // rows (with source_tia_id pointing at this primary) are removed too.
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_internal_agent', internal_agent_id: internalAgentId }),
+        body: JSON.stringify({
+          action: 'delete_internal_agent_cascade',
+          internal_agent_id: internalAgentId,
+        }),
       })
       if (res.ok) {
-        setData((prev: any) => ({
-          ...prev,
-          agents: prev.agents.filter((a: any) => a.id !== internalAgentId),
-        }))
         setDeleteConfirm(null)
+        // Cascade may have removed multiple rows. Reload to be safe.
+        await loadData()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error || 'Failed to remove agent')
       }
     } finally {
       setSaving(false)
@@ -1918,7 +1924,7 @@ export default function AdminTransactionDetailPage() {
                                 <p className="text-xs text-luxury-gray-3">
                                   {a.agent_role?.replace(/_/g, ' ')}
                                   {a.side ? ` · ${sideLabel(a.side)} side` : ''}
-                                  {' · '}{a.user?.commission_plan || a.commission_plan || '--'}
+                                  {' · '}{a.commission_plan_friendly || a.user?.commission_plan || a.commission_plan || '--'}
                                 </p>
                                 {!isPaid && (
                                   <div className="flex items-center gap-2 mt-1">
@@ -2954,7 +2960,7 @@ export default function AdminTransactionDetailPage() {
                     {u && (
                       <div className="space-y-0">
                         <FieldRow label="Office" value={u.office} />
-                        <FieldRow label="Commission Plan" value={u.commission_plan} />
+                        <FieldRow label="Commission Plan" value={a.commission_plan_friendly || u.commission_plan} />
                         <FieldRow label="Division" value={u.division} />
                         <FieldRow label="License #" value={u.license_number} />
                         <FieldRow label="License Exp" value={fmtDate(u.license_expiration)} />
