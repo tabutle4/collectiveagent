@@ -91,6 +91,24 @@ const formatTransactionType = (type: string | null) => {
   return getTransactionTypeLabel(type)
 }
 
+// Title-case label for an agent_role code. Falls back to a snake-case
+// stripped version of the code if unknown.
+const formatAgentRole = (role: string | null | undefined): string => {
+  if (!role) return 'Agent'
+  const map: Record<string, string> = {
+    primary_agent: 'Primary Agent',
+    co_agent: 'Co-Agent',
+    listing_agent: 'Listing Agent',
+    team_lead: 'Team Lead',
+    momentum_partner: 'Momentum Partner',
+    referral_agent: 'Referral Agent',
+  }
+  if (map[role]) return map[role]
+  return role
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
 const STATUS_OPTIONS = [
   { value: 'prospect', label: 'Prospect' },
   { value: 'active', label: 'Active' },
@@ -1827,7 +1845,7 @@ export default function AdminTransactionDetailPage() {
                             {fmtName(a.user)}
                           </p>
                           <p className="text-xs text-luxury-gray-3">
-                            {a.agent_role?.replace(/_/g, ' ')}
+                            {formatAgentRole(a.agent_role)}
                           </p>
                         </div>
                         <div className="text-right">
@@ -1922,7 +1940,7 @@ export default function AdminTransactionDetailPage() {
                                   {fmtName(a.user)}
                                 </p>
                                 <p className="text-xs text-luxury-gray-3">
-                                  {a.agent_role?.replace(/_/g, ' ')}
+                                  {formatAgentRole(a.agent_role)}
                                   {a.side ? ` · ${sideLabel(a.side)} side` : ''}
                                   {' · '}{a.commission_plan_friendly || a.user?.commission_plan || a.commission_plan || '--'}
                                 </p>
@@ -2503,7 +2521,7 @@ export default function AdminTransactionDetailPage() {
                                 <div>
                                   <p className="text-xs font-semibold text-luxury-gray-1">{name}</p>
                                   <p className="text-xs text-luxury-gray-3">
-                                    {a.agent_role?.replace(/_/g, ' ')} · {a.payment_status || 'pending'}
+                                    {formatAgentRole(a.agent_role)} · {a.payment_status || 'pending'}
                                   </p>
                                   {a.payment_date && (
                                     <p className="text-xs text-luxury-gray-3">{fmtDate(a.payment_date)}</p>
@@ -2919,14 +2937,6 @@ export default function AdminTransactionDetailPage() {
           }).map((a: any) => {
             const u = a.user
             const isExpanded = expandedAgents[a.id] !== false
-            const agentRoleLabel = (role: string) => {
-              const map: Record<string, string> = {
-                primary_agent: 'Primary Agent', co_agent: 'Co-Agent',
-                listing_agent: 'Listing Agent', team_lead: 'Team Lead',
-                referral_agent: 'Referral Agent',
-              }
-              return map[role] || role?.replace(/_/g, ' ') || 'Agent'
-            }
             return (
               <div key={a.id} className="container-card p-3">
                 <button
@@ -2934,7 +2944,7 @@ export default function AdminTransactionDetailPage() {
                   onClick={() => toggleAgent(a.id)}
                 >
                   <span className="section-title flex items-center gap-1.5">
-                    <User size={12} /> {agentRoleLabel(a.agent_role)}
+                    <User size={12} /> {formatAgentRole(a.agent_role)}
                   </span>
                   {isExpanded ? (
                     <ChevronUp size={12} className="text-luxury-gray-3" />

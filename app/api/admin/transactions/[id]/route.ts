@@ -1613,6 +1613,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         commission_plan: breakdown.planCode,
         agent_basis: commAmt,
         split_percentage: breakdown.agentSplitPct,
+        brokerage_split_percentage: breakdown.firmSplitPct,
+        team_lead_percentage: breakdown.teamLeadPct,
         agent_gross: Math.round(breakdown.agentGross * 100) / 100,
         brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
         processing_fee: Math.round(breakdown.processingFee * 100) / 100,
