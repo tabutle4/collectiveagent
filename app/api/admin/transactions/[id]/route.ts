@@ -397,6 +397,8 @@ async function cascadePrimarySplit(args: {
     commission_plan: breakdown.planCode,
     agent_basis: commissionAmount,
     split_percentage: breakdown.agentSplitPct,
+    brokerage_split_percentage: breakdown.firmSplitPct,
+    team_lead_percentage: breakdown.teamLeadPct,
     agent_gross: Math.round(breakdown.agentGross * 100) / 100,
     brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
     processing_fee: Math.round(breakdown.processingFee * 100) / 100,
@@ -847,29 +849,81 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { updates } = body
       const cleanUpdates: any = { ...updates }
 
-      // Auto-derive sales_volume on leases when monthly_rent or lease_term
-      // change. Same formula used by reports and dashboards:
-      //   sales_volume = monthly_rent × lease_term
-      // Skip if the caller explicitly passed sales_volume (manual override).
-      const touchesLeaseInputs =
-        'monthly_rent' in cleanUpdates || 'lease_term' in cleanUpdates
-      if (touchesLeaseInputs && !('sales_volume' in cleanUpdates)) {
-        // Need the current row to fill in whichever lease field wasn't sent.
+      // ── Auto-derive related transaction fields ──────────────────────────────
+      // Whenever inputs that drive computed fields are touched, fetch the
+      // current row, recompute, and merge into the update. Skip a derived
+      // field if the caller already passed it (manual override).
+      const COMPUTE_TRIGGERS = [
+        'monthly_rent', 'lease_term',
+        'gross_commission', 'listing_side_commission',
+        'buying_side_commission', 'office_gross',
+        'transaction_type', 'is_intermediary',
+      ]
+      const triggered = COMPUTE_TRIGGERS.some(k => k in cleanUpdates)
+      if (triggered) {
         const { data: current } = await supabase
           .from('transactions')
-          .select('transaction_type, monthly_rent, lease_term')
+          .select(
+            'transaction_type, is_intermediary, monthly_rent, lease_term, ' +
+            'sales_volume, gross_commission, listing_side_commission, ' +
+            'buying_side_commission, office_gross'
+          )
           .eq('id', id)
           .single()
-        if (current && isLeaseTransactionType(current.transaction_type)) {
-          const rent = parseFloat(
-            cleanUpdates.monthly_rent ?? current.monthly_rent ?? 0
-          )
-          const term = parseInt(
-            cleanUpdates.lease_term ?? current.lease_term ?? 0,
-            10
-          )
-          if (rent > 0 && term > 0) {
-            cleanUpdates.sales_volume = rent * term
+
+        if (current) {
+          // Effective values = caller's update if present, else current row.
+          const eff = (k: string) => (k in cleanUpdates ? cleanUpdates[k] : (current as any)[k])
+          const txnType = eff('transaction_type')
+          const isLease = isLeaseTransactionType(txnType)
+          const isIntermediary = !!eff('is_intermediary')
+
+          // Lease volume: monthly_rent × lease_term
+          if (isLease && !('sales_volume' in cleanUpdates)) {
+            const rent = parseFloat(eff('monthly_rent') ?? 0)
+            const term = parseInt(eff('lease_term') ?? 0, 10)
+            if (rent > 0 && term > 0) {
+              cleanUpdates.sales_volume = rent * term
+            }
+          }
+
+          // Single-sided commission flow.
+          // For single-sided deals the side WE represent is implied by
+          // transaction_type:
+          //   buyer / tenant types → we earn buying_side_commission
+          //   seller / landlord types → we earn listing_side_commission
+          // Gross Commission = our side = Office Gross. The other side stays 0.
+          if (!isIntermediary && txnType) {
+            const t = String(txnType).toLowerCase()
+            const isOurSideListing = t.includes('seller') || t.includes('landlord')
+            const ourSideField = isOurSideListing
+              ? 'listing_side_commission'
+              : 'buying_side_commission'
+            const otherSideField = isOurSideListing
+              ? 'buying_side_commission'
+              : 'listing_side_commission'
+
+            // Pick the most recently touched driver. Order of precedence:
+            //   1) gross_commission (if user typed it, broadcast to side + office)
+            //   2) our_side_commission (broadcast to gross + office)
+            //   3) office_gross (broadcast to gross + side)
+            let driver: number | null = null
+            if ('gross_commission' in cleanUpdates) {
+              driver = parseFloat(cleanUpdates.gross_commission ?? 0)
+            } else if (ourSideField in cleanUpdates) {
+              driver = parseFloat(cleanUpdates[ourSideField] ?? 0)
+            } else if ('office_gross' in cleanUpdates) {
+              driver = parseFloat(cleanUpdates.office_gross ?? 0)
+            }
+
+            if (driver != null && Number.isFinite(driver)) {
+              if (!('gross_commission' in cleanUpdates)) cleanUpdates.gross_commission = driver
+              if (!(ourSideField in cleanUpdates)) cleanUpdates[ourSideField] = driver
+              if (!('office_gross' in cleanUpdates)) cleanUpdates.office_gross = driver
+              // Other side is always 0 for single-sided unless the caller
+              // explicitly set it (which is unusual but allowed).
+              if (!(otherSideField in cleanUpdates)) cleanUpdates[otherSideField] = 0
+            }
           }
         }
       }
@@ -879,8 +933,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
         .eq('id', id)
       if (error) throw error
-      // Office_net depends on office_gross. Recompute if it (or any input) was touched.
-      if ('office_gross' in (updates || {})) await recomputeOfficeNet(id)
+      // Office_net depends on office_gross. Recompute when office_gross was
+      // touched (directly OR via the auto-derive above).
+      if ('office_gross' in cleanUpdates) await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
