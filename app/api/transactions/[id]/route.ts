@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { computeCommission } from '@/lib/transactions/math'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_view_all_transactions')
@@ -422,13 +423,6 @@ if (action === 'add_external_brokerage') {
       const otherFees = parseFloat(tia.other_fees || 0)
       const brokerageSplit = parseFloat(tia.brokerage_split || 0)
 
-      let amount1099: number
-      if (tia.agent_role === 'primary_agent') {
-        amount1099 = agentGross - processingFee - coachingFee - otherFees
-      } else {
-        amount1099 = parseFloat(tia.agent_net || 0)
-      }
-
       let totalDebtsDeducted = 0
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
@@ -436,10 +430,34 @@ if (action === 'add_external_brokerage') {
         }
       }
 
-      const agentNet =
-        agent_net_override != null
+      // Canonical formula:
+      //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
+      //   agent_net   = amount_1099 − debts
+      // For non-primary roles (team_lead, momentum_partner, referral) the
+      // amount_1099 comes from the row's stored agent_net (no further math).
+      let amount1099: number
+      let agentNet: number
+      if (tia.agent_role === 'primary_agent') {
+        const canon = computeCommission({
+          agent_gross: tia.agent_gross,
+          btsa_amount: tia.btsa_amount,
+          processing_fee: tia.processing_fee,
+          coaching_fee: tia.coaching_fee,
+          other_fees: tia.other_fees,
+          rebate_amount: tia.rebate_amount,
+          credits_applied: 0,
+          debts_deducted: totalDebtsDeducted,
+        })
+        amount1099 = canon.amount_1099
+        agentNet = agent_net_override != null
+          ? parseFloat(agent_net_override)
+          : canon.agent_net
+      } else {
+        amount1099 = parseFloat(tia.agent_net || 0)
+        agentNet = agent_net_override != null
           ? parseFloat(agent_net_override)
           : amount1099 - totalDebtsDeducted
+      }
 
       const tiaUpdate: any = {
         payment_status: 'paid',

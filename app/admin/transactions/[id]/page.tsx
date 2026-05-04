@@ -33,6 +33,7 @@ import PayoutModal from '@/components/transactions/PayoutModal'
 import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagPanel'
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
+import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
 import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS } from '@/lib/transactions/constants'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -363,13 +364,32 @@ export default function AdminTransactionDetailPage() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
 
+  // Retainer modal state — opens from the agent card's "+ Add Retainer" button.
+  // Creates a new TIA row with installment_kind='retainer' for this agent on
+  // this transaction. Retainer rows have simple math: basis - retainer_fee.
+  // No team lead, no momentum partner, no BTSA, no rebate.
+  const [retainerModal, setRetainerModal] = useState<{
+    open: boolean
+    forAgent: any | null
+    retainerAmount: string
+    retainerFee: string
+    saving: boolean
+    error: string | null
+  }>({
+    open: false,
+    forAgent: null,
+    retainerAmount: '',
+    retainerFee: '',
+    saving: false,
+    error: null,
+  })
+
   // Mark Paid modal state
+  // Debt/credit selection lives on the per-card billing panel (billingApplied
+  // state). The modal only collects payment metadata.
   const [markPaidModal, setMarkPaidModal] = useState<{
     open: boolean
     agent: any
-    debts: any[]
-    loadingDebts: boolean
-    selectedDebts: Record<string, number>  // debt_id -> amount to apply
     paymentDate: string
     paymentMethod: string
     paymentReference: string
@@ -378,9 +398,6 @@ export default function AdminTransactionDetailPage() {
   }>({
     open: false,
     agent: null,
-    debts: [],
-    loadingDebts: false,
-    selectedDebts: {},
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'ACH',
     paymentReference: '',
@@ -708,6 +725,70 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  // ── Retainer modal handlers ────────────────────────────────────────────────
+  const openRetainerModal = (agent: any) => {
+    setRetainerModal({
+      open: true,
+      forAgent: agent,
+      retainerAmount: '',
+      retainerFee: '',
+      saving: false,
+      error: null,
+    })
+  }
+
+  const closeRetainerModal = () => {
+    setRetainerModal(prev => ({ ...prev, open: false }))
+  }
+
+  const submitRetainer = async () => {
+    const a = retainerModal.forAgent
+    if (!a) return
+    const amount = parseFloat(retainerModal.retainerAmount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setRetainerModal(prev => ({ ...prev, error: 'Enter a retainer amount.' }))
+      return
+    }
+    const fee = retainerModal.retainerFee === '' ? 0 : parseFloat(retainerModal.retainerFee)
+    if (!Number.isFinite(fee) || fee < 0) {
+      setRetainerModal(prev => ({ ...prev, error: 'Retainer fee must be 0 or more.' }))
+      return
+    }
+
+    setRetainerModal(prev => ({ ...prev, saving: true, error: null }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_retainer_row',
+          retainer: {
+            agent_id: a.agent_id,
+            agent_role: a.agent_role,
+            side: a.side,
+            retainer_amount: amount,
+            retainer_fee: fee,
+          },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to add retainer row')
+      }
+      await loadData()
+      setRetainerModal({
+        open: false,
+        forAgent: null,
+        retainerAmount: '',
+        retainerFee: '',
+        saving: false,
+        error: null,
+      })
+    } catch (e: any) {
+      setRetainerModal(prev => ({ ...prev, saving: false, error: e.message || 'Save failed' }))
+    }
+  }
+
   const updateInternalAgent = async (internalAgentId: string, updates: any) => {
     setSaving(true)
     try {
@@ -727,6 +808,111 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  // Save a single editable field on a TIA, ALSO flagging it as manually
+  // overridden. The cascade for derived fields (gross/brokerage/etc) is
+  // handled by AgentCardFinancials's local overlay; this just persists.
+  const saveOverridableField = async (
+    internalAgentId: string,
+    field: OverridableField,
+    value: number | null,
+    markOverridden: boolean,
+  ) => {
+    const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
+    const currentOverrides = agent?.manual_overrides || {}
+    const nextOverrides = markOverridden
+      ? { ...currentOverrides, [field]: true }
+      : currentOverrides
+
+    // For percentage fields that cascade, we save the percentage AND the
+    // derived dollars together so the database stays consistent without
+    // waiting for cascadePrimarySplit.
+    const updates: any = {
+      [field]: value,
+      manual_overrides: nextOverrides,
+    }
+    if (field === 'split_percentage' && value != null) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      const newGross = (basis * value) / 100
+      updates.agent_gross = Math.round(newGross * 100) / 100
+      updates.brokerage_split = Math.round((basis - newGross) * 100) / 100
+      updates.brokerage_split_percentage = 100 - value
+    }
+    if (field === 'brokerage_split_percentage' && value != null) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      const newBrokerage = (basis * value) / 100
+      updates.brokerage_split = Math.round(newBrokerage * 100) / 100
+      updates.agent_gross = Math.round((basis - newBrokerage) * 100) / 100
+      updates.split_percentage = 100 - value
+    }
+    if (field === 'agent_basis' && value != null) {
+      const sp = parseFloat(agent?.split_percentage || 0)
+      const newGross = (value * sp) / 100
+      updates.agent_gross = Math.round(newGross * 100) / 100
+      updates.brokerage_split = Math.round((value - newGross) * 100) / 100
+    }
+    if (field === 'agent_gross' && value != null) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      if (basis > 0) {
+        const newPct = (value / basis) * 100
+        updates.split_percentage = Math.round(newPct * 100) / 100
+        updates.brokerage_split = Math.round((basis - value) * 100) / 100
+        updates.brokerage_split_percentage = Math.round((100 - newPct) * 100) / 100
+      }
+    }
+    if (field === 'brokerage_split' && value != null) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      if (basis > 0) {
+        const newPct = (value / basis) * 100
+        updates.brokerage_split_percentage = Math.round(newPct * 100) / 100
+        updates.agent_gross = Math.round((basis - value) * 100) / 100
+        updates.split_percentage = Math.round((100 - newPct) * 100) / 100
+      }
+    }
+    if (field === 'team_lead_percentage' && value != null) {
+      const basis = parseFloat(agent?.agent_basis || 0)
+      updates.team_lead_commission = Math.round((basis * value) / 100 * 100) / 100
+    }
+
+    await updateInternalAgent(internalAgentId, updates)
+  }
+
+  // Clear a single override flag, then trigger a Recalculate so the field
+  // returns to the computed value.
+  const clearOverrideForField = async (
+    internalAgentId: string,
+    field: OverridableField,
+  ) => {
+    const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
+    const currentOverrides = { ...(agent?.manual_overrides || {}) }
+    delete currentOverrides[field]
+    // Persist the override removal first; cascadePrimarySplit on the next
+    // Recalculate (or auto-cascade in update_internal_agent) will restore the
+    // computed value.
+    await updateInternalAgent(internalAgentId, { manual_overrides: currentOverrides })
+    // Trigger Recalculate so the cleared field gets a fresh computed value
+    const a = agent
+    if (a) {
+      try {
+        await fetch(`/api/admin/transactions/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'apply_primary_split',
+            internal_agent_id: a.id,
+            agent_id: a.agent_id,
+            commission_amount: parseFloat(a.agent_basis || 0),
+            lead_source: a.lead_source || 'own',
+            referred_agent_id: a.referred_agent_id || null,
+          }),
+        })
+      } catch {
+        // ignore — admin can still Recalculate manually
+      }
+      await loadData()
+    }
+  }
+
+
   // ── Mark Paid Modal Functions ────────────────────────────────────────────────
 
   const openMarkPaidModal = async (agent: any) => {
@@ -735,7 +921,7 @@ export default function AdminTransactionDetailPage() {
     const isNewAgentPlan = plan.includes('new') || plan.includes('70/30')
     const txnType = data?.transaction_type || ''
     const txnIsLease = isLease(txnType)
-    
+
     // For New Agent Plan: sales count, leases don't by default
     const defaultCountsToward = isNewAgentPlan ? !txnIsLease : true
 
@@ -743,32 +929,14 @@ export default function AdminTransactionDetailPage() {
       ...prev,
       open: true,
       agent,
-      loadingDebts: true,
-      debts: [],
-      selectedDebts: {},
       paymentDate: new Date().toISOString().split('T')[0],
       paymentMethod: 'ACH',
       paymentReference: '',
       fundingSource: 'crc',
       countsTowardProgress: defaultCountsToward,
     }))
-
-    // Load outstanding debts for this agent
-    try {
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_agent_debts', agent_id: agent.agent_id }),
-      })
-      const json = await res.json()
-      setMarkPaidModal(prev => ({
-        ...prev,
-        loadingDebts: false,
-        debts: json.debts || [],
-      }))
-    } catch {
-      setMarkPaidModal(prev => ({ ...prev, loadingDebts: false }))
-    }
+    // Note: debts/credits selection comes from the per-card billing panel
+    // (billingApplied state). Modal does NOT load or display debts.
   }
 
   const closeMarkPaidModal = () => {
@@ -868,20 +1036,6 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setSaving(false)
     }
-  }
-
-  const toggleDebt = (debtId: string, maxAmount: number) => {
-    setMarkPaidModal(prev => {
-      const current = prev.selectedDebts[debtId]
-      if (current) {
-        // Remove it
-        const { [debtId]: _, ...rest } = prev.selectedDebts
-        return { ...prev, selectedDebts: rest }
-      } else {
-        // Add it with full amount
-        return { ...prev, selectedDebts: { ...prev.selectedDebts, [debtId]: maxAmount } }
-      }
-    })
   }
 
   const toggleChecklist = async (itemId: string, currentlyComplete: boolean) => {
@@ -1784,6 +1938,16 @@ export default function AdminTransactionDetailPage() {
                                   {recalcRowId === a.id ? 'Recalculating...' : 'Recalculate'}
                                 </button>
                               )}
+                              {/* + Add Retainer — only on primary/listing/co rows that aren't themselves retainers */}
+                              {['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && a.installment_kind !== 'retainer' && (
+                                <button
+                                  onClick={() => openRetainerModal(a)}
+                                  className="btn btn-secondary text-xs px-2 py-1"
+                                  title="Record a retainer payment for this agent (separate from the deal commission)"
+                                >
+                                  + Retainer
+                                </button>
+                              )}
                               {/* Delete button */}
                               {!isPaid && (
                                 <button
@@ -1872,24 +2036,26 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Financial breakdown */}
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                            <FieldRow label="Sales Volume" value={salesVolume > 0 ? fmt$(salesVolume) : null} />
-                            <FieldRow label="Office Gross (100%)" value={fmt$(txn.office_gross)} />
-                            <FieldRow label="Split" value={a.split_percentage ? `${a.split_percentage}%` : (calc?.agent_split_pct ? `${calc.agent_split_pct}%` : null)} />
-                            <FieldRow label="Agent Gross" value={fmt$(agentGross)} />
-                            <FieldRow label="Brokerage Split" value={brokerageSplit > 0 ? fmt$(brokerageSplit) : null} />
-                            <FieldRow label="Processing Fee" value={processingFee > 0 ? `-${fmt$(processingFee)}` : null} />
-                            <FieldRow label="Coaching Fee" value={coachingFee > 0 ? `-${fmt$(coachingFee)}` : null} />
-                            {teamLeadComm > 0 && (
-                              <FieldRow label="Team Lead Comm" value={`-${fmt$(teamLeadComm)}`} />
-                            )}
-                            <FieldRow label="Other Fees" value={otherFees > 0 ? `-${fmt$(otherFees)}` : null} />
-                            <FieldRow label="Rebate" value={a.rebate_amount > 0 ? fmt$(a.rebate_amount) : null} />
-                            <FieldRow label="BTSA" value={a.btsa_amount > 0 ? fmt$(a.btsa_amount) : null} />
-                          </div>
+                          {/* Financial breakdown — sectioned layout with overrides */}
+                          {(() => {
+                            const applied = billingApplied[a.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
+                            return (
+                              <AgentCardFinancials
+                                agent={a}
+                                txn={txn}
+                                calc={calc}
+                                isPaid={isPaid}
+                                appliedDebts={applied.debts}
+                                appliedCredits={applied.credits}
+                                onSaveField={(field, value, markOverridden) =>
+                                  saveOverridableField(a.id, field, value, markOverridden)
+                                }
+                                onClearOverride={(field) => clearOverrideForField(a.id, field)}
+                              />
+                            )
+                          })()}
 
-                          {/* Billing — debts and credits, above totals */}
+                          {/* Billing — debts and credits, between adjustments and totals */}
                           <AgentBillingPanel
                             agentId={a.agent_id}
                             tiaId={a.id}
@@ -1898,46 +2064,6 @@ export default function AdminTransactionDetailPage() {
                             onAppliedChange={handleBillingChange(a.id)}
                             onReversedTia={loadData}
                           />
-
-                          {/* Totals */}
-                          <div className="border-t border-luxury-gray-5/50 mt-2 pt-2 space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs text-luxury-gray-3">1099 Amount</span>
-                              <span className="text-xs text-luxury-gray-2">{fmt$(amount1099)}</span>
-                            </div>
-                            {(() => {
-                              const applied = billingApplied[a.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
-                              const persistedDebts = debtsDeducted // already-saved on row
-                              return (
-                                <>
-                                  {persistedDebts > 0 && (
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-xs text-luxury-gray-3">Debts (saved)</span>
-                                      <span className="text-xs text-red-500">-{fmt$(persistedDebts)}</span>
-                                    </div>
-                                  )}
-                                  {applied.debts > 0 && (
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-xs text-luxury-gray-3">Debts (selected)</span>
-                                      <span className="text-xs text-orange-600">-{fmt$(applied.debts)}</span>
-                                    </div>
-                                  )}
-                                  {applied.credits > 0 && (
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-xs text-luxury-gray-3">Credits (selected)</span>
-                                      <span className="text-xs text-green-600">+{fmt$(applied.credits)}</span>
-                                    </div>
-                                  )}
-                                  <div className="flex justify-between items-center pt-1 border-t border-luxury-gray-5/30">
-                                    <span className="text-xs font-semibold text-luxury-gray-2">Agent Net{applied.debts > 0 || applied.credits > 0 ? ' (preview)' : ''}</span>
-                                    <span className="text-sm font-bold text-luxury-accent">
-                                      {fmt$(agentNet - applied.debts + applied.credits)}
-                                    </span>
-                                  </div>
-                                </>
-                              )
-                            })()}
-                          </div>
 
                           {/* Payment details (if paid) */}
                           {isPaid && (
@@ -2252,24 +2378,6 @@ export default function AdminTransactionDetailPage() {
                               >
                                 <span
                                   className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.crc_transferred ? 'translate-x-6' : 'translate-x-1'}`}
-                                />
-                              </button>
-                            </div>
-
-                            {/* Agents Paid toggle */}
-                            <div className="flex items-center justify-between inner-card mb-3">
-                              <div>
-                                <p className="text-xs font-semibold text-luxury-gray-1">Agents Paid</p>
-                                <p className="text-xs text-luxury-gray-3">
-                                  All agents paid - removes from payouts report
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => updateCheck(check.id, { agents_paid: !check.agents_paid })}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${check.agents_paid ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
-                              >
-                                <span
-                                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${check.agents_paid ? 'translate-x-6' : 'translate-x-1'}`}
                                 />
                               </button>
                             </div>
@@ -3126,73 +3234,10 @@ export default function AdminTransactionDetailPage() {
                 </div>
               </div>
 
-              {/* Outstanding Debts */}
-              {markPaidModal.loadingDebts ? (
-                <p className="text-xs text-luxury-gray-3 text-center py-2">Loading debts...</p>
-              ) : markPaidModal.debts.length > 0 ? (
-                <div className="inner-card">
-                  <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Apply Outstanding Debts</p>
-                  <div className="space-y-2">
-                    {markPaidModal.debts.map((debt: any) => {
-                      const remaining = parseFloat(debt.amount_remaining || debt.amount_owed || 0)
-                      const isSelected = markPaidModal.selectedDebts[debt.id] != null
-                      return (
-                        <label
-                          key={debt.id}
-                          className={`flex items-center justify-between p-2 rounded border cursor-pointer transition-colors ${
-                            isSelected
-                              ? 'border-luxury-accent bg-luxury-accent/5'
-                              : 'border-luxury-gray-5 hover:border-luxury-gray-4'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleDebt(debt.id, remaining)}
-                              className="rounded"
-                            />
-                            <div>
-                              <p className="text-xs font-medium text-luxury-gray-1">
-                                {debt.debt_type?.replace(/_/g, ' ')}
-                              </p>
-                              <p className="text-xs text-luxury-gray-3">
-                                {debt.description || fmtDate(debt.date_incurred)}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-red-500">{fmt$(remaining)}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {Object.keys(markPaidModal.selectedDebts).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-luxury-gray-5/30 flex justify-between text-xs">
-                      <span className="text-luxury-gray-3">Total Deductions</span>
-                      <span className="font-semibold text-red-500">
-                        -{fmt$(Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {/* Final Amount */}
-              <div className="inner-card bg-luxury-accent/5 border-luxury-accent">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-luxury-gray-2">Agent Will Receive</span>
-                  <span className="text-lg font-bold text-luxury-accent">
-                    {fmt$(
-                    parseFloat(markPaidModal.agent.agent_gross || 0) -
-                    parseFloat(markPaidModal.agent.processing_fee || 0) -
-                    parseFloat(markPaidModal.agent.coaching_fee || 0) -
-                    parseFloat(markPaidModal.agent.other_fees || 0) -
-                    parseFloat(markPaidModal.agent.debts_deducted || 0) -
-                    Object.values(markPaidModal.selectedDebts).reduce((s: number, a: any) => s + a, 0)
-                  )}
-                  </span>
-                </div>
-              </div>
+              {/* Note: Debts and credits are selected on the agent card's
+                  Billing panel before opening this modal. The selected items
+                  appear in the agent card's Net (preview). When you confirm
+                  here, those selected items are applied. */}
 
               {/* Payment Details */}
               <div className="grid grid-cols-2 gap-3">
@@ -3342,6 +3387,96 @@ export default function AdminTransactionDetailPage() {
               .catch(() => {})
           }}
         />
+      )}
+
+      {/* Retainer modal */}
+      {retainerModal.open && retainerModal.forAgent && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={closeRetainerModal}
+        >
+          <div
+            className="bg-white rounded-lg max-w-md w-full p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-luxury-gray-1 mb-1">
+              Add Retainer Payment
+            </h2>
+            <p className="text-xs text-luxury-gray-3 mb-4">
+              For {retainerModal.forAgent.user?.preferred_first_name || retainerModal.forAgent.user?.first_name || 'this agent'}.
+              This creates a separate row from the deal commission. No team lead, no momentum partner, no BTSA.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="field-label">Retainer Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-luxury text-sm"
+                  value={retainerModal.retainerAmount}
+                  onChange={e => setRetainerModal(prev => ({ ...prev, retainerAmount: e.target.value, error: null }))}
+                  placeholder="0.00"
+                  autoFocus
+                />
+                <p className="text-[10px] text-luxury-gray-3 mt-0.5">Total amount the brokerage received for this retainer</p>
+              </div>
+              <div>
+                <label className="field-label">Office Retainer Fee</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-luxury text-sm"
+                  value={retainerModal.retainerFee}
+                  onChange={e => setRetainerModal(prev => ({ ...prev, retainerFee: e.target.value, error: null }))}
+                  placeholder="0.00"
+                />
+                <p className="text-[10px] text-luxury-gray-3 mt-0.5">What the office keeps. Agent gets the rest.</p>
+              </div>
+
+              {/* Live preview */}
+              {(() => {
+                const amt = parseFloat(retainerModal.retainerAmount || '0') || 0
+                const fee = parseFloat(retainerModal.retainerFee || '0') || 0
+                const net = amt - fee
+                if (amt > 0) {
+                  return (
+                    <div className="inner-card text-xs">
+                      <div className="flex justify-between"><span className="text-luxury-gray-3">Retainer</span><span>{fmt$(amt)}</span></div>
+                      <div className="flex justify-between"><span className="text-luxury-gray-3">- Office fee</span><span className="text-red-500">-{fmt$(fee)}</span></div>
+                      <div className="flex justify-between font-semibold pt-1 border-t border-luxury-gray-5/30 mt-1">
+                        <span>Agent gets</span>
+                        <span className="text-luxury-accent">{fmt$(net)}</span>
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+
+              {retainerModal.error && (
+                <p className="text-xs text-red-600">{retainerModal.error}</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={closeRetainerModal}
+                disabled={retainerModal.saving}
+                className="btn btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRetainer}
+                disabled={retainerModal.saving || !retainerModal.retainerAmount}
+                className="btn btn-primary text-xs"
+              >
+                {retainerModal.saving ? 'Saving...' : 'Add Retainer Row'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAddAgentModal && (

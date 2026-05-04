@@ -3,10 +3,10 @@
  *
  * Single source of truth — every place that computes agent_net or
  * amount_1099_reportable MUST use these functions. Do not inline the
- * formulas anywhere else. Locked 2026-04-24.
+ * formulas anywhere else. Locked 2026-05-04 (Phase 2.6).
  *
- * FORMULA (Model A):
- *   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate
+ * FORMULA (canonical):
+ *   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
  *   agent_net   = amount_1099 − debts
  *
  * Notes:
@@ -17,6 +17,11 @@
  *
  *   rebate is a client-facing credit that comes out of agent commission and
  *   reduces the agent's reportable income (not the firm's).
+ *
+ *   credits ADD to amount_1099. A credit reduces a fee the agent owes (e.g.
+ *   $50 credit applied to a $150 processing fee → effective $100 fee).
+ *   That extra $50 the agent keeps IS reportable income — same tax
+ *   treatment as a fee waiver.
  *
  *   debts reduce cash out only, not tax liability (the debt being paid
  *   down is post-tax money from the agent's account balance).
@@ -41,6 +46,7 @@ export interface CommissionInputs {
   coaching_fee?: number | string | null
   other_fees?: number | string | null
   rebate_amount?: number | string | null
+  credits_applied?: number | string | null
   debts_deducted?: number | string | null
 }
 
@@ -61,9 +67,10 @@ export function computeCommission(inputs: CommissionInputs): CommissionResult {
   const coaching = num(inputs.coaching_fee)
   const otherFees = num(inputs.other_fees)
   const rebate = num(inputs.rebate_amount)
+  const credits = num(inputs.credits_applied)
   const debts = num(inputs.debts_deducted)
 
-  const amount_1099 = agentGross + btsa - processing - coaching - otherFees - rebate
+  const amount_1099 = agentGross + btsa - processing - coaching - otherFees - rebate + credits
   const agent_net = amount_1099 - debts
 
   return {
@@ -84,6 +91,7 @@ export function formulaDisplay(inputs: CommissionInputs): string {
   const coaching = num(inputs.coaching_fee)
   const other = num(inputs.other_fees)
   const rebate = num(inputs.rebate_amount)
+  const credits = num(inputs.credits_applied)
   const debts = num(inputs.debts_deducted)
 
   parts.push(`$${gross.toFixed(2)}`)
@@ -92,6 +100,7 @@ export function formulaDisplay(inputs: CommissionInputs): string {
   if (coaching !== 0) parts.push(`− $${coaching.toFixed(2)} coaching`)
   if (other !== 0) parts.push(`− $${other.toFixed(2)} other`)
   if (rebate !== 0) parts.push(`− $${rebate.toFixed(2)} rebate`)
+  if (credits !== 0) parts.push(`+ $${credits.toFixed(2)} credits`)
   if (debts !== 0) parts.push(`− $${debts.toFixed(2)} debts`)
 
   return parts.join(' ')
@@ -113,6 +122,7 @@ export function deductionLines(
   add('Coaching fee', num(inputs.coaching_fee), '−')
   add('Other fees', num(inputs.other_fees), '−')
   add('Rebate', num(inputs.rebate_amount), '−')
+  add('Credits', num(inputs.credits_applied), '+')
   add('Debts', num(inputs.debts_deducted), '−')
   return lines
 }

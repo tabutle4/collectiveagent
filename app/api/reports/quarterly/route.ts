@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
          sales_volume,
          units,
          agent_net,
+         installment_kind,
          agent:users!transaction_internal_agents_agent_id_fkey(
            id,
            first_name,
@@ -168,6 +169,8 @@ export async function GET(request: NextRequest) {
     const allRelevantRows = internalAgents.filter(ia => qualifiedTransactionIds.has(ia.transaction_id))
     // Production roles only: primary_agent and listing_agent count for firm volume/units/top producers
     // (co_agent, team_lead, referral_agent, momentum_partner do not add units or volume)
+    // Installment/retainer rows have sales_volume=0 and units=0 by construction,
+    // so they contribute nothing to totals here without needing a special filter.
     const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
     const relevantAgentRows = allRelevantRows.filter(ia => PRODUCTION_ROLES.includes(ia.agent_role))
 
@@ -183,7 +186,9 @@ export async function GET(request: NextRequest) {
     let totalAgentNet = 0
     relevantAgentRows.forEach(row => {
       totalVolume += parseFloat(row.sales_volume || '0')
-      totalUnits += 1  // each TIA row = 1 unit (buyer, seller, tenant, landlord each count)
+      // units: existing TIA rows default to 1 (legacy). Installment rows
+      // set this to 0 explicitly so they don't double-count.
+      totalUnits += row.units != null ? parseFloat(row.units || '0') : 1
     })
     // Agent net includes all payees (co-agents, team leads, etc.)
     allRelevantRows.forEach(row => {
@@ -227,7 +232,9 @@ export async function GET(request: NextRequest) {
       }
       
       const volume = parseFloat(row.sales_volume || '0')
-      const units = 1  // each qualifying TIA row = 1 unit
+      // units: legacy rows default to 1. Installment rows set 0 to avoid
+      // double-counting.
+      const units = row.units != null ? parseFloat(row.units || '0') : 1
       
       const isLease = isLeaseType(txn.transaction_type)
       
@@ -328,7 +335,7 @@ export async function GET(request: NextRequest) {
       }
       
       teamStats[teamId].volume += parseFloat(row.sales_volume || '0')
-      teamStats[teamId].units += 1  // each qualifying TIA row = 1 unit
+      teamStats[teamId].units += row.units != null ? parseFloat(row.units || '0') : 1
     })
 
     // Get top 2 teams with their details

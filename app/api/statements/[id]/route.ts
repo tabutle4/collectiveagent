@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { computeCommission } from '@/lib/transactions/math'
 
 const fmt$ = (n: number | null | undefined): string => {
   if (n == null) return '$0.00'
@@ -122,7 +123,20 @@ export async function GET(
     const coachingFee = parseFloat(tia.coaching_fee || 0)
     const otherFees = parseFloat(tia.other_fees || 0)
     const totalFees = processingFee + coachingFee + otherFees
-    const amount1099 = tia.amount_1099_reportable || (agentGross - totalFees)
+    // Display fallback when amount_1099_reportable not stored. Match canonical formula
+    // from lib/transactions/math.ts:
+    //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
+    const fallback = computeCommission({
+      agent_gross: tia.agent_gross,
+      btsa_amount: tia.btsa_amount,
+      processing_fee: tia.processing_fee,
+      coaching_fee: tia.coaching_fee,
+      other_fees: tia.other_fees,
+      rebate_amount: tia.rebate_amount,
+      credits_applied: 0,
+      debts_deducted: 0,
+    })
+    const amount1099 = tia.amount_1099_reportable || fallback.amount_1099
     const debtsDeducted = parseFloat(tia.debts_deducted || 0)
     const agentNet = parseFloat(tia.agent_net || 0)
     const brokerageSplit = parseFloat(tia.brokerage_split || 0)

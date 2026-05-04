@@ -348,12 +348,17 @@ async function cascadePrimarySplit(args: {
 
   const { data: primaryTia } = await supabase
     .from('transaction_internal_agents')
-    .select('id, agent_id, agent_role, payment_status, side')
+    .select('id, agent_id, agent_role, payment_status, side, manual_overrides, installment_kind')
     .eq('id', internalAgentId)
     .eq('transaction_id', transactionId)
     .single()
   if (!primaryTia) return
   if (primaryTia.payment_status === 'paid') return
+  // Retainer rows are not part of commission cascade. They have their own
+  // simple structure (basis - retainer_fee = net) and never spawn TL/MP rows.
+  if (primaryTia.installment_kind === 'retainer') return
+
+  const overrides: Record<string, true> = (primaryTia.manual_overrides || {}) as any
 
   const { data: txn } = await supabase
     .from('transactions')
@@ -376,7 +381,8 @@ async function cascadePrimarySplit(args: {
   // Existing manual fields (btsa_amount, other_fees, rebate_amount,
   // debts_deducted) are loaded from the row and used in the calculation,
   // so ad-hoc adjustments are preserved through recalc.
-  const primaryUpdates: any = {
+  // FIELDS PRESENT IN manual_overrides ARE NOT OVERWRITTEN.
+  const candidate: Record<string, any> = {
     commission_plan: breakdown.planCode,
     agent_basis: commissionAmount,
     split_percentage: breakdown.agentSplitPct,
@@ -389,7 +395,12 @@ async function cascadePrimarySplit(args: {
     amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
     updated_at: new Date().toISOString(),
   }
-  if (breakdown.commissionPlanId) {
+  // Drop any candidate field that admin has overridden manually.
+  const primaryUpdates: any = {}
+  for (const k of Object.keys(candidate)) {
+    if (!overrides[k]) primaryUpdates[k] = candidate[k]
+  }
+  if (breakdown.commissionPlanId && !overrides['commission_plan_id']) {
     primaryUpdates.commission_plan_id = breakdown.commissionPlanId
   }
   await supabase
@@ -1277,6 +1288,74 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ agent: data })
     }
 
+    // ── Add retainer row ─────────────────────────────────────────────────────
+    // Creates a NEW TIA row marked as installment_kind='retainer' for the
+    // given agent. Retainer rows are payment events independent from
+    // commission. Only basis (retainer amount), processing_fee (office's
+    // retainer cut), and payment fields are populated. All other
+    // commission fields are 0.
+    //
+    // body: { retainer: { agent_id, agent_role, side, retainer_amount, retainer_fee, payment_date?, payment_method?, payment_reference? } }
+    if (action === 'add_retainer_row') {
+      const { retainer } = body
+      if (!retainer?.agent_id) {
+        return NextResponse.json({ error: 'agent_id is required' }, { status: 400 })
+      }
+      if (retainer.retainer_amount == null) {
+        return NextResponse.json({ error: 'retainer_amount is required' }, { status: 400 })
+      }
+
+      const retainerAmount = num(retainer.retainer_amount)
+      const retainerFee = num(retainer.retainer_fee)
+      const amount1099 = retainerAmount - retainerFee
+      const agentNet = amount1099 // debts/credits applied at mark_paid time
+
+      const insertData: Record<string, any> = {
+        transaction_id: id,
+        agent_id: retainer.agent_id,
+        agent_role: retainer.agent_role || 'primary_agent',
+        side: retainer.side || null,
+        installment_kind: 'retainer',
+        // Retainer-only fields populated:
+        agent_basis: retainerAmount,
+        processing_fee: retainerFee,
+        amount_1099_reportable: Math.round(amount1099 * 100) / 100,
+        agent_net: Math.round(agentNet * 100) / 100,
+        // Payment metadata:
+        payment_status: retainer.payment_status || 'pending',
+        payment_date: retainer.payment_date || null,
+        payment_method: retainer.payment_method || null,
+        payment_reference: retainer.payment_reference || null,
+        // All other commission fields zero/null on retainer rows:
+        split_percentage: 0,
+        agent_gross: 0,
+        brokerage_split: 0,
+        coaching_fee: 0,
+        team_lead_commission: 0,
+        team_lead_percentage: 0,
+        btsa_amount: 0,
+        rebate_amount: 0,
+        other_fees: 0,
+        sales_volume: 0,
+        units: 0,
+        debts_deducted: 0,
+        counts_toward_progress: false,
+        // Manual override map empty by default
+        manual_overrides: {},
+      }
+
+      const { data, error } = await supabase
+        .from('transaction_internal_agents')
+        .insert(insertData)
+        .select()
+        .single()
+      if (error) throw error
+
+      await recomputeOfficeNet(id)
+
+      return NextResponse.json({ agent: data })
+    }
+
     // ── Add external brokerage ───────────────────────────────────────────────
     if (action === 'add_external_brokerage') {
       const { brokerage } = body
@@ -1817,10 +1896,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
-      // Load the agent_debts row that was applied
+      // Validate the trigger record exists and was applied here
       const { data: rec } = await supabase
         .from('agent_debts')
-        .select('*')
+        .select('id, record_type, offset_transaction_id, offset_transaction_agent_id')
         .eq('id', recordId)
         .single()
 
@@ -1834,22 +1913,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
-      const amountApplied = num(rec.amount_paid)
-
-      // Reverse the agent_debts row
-      await supabase
+      // Reverse ALL agent_debts rows applied to this TIA (debts AND credits).
+      // Why: leaving some applied while unmarking the TIA creates inconsistent
+      // state ("paid via offset to this txn" but txn is no longer paid). Cleaner
+      // to clear everything and let admin re-check what they want.
+      const { data: allApplied } = await supabase
         .from('agent_debts')
-        .update({
-          amount_paid: 0,
-          status: 'outstanding',
-          offset_transaction_id: null,
-          offset_transaction_agent_id: null,
-          date_resolved: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', recordId)
+        .select('*')
+        .eq('offset_transaction_agent_id', internal_agent_id)
+        .eq('offset_transaction_id', id)
+        .eq('status', 'paid')
 
-      // Revert the TIA to pending and adjust agent_net.
+      for (const r of allApplied || []) {
+        await supabase
+          .from('agent_debts')
+          .update({
+            amount_paid: 0,
+            status: 'outstanding',
+            offset_transaction_id: null,
+            offset_transaction_agent_id: null,
+            date_resolved: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', r.id)
+      }
+
+      // Now recompute the TIA using canonical formula with no debts/credits
+      // (since we just cleared them all). Rebate stays.
       const { data: tia } = await supabase
         .from('transaction_internal_agents')
         .select('*')
@@ -1857,20 +1947,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
 
       if (tia) {
-        const isCredit = rec.record_type === 'credit'
-        const currentNet = num(tia.agent_net)
-        const newAgentNet = isCredit
-          ? currentNet - amountApplied
-          : currentNet + amountApplied
-        const newDebtsDeducted = isCredit
-          ? num(tia.debts_deducted)
-          : Math.max(0, num(tia.debts_deducted) - amountApplied)
+        // For retainer rows, basis acts as gross (see mark_paid for canonical
+        // explanation).
+        const isRetainer = tia.installment_kind === 'retainer'
+        const grossForFormula = isRetainer ? tia.agent_basis : tia.agent_gross
+
+        const { amount_1099: restored1099, agent_net: restoredNet } = computeCommission({
+          agent_gross: grossForFormula,
+          btsa_amount: tia.btsa_amount,
+          processing_fee: tia.processing_fee,
+          coaching_fee: tia.coaching_fee,
+          other_fees: tia.other_fees,
+          rebate_amount: tia.rebate_amount,
+          credits_applied: 0,
+          debts_deducted: 0,
+        })
 
         await supabase
           .from('transaction_internal_agents')
           .update({
-            agent_net: Math.round(newAgentNet * 100) / 100,
-            debts_deducted: newDebtsDeducted,
+            amount_1099_reportable: restored1099,
+            agent_net: restoredNet,
+            debts_deducted: 0,
             payment_status: 'pending',
             payment_date: null,
             payment_method: null,
@@ -1882,7 +1980,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       await recomputeOfficeNet(id)
 
-      return NextResponse.json({ success: true, reversed_id: recordId })
+      return NextResponse.json({
+        success: true,
+        reversed_id: recordId,
+        all_reversed_ids: (allApplied || []).map(r => r.id),
+      })
     }
 
     // ── Mark agent paid (TIA) ────────────────────────────────────────────────
@@ -1922,10 +2024,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .single()
       if (userError) throw userError
 
-      // Start from the stored 1099 amount (set at edit time)
-      const amount1099 = num(tia.amount_1099_reportable)
-
-      // Apply debts
+      // Sum debts to apply
       let totalDebtsDeducted = 0
       if (debts_to_apply && debts_to_apply.length > 0) {
         for (const debtApp of debts_to_apply) {
@@ -1933,7 +2032,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Apply credits — credits ADD to agent_net (refund of prior overpayments).
+      // Sum credits to apply
       let totalCreditsApplied = 0
       if (credits_to_apply && credits_to_apply.length > 0) {
         for (const creditApp of credits_to_apply) {
@@ -1941,15 +2040,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Under Model A: team_lead is NOT deducted from agent_net. It was
-      // already carved out of agent_gross at apply_primary_split time.
-      // agent_net = gross + btsa − fees − debts + credits
-      const agentGross = num(tia.agent_gross)
-      const processingFee = num(tia.processing_fee)
-      const coachingFee = num(tia.coaching_fee)
-      const otherFees = num(tia.other_fees)
-      const btsa = num(tia.btsa_amount)
-      const agentNet = agentGross + btsa - processingFee - coachingFee - otherFees - totalDebtsDeducted + totalCreditsApplied
+      // Use the CANONICAL commission formula from lib/transactions/math.ts.
+      // Locked 2026-05-04 (Phase 2.6).
+      //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
+      //   agent_net   = amount_1099 − debts
+      //
+      // team_lead_commission on primary TIA is informational only — it was
+      // carved out of agent_gross at apply_primary_split time. Do NOT pass
+      // it as a deduction here.
+      //
+      // RETAINER rows: the formula above also works for retainer rows because
+      // we map agent_basis -> agent_gross (the income before any fee), and
+      // processing_fee carries the office's retainer fee. All other fields
+      // are 0 on a retainer row by construction, so the formula reduces to:
+      //   amount_1099 = basis − retainer_fee + credits
+      //   agent_net   = amount_1099 − debts
+      const isRetainer = tia.installment_kind === 'retainer'
+      const grossForFormula = isRetainer ? tia.agent_basis : tia.agent_gross
+
+      const { amount_1099: amount1099, agent_net: agentNet } = computeCommission({
+        agent_gross: grossForFormula,
+        btsa_amount: tia.btsa_amount,
+        processing_fee: tia.processing_fee,
+        coaching_fee: tia.coaching_fee,
+        other_fees: tia.other_fees,
+        rebate_amount: tia.rebate_amount,
+        credits_applied: totalCreditsApplied,
+        debts_deducted: totalDebtsDeducted,
+      })
 
       const tiaUpdate: any = {
         payment_status: 'paid',
@@ -1957,8 +2075,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         payment_method: payment_method || null,
         payment_reference: payment_reference || null,
         funding_source: funding_source || 'crc',
+        amount_1099_reportable: amount1099,
         debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
-        agent_net: Math.round(agentNet * 100) / 100,
+        agent_net: agentNet,
         updated_at: new Date().toISOString(),
       }
 
@@ -2027,27 +2146,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease
+      // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease.
+      // Fires ONCE per (transaction_id, agent_id) pair — not once per installment.
+      // Check first: has any other paid TIA row exists for this agent on this transaction?
       const countsThis = counts_toward_progress !== false
       if (
         countsThis &&
         (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
         agentUser
       ) {
-        const plan = (agentUser.commission_plan || '').toLowerCase().trim()
-        const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
-        if (!txnIsLease) {
-          const isNewAgentPlan =
-            plan === 'new_agent' ||
-            plan === 'new agent plan' ||
-            (plan.includes('new') && plan.includes('agent'))
-          if (isNewAgentPlan) {
-            await supabase
-              .from('users')
-              .update({
-                qualifying_transaction_count: (agentUser.qualifying_transaction_count || 0) + 1,
-              })
-              .eq('id', tia.agent_id)
+        const { data: otherPaidRows } = await supabase
+          .from('transaction_internal_agents')
+          .select('id')
+          .eq('transaction_id', id)
+          .eq('agent_id', tia.agent_id)
+          .eq('payment_status', 'paid')
+          .neq('id', internal_agent_id)
+
+        const alreadyCountedForThisDeal = (otherPaidRows || []).length > 0
+        if (!alreadyCountedForThisDeal) {
+          const plan = (agentUser.commission_plan || '').toLowerCase().trim()
+          const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
+          if (!txnIsLease) {
+            const isNewAgentPlan =
+              plan === 'new_agent' ||
+              plan === 'new agent plan' ||
+              (plan.includes('new') && plan.includes('agent'))
+            if (isNewAgentPlan) {
+              await supabase
+                .from('users')
+                .update({
+                  qualifying_transaction_count: (agentUser.qualifying_transaction_count || 0) + 1,
+                })
+                .eq('id', tia.agent_id)
+            }
           }
         }
       }
@@ -2128,13 +2260,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         await supabase.from('agent_debts').update(updated).eq('id', debt.id)
       }
 
-      // Recompute agent_net without debts (Model A: no team_lead deduction)
-      const agentGross = num(tia.agent_gross)
-      const processingFee = num(tia.processing_fee)
-      const coachingFee = num(tia.coaching_fee)
-      const otherFees = num(tia.other_fees)
-      const btsa = num(tia.btsa_amount)
-      const restoredNet = agentGross + btsa - processingFee - coachingFee - otherFees
+      // Recompute agent_net using canonical formula. Debts cleared (we
+      // just reversed them); credits cleared on unmark. Rebate is preserved
+      // on the row and stays in the formula.
+      // For retainer rows, basis acts as gross.
+      const isRetainerUnmark = tia.installment_kind === 'retainer'
+      const grossForFormulaUnmark = isRetainerUnmark ? tia.agent_basis : tia.agent_gross
+      const { amount_1099: restored1099, agent_net: restoredNet } = computeCommission({
+        agent_gross: grossForFormulaUnmark,
+        btsa_amount: tia.btsa_amount,
+        processing_fee: tia.processing_fee,
+        coaching_fee: tia.coaching_fee,
+        other_fees: tia.other_fees,
+        rebate_amount: tia.rebate_amount,
+        credits_applied: 0,
+        debts_deducted: 0,
+      })
 
       const { error: updErr } = await supabase
         .from('transaction_internal_agents')
@@ -2144,14 +2285,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           payment_method: null,
           payment_reference: null,
           debts_deducted: 0,
-          agent_net: Math.round(restoredNet * 100) / 100,
+          amount_1099_reportable: restored1099,
+          agent_net: restoredNet,
           updated_at: new Date().toISOString(),
         })
         .eq('id', internal_agent_id)
       if (updErr) throw updErr
 
-      // Decrement qualifying_transaction_count if this was a non-lease primary/listing on new_agent plan
+      // Decrement qualifying_transaction_count if this was a non-lease primary/listing on new_agent plan.
+      // Only decrement if NO other paid TIA row remains for this agent on this transaction
+      // (i.e., this was the last installment that had been paid).
       if (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') {
+        const { data: stillPaid } = await supabase
+          .from('transaction_internal_agents')
+          .select('id')
+          .eq('transaction_id', id)
+          .eq('agent_id', tia.agent_id)
+          .eq('payment_status', 'paid')
+          .neq('id', internal_agent_id)
+
+        const lastPaidRow = (stillPaid || []).length === 0
+        if (lastPaidRow) {
         const { data: txn } = await supabase
           .from('transactions')
           .select('transaction_type')
@@ -2179,6 +2333,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
           }
         }
+        }  // close if (lastPaidRow)
       }
 
       await recomputeOfficeNet(id)

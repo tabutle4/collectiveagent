@@ -77,7 +77,6 @@ function initAgentForm(a: any) {
   return {
     agent_id:          a.agent_id || '',
     agent_role:        a.agent_role || 'primary_agent',
-    agent_net:         a.agent_net        != null ? String(a.agent_net)        : '',
     payment_status:    a.payment_status   || 'pending',
     payment_date:      a.payment_date?.substring(0, 10) || '',
     payment_method:    a.payment_method   || '',
@@ -101,7 +100,7 @@ function initBrokerageForm(b: any) {
 function emptyNewAgent() {
   return {
     _id: uid(), agent_id: '', agent_role: 'primary_agent',
-    agent_net: '', payment_status: 'pending',
+    payment_status: 'pending',
     payment_date: '', payment_method: '', payment_reference: '',
   }
 }
@@ -231,7 +230,6 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
           updates: {
             agent_id:          f.agent_id || a.agent_id,
             agent_role:        f.agent_role,
-            agent_net:         f.agent_net !== '' ? parseFloat(f.agent_net) : null,
             payment_status:    f.payment_status,
             payment_date:      f.payment_date || null,
             payment_method:    f.payment_method || null,
@@ -264,7 +262,6 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
           agent: {
             agent_id:          r.agent_id,
             agent_role:        r.agent_role,
-            agent_net:         r.agent_net !== '' ? parseFloat(r.agent_net) : 0,
             payment_status:    r.payment_status,
             payment_date:      r.payment_date || null,
             payment_method:    r.payment_method || null,
@@ -391,14 +388,6 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                             ))}
                           </select>
                         </Field>
-                        <Field label="Agent Net">
-                          <input
-                            type="number" step="0.01" className="input-luxury text-xs"
-                            value={f.agent_net}
-                            onChange={e => setAgentF(a.id, 'agent_net', e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </Field>
                         <PaymentFields
                           status={f.payment_status} date={f.payment_date}
                           method={f.payment_method} reference={f.payment_reference}
@@ -423,9 +412,6 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                         <select className="select-luxury text-xs" value={row.agent_role} onChange={e => setNewAgentF(row._id, 'agent_role', e.target.value)}>
                           {AGENT_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
-                      </Field>
-                      <Field label="Agent Net">
-                        <input type="number" step="0.01" className="input-luxury text-xs" value={row.agent_net} onChange={e => setNewAgentF(row._id, 'agent_net', e.target.value)} placeholder="0.00" />
                       </Field>
                       <PaymentFields
                         status={row.payment_status} date={row.payment_date}
