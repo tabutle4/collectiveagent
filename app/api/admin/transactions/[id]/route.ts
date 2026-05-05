@@ -1808,6 +1808,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // After all primary/TL/MP row updates land, refresh the brokerage
+      // net since office_net depends on the sum of every TIA agent_net.
+      await recomputeOfficeNet(id)
+
       return NextResponse.json({
         success: true,
         breakdown,
