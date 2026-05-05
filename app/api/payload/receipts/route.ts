@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 export async function GET(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
     const userId = request.nextUrl.searchParams.get('user_id')
     if (!userId) return NextResponse.json({ error: 'user_id is required' }, { status: 400 })
+
+    // Agents can only see their own receipts; admins with billing permission can see anyone's.
+    const isOwner = userId === auth.user.id
+    const isAdmin = auth.permissions.has('can_manage_agent_billing')
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const supabase = createClient()
     const { data: user } = await supabase

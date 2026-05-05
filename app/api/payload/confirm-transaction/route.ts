@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 // After the embedded checkout fires its success event, the client sends
 // pl_transaction_id here. We confirm it by updating status to 'processed'.
+// Any authenticated agent can confirm their own payment.
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_agent_billing')
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
