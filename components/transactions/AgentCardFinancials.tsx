@@ -261,10 +261,10 @@ interface AgentCardFinancialsProps {
   // Live values from billing panel state for the preview line
   appliedDebts: number
   appliedCredits: number
-  // Save handler — single field. Should also flag the field as overridden
-  // by writing into manual_overrides on the row.
+  // Save handler — single field. The markOverridden flag is accepted for
+  // historical reasons but ignored; we don't track per-field overrides.
   onSaveField: (field: OverridableField, value: number | null, markOverridden: boolean) => Promise<void>
-  // Clear an override flag for one field (and revert to computed value)
+  // Trigger a recalculate so the field reverts to the computed value.
   onClearOverride: (field: OverridableField) => Promise<void>
 }
 
@@ -278,7 +278,11 @@ export default function AgentCardFinancials({
   onSaveField,
   onClearOverride,
 }: AgentCardFinancialsProps) {
-  const overrides: OverridesMap = (a.manual_overrides || {}) as OverridesMap
+  // We don't track per-field overrides — the manual_overrides column was
+  // removed. Always render as "not overridden" which hides the amber
+  // asterisks. Inline edits still work (saved directly to the field) but
+  // are overwritten on the next Recalculate.
+  const overrides: OverridesMap = {} as OverridesMap
   const isRetainer = a.installment_kind === 'retainer'
 
   // Live values: optimistic overlay so editing one field shows updated
@@ -530,16 +534,22 @@ export default function AgentCardFinancials({
         onSavePct={v => handleSave('split_percentage', v)}
         onClearOverride={() => handleClear('split_percentage')}
       />
-      <PercentRow
-        label="Brokerage"
-        pctValue={brokerageSplitPct || (100 - splitPct)}
-        dollarValue={brokerageSplit}
-        isEditable={editable}
-        isMuted
-        isOverridden={!!overrides.brokerage_split_percentage || !!overrides.brokerage_split}
-        onSavePct={v => handleSave('brokerage_split_percentage', v)}
-        onClearOverride={() => handleClear('brokerage_split_percentage')}
-      />
+      {/* Brokerage row hidden on linked rows (team_lead, momentum_partner).
+          Those rows only carry the carved-out commission for that role; the
+          brokerage cut already lives on the source primary's row, so this
+          row would render as "Brokerage 95% / $0.00" which is misleading. */}
+      {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && (
+        <PercentRow
+          label="Brokerage"
+          pctValue={brokerageSplitPct || (100 - splitPct)}
+          dollarValue={brokerageSplit}
+          isEditable={editable}
+          isMuted
+          isOverridden={!!overrides.brokerage_split_percentage || !!overrides.brokerage_split}
+          onSavePct={v => handleSave('brokerage_split_percentage', v)}
+          onClearOverride={() => handleClear('brokerage_split_percentage')}
+        />
+      )}
       {teamLeadPct > 0 || teamLeadComm > 0 ? (
         <PercentRow
           label="Team Lead"

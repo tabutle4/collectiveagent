@@ -834,25 +834,22 @@ export default function AdminTransactionDetailPage() {
 
   // Save a single editable field on a TIA, ALSO flagging it as manually
   // overridden. The cascade for derived fields (gross/brokerage/etc) is
-  // handled by AgentCardFinancials's local overlay; this just persists.
+  // Saves a field's value directly. We don't track overrides — every
+  // recalculate freshly overwrites computed fields. So the markOverridden
+  // flag is accepted for prop compatibility but ignored.
   const saveOverridableField = async (
     internalAgentId: string,
     field: OverridableField,
     value: number | null,
-    markOverridden: boolean,
+    _markOverridden: boolean,
   ) => {
     const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
-    const currentOverrides = agent?.manual_overrides || {}
-    const nextOverrides = markOverridden
-      ? { ...currentOverrides, [field]: true }
-      : currentOverrides
 
     // For percentage fields that cascade, we save the percentage AND the
     // derived dollars together so the database stays consistent without
     // waiting for cascadePrimarySplit.
     const updates: any = {
       [field]: value,
-      manual_overrides: nextOverrides,
     }
     if (field === 'split_percentage' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
@@ -905,20 +902,15 @@ export default function AdminTransactionDetailPage() {
     await updateInternalAgent(internalAgentId, updates)
   }
 
-  // Clear a single override flag, then trigger a Recalculate so the field
-  // returns to the computed value.
+  // We don't track overrides anymore (manual_overrides column doesn't
+  // exist). Clearing an override just means triggering a recalculate so
+  // the cascade overwrites whatever the user manually entered with the
+  // computed value.
   const clearOverrideForField = async (
     internalAgentId: string,
-    field: OverridableField,
+    _field: OverridableField,
   ) => {
     const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
-    const currentOverrides = { ...(agent?.manual_overrides || {}) }
-    delete currentOverrides[field]
-    // Persist the override removal first; cascadePrimarySplit on the next
-    // Recalculate (or auto-cascade in update_internal_agent) will restore the
-    // computed value.
-    await updateInternalAgent(internalAgentId, { manual_overrides: currentOverrides })
-    // Trigger Recalculate so the cleared field gets a fresh computed value
     const a = agent
     if (a) {
       try {

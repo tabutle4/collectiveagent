@@ -359,7 +359,7 @@ async function cascadePrimarySplit(args: {
 
   const { data: primaryTia } = await supabase
     .from('transaction_internal_agents')
-    .select('id, agent_id, agent_role, payment_status, side, manual_overrides, installment_kind')
+    .select('id, agent_id, agent_role, payment_status, side, installment_kind')
     .eq('id', internalAgentId)
     .eq('transaction_id', transactionId)
     .single()
@@ -368,8 +368,6 @@ async function cascadePrimarySplit(args: {
   // Retainer rows are not part of commission cascade. They have their own
   // simple structure (basis - retainer_fee = net) and never spawn TL/MP rows.
   if (primaryTia.installment_kind === 'retainer') return
-
-  const overrides: Record<string, true> = (primaryTia.manual_overrides || {}) as any
 
   const { data: txn } = await supabase
     .from('transactions')
@@ -391,9 +389,10 @@ async function cascadePrimarySplit(args: {
   // Update primary row — commission math via canonical computeCommission().
   // Existing manual fields (btsa_amount, other_fees, rebate_amount,
   // debts_deducted) are loaded from the row and used in the calculation,
-  // so ad-hoc adjustments are preserved through recalc.
-  // FIELDS PRESENT IN manual_overrides ARE NOT OVERWRITTEN.
-  const candidate: Record<string, any> = {
+  // so ad-hoc adjustments are preserved through recalc. Every recalc
+  // freshly overwrites the computed columns — there is no per-field
+  // override flag.
+  const primaryUpdates: Record<string, any> = {
     commission_plan: breakdown.planCode,
     agent_basis: commissionAmount,
     split_percentage: breakdown.agentSplitPct,
@@ -406,12 +405,7 @@ async function cascadePrimarySplit(args: {
     amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
     updated_at: new Date().toISOString(),
   }
-  // Drop any candidate field that admin has overridden manually.
-  const primaryUpdates: any = {}
-  for (const k of Object.keys(candidate)) {
-    if (!overrides[k]) primaryUpdates[k] = candidate[k]
-  }
-  if (breakdown.commissionPlanId && !overrides['commission_plan_id']) {
+  if (breakdown.commissionPlanId) {
     primaryUpdates.commission_plan_id = breakdown.commissionPlanId
   }
   await supabase
@@ -1481,8 +1475,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         units: 0,
         debts_deducted: 0,
         counts_toward_progress: false,
-        // Manual override map empty by default
-        manual_overrides: {},
       }
 
       const { data, error } = await supabase
