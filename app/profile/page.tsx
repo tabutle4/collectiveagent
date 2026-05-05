@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/context/AuthContext'
 function normalizeCommissionPlan(plan: string): string {
   if (!plan) return ''
   const p = plan.toLowerCase()
+  if (p === 'broker_100' || p === 'broker plan' || p === 'broker') return 'broker'
   if (p.includes('new_agent') || p.includes('new agent') || p.includes('70/30') || p === 'new_agent') return 'new_agent'
   if (p.includes('no_cap') || p.includes('no cap') || p.includes('85/15') || p === 'no_cap') return 'no_cap'
   if (p.includes('cap') && !p.includes('no')) return 'cap'
@@ -311,6 +312,10 @@ export default function ProfilePage({
         })(),
         lease_commission_plan: (() => {
           const raw = freshUserData.lease_commission_plan || ''
+          // Special case: "Custom Lease 0/100" is the broker plan (encoded
+          // as a custom-style string since there's no dedicated lease
+          // broker plan in commission_plans).
+          if (raw === 'Custom Lease 0/100') return 'broker_lease'
           if (raw.toLowerCase().startsWith('custom lease')) return 'custom'
           return raw || 'lease'
         })(),
@@ -448,6 +453,16 @@ export default function ProfilePage({
     try {
       // Convert empty strings to null for date/nullable fields so Postgres doesn't choke
       const sanitized = { ...realEstateForm }
+      // Translate the "Broker" dropdown selection to the canonical
+      // commission_plans.code value (broker_100). Same pattern for leases.
+      if (sanitized.commission_plan === 'broker') {
+        sanitized.commission_plan = 'broker_100'
+      }
+      if (sanitized.lease_commission_plan === 'broker_lease') {
+        // No dedicated lease broker_100 plan in commission_plans; encode as
+        // a custom-style string so the parser picks up the 0/100 split.
+        sanitized.lease_commission_plan = 'Custom Lease 0/100'
+      }
       // Format custom plan into a stored string, then strip helper fields
       if (sanitized.commission_plan === 'custom' && sanitized.custom_split && sanitized.custom_plan_type) {
         const agentSplit = parseInt(sanitized.custom_split as string)
@@ -1188,6 +1203,7 @@ export default function ProfilePage({
                       <option value="new_agent">New Agent 70/30</option>
                       <option value="no_cap">No Cap 85/15</option>
                       <option value="cap">Cap 70/30</option>
+                      <option value="broker">Broker Plan 0/100</option>
                       <option value="custom">Custom Plan</option>
                     </select>
                     {realEstateForm.commission_plan === 'custom' && (
@@ -1230,6 +1246,7 @@ export default function ProfilePage({
                       onChange={e => handleRealEstateChange('lease_commission_plan', e.target.value)}
                     >
                       <option value="lease">Lease Plan 85/15</option>
+                      <option value="broker_lease">Broker Plan 0/100</option>
                       <option value="custom">Custom Plan</option>
                     </select>
                     {realEstateForm.lease_commission_plan === 'custom' && (

@@ -23,6 +23,6 @@ export function parseCustomPlanSplit(
   const f = parseInt(m[2], 10)
   if (!Number.isFinite(a) || !Number.isFinite(f)) return null
   if (a + f !== 100) return null
-  if (a <= 0 || a > 100) return null
+  if (a < 0 || a > 100) return null
   return { agentPct: a, firmPct: f }
 }
