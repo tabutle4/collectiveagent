@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getLeadSourceBucket } from '@/lib/transactions/constants'
-import { computeCommission, computeOfficeNet } from '@/lib/transactions/math'
+import { computeCommission } from '@/lib/transactions/math'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import {
   buildStatementEmail,
@@ -303,35 +303,89 @@ async function computeCommissionBreakdown(args: {
  */
 /**
  * Recompute and write office_net for a transaction. Call this after any
- * mutation that changes office_gross, TIA.agent_net, or TEB.amount_1099_reportable.
+ * mutation that changes brokerage income lines (brokerage_split, fees,
+ * external 1099) or staged debts/credits applied against this transaction.
  *
- * Formula (canonical):
- *   office_net = office_gross − sum(TIA.agent_net) − sum(TEB.amount_1099_reportable)
+ * Formula (rewritten 2026-05-05 to fix BTSA/rebate/debt edge cases):
  *
- * Idempotent and safe to call repeatedly. Failures are logged but never throw —
- * office_net display being stale is preferable to blocking the upstream save.
+ *   office_net =
+ *       sum(TIA.brokerage_split)                  -- brokerage's % cut
+ *     + sum(TIA.processing_fee + coaching_fee + other_fees)  -- fees retained
+ *     + sum(staged debts applied against this txn)   -- debts collected here
+ *     - sum(staged credits applied against this txn) -- credits paid out here
+ *     - sum(TEB.amount_1099_reportable)              -- paid to other brokerages
+ *
+ * Why this formula and not the old gross-minus-agent_net version:
+ *   The old formula assumed agent_net came out of office_gross. That breaks
+ *   on deals with BTSA (paid to agent by buyer, never on brokerage books)
+ *   or rebates (agent's own funds going to client) — both inflate agent_net
+ *   without touching brokerage cash, so subtracting agent_net from office_gross
+ *   over-deducts and produces wrong (sometimes negative) results.
+ *
+ *   The new formula traces brokerage cash directly: what the brokerage
+ *   keeps, plus what they collect, minus what they pay out. office_gross
+ *   doesn't appear because it's already split into brokerage_split (kept)
+ *   and agent_gross (paid out) on the TIA rows.
+ *
+ * Idempotent and safe to call repeatedly. Failures are logged but never throw.
  */
 async function recomputeOfficeNet(transactionId: string): Promise<void> {
   try {
-    const [{ data: txn }, { data: tias }, { data: tebs }] = await Promise.all([
-      supabase.from('transactions').select('office_gross').eq('id', transactionId).single(),
+    const [{ data: tias }, { data: tebs }, { data: stagedRecs }] = await Promise.all([
       supabase
         .from('transaction_internal_agents')
-        .select('agent_net')
+        .select('brokerage_split, processing_fee, coaching_fee, other_fees')
         .eq('transaction_id', transactionId),
       supabase
         .from('transaction_external_brokerages')
         .select('amount_1099_reportable')
         .eq('transaction_id', transactionId),
+      // Staged debts/credits applied against this txn. record_type='credit'
+      // is a credit (reduces office_net); anything else is a debt
+      // (increases office_net). amount_owed - amount_remaining = what's
+      // actually been applied.
+      supabase
+        .from('agent_debts')
+        .select('record_type, amount_owed, amount_remaining')
+        .eq('offset_transaction_id', transactionId),
     ])
 
-    if (!txn) return
+    const brokerageSplitTotal = (tias || []).reduce(
+      (s, t) => s + parseFloat(String(t.brokerage_split ?? 0)),
+      0
+    )
+    const feesTotal = (tias || []).reduce(
+      (s, t) =>
+        s +
+        parseFloat(String(t.processing_fee ?? 0)) +
+        parseFloat(String(t.coaching_fee ?? 0)) +
+        parseFloat(String(t.other_fees ?? 0)),
+      0
+    )
+    const externalTotal = (tebs || []).reduce(
+      (s, e) => s + parseFloat(String(e.amount_1099_reportable ?? 0)),
+      0
+    )
 
-    const officeNet = computeOfficeNet({
-      office_gross: txn.office_gross,
-      internal_agents: tias || [],
-      external_brokerages: tebs || [],
-    })
+    let stagedDebtsTotal = 0
+    let stagedCreditsTotal = 0
+    for (const r of stagedRecs || []) {
+      const owed = parseFloat(String(r.amount_owed ?? 0))
+      const remaining = parseFloat(String(r.amount_remaining ?? 0))
+      const applied = Math.max(0, owed - remaining)
+      if (r.record_type === 'credit') stagedCreditsTotal += applied
+      else stagedDebtsTotal += applied
+    }
+
+    const officeNet =
+      Math.round(
+        (brokerageSplitTotal +
+          feesTotal +
+          stagedDebtsTotal -
+          stagedCreditsTotal -
+          externalTotal) *
+          100
+      ) / 100
 
     await supabase
       .from('transactions')
@@ -2071,6 +2125,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         .eq('id', recordId)
       if (error) throw error
+      // Staging a debt/credit changes the brokerage's net for the txn under
+      // the new formula, so refresh it.
+      await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
@@ -2126,6 +2183,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         .eq('id', recordId)
       if (error) throw error
+      // Unstaging changes the brokerage's net for the txn under the new
+      // formula, so refresh it.
+      await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
 
