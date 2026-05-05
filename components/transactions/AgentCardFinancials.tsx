@@ -564,7 +564,9 @@ export default function AgentCardFinancials({
 
       {/* ADJUSTMENTS */}
       <SectionH>Adjustments</SectionH>
-      {(btsa > 0 || overrides.btsa_amount) && (
+      {/* BTSA: always visible when editable so admin can enter from $0.
+          When read-only, only show if there's an actual value. */}
+      {(btsa > 0 || editable) && (
         <OverridableMoneyRow
           label="BTSA"
           value={btsa}
