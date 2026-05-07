@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
+import { computeCommission } from '@/lib/transactions/math'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
@@ -2113,6 +2114,9 @@ export default function AdminTransactionDetailPage() {
                                   saveOverridableField(a.id, field, value, markOverridden)
                                 }
                                 onClearOverride={(field) => clearOverrideForField(a.id, field)}
+                                onSaveTextField={(field, value) =>
+                                  updateInternalAgent(a.id, { [field]: value })
+                                }
                               />
                             )
                           })()}
@@ -3306,36 +3310,63 @@ export default function AdminTransactionDetailPage() {
 
             <div className="p-4 space-y-4">
               {/* Financial Summary */}
-              <div className="inner-card">
-                <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment Summary</p>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">Agent Gross</span>
-                    <span>{fmt$(markPaidModal.agent.agent_gross)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-luxury-gray-3">- Fees</span>
-                    <span className="text-red-500">
-                      -{fmt$(
-                        parseFloat(markPaidModal.agent.processing_fee || 0) +
-                        parseFloat(markPaidModal.agent.coaching_fee || 0) +
-                        parseFloat(markPaidModal.agent.other_fees || 0)
+              {(() => {
+                // Use the canonical formula so the Mark Paid modal matches
+                // the agent card exactly. Inline math here previously omitted
+                // BTSA (additive) and rebate (deduction), which made the 1099
+                // shown on the modal disagree with the 1099 on the card.
+                const a = markPaidModal.agent
+                const live = computeCommission({
+                  agent_gross: a.agent_gross,
+                  btsa_amount: a.btsa_amount,
+                  processing_fee: a.processing_fee,
+                  coaching_fee: a.coaching_fee,
+                  other_fees: a.other_fees,
+                  rebate_amount: a.rebate_amount,
+                  credits_applied: 0,
+                  debts_deducted: 0,
+                })
+                const agentGross = parseFloat(a.agent_gross || 0) || 0
+                const btsaAmt = parseFloat(a.btsa_amount || 0) || 0
+                const processing = parseFloat(a.processing_fee || 0) || 0
+                const coaching = parseFloat(a.coaching_fee || 0) || 0
+                const otherF = parseFloat(a.other_fees || 0) || 0
+                const rebateAmt = parseFloat(a.rebate_amount || 0) || 0
+                const feesTotal = processing + coaching + otherF
+                return (
+                  <div className="inner-card">
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment Summary</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Agent Gross</span>
+                        <span>{fmt$(agentGross)}</span>
+                      </div>
+                      {btsaAmt > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-luxury-gray-3">+ BTSA</span>
+                          <span className="text-green-600">+{fmt$(btsaAmt)}</span>
+                        </div>
                       )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-luxury-gray-5/30">
-                    <span className="font-semibold">1099 Amount</span>
-                    <span className="font-semibold">
-                      {fmt$(
-                        parseFloat(markPaidModal.agent.agent_gross || 0) -
-                        parseFloat(markPaidModal.agent.processing_fee || 0) -
-                        parseFloat(markPaidModal.agent.coaching_fee || 0) -
-                        parseFloat(markPaidModal.agent.other_fees || 0)
+                      {feesTotal > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-luxury-gray-3">- Fees</span>
+                          <span className="text-red-500">-{fmt$(feesTotal)}</span>
+                        </div>
                       )}
-                    </span>
+                      {rebateAmt > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-luxury-gray-3">- Rebate</span>
+                          <span className="text-red-500">-{fmt$(rebateAmt)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between pt-1 border-t border-luxury-gray-5/30">
+                        <span className="font-semibold">1099 Amount</span>
+                        <span className="font-semibold">{fmt$(live.amount_1099)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                )
+              })()}
 
               {/* Note: Debts and credits are selected on the agent card's
                   Billing panel before opening this modal. The selected items

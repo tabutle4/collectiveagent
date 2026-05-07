@@ -166,6 +166,72 @@ function OverridableMoneyRow({
   )
 }
 
+// ──── InlineTextRow ────
+// Click-to-edit text row used for short descriptions (e.g. Other Fees
+// description). Renders smaller than OverridableMoneyRow and indents under
+// its parent row to indicate hierarchy.
+function InlineTextRow({
+  label,
+  value,
+  placeholder,
+  isEditable = true,
+  onSave,
+}: {
+  label: string
+  value: string
+  placeholder?: string
+  isEditable?: boolean
+  onSave?: (v: string | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value || '')
+
+  useEffect(() => { setDraft(value || '') }, [value])
+
+  const beginEdit = () => {
+    if (!isEditable) return
+    setEditing(true)
+  }
+  const finishEdit = () => {
+    const trimmed = draft.trim()
+    const nextValue = trimmed === '' ? null : trimmed
+    if (onSave && trimmed !== (value || '').trim()) {
+      onSave(nextValue)
+    }
+    setEditing(false)
+  }
+  const cancelEdit = () => { setDraft(value || ''); setEditing(false) }
+
+  return (
+    <div className="flex justify-between items-center py-0.5 pl-3 text-[11px]">
+      <span className="text-luxury-gray-3 italic">{label}</span>
+      {editing && isEditable ? (
+        <input
+          type="text"
+          autoFocus
+          value={draft}
+          placeholder={placeholder || ''}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={finishEdit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') finishEdit()
+            if (e.key === 'Escape') cancelEdit()
+          }}
+          className="text-[11px] w-48 text-right bg-white border border-luxury-accent rounded px-1.5 py-0.5"
+        />
+      ) : (
+        <span
+          onClick={beginEdit}
+          className={`italic ${isEditable ? 'cursor-pointer hover:bg-luxury-gray-6 px-1 -mx-1 rounded' : ''} ${value ? 'text-luxury-gray-2' : 'text-luxury-gray-4'}`}
+          title={isEditable ? 'Click to edit' : undefined}
+        >
+          {value || (isEditable ? (placeholder || 'click to add') : '')}
+        </span>
+      )}
+    </div>
+  )
+}
+
 function PercentRow({
   label,
   pctValue,
@@ -266,6 +332,9 @@ interface AgentCardFinancialsProps {
   onSaveField: (field: OverridableField, value: number | null, markOverridden: boolean) => Promise<void>
   // Trigger a recalculate so the field reverts to the computed value.
   onClearOverride: (field: OverridableField) => Promise<void>
+  // Save handler for text fields on the row (e.g. other_fees_description).
+  // Optional — only the Other Fees description input uses it today.
+  onSaveTextField?: (field: 'other_fees_description', value: string | null) => Promise<void>
 }
 
 export default function AgentCardFinancials({
@@ -277,6 +346,7 @@ export default function AgentCardFinancials({
   appliedCredits,
   onSaveField,
   onClearOverride,
+  onSaveTextField,
 }: AgentCardFinancialsProps) {
   // We don't track per-field overrides — the manual_overrides column was
   // removed. Always render as "not overridden" which hides the amber
@@ -495,6 +565,17 @@ export default function AgentCardFinancials({
 
   const editable = !isPaid
 
+  // Linked rows (team_lead, momentum_partner, referral_agent) are carved-out
+  // payouts. BTSA and Rebate only apply to agents on the contract — they
+  // never apply to these linked roles. Other Fees CAN apply to anyone, so
+  // they remain visible on linked rows. The cascade already sets
+  // btsa_amount/rebate_amount to 0 on linked rows; this hides the UI rows
+  // so admin can't accidentally enter values that wouldn't make sense.
+  const isLinkedRow =
+    a.agent_role === 'team_lead' ||
+    a.agent_role === 'momentum_partner' ||
+    a.agent_role === 'referral_agent'
+
   return (
     <div className="space-y-0.5">
       {/* THIS SIDE */}
@@ -566,7 +647,7 @@ export default function AgentCardFinancials({
       <SectionH>Adjustments</SectionH>
       {/* BTSA: always visible when editable so admin can enter from $0.
           When read-only, only show if there's an actual value. */}
-      {(btsa > 0 || editable) && (
+      {!isLinkedRow && (btsa > 0 || editable) && (
         <OverridableMoneyRow
           label="BTSA"
           value={btsa}
@@ -599,18 +680,27 @@ export default function AgentCardFinancials({
         />
       )}
       {(otherFees > 0 || editable) && (
-        <OverridableMoneyRow
-          label="Other Fees"
-          value={otherFees}
-          isDeduction
-          isEditable={editable}
-          isOverridden={!!overrides.other_fees}
-          onSave={v => handleSave('other_fees', v)}
-          onClearOverride={() => handleClear('other_fees')}
-          showZero
-        />
+        <>
+          <OverridableMoneyRow
+            label="Other Fees"
+            value={otherFees}
+            isDeduction
+            isEditable={editable}
+            isOverridden={!!overrides.other_fees}
+            onSave={v => handleSave('other_fees', v)}
+            onClearOverride={() => handleClear('other_fees')}
+            showZero
+          />
+          <InlineTextRow
+            label="Description"
+            value={a.other_fees_description || ''}
+            placeholder="What is this fee for?"
+            isEditable={editable}
+            onSave={v => onSaveTextField?.('other_fees_description', v)}
+          />
+        </>
       )}
-      {(rebate > 0 || editable) && (
+      {!isLinkedRow && (rebate > 0 || editable) && (
         <OverridableMoneyRow
           label="Rebate"
           value={rebate}
