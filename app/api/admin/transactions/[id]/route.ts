@@ -713,7 +713,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const agentIds = (agents || []).map((a: any) => a.agent_id).filter(Boolean)
       const agentUsers = (agents || []).map((a: any) => a.user).filter(Boolean)
 
-      const primaryAgentId = txn.submitted_by
+      // Find the actual primary agent on this deal by TIA role, not by
+      // txn.submitted_by. submitted_by can be the admin who created the
+      // transaction (e.g., office support submitting on the agent's behalf),
+      // which would cause the right-sidebar Agent Billing block to load
+      // the admin's debts/credits instead of the actual agent's. Order:
+      // primary_agent → listing_agent → first row.
+      const primaryTia =
+        (agents || []).find((a: any) => a.agent_role === 'primary_agent') ||
+        (agents || []).find((a: any) => a.agent_role === 'listing_agent') ||
+        (agents || [])[0]
+      const primaryAgentId = primaryTia?.agent_id || txn.submitted_by
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
@@ -878,6 +888,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         completion: completionMap.get(item.id) || null,
       }))
 
+      // Resolve referred-agent UUIDs to display names. The
+      // `users.referred_agents` column stores an array of UUIDs (agents
+      // this user has referred). The right-sidebar UI renders the array
+      // joined as a comma-separated string, so we need to swap UUIDs for
+      // human-readable names before sending the response. Single batch
+      // query covers every referenced UUID across all agents on this txn.
+      const referredAgentIds = new Set<string>()
+      for (const a of agents || []) {
+        const list = a.user?.referred_agents
+        if (Array.isArray(list)) {
+          for (const refId of list) {
+            if (typeof refId === 'string' && refId) referredAgentIds.add(refId)
+          }
+        }
+      }
+      const referredNamesById: Record<string, string> = {}
+      if (referredAgentIds.size > 0) {
+        const { data: namedAgents } = await supabase
+          .from('users')
+          .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+          .in('id', Array.from(referredAgentIds))
+        for (const r of namedAgents || []) {
+          const first = (r as any).preferred_first_name || (r as any).first_name || ''
+          const last = (r as any).preferred_last_name || (r as any).last_name || ''
+          const display = `${first} ${last}`.trim()
+          if (display) referredNamesById[(r as any).id] = display
+        }
+      }
+
       return NextResponse.json({
         transaction: txn,
         agents: (agents || []).map((a: any) => {
@@ -888,8 +927,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           const planCode = txnIsLease
             ? (u.lease_commission_plan || u.commission_plan)
             : u.commission_plan
+          // Replace referred_agents UUIDs with names so the sidebar
+          // "Referred: ..." line renders human-readable.
+          const referredNames = Array.isArray(u.referred_agents)
+            ? u.referred_agents
+                .map((rid: string) => referredNamesById[rid])
+                .filter((n: string | undefined): n is string => !!n)
+            : []
           return {
             ...a,
+            user: { ...u, referred_agents: referredNames },
             team_membership: membershipByAgent[a.agent_id] || null,
             billing: billingByAgent[a.agent_id] || null,
             commission_plan_friendly: friendlyPlanLabel(planCode),
@@ -956,7 +1003,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // current row, recompute, and merge into the update. Skip a derived
       // field if the caller already passed it (manual override).
       const COMPUTE_TRIGGERS = [
-        'monthly_rent', 'lease_term',
+        'sales_price', 'monthly_rent', 'lease_term', 'move_in_date',
         'gross_commission', 'listing_side_commission',
         'buying_side_commission', 'office_gross',
         'transaction_type', 'is_intermediary',
@@ -966,9 +1013,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const { data: current } = await supabase
           .from('transactions')
           .select(
-            'transaction_type, is_intermediary, monthly_rent, lease_term, ' +
+            'transaction_type, is_intermediary, sales_price, monthly_rent, lease_term, move_in_date, ' +
             'sales_volume, gross_commission, listing_side_commission, ' +
-            'buying_side_commission, office_gross'
+            'buying_side_commission, office_gross, closing_date'
           )
           .eq('id', id)
           .single()
@@ -980,13 +1027,45 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const isLease = isLeaseTransactionType(txnType)
           const isIntermediary = !!eff('is_intermediary')
 
-          // Lease volume: monthly_rent × lease_term
-          if (isLease && !('sales_volume' in cleanUpdates)) {
-            const rent = parseFloat(eff('monthly_rent') ?? 0)
-            const term = parseInt(eff('lease_term') ?? 0, 10)
-            if (rent > 0 && term > 0) {
-              cleanUpdates.sales_volume = rent * term
+          // Sales volume auto-broadcast (matches Tara's spec 2026-05-07):
+          //   - Lease: sales_volume = monthly_rent × lease_term
+          //   - Sale:  sales_volume = sales_price
+          //
+          // Editing the source field (rent/term for leases, sales_price for
+          // sales) ALWAYS broadcasts to sales_volume, overriding any prior
+          // manual value. To set a custom sales_volume permanently, the
+          // source must already be set; then editing sales_volume directly
+          // sticks until a driver changes again. Direct sales_volume edits
+          // are preserved by the `'sales_volume' in cleanUpdates`
+          // short-circuit — when the caller passes sales_volume explicitly,
+          // no broadcast runs.
+          if (!('sales_volume' in cleanUpdates)) {
+            if (isLease) {
+              if ('monthly_rent' in cleanUpdates || 'lease_term' in cleanUpdates) {
+                const rent = parseFloat(eff('monthly_rent') ?? 0)
+                const term = parseInt(eff('lease_term') ?? 0, 10)
+                if (rent > 0 && term > 0) {
+                  cleanUpdates.sales_volume = rent * term
+                }
+              }
+            } else if ('sales_price' in cleanUpdates) {
+              const price = parseFloat(eff('sales_price') ?? 0)
+              if (price > 0) {
+                cleanUpdates.sales_volume = price
+              }
             }
+          }
+
+          // Move-in date IS the closing date for leases. The schema keeps
+          // both columns because reports historically split lease
+          // qualification (move_in_date) from 1099 timing (closed_date) and
+          // some agent-side queries fall back to closing_date when
+          // move_in_date is null. Keeping the two columns in lockstep on
+          // leases avoids that fallback divergence — every report sees the
+          // same value regardless of which column it queries. Only fires
+          // when the caller didn't already pass closing_date explicitly.
+          if (isLease && 'move_in_date' in cleanUpdates && !('closing_date' in cleanUpdates)) {
+            cleanUpdates.closing_date = cleanUpdates.move_in_date
           }
 
           // Single-sided commission flow.
@@ -1026,6 +1105,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               // explicitly set it (which is unusual but allowed).
               if (!(otherSideField in cleanUpdates)) cleanUpdates[otherSideField] = 0
             }
+          }
+
+          // Intermediary commission flow.
+          // For intermediary (dual-sided) deals the brokerage represents
+          // both buyer and seller, so the user enters BOTH side commissions
+          // and the totals broadcast together. office_gross + gross_commission
+          // = listing_side + buying_side.
+          //
+          // Why we need this: the overview tab now displays office_gross as
+          // read-only and removed the editable Gross Commission row, so the
+          // only user-editable inputs for an intermediary deal are the two
+          // side commissions. Without this block, office_gross would stay
+          // stale after side edits — breaking office_net (which depends on
+          // it) and the per-agent basis fallback in lib/transactions/sides.ts
+          // which uses office_gross when no side is set.
+          if (
+            isIntermediary &&
+            ('listing_side_commission' in cleanUpdates || 'buying_side_commission' in cleanUpdates)
+          ) {
+            const listing = parseFloat(eff('listing_side_commission') ?? 0)
+            const buying = parseFloat(eff('buying_side_commission') ?? 0)
+            const total = (Number.isFinite(listing) ? listing : 0) + (Number.isFinite(buying) ? buying : 0)
+            if (!('gross_commission' in cleanUpdates)) cleanUpdates.gross_commission = total
+            if (!('office_gross' in cleanUpdates)) cleanUpdates.office_gross = total
           }
         }
       }

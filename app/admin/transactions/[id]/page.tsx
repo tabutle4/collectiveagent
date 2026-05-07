@@ -1663,6 +1663,13 @@ export default function AdminTransactionDetailPage() {
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
+                        label="Sales Volume"
+                        value={txn.sales_volume}
+                        field="sales_volume"
+                        type="number"
+                        onSave={(f, v) => updateTransaction({ [f]: v })}
+                      />
+                      <EditableFieldRow
                         label="Move-In Date"
                         value={txn.move_in_date}
                         field="move_in_date"
@@ -1670,10 +1677,10 @@ export default function AdminTransactionDetailPage() {
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
-                        label="Sales Volume"
-                        value={txn.sales_volume}
-                        field="sales_volume"
-                        type="number"
+                        label="Closed Date"
+                        value={txn.closed_date}
+                        field="closed_date"
+                        type="date"
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                     </>
@@ -1716,13 +1723,6 @@ export default function AdminTransactionDetailPage() {
                     canEdit={true}
                   />
                   <EditableFieldRow
-                    label="Gross Commission"
-                    value={txn.gross_commission}
-                    field="gross_commission"
-                    type="number"
-                    onSave={(f, v) => updateTransaction({ [f]: v })}
-                  />
-                  <EditableFieldRow
                     label="Listing Side"
                     value={txn.listing_side_commission}
                     field="listing_side_commission"
@@ -1736,13 +1736,64 @@ export default function AdminTransactionDetailPage() {
                     type="number"
                     onSave={(f, v) => updateTransaction({ [f]: v })}
                   />
-                  <EditableFieldRow
+                  {/* Office Gross is read-only — auto-derived from sides by
+                      the API. The auto-derive runs on single-sided deals
+                      (one of listing_side / buying_side is 0); for
+                      dual-sided deals admin sets the side commissions
+                      directly and office_gross matches their sum. */}
+                  <FieldRow
                     label="Office Gross"
-                    value={txn.office_gross}
-                    field="office_gross"
-                    type="number"
-                    onSave={(f, v) => updateTransaction({ [f]: v })}
+                    value={fmt$(txn.office_gross || 0)}
                   />
+                  {/* BTSA breakdown — itemized lines per agent appear ABOVE
+                      the computed Gross row. BTSA is per-agent (stored on
+                      TIA), paid in addition to the contract commission, and
+                      only applies to contract roles (primary / listing /
+                      co_agent). Linked rows (team_lead, momentum_partner,
+                      referral_agent) always have btsa = 0 by design and
+                      are filtered here defensively. */}
+                  {(() => {
+                    const btsaRows = (agents || [])
+                      .filter((a: any) =>
+                        a.agent_role !== 'team_lead' &&
+                        a.agent_role !== 'momentum_partner' &&
+                        a.agent_role !== 'referral_agent'
+                      )
+                      .filter((a: any) => parseFloat(a.btsa_amount || 0) > 0)
+                    const btsaTotal = btsaRows.reduce(
+                      (s: number, a: any) => s + (parseFloat(a.btsa_amount || 0) || 0),
+                      0
+                    )
+                    const officeGross = parseFloat(txn.office_gross || 0) || 0
+                    const grossTotal = officeGross + btsaTotal
+                    return (
+                      <>
+                        {btsaRows.map((a: any) => {
+                          const u = a.user
+                          const name = u
+                            ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
+                            : 'Agent'
+                          return (
+                            <div
+                              key={a.id}
+                              className="flex justify-between items-center gap-4 py-1.5 pl-4 border-b border-luxury-gray-5/30"
+                            >
+                              <span className="field-label shrink-0 italic">+ BTSA: {name}</span>
+                              <span className="text-xs text-green-600 text-right font-mono">
+                                +{fmt$(a.btsa_amount)}
+                              </span>
+                            </div>
+                          )
+                        })}
+                        <FieldRow
+                          label="Gross"
+                          value={
+                            <span className="font-semibold text-luxury-gray-1">{fmt$(grossTotal)}</span>
+                          }
+                        />
+                      </>
+                    )
+                  })()}
                   <FieldRow
                     label="Office Net"
                     value={
@@ -1752,10 +1803,6 @@ export default function AdminTransactionDetailPage() {
                   {txn.bonus_amount > 0 && (
                     <FieldRow label="Bonus" value={fmt$(txn.bonus_amount)} />
                   )}
-                  {txn.rebate_amount > 0 && (
-                    <FieldRow label="Rebate" value={fmt$(txn.rebate_amount)} />
-                  )}
-                  {txn.has_btsa && <FieldRow label="BTSA" value={fmt$(txn.btsa_amount)} />}
                   {txn.expedite_requested && (
                     <FieldRow label="Expedite Fee" value={fmt$(txn.expedite_fee)} />
                   )}
@@ -3040,84 +3087,62 @@ export default function AdminTransactionDetailPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Agent Billing — per-agent debts/credits across all
+                        transactions. Renders inside each agent card so every
+                        agent on this deal has their own visible billing
+                        summary. Reads `a.billing` which the API computes for
+                        every TIA, not just the deal's primary. */}
+                    {a.billing && (
+                      <div className="mt-2 p-2 bg-luxury-light rounded">
+                        <p className="text-xs font-semibold text-luxury-gray-2 mb-1 flex items-center gap-1.5">
+                          <DollarSign size={11} /> Agent Billing
+                        </p>
+                        {a.billing.debts.length === 0 && a.billing.credits.length === 0 ? (
+                          <p className="text-xs text-luxury-gray-3">No outstanding balances.</p>
+                        ) : (
+                          <>
+                            {a.billing.debts.map((d: any) => (
+                              <div key={d.id} className="flex justify-between items-baseline gap-2 py-0.5">
+                                <span className="text-xs text-luxury-gray-3 truncate">
+                                  {d.description}
+                                </span>
+                                <span className="text-xs font-semibold text-orange-600 shrink-0">
+                                  {fmt$(d.amount_remaining ?? d.amount_owed)}
+                                </span>
+                              </div>
+                            ))}
+                            {a.billing.credits.map((c: any) => (
+                              <div key={c.id} className="flex justify-between items-baseline gap-2 py-0.5">
+                                <span className="text-xs text-luxury-gray-3 truncate">
+                                  {c.description}
+                                </span>
+                                <span className="text-xs font-semibold text-green-600 shrink-0">
+                                  -{fmt$(c.amount_remaining ?? c.amount_owed)}
+                                </span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between items-center pt-1 mt-1 border-t border-luxury-gray-5/50">
+                              <span className="text-xs font-semibold text-luxury-gray-2">
+                                Net Balance
+                              </span>
+                              <span
+                                className={`text-xs font-bold ${a.billing.net_balance > 0 ? 'text-orange-600' : 'text-green-600'}`}
+                              >
+                                {a.billing.net_balance > 0
+                                  ? fmt$(a.billing.net_balance)
+                                  : `-${fmt$(Math.abs(a.billing.net_balance))}`}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
             )
           })}
-
-          {/* Agent Billing */}
-          {agentBilling && (
-            <div className="container-card p-3">
-              <button
-                className="flex items-center justify-between w-full mb-2"
-                onClick={() => toggleSection('billing')}
-              >
-                <span className="section-title flex items-center gap-1.5">
-                  <DollarSign size={12} /> Agent Billing
-                </span>
-                {expandedSections.billing ? (
-                  <ChevronUp size={12} className="text-luxury-gray-3" />
-                ) : (
-                  <ChevronDown size={12} className="text-luxury-gray-3" />
-                )}
-              </button>
-              {expandedSections.billing && (
-                <>
-                  {agentBilling.debts.length === 0 && agentBilling.credits.length === 0 ? (
-                    <p className="text-xs text-luxury-gray-3">No outstanding balances.</p>
-                  ) : (
-                    <>
-                      {agentBilling.debts.map((d: any) => (
-                        <div
-                          key={d.id}
-                          className="inner-card border border-orange-100 bg-orange-50/20 mb-1.5"
-                        >
-                          <p className="text-xs font-medium text-luxury-gray-1">{d.description}</p>
-                          <div className="flex justify-between mt-0.5">
-                            <span className="text-xs text-luxury-gray-3">
-                              {fmtDate(d.date_incurred)}
-                            </span>
-                            <span className="text-xs font-semibold text-orange-600">
-                              {fmt$(d.amount_remaining ?? d.amount_owed)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                      {agentBilling.credits.map((c: any) => (
-                        <div
-                          key={c.id}
-                          className="inner-card border border-green-100 bg-green-50/20 mb-1.5"
-                        >
-                          <p className="text-xs font-medium text-luxury-gray-1">{c.description}</p>
-                          <div className="flex justify-between mt-0.5">
-                            <span className="text-xs text-luxury-gray-3">
-                              {fmtDate(c.date_incurred)}
-                            </span>
-                            <span className="text-xs font-semibold text-green-600">
-                              -{fmt$(c.amount_remaining ?? c.amount_owed)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex justify-between items-center pt-1.5 mt-1 border-t border-luxury-gray-5/50">
-                        <span className="text-xs font-semibold text-luxury-gray-2">
-                          Net Balance
-                        </span>
-                        <span
-                          className={`text-sm font-bold ${agentBilling.net_balance > 0 ? 'text-orange-600' : 'text-green-600'}`}
-                        >
-                          {agentBilling.net_balance > 0
-                            ? fmt$(agentBilling.net_balance)
-                            : `-${fmt$(Math.abs(agentBilling.net_balance))}`}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
 
           {/* Team Info */}
           {teamInfo && (

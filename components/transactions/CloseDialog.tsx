@@ -54,8 +54,8 @@ export default function CloseDialog({
   if (!closedDate) txnWarnings.push('Closed date is not set')
   if (!isLease && !transaction?.sales_price) txnWarnings.push('Sales price is not set')
   if (isLease && !transaction?.monthly_rent) txnWarnings.push('Monthly rent is not set')
-  if (!transaction?.gross_commission && !transaction?.office_gross) {
-    txnWarnings.push('Gross commission / office gross is not set')
+  if (!transaction?.office_gross && !transaction?.gross_commission) {
+    txnWarnings.push('Office gross is not set')
   }
 
   for (const a of agents || []) {
@@ -147,12 +147,33 @@ export default function CloseDialog({
                 </p>
               </div>
               <div>
-                <label className="field-label">Gross commission</label>
-                <p className="text-xs text-luxury-gray-1 py-1.5">{fmt$(transaction?.gross_commission)}</p>
-              </div>
-              <div>
                 <label className="field-label">Office gross</label>
                 <p className="text-xs text-luxury-gray-1 py-1.5">{fmt$(transaction?.office_gross)}</p>
+              </div>
+              <div>
+                <label className="field-label">Gross</label>
+                <p className="text-xs text-luxury-gray-1 py-1.5">
+                  {(() => {
+                    // Gross = office_gross + sum(BTSA) across contract-role
+                    // TIAs. Mirrors the Overview tab's "Gross" computation
+                    // so the close dialog matches what admin sees on the
+                    // page. Linked rows (team_lead, momentum_partner,
+                    // referral_agent) always have btsa = 0 by design and
+                    // are filtered here defensively.
+                    const officeGross = num(transaction?.office_gross)
+                    const btsaTotal = (agents || [])
+                      .filter((a: any) =>
+                        a.agent_role !== 'team_lead' &&
+                        a.agent_role !== 'momentum_partner' &&
+                        a.agent_role !== 'referral_agent'
+                      )
+                      .reduce(
+                        (s: number, a: any) => s + num(a.btsa_amount),
+                        0
+                      )
+                    return fmt$(officeGross + btsaTotal)
+                  })()}
+                </p>
               </div>
             </div>
           </div>
