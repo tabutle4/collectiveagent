@@ -845,6 +845,15 @@ export default function AdminTransactionDetailPage() {
   ) => {
     const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
 
+    // Linked rows (team_lead, momentum_partner) carry only the carved-out
+    // payout for that role — their brokerage_split is always 0 by design.
+    // The cascade math below assumes a primary row where
+    //   brokerage_split = basis - agent_gross
+    // which would be wrong for linked rows. Skipping the brokerage_split
+    // write keeps the column at 0, which is what recomputeOfficeNet expects.
+    const isLinkedRow =
+      agent?.agent_role === 'team_lead' || agent?.agent_role === 'momentum_partner'
+
     // For percentage fields that cascade, we save the percentage AND the
     // derived dollars together so the database stays consistent without
     // waiting for cascadePrimarySplit.
@@ -855,12 +864,15 @@ export default function AdminTransactionDetailPage() {
       const basis = parseFloat(agent?.agent_basis || 0)
       const newGross = (basis * value) / 100
       updates.agent_gross = Math.round(newGross * 100) / 100
-      updates.brokerage_split = Math.round((basis - newGross) * 100) / 100
+      if (!isLinkedRow) {
+        updates.brokerage_split = Math.round((basis - newGross) * 100) / 100
+      }
     }
     if (field === 'brokerage_split_percentage' && value != null) {
       // brokerage_split_percentage is not a real column; translate the user's
       // % edit into a brokerage_split (dollar) write. Cascade updates the
-      // agent side accordingly.
+      // agent side accordingly. (Brokerage row is hidden in the UI for
+      // linked rows, so this branch is unreachable for them in practice.)
       const basis = parseFloat(agent?.agent_basis || 0)
       const newBrokerage = (basis * value) / 100
       updates.brokerage_split = Math.round(newBrokerage * 100) / 100
@@ -873,14 +885,18 @@ export default function AdminTransactionDetailPage() {
       const sp = parseFloat(agent?.split_percentage || 0)
       const newGross = (value * sp) / 100
       updates.agent_gross = Math.round(newGross * 100) / 100
-      updates.brokerage_split = Math.round((value - newGross) * 100) / 100
+      if (!isLinkedRow) {
+        updates.brokerage_split = Math.round((value - newGross) * 100) / 100
+      }
     }
     if (field === 'agent_gross' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
       if (basis > 0) {
         const newPct = (value / basis) * 100
         updates.split_percentage = Math.round(newPct * 100) / 100
-        updates.brokerage_split = Math.round((basis - value) * 100) / 100
+        if (!isLinkedRow) {
+          updates.brokerage_split = Math.round((basis - value) * 100) / 100
+        }
       }
     }
     if (field === 'brokerage_split' && value != null) {

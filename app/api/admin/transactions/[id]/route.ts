@@ -246,14 +246,18 @@ async function computeCommissionBreakdown(args: {
     ? commissionAmount * (teamLeadPct / 100)
     : 0
 
-  // Momentum partner takes from the brokerage side
+  // Momentum partner is paid revenue_share_percentage of the primary's
+  // commission_amount (agent_basis), NOT of the brokerage_split. The cash
+  // still comes from the brokerage's portion (deducted via
+  // recomputeOfficeNet), but the BASE of the calculation is the full
+  // commission earned for the brokerage.
   let momentumPartnerId: string | null = null
   let momentumPartnerPct = 0
   let momentumPartnerPayout = 0
   if (agent.referring_agent_id && agent.revenue_share_percentage) {
     momentumPartnerId = agent.referring_agent_id
     momentumPartnerPct = num(agent.revenue_share_percentage)
-    momentumPartnerPayout = brokerageSplit * (momentumPartnerPct / 100)
+    momentumPartnerPayout = commissionAmount * (momentumPartnerPct / 100)
   }
 
   // Under Model A: team_lead is already carved out of agent_gross by the team
@@ -306,7 +310,8 @@ async function computeCommissionBreakdown(args: {
  * mutation that changes brokerage income lines (brokerage_split, fees,
  * external 1099) or staged debts/credits applied against this transaction.
  *
- * Formula (rewritten 2026-05-05 to fix BTSA/rebate/debt edge cases):
+ * Formula (rewritten 2026-05-05 to fix BTSA/rebate/debt edge cases;
+ * extended 2026-05-07 to subtract momentum partner payouts):
  *
  *   office_net =
  *       sum(TIA.brokerage_split)                  -- brokerage's % cut
@@ -314,6 +319,14 @@ async function computeCommissionBreakdown(args: {
  *     + sum(staged debts applied against this txn)   -- debts collected here
  *     - sum(staged credits applied against this txn) -- credits paid out here
  *     - sum(TEB.amount_1099_reportable)              -- paid to other brokerages
+ *     - sum(momentum_partner TIA.agent_gross)        -- paid to referrers
+ *
+ * Why momentum gets subtracted explicitly:
+ *   Momentum partner rows have brokerage_split = 0 by construction (linked
+ *   row design — brokerage cut lives on the source primary's row), so they
+ *   don't appear in the brokerage_split sum. But the cash IS paid out of
+ *   the brokerage's portion. Without this subtraction office_net would
+ *   over-count by the momentum payout total.
  *
  * Why this formula and not the old gross-minus-agent_net version:
  *   The old formula assumed agent_net came out of office_gross. That breaks
@@ -334,7 +347,7 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
     const [{ data: tias }, { data: tebs }, { data: stagedRecs }] = await Promise.all([
       supabase
         .from('transaction_internal_agents')
-        .select('brokerage_split, processing_fee, coaching_fee, other_fees')
+        .select('brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross')
         .eq('transaction_id', transactionId),
       supabase
         .from('transaction_external_brokerages')
@@ -362,6 +375,16 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
         parseFloat(String(t.other_fees ?? 0)),
       0
     )
+    // Momentum partner payouts come from the brokerage's portion. Their own
+    // brokerage_split row is 0, but their agent_gross is real cash leaving
+    // the brokerage and must be subtracted here.
+    const momentumPayoutsTotal = (tias || []).reduce(
+      (s, t) =>
+        t.agent_role === 'momentum_partner'
+          ? s + parseFloat(String(t.agent_gross ?? 0))
+          : s,
+      0
+    )
     const externalTotal = (tebs || []).reduce(
       (s, e) => s + parseFloat(String(e.amount_1099_reportable ?? 0)),
       0
@@ -383,7 +406,8 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
           feesTotal +
           stagedDebtsTotal -
           stagedCreditsTotal -
-          externalTotal) *
+          externalTotal -
+          momentumPayoutsTotal) *
           100
       ) / 100
 
@@ -577,11 +601,13 @@ async function cascadePrimarySplit(args: {
       .eq('source_tia_id', internalAgentId)
       .maybeSingle()
     const mpAmount = Math.round(breakdown.momentumPartnerPayout * 100) / 100
+    // Basis = primary's commission_amount (agent_basis). Momentum partner is
+    // paid a % of the agent's full commission, not of the brokerage_split.
     const mpFields = await buildLinkedRowFields(
       breakdown.momentumPartnerId,
       mpAmount,
       breakdown.momentumPartnerPct,
-      Math.round(breakdown.brokerageSplit * 100) / 100
+      commissionAmount,
     )
     if (existingMp && existingMp.payment_status !== 'paid') {
       await supabase
@@ -1811,11 +1837,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           .maybeSingle()
 
         const mpAmount = Math.round(breakdown.momentumPartnerPayout * 100) / 100
+        // Basis = primary's commission_amount (agent_basis). Momentum partner
+        // is paid a % of the agent's full commission, not of brokerage_split.
         const mpFields = await buildLinkedRowFields(
           breakdown.momentumPartnerId,
           mpAmount,
           breakdown.momentumPartnerPct,
-          Math.round(breakdown.brokerageSplit * 100) / 100,
+          commAmt,
         )
 
         if (existingMp) {

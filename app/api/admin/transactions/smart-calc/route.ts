@@ -311,13 +311,16 @@ export async function POST(request: NextRequest) {
     if (cat === 'buying' && agent.waive_buyer_processing_fees) processingFee = 0
     if (cat === 'listing' && agent.waive_seller_processing_fees) processingFee = 0
 
-    // Momentum partner payout — comes from brokerage_split
+    // Momentum partner payout — paid OUT of the brokerage's portion, but
+    // calculated as a % of the agent's full basis (commission_amount), NOT
+    // of brokerage_split. The basis represents what the agent earned for
+    // the brokerage; the referrer (momentum partner) gets a cut of that.
     let momentumPartnerPayout = 0
     let momentumPartnerName: string | null = null
     let momentumPartnerPct = 0
     if (agent.referring_agent_id && agent.revenue_share_percentage) {
       momentumPartnerPct = agent.revenue_share_percentage
-      momentumPartnerPayout = round2(brokerageSplit * (momentumPartnerPct / 100))
+      momentumPartnerPayout = round2(agentBasis * (momentumPartnerPct / 100))
       const { data: partner } = await supabase
         .from('users')
         .select('first_name, last_name, preferred_first_name, preferred_last_name')

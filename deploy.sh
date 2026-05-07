@@ -1,76 +1,88 @@
-#!/usr/bin/env bash
-# Re-deploys the All Payouts and Payouts Report fixes at the correct
-# repo paths. The previous deploys committed files under patch/ instead
-# of overwriting the real app/ files, so the fixes never went live.
+#!/bin/bash
+# deploy.sh — Apply momentum partner + sales_volume + Other Fees/Rebate fixes
 #
-# Run from the repo root:
-#   bash deploy.sh
-#
-# Then:
-#   git add -A
-#   git commit -m "Re-deploy All Payouts + Payouts Report fixes (correct paths)"
-#   git push origin main
-set -euo pipefail
+# Run from the repository root. Expects:
+#   app/api/admin/transactions/[id]/route.ts
+#   app/api/admin/transactions/smart-calc/route.ts
+#   app/admin/transactions/[id]/page.tsx
+#   components/transactions/AgentCardFinancials.tsx
+# placed directly at correct paths (NOT under any patch/ directory).
 
-echo ""
-echo "=== Cleanup leftover patch artifacts at repo root ==="
+set -e
+
+echo "─── Verifying environment ───"
+if [ ! -f "package.json" ]; then
+  echo "ERROR: must run from repository root (no package.json found here)"
+  exit 1
+fi
+
+if [ ! -d "app/api/admin/transactions/[id]" ]; then
+  echo "ERROR: app/api/admin/transactions/[id] directory missing — wrong dir?"
+  exit 1
+fi
+
+echo "─── Cleaning up leftover patch artifacts ───"
 if [ -d "patch" ]; then
-  echo "Removing leftover patch/ directory..."
+  echo "  Removing leftover patch/ directory"
   rm -rf patch
 fi
 
-for stale_zip in all-payouts-fix.zip payouts-report-fix.zip; do
-  if [ -f "$stale_zip" ]; then
-    echo "Removing leftover $stale_zip..."
-    rm -f "$stale_zip"
+for f in all-payouts-fix.zip payouts-report-fix.zip redeploy-payouts-fix.zip momentum-and-fees-fix.zip; do
+  if [ -f "$f" ]; then
+    echo "  Removing $f"
+    rm -f "$f"
   fi
 done
 
-echo ""
-echo "=== Verify patched files are in place at correct paths ==="
-fail=0
-for f in \
-  app/api/admin/all-payouts/route.ts \
-  app/api/admin/payouts-report/route.ts \
-  app/admin/reports/all-payouts/page.tsx; do
-  if [ ! -f "$f" ]; then
-    echo "MISSING: $f"
-    fail=1
-  else
-    echo "OK: $f"
-  fi
-done
+echo "─── Verifying patch markers ───"
 
-if [ "$fail" = "1" ]; then
-  echo ""
-  echo "ERROR: One or more files are missing. Re-extract the zip from the repo root."
+if grep -q "momentumPartnerPayout = commissionAmount \* (momentumPartnerPct / 100)" app/api/admin/transactions/\[id\]/route.ts; then
+  echo "  OK route.ts: momentum formula uses commissionAmount"
+else
+  echo "  FAIL route.ts: momentum formula NOT updated"
+  exit 1
+fi
+
+if grep -q "momentumPayoutsTotal" app/api/admin/transactions/\[id\]/route.ts; then
+  echo "  OK route.ts: recomputeOfficeNet subtracts momentum payouts"
+else
+  echo "  FAIL route.ts: recomputeOfficeNet NOT updated"
+  exit 1
+fi
+
+if grep -q "round2(agentBasis \* (momentumPartnerPct / 100))" app/api/admin/transactions/smart-calc/route.ts; then
+  echo "  OK smart-calc: momentum formula uses agentBasis"
+else
+  echo "  FAIL smart-calc: momentum formula NOT updated"
+  exit 1
+fi
+
+if grep -q "const isLinkedRow =" app/admin/transactions/\[id\]/page.tsx; then
+  echo "  OK page.tsx: isLinkedRow guard added"
+else
+  echo "  FAIL page.tsx: isLinkedRow guard NOT added"
+  exit 1
+fi
+
+if grep -q "(otherFees > 0 || editable)" components/transactions/AgentCardFinancials.tsx; then
+  echo "  OK AgentCardFinancials.tsx: Other Fees visibility guard added"
+else
+  echo "  FAIL AgentCardFinancials.tsx: Other Fees visibility NOT updated"
+  exit 1
+fi
+
+if grep -q "(rebate > 0 || editable)" components/transactions/AgentCardFinancials.tsx; then
+  echo "  OK AgentCardFinancials.tsx: Rebate visibility guard added"
+else
+  echo "  FAIL AgentCardFinancials.tsx: Rebate visibility NOT updated"
   exit 1
 fi
 
 echo ""
-echo "=== Verify patches are applied ==="
-if ! grep -q "pendingByType" app/api/admin/all-payouts/route.ts; then
-  echo "ERROR: app/api/admin/all-payouts/route.ts does NOT contain pendingByType."
-  echo "       The deployed file is still the unpatched version."
-  exit 1
-fi
-echo "OK: all-payouts route has pendingByType"
-
-if ! grep -q "pm_fees" app/api/admin/payouts-report/route.ts; then
-  echo "ERROR: app/api/admin/payouts-report/route.ts does NOT contain pm_fees key."
-  exit 1
-fi
-echo "OK: payouts-report route returns pm_fees"
-
-if ! grep -q "setTimeout(() => loadData(), 300)" app/admin/reports/all-payouts/page.tsx; then
-  echo "ERROR: page.tsx does NOT have the 300ms debounce."
-  exit 1
-fi
-echo "OK: page.tsx has debounce"
-
+echo "─── All patch markers verified ───"
 echo ""
-echo "=== Done ==="
-echo "Next steps:"
+echo "Now run:"
+echo "  rm momentum-and-fees-fix.zip"
 echo "  git add -A"
-echo "  git commit -m 'Re-deploy All Payouts + Payouts Report fixes (correct paths)'"
+echo "  git commit -m \"Fix momentum partner basis (commission_amount, not brokerage_split), Other Fees/Rebate visibility on commissions tab\""
 echo "  git push origin main"

@@ -598,24 +598,30 @@ export default function AgentCardFinancials({
           showZero
         />
       )}
-      <OverridableMoneyRow
-        label="Other Fees"
-        value={otherFees}
-        isDeduction
-        isEditable={editable}
-        isOverridden={!!overrides.other_fees}
-        onSave={v => handleSave('other_fees', v)}
-        onClearOverride={() => handleClear('other_fees')}
-      />
-      <OverridableMoneyRow
-        label="Rebate"
-        value={rebate}
-        isDeduction
-        isEditable={editable}
-        isOverridden={!!overrides.rebate_amount}
-        onSave={v => handleSave('rebate_amount', v)}
-        onClearOverride={() => handleClear('rebate_amount')}
-      />
+      {(otherFees > 0 || editable) && (
+        <OverridableMoneyRow
+          label="Other Fees"
+          value={otherFees}
+          isDeduction
+          isEditable={editable}
+          isOverridden={!!overrides.other_fees}
+          onSave={v => handleSave('other_fees', v)}
+          onClearOverride={() => handleClear('other_fees')}
+          showZero
+        />
+      )}
+      {(rebate > 0 || editable) && (
+        <OverridableMoneyRow
+          label="Rebate"
+          value={rebate}
+          isDeduction
+          isEditable={editable}
+          isOverridden={!!overrides.rebate_amount}
+          onSave={v => handleSave('rebate_amount', v)}
+          onClearOverride={() => handleClear('rebate_amount')}
+          showZero
+        />
+      )}
 
       {/* TOTALS — billing panel goes between adjustments and totals (rendered by parent) */}
       <div className="border-t border-luxury-gray-5/50 mt-3 pt-2 space-y-1">
