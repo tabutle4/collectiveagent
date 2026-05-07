@@ -4,6 +4,17 @@ import { requirePermission } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+function periodLabel(month: number | null, year: number | null): string {
+  if (!month || !year) return ''
+  const m = MONTH_LABELS[month - 1] || ''
+  return m ? `${m} ${year}` : `${year}`
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_checks')
   if (auth.error) return auth.error
@@ -200,6 +211,87 @@ export async function GET(request: NextRequest) {
       { orderBy: { column: 'created_at', ascending: false } }
     )
 
+    // Pending PM agent referral fees (payee_type = 'agent', status = 'pending').
+    // Brokerage-payee rows are intentionally excluded: that portion stays in
+    // the CRC bank and would double-count the reconciliation.
+    const pmAgentFeePayouts = await fetchAllRows(
+      'pm_fee_payouts',
+      `id, payee_id, payee_name, amount, payment_status, payment_date, payment_method,
+       landlord_disbursements!inner(
+         period_month, period_year,
+         managed_properties(property_address)
+       ),
+       payee:users!pm_fee_payouts_payee_id_fkey(
+         id, preferred_first_name, first_name, preferred_last_name, last_name
+       )`,
+      {
+        filters: [
+          { type: 'eq', column: 'payment_status', value: 'pending' },
+          { type: 'eq', column: 'payee_type',     value: 'agent'   },
+        ],
+        orderBy: { column: 'created_at', ascending: false, nullsFirst: false },
+      }
+    )
+
+    // Pending landlord disbursements
+    const pendingLandlordDisbursements = await fetchAllRows(
+      'landlord_disbursements',
+      `id, net_amount, payment_status, payment_date, payment_method,
+       period_month, period_year,
+       landlords(first_name, last_name),
+       managed_properties(property_address)`,
+      {
+        filters: [{ type: 'eq', column: 'payment_status', value: 'pending' }],
+        orderBy: { column: 'created_at', ascending: false, nullsFirst: false },
+      }
+    )
+
+    const pmFees = pmAgentFeePayouts.map(p => {
+      const disb = (p as any).landlord_disbursements
+      const property = disb?.managed_properties
+      const u = (p as any).payee
+      const periodM: number | null = disb?.period_month ?? null
+      const periodY: number | null = disb?.period_year ?? null
+      let payeeName = ''
+      if (u) {
+        const first = u.preferred_first_name || u.first_name || ''
+        const last  = u.preferred_last_name  || u.last_name  || ''
+        payeeName = `${first} ${last}`.trim()
+      }
+      if (!payeeName) payeeName = p.payee_name || 'Unknown Agent'
+      return {
+        id:             p.id,
+        payee_name:     payeeName,
+        payee_id:       p.payee_id || '',
+        amount:         p.amount || 0,
+        address:        property?.property_address || '',
+        period:         periodLabel(periodM, periodY),
+        payment_status: p.payment_status || 'pending',
+        payment_date:   p.payment_date || null,
+        payment_method: p.payment_method || null,
+      }
+    })
+
+    const landlordPayouts = pendingLandlordDisbursements.map(d => {
+      const ll = (d as any).landlords
+      const property = (d as any).managed_properties
+      const periodM: number | null = d.period_month ?? null
+      const periodY: number | null = d.period_year ?? null
+      const payeeName = ll
+        ? (`${ll.first_name || ''} ${ll.last_name || ''}`.trim() || 'Unknown Landlord')
+        : 'Unknown Landlord'
+      return {
+        id:             d.id,
+        payee_name:     payeeName,
+        amount:         d.net_amount || 0,
+        address:        property?.property_address || '',
+        period:         periodLabel(periodM, periodY),
+        payment_status: d.payment_status || 'pending',
+        payment_date:   d.payment_date || null,
+        payment_method: d.payment_method || null,
+      }
+    })
+
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
    // A cleared_date in the future still counts as pending
    const today = new Date().toISOString().split('T')[0]
@@ -211,6 +303,8 @@ export async function GET(request: NextRequest) {
       rows,
       settings: settings || {},
       expenses,
+      pm_fees: pmFees,
+      landlord_payouts: landlordPayouts,
       pending_payload_total: pendingPayloadTotal,
     })
   } catch (error: any) {

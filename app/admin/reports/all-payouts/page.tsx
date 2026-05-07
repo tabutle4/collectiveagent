@@ -54,22 +54,21 @@ export default function AllPayoutsPage() {
   const [markPaidMethod, setMarkPaidMethod] = useState('ach')
   const [markPaidSaving, setMarkPaidSaving] = useState(false)
 
+  // Auth check (one-time, in parallel with the first data load)
   useEffect(() => {
-    checkAuth()
+    fetch('/api/auth/me').then(res => {
+      if (!res.ok) router.push('/auth/login')
+    })
   }, [])
 
+  // Debounced load on filter changes (also handles initial load).
+  // No `if (!loading)` guard. That guard was dropping keystrokes when a
+  // request was in flight, leaving the search box and the rendered rows
+  // out of sync.
   useEffect(() => {
-    if (!loading) loadData()
+    const t = setTimeout(() => loadData(), 300)
+    return () => clearTimeout(t)
   }, [search, statusFilter, typeFilter, yearFilter, fromDate, toDate])
-
-  const checkAuth = async () => {
-    const res = await fetch('/api/auth/me')
-    if (!res.ok) {
-      router.push('/auth/login')
-      return
-    }
-    loadData()
-  }
 
   const loadData = async () => {
     setLoading(true)
