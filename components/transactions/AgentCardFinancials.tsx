@@ -319,6 +319,155 @@ function SectionH({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ─── Side-commission lookup for percentage-based referral basis ──────────────
+// Maps a TIA row's side to the relevant side-commission column on the txn.
+// Returns 0 when side is unknown / unset; the toggle UI degrades to disabled
+// in that case so the user can't enter a % against an undefined denominator.
+function sideCommissionForRow(a: any, txn: any): number {
+  const side = a?.side
+  if (side === 'seller' || side === 'landlord') return num(txn?.listing_side_commission)
+  if (side === 'buyer' || side === 'tenant') return num(txn?.buying_side_commission)
+  return 0
+}
+
+// ─── BasisModeToggle (referral_agent only) ───────────────────────────────────
+// Shows the current input mode ($ vs %), lets the user flip it, and (when in
+// % mode) shows an inline percentage input that saves on Enter / blur. The
+// dollar agent_basis stays as the source of truth on the row — the % is just
+// the entry mechanism. On flip $→%, the current basis ÷ side_commission is
+// pre-filled as the starting % so the existing dollar amount carries over.
+//
+// All saves route through onSaveBasisMode; this component does not call
+// fetch directly.
+function BasisModeToggle({
+  agent: a,
+  sideCommission,
+  agentBasis,
+  onSaveBasisMode,
+}: {
+  agent: any
+  sideCommission: number
+  agentBasis: number
+  onSaveBasisMode: (mode: 'amount' | 'percentage', basisPercentage: number | null) => Promise<void>
+}) {
+  const initialMode: 'amount' | 'percentage' =
+    a?.basis_input_mode === 'percentage' ? 'percentage' : 'amount'
+  const [mode, setMode] = useState<'amount' | 'percentage'>(initialMode)
+  const [pctInput, setPctInput] = useState<string>(() => {
+    const stored = num(a?.basis_percentage)
+    if (stored > 0) return String(stored)
+    if (initialMode === 'percentage' && sideCommission > 0 && agentBasis > 0) {
+      return String(Math.round((agentBasis / sideCommission) * 10000) / 100)
+    }
+    return ''
+  })
+
+  // Re-sync local state when the row reloads from the server (after another
+  // save lands, or when the user clicks Recalculate).
+  useEffect(() => {
+    setMode(a?.basis_input_mode === 'percentage' ? 'percentage' : 'amount')
+    const stored = num(a?.basis_percentage)
+    setPctInput(stored > 0 ? String(stored) : '')
+  }, [a?.basis_input_mode, a?.basis_percentage])
+
+  const sideKnown = sideCommission > 0
+
+  const commitToggle = async (newMode: 'amount' | 'percentage') => {
+    if (newMode === mode) return
+    setMode(newMode)
+    if (newMode === 'amount') {
+      // Switching back to $: clear the stored percentage. The dollar
+      // agent_basis on the row stays where it is (user can edit it directly).
+      await onSaveBasisMode('amount', null)
+    } else {
+      // Switching to %: derive % from existing basis ÷ side commission so
+      // the dollars carry over to the equivalent percentage. If we can't
+      // compute (no basis yet, or no side commission), seed with 0 — the
+      // user types a value before the row resolves to a real dollar amount.
+      let derivedPct = 0
+      if (sideCommission > 0 && agentBasis > 0) {
+        derivedPct = Math.round((agentBasis / sideCommission) * 10000) / 100
+      }
+      setPctInput(derivedPct > 0 ? String(derivedPct) : '')
+      await onSaveBasisMode('percentage', derivedPct)
+    }
+  }
+
+  const commitPercentage = async () => {
+    const raw = pctInput.trim()
+    if (raw === '') return
+    const parsed = parseFloat(raw)
+    if (!Number.isFinite(parsed) || parsed < 0) return
+    await onSaveBasisMode('percentage', parsed)
+  }
+
+  const computedDollars =
+    mode === 'percentage' && sideCommission > 0
+      ? Math.round(sideCommission * parseFloat(pctInput || '0')) / 100
+      : 0
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1 text-[11px]">
+      <div className="flex items-center gap-2">
+        <span className="text-luxury-gray-4">Enter as:</span>
+        <div className="inline-flex rounded border border-luxury-gray-5 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => commitToggle('amount')}
+            className={
+              mode === 'amount'
+                ? 'px-2 py-0.5 bg-luxury-gray-2 text-white font-medium'
+                : 'px-2 py-0.5 bg-white text-luxury-gray-3 hover:bg-luxury-gray-6'
+            }
+          >
+            $
+          </button>
+          <button
+            type="button"
+            disabled={!sideKnown}
+            title={sideKnown ? '' : 'Set the side commission first'}
+            onClick={() => commitToggle('percentage')}
+            className={
+              mode === 'percentage'
+                ? 'px-2 py-0.5 bg-luxury-gray-2 text-white font-medium'
+                : `px-2 py-0.5 bg-white text-luxury-gray-3 hover:bg-luxury-gray-6 ${sideKnown ? '' : 'opacity-50 cursor-not-allowed'}`
+            }
+          >
+            %
+          </button>
+        </div>
+      </div>
+      {mode === 'percentage' && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            value={pctInput}
+            onChange={e => setPctInput(e.target.value)}
+            onBlur={commitPercentage}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            step="0.01"
+            min="0"
+            max="100"
+            placeholder="0.00"
+            className="w-16 text-right border border-luxury-gray-5 rounded px-1.5 py-0.5 focus:outline-none focus:border-luxury-gray-3"
+          />
+          <span className="text-luxury-gray-4">% of side</span>
+          {sideKnown && computedDollars > 0 && (
+            <span className="text-luxury-gray-4 tabular-nums">
+              = ${computedDollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface AgentCardFinancialsProps {
   agent: any              // TIA row
   txn: any                // transaction
@@ -335,6 +484,12 @@ interface AgentCardFinancialsProps {
   // Save handler for text fields on the row (e.g. other_fees_description).
   // Optional — only the Other Fees description input uses it today.
   onSaveTextField?: (field: 'other_fees_description', value: string | null) => Promise<void>
+  // Save handler for referral-only basis-mode toggle. When mode='percentage',
+  // basisPercentage is the % value (e.g., 30 for 30% of side commission); when
+  // mode='amount', basisPercentage is ignored (stored as null server-side).
+  // The server recomputes the dollar agent_basis from the side commission;
+  // FE only needs to send mode + percentage.
+  onSaveBasisMode?: (mode: 'amount' | 'percentage', basisPercentage: number | null) => Promise<void>
 }
 
 export default function AgentCardFinancials({
@@ -347,6 +502,7 @@ export default function AgentCardFinancials({
   onSaveField,
   onClearOverride,
   onSaveTextField,
+  onSaveBasisMode,
 }: AgentCardFinancialsProps) {
   // We don't track per-field overrides — the manual_overrides column was
   // removed. Always render as "not overridden" which hides the amber
@@ -462,13 +618,15 @@ export default function AgentCardFinancials({
   const agentGross = num(liveVal('agent_gross', a.agent_gross ?? calc?.agent_gross))
   const brokerageSplit = num(liveVal('brokerage_split', a.brokerage_split ?? calc?.brokerage_split))
   const teamLeadComm = num(a.team_lead_commission ?? calc?.team_lead_payout)
-  // Derive %s from the $ amounts and basis. Always accurate since every
-  // recalc writes the dollars.
+  // Derive brokerage % from the split_percentage column (canonical input).
+  // The brokerage takes whatever the agent doesn't, so brokerage% = 100 - agent%.
+  // Re-deriving from (brokerage_split / basis) * 100 picked up rounding error
+  // from the rounded dollars and produced ugly values like 10.000116%. Using
+  // 100 - splitPct keeps the displayed percent clean. When the agent has no
+  // basis yet (referral_agent row before manual entry) the same fallback
+  // applies, so the visual still reads 10% / 90% etc.
   const brokerageSplitPct = num(
-    liveVal(
-      'brokerage_split_percentage',
-      agentBasis > 0 ? (brokerageSplit / agentBasis) * 100 : (100 - splitPct)
-    )
+    liveVal('brokerage_split_percentage', 100 - splitPct)
   )
   const teamLeadPct = num(
     liveVal(
@@ -505,40 +663,46 @@ export default function AgentCardFinancials({
 
   // Cascade: when a percentage or basis changes, derive the dependents
   // optimistically and call save with the right field.
+  //
+  // Rounding rule (Phase 2.7): round agent_gross FIRST to 2 decimals, then
+  // derive brokerage_split = basis - rounded(agent_gross). Matches the
+  // server-side rounding so the overlay shows the same values that will land
+  // in the DB. Without this the overlay briefly displays 90% / $0.01-too-high
+  // brokerage and the user sees a flicker on save.
+  const r2 = (n: number) => Math.round(n * 100) / 100
   const cascade = (field: OverridableField, newVal: number | null) => {
     const next = { ...liveOverlay, [field]: newVal }
     if (field === 'split_percentage' && newVal != null) {
-      // Agent gross, brokerage split, brokerage_split_pct cascade
       const basis = num(next.agent_basis !== undefined ? next.agent_basis : agentBasis)
-      next.agent_gross = (basis * newVal) / 100
-      next.brokerage_split = basis - next.agent_gross
-      next.brokerage_split_percentage = 100 - newVal
+      next.agent_gross = r2((basis * newVal) / 100)
+      next.brokerage_split = r2(basis - next.agent_gross)
+      next.brokerage_split_percentage = r2(100 - newVal)
     }
     if (field === 'brokerage_split_percentage' && newVal != null) {
       const basis = num(next.agent_basis !== undefined ? next.agent_basis : agentBasis)
-      next.brokerage_split = (basis * newVal) / 100
-      next.agent_gross = basis - next.brokerage_split
-      next.split_percentage = 100 - newVal
+      next.brokerage_split = r2((basis * newVal) / 100)
+      next.agent_gross = r2(basis - next.brokerage_split)
+      next.split_percentage = r2(100 - newVal)
     }
     if (field === 'agent_basis' && newVal != null) {
       const sp = num(next.split_percentage !== undefined ? next.split_percentage : splitPct)
-      next.agent_gross = (newVal * sp) / 100
-      next.brokerage_split = newVal - next.agent_gross
+      next.agent_gross = r2((newVal * sp) / 100)
+      next.brokerage_split = r2(newVal - next.agent_gross)
     }
     if (field === 'agent_gross' && newVal != null) {
       const basis = num(next.agent_basis !== undefined ? next.agent_basis : agentBasis)
       if (basis > 0) {
-        next.split_percentage = (newVal / basis) * 100
-        next.brokerage_split = basis - newVal
-        next.brokerage_split_percentage = 100 - next.split_percentage
+        next.split_percentage = r2((newVal / basis) * 100)
+        next.brokerage_split = r2(basis - newVal)
+        next.brokerage_split_percentage = r2(100 - num(next.split_percentage))
       }
     }
     if (field === 'brokerage_split' && newVal != null) {
       const basis = num(next.agent_basis !== undefined ? next.agent_basis : agentBasis)
       if (basis > 0) {
-        next.brokerage_split_percentage = (newVal / basis) * 100
-        next.agent_gross = basis - newVal
-        next.split_percentage = 100 - next.brokerage_split_percentage
+        next.brokerage_split_percentage = r2((newVal / basis) * 100)
+        next.agent_gross = r2(basis - newVal)
+        next.split_percentage = r2(100 - num(next.brokerage_split_percentage))
       }
     }
     setLiveOverlay(next)
@@ -597,6 +761,23 @@ export default function AgentCardFinancials({
 
       {/* SPLIT */}
       <SectionH>Split</SectionH>
+
+      {/* Basis-input-mode toggle — referral_agent ONLY. Lets the admin enter
+          the referral's carve-out as either a fixed dollar amount or a
+          percentage of the side commission. In % mode the server recomputes
+          the dollar agent_basis from the current side commission every time,
+          and ALSO when the side commission itself later changes — so a deal
+          where commission grows or shrinks keeps the referral pinned at the
+          contracted %. */}
+      {a.agent_role === 'referral_agent' && editable && onSaveBasisMode && (
+        <BasisModeToggle
+          agent={a}
+          sideCommission={sideCommissionForRow(a, txn)}
+          agentBasis={agentBasis}
+          onSaveBasisMode={onSaveBasisMode}
+        />
+      )}
+
       <OverridableMoneyRow
         label="Agent Basis"
         value={agentBasis}
@@ -618,7 +799,10 @@ export default function AgentCardFinancials({
       {/* Brokerage row hidden on linked rows (team_lead, momentum_partner).
           Those rows only carry the carved-out commission for that role; the
           brokerage cut already lives on the source primary's row, so this
-          row would render as "Brokerage 95% / $0.00" which is misleading. */}
+          row would render as "Brokerage 95% / $0.00" which is misleading.
+          NOTE: referral_agent is intentionally NOT hidden here — a referral
+          agent has its own basis (a carve-out of the deal gross) and splits
+          with the brokerage on that basis, so the row shows real numbers. */}
       {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && (
         <PercentRow
           label="Brokerage"
@@ -631,7 +815,7 @@ export default function AgentCardFinancials({
           onClearOverride={() => handleClear('brokerage_split_percentage')}
         />
       )}
-      {teamLeadPct > 0 || teamLeadComm > 0 ? (
+      {!isLinkedRow && (teamLeadPct > 0 || teamLeadComm > 0) ? (
         <PercentRow
           label="Team Lead"
           pctValue={teamLeadPct}

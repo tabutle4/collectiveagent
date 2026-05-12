@@ -470,12 +470,19 @@ async function cascadePrimarySplit(args: {
   // so ad-hoc adjustments are preserved through recalc. Every recalc
   // freshly overwrites the computed columns — there is no per-field
   // override flag.
+  //
+  // Rounding rule (Phase 2.7): round agent_gross to 2 decimals FIRST, then
+  // derive brokerage_split = commissionAmount - rounded(agent_gross). This
+  // guarantees the two ALWAYS sum to commissionAmount and eliminates the
+  // "$0.01 too high / 10.000116%" rounding artifact that came from
+  // independently rounding both values from raw basis × pct.
+  const roundedAgentGross = Math.round(breakdown.agentGross * 100) / 100
   const primaryUpdates: Record<string, any> = {
     commission_plan: breakdown.planCode,
     agent_basis: commissionAmount,
     split_percentage: breakdown.agentSplitPct,
-    agent_gross: Math.round(breakdown.agentGross * 100) / 100,
-    brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
+    agent_gross: roundedAgentGross,
+    brokerage_split: Math.round((commissionAmount - roundedAgentGross) * 100) / 100,
     processing_fee: Math.round(breakdown.processingFee * 100) / 100,
     coaching_fee: Math.round(breakdown.coachingFee * 100) / 100,
     team_lead_commission: Math.round(breakdown.teamLeadPayout * 100) / 100,
@@ -645,6 +652,251 @@ async function cascadePrimarySplit(args: {
   // Office_net depends on every TIA agent_net; recompute now that the cascade
   // has finished writing primary + linked rows.
   await recomputeOfficeNet(transactionId)
+}
+
+/**
+ * resolveAgentPlanSplit — looks up an agent's commission plan and returns
+ * its default agent split percentage. Mirrors the plan-resolution logic
+ * inside computeCommissionBreakdown (lines ~120–186) but skips the team /
+ * processing-fee / momentum-partner work, because for a referral_agent row
+ * on add we ONLY want the plan's default split. Used by add_internal_agent
+ * to pre-fill split_percentage / commission_plan / commission_plan_id on
+ * a new referral row so it arrives with the agent's plan default instead
+ * of blank. Admin can still override after.
+ *
+ * Falls back through the same custom-plan parser the cascade uses, then
+ * to 85 as a final safety net (matching the cascade's `?? 85` default).
+ */
+async function resolveAgentPlanSplit(
+  agentId: string,
+  transactionType: string | null,
+): Promise<{ planCode: string; planId: string | null; agentSplitPct: number } | null> {
+  const { data: agent } = await supabase
+    .from('users')
+    .select('commission_plan, lease_commission_plan')
+    .eq('id', agentId)
+    .single()
+  if (!agent) return null
+
+  const isLease = isLeaseType(transactionType)
+  const planCode = isLease && agent.lease_commission_plan
+    ? agent.lease_commission_plan
+    : agent.commission_plan || ''
+  if (!planCode) return null
+
+  // Fuzzy match (data mixes codes and names) — same approach the cascade uses.
+  const { data: plans } = await supabase
+    .from('commission_plans')
+    .select('id, code, name, agent_split_percentage')
+    .eq('is_active', true)
+  const plan = (plans || []).find((p: any) =>
+    (p.code && p.code.toLowerCase() === planCode.toLowerCase()) ||
+    (p.name && p.name.toLowerCase() === planCode.toLowerCase())
+  )
+
+  let agentSplitPct: number | null = plan?.agent_split_percentage ?? null
+
+  // Custom plan string fallback (e.g., "Custom 85/15 Cap") — parser is the
+  // same one cascadePrimarySplit calls.
+  if (agentSplitPct == null) {
+    const parsed = parseCustomPlanSplit(planCode)
+    if (parsed) agentSplitPct = parsed.agentPct
+  }
+
+  // Final safety net — match the cascade's `?? 85` default so behavior
+  // stays consistent across the codebase.
+  if (agentSplitPct == null) agentSplitPct = 85
+
+  return {
+    planCode,
+    planId: plan?.id || null,
+    agentSplitPct,
+  }
+}
+
+/**
+ * rebalanceReferralCarveouts — when a referral_agent's agent_basis changes
+ * (set, edited, or deleted), the SAME-SIDE primary's agent_basis must be
+ * adjusted so the two pools sum to the side commission. Example: side
+ * commission $5,000, referral basis $2,000 → primary basis $3,000.
+ *
+ * Trigger points (callers must invoke this manually):
+ *   • update_internal_agent  — when role=referral_agent AND agent_basis touched
+ *   • delete_internal_agent  — when the deleted row was a referral_agent
+ *   • delete_internal_agent_cascade — same
+ *
+ * Scope decisions:
+ *   • Only rebalances if a same-side primary exists. Otherwise no-op.
+ *   • Primary lookup prefers primary_agent > listing_agent > co_agent. If
+ *     multiple matches exist on a side, only the first one is adjusted —
+ *     multi-primary same-side carve-out splits are out of scope and the
+ *     admin handles those manually.
+ *   • Skips if the target primary is paid (basis is locked).
+ *   • Skips if the txn is closed.
+ *   • Skips if side commission is 0 (nothing to rebalance against).
+ *   • Idempotent: if the primary's basis already matches the new target
+ *     within $0.01, no write is issued (prevents redundant cascades).
+ *
+ * Uses cascadePrimarySplit to write the new basis so all derived fields
+ * (agent_gross, brokerage_split, processing/coaching, linked team_lead /
+ * momentum_partner rows) re-stamp consistently.
+ */
+async function rebalanceReferralCarveouts(
+  transactionId: string,
+  side: string | null,
+): Promise<void> {
+  if (!side) return
+
+  const { data: txn } = await supabase
+    .from('transactions')
+    .select('listing_side_commission, buying_side_commission, status')
+    .eq('id', transactionId)
+    .single()
+  if (!txn) return
+  if (txn.status === 'closed') return
+
+  let sideCommission = 0
+  if (side === 'buyer' || side === 'tenant') {
+    sideCommission = num(txn.buying_side_commission)
+  } else if (side === 'seller' || side === 'landlord') {
+    sideCommission = num(txn.listing_side_commission)
+  }
+  if (sideCommission <= 0) return
+
+  // Sum all referral_agent agent_basis on this side.
+  const { data: referralRows } = await supabase
+    .from('transaction_internal_agents')
+    .select('agent_basis')
+    .eq('transaction_id', transactionId)
+    .eq('agent_role', 'referral_agent')
+    .eq('side', side)
+
+  const totalReferralBasis = (referralRows || []).reduce(
+    (sum: number, r: any) => sum + num(r.agent_basis),
+    0
+  )
+
+  const newPrimaryBasis = Math.round((sideCommission - totalReferralBasis) * 100) / 100
+
+  // Find the same-side primary. Prefer primary_agent, then listing_agent,
+  // then co_agent. If multiple, only the first one is adjusted.
+  const { data: candidates } = await supabase
+    .from('transaction_internal_agents')
+    .select('id, agent_role, payment_status, agent_basis, lead_source, referred_agent_id')
+    .eq('transaction_id', transactionId)
+    .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
+    .eq('side', side)
+
+  if (!candidates || candidates.length === 0) return
+
+  const rolePref: Record<string, number> = {
+    primary_agent: 0,
+    listing_agent: 1,
+    co_agent: 2,
+  }
+  const ordered = [...candidates].sort(
+    (a: any, b: any) => (rolePref[a.agent_role] ?? 99) - (rolePref[b.agent_role] ?? 99)
+  )
+  const target = ordered[0]
+  if (target.payment_status === 'paid') return
+
+  // Idempotent: don't re-run the cascade if basis is already at target.
+  const currentBasis = num(target.agent_basis)
+  if (Math.abs(currentBasis - newPrimaryBasis) < 0.01) return
+
+  await cascadePrimarySplit({
+    transactionId,
+    internalAgentId: target.id,
+    commissionAmount: newPrimaryBasis,
+    leadSource: target.lead_source || 'own',
+    referredAgentId: target.referred_agent_id || null,
+  })
+}
+
+/**
+ * recomputePercentageBasedReferrals — when the side commission on a deal
+ * changes, every referral_agent row on that side with basis_input_mode =
+ * 'percentage' needs its agent_basis re-derived as
+ *   new_basis = new_side_commission × basis_percentage / 100
+ * along with its dependent fields (agent_gross, brokerage_split, agent_net,
+ * amount_1099_reportable).
+ *
+ * Caller responsibilities:
+ *   • Pass `side` matching the side commission column that changed
+ *     ('seller' / 'landlord' for listing_side_commission,
+ *      'buyer' / 'tenant' for buying_side_commission).
+ *   • Pass the NEW side commission as it should now be (already saved).
+ *   • Run rebalanceReferralCarveouts(transactionId, side) AFTER this — the
+ *     same-side primary's basis needs to absorb the new referral total.
+ *
+ * Safety guards:
+ *   • Skips paid rows (basis is locked).
+ *   • Skips closed transactions.
+ *   • Skips rows where basis_percentage is null/invalid.
+ *   • Idempotent: no-op when the existing agent_basis already matches
+ *     within $0.01.
+ *
+ * Returns the count of rows actually updated, so callers can decide whether
+ * to also fire downstream side-effects.
+ */
+async function recomputePercentageBasedReferrals(
+  transactionId: string,
+  side: string,
+  newSideCommission: number,
+): Promise<number> {
+  if (!side || newSideCommission <= 0) return 0
+
+  const { data: txn } = await supabase
+    .from('transactions')
+    .select('status')
+    .eq('id', transactionId)
+    .single()
+  if (!txn || txn.status === 'closed') return 0
+
+  const { data: rows } = await supabase
+    .from('transaction_internal_agents')
+    .select('id, agent_basis, basis_percentage, split_percentage, payment_status')
+    .eq('transaction_id', transactionId)
+    .eq('agent_role', 'referral_agent')
+    .eq('side', side)
+    .eq('basis_input_mode', 'percentage')
+
+  if (!rows || rows.length === 0) return 0
+
+  let updatedCount = 0
+  for (const row of rows) {
+    if (row.payment_status === 'paid') continue
+    const pct = num(row.basis_percentage)
+    if (pct <= 0) continue
+
+    const newBasis = Math.round(newSideCommission * pct) / 100
+    const currentBasis = num(row.agent_basis)
+    if (Math.abs(currentBasis - newBasis) < 0.01) continue
+
+    // Mirror Phase 2.7 rounding rule: round agent_gross first, derive
+    // brokerage_split as the residual so the two ALWAYS sum to basis.
+    const splitPct = num(row.split_percentage)
+    const newGross = Math.round(newBasis * splitPct) / 100
+    const newBrokerage = Math.round((newBasis - newGross) * 100) / 100
+
+    await supabase
+      .from('transaction_internal_agents')
+      .update({
+        agent_basis: newBasis,
+        agent_gross: newGross,
+        brokerage_split: newBrokerage,
+        // Referral rows have no team_lead / processing / coaching / debts;
+        // agent_net = agent_gross and 1099 = agent_gross (existing model).
+        agent_net: newGross,
+        amount_1099_reportable: newGross,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', row.id)
+
+    updatedCount++
+  }
+
+  return updatedCount
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -1138,6 +1390,58 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
         .eq('id', id)
       if (error) throw error
+
+      // ── Auto-recompute %-based referrals on side-commission edits ──────────
+      // When listing_side_commission or buying_side_commission changes (either
+      // directly OR via the auto-derive logic above that broadcasts from
+      // gross_commission / office_gross / sales_price etc.), any referral_agent
+      // row on that side with basis_input_mode='percentage' must have its
+      // agent_basis recomputed from the new side commission. After the
+      // referral rows update, the same-side primary's basis needs to absorb
+      // the change — same flow as a manual referral basis edit.
+      const listingChanged = 'listing_side_commission' in cleanUpdates
+      const buyingChanged = 'buying_side_commission' in cleanUpdates
+
+      if (listingChanged || buyingChanged) {
+        try {
+          // Re-fetch the now-saved row so we use canonical values (the
+          // auto-derive may have rewritten side commissions from a different
+          // driver like gross_commission).
+          const { data: saved } = await supabase
+            .from('transactions')
+            .select('listing_side_commission, buying_side_commission')
+            .eq('id', id)
+            .single()
+
+          if (saved) {
+            if (listingChanged) {
+              const newListing = num(saved.listing_side_commission)
+              // Pick whichever side label the existing referral rows use —
+              // sellers + landlords both map to listing_side_commission.
+              for (const sideLabel of ['seller', 'landlord']) {
+                const updated = await recomputePercentageBasedReferrals(id, sideLabel, newListing)
+                if (updated > 0) {
+                  await rebalanceReferralCarveouts(id, sideLabel)
+                }
+              }
+            }
+            if (buyingChanged) {
+              const newBuying = num(saved.buying_side_commission)
+              for (const sideLabel of ['buyer', 'tenant']) {
+                const updated = await recomputePercentageBasedReferrals(id, sideLabel, newBuying)
+                if (updated > 0) {
+                  await rebalanceReferralCarveouts(id, sideLabel)
+                }
+              }
+            }
+          }
+        } catch (recomputeErr: any) {
+          // Log but don't fail the user's transaction save — the txn IS
+          // saved; downstream rows can be re-triggered by editing again.
+          console.error('Percentage-based referral recompute failed:', recomputeErr)
+        }
+      }
+
       // Office_net depends on office_gross. Recompute when office_gross was
       // touched (directly OR via the auto-derive above).
       if ('office_gross' in cleanUpdates) await recomputeOfficeNet(id)
@@ -1244,7 +1548,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Check current row + payment status
       const { data: current } = await supabase
         .from('transaction_internal_agents')
-        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id')
+        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id, side, split_percentage')
         .eq('id', internal_agent_id)
         .single()
 
@@ -1258,9 +1562,71 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // ── Server-authoritative percentage-based referral basis ─────────────
+      // When the FE saves a referral_agent row with basis_input_mode =
+      // 'percentage', the dollar agent_basis is derived server-side from
+      // the current side commission. This protects against stale-state
+      // drift (FE's cached side commission older than the DB's) and means
+      // the FE doesn't need to know the formula — it just sends mode +
+      // percentage. agent_gross and brokerage_split are also recomputed
+      // from the new basis using the row's split_percentage (Phase 2.7
+      // rounding rule: round gross first, derive brokerage as residual).
+      //
+      // For 'amount' mode (or when mode is absent), behavior is unchanged —
+      // the FE's agent_basis flows through as-is.
+      const cleanUpdates: any = { ...(updates || {}) }
+      if (
+        current?.agent_role === 'referral_agent' &&
+        cleanUpdates.basis_input_mode === 'percentage' &&
+        cleanUpdates.basis_percentage != null
+      ) {
+        try {
+          const { data: txn } = await supabase
+            .from('transactions')
+            .select('listing_side_commission, buying_side_commission')
+            .eq('id', id)
+            .single()
+
+          const sideForLookup = current.side
+          let sideCommission = 0
+          if (sideForLookup === 'seller' || sideForLookup === 'landlord') {
+            sideCommission = num(txn?.listing_side_commission)
+          } else if (sideForLookup === 'buyer' || sideForLookup === 'tenant') {
+            sideCommission = num(txn?.buying_side_commission)
+          }
+
+          const pct = num(cleanUpdates.basis_percentage)
+          if (sideCommission > 0 && pct > 0) {
+            const newBasis = Math.round(sideCommission * pct) / 100
+            // Round gross first, derive brokerage as residual.
+            const splitPct = num(
+              'split_percentage' in cleanUpdates
+                ? cleanUpdates.split_percentage
+                : current.split_percentage
+            )
+            const newGross = Math.round(newBasis * splitPct) / 100
+            const newBrokerage = Math.round((newBasis - newGross) * 100) / 100
+
+            cleanUpdates.agent_basis = newBasis
+            cleanUpdates.agent_gross = newGross
+            cleanUpdates.brokerage_split = newBrokerage
+            cleanUpdates.agent_net = newGross
+            cleanUpdates.amount_1099_reportable = newGross
+          }
+        } catch (pctErr: any) {
+          console.error('Percentage basis recompute failed (falling back to FE-provided amount):', pctErr)
+        }
+      }
+
+      // When switching FROM percentage TO amount mode, clear the stale
+      // basis_percentage so the column reflects the source of truth.
+      if (cleanUpdates.basis_input_mode === 'amount' && !('basis_percentage' in cleanUpdates)) {
+        cleanUpdates.basis_percentage = null
+      }
+
       const { error } = await supabase
         .from('transaction_internal_agents')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
         .eq('id', internal_agent_id)
       if (error) throw error
 
@@ -1328,6 +1694,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // ── Referral carve-out rebalance ────────────────────────────────────────
+      // When a referral_agent's agent_basis changes, the SAME-SIDE primary's
+      // basis must shrink/grow to keep the pool = side commission. Runs
+      // before recomputeOfficeNet so office_net reflects the new primary
+      // basis on the same request. (Phase 2.7 fix — change #2.)
+      //
+      // Also fires on basis_input_mode / basis_percentage edits: the BE may
+      // have just recomputed agent_basis from a new percentage value, and
+      // we want the same-side primary to re-absorb. Checking these keys in
+      // `updates` (not cleanUpdates) is intentional — they describe what
+      // the USER changed, not server-side derivations.
+      if (
+        current?.agent_role === 'referral_agent' &&
+        (
+          'agent_basis' in (updates || {}) ||
+          'basis_input_mode' in (updates || {}) ||
+          'basis_percentage' in (updates || {})
+        )
+      ) {
+        try {
+          await rebalanceReferralCarveouts(id, current.side ?? null)
+        } catch (rebalanceErr: any) {
+          // Log but don't fail the user's update — the referral row IS saved.
+          console.error('Referral carve-out rebalance failed:', rebalanceErr)
+        }
+      }
+
       // Office_net depends on every TIA agent_net.
       await recomputeOfficeNet(id)
 
@@ -1342,7 +1735,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const { data: existing } = await supabase
         .from('transaction_internal_agents')
-        .select('id, payment_status')
+        .select('id, payment_status, agent_role, side')
         .eq('id', internal_agent_id)
         .eq('transaction_id', id)
         .single()
@@ -1360,6 +1753,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .delete()
         .eq('id', internal_agent_id)
       if (error) throw error
+
+      // Rebalance the same-side primary if we removed a referral_agent —
+      // their carve-out is gone so the primary's basis goes back up.
+      if (existing.agent_role === 'referral_agent') {
+        try {
+          await rebalanceReferralCarveouts(id, existing.side ?? null)
+        } catch (rebalanceErr: any) {
+          console.error('Referral carve-out rebalance on delete failed:', rebalanceErr)
+        }
+      }
+
       await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
     }
@@ -1374,7 +1778,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const { data: row } = await supabase
         .from('transaction_internal_agents')
-        .select('id, agent_role, payment_status')
+        .select('id, agent_role, payment_status, side')
         .eq('id', internal_agent_id)
         .eq('transaction_id', id)
         .single()
@@ -1424,6 +1828,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .delete()
         .eq('id', internal_agent_id)
       if (delErr) throw delErr
+
+      // Rebalance the same-side primary if we removed a referral_agent —
+      // their carve-out is gone so the primary's basis goes back up.
+      if (row.agent_role === 'referral_agent') {
+        try {
+          await rebalanceReferralCarveouts(id, row.side ?? null)
+        } catch (rebalanceErr: any) {
+          console.error('Referral carve-out rebalance on cascade-delete failed:', rebalanceErr)
+        }
+      }
 
       await recomputeOfficeNet(id)
 
@@ -1597,6 +2011,63 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               console.error('Auto-stamp on agent add failed:', err)
             }
           }
+        }
+      }
+
+      // For referral_agent: don't cascade math (basis is unknown until admin
+      // enters the carve-out manually), but DO stamp the agent's commission
+      // plan default split so the row arrives pre-filled with e.g. 90/10
+      // instead of 0/100. Admin can override after. (Phase 2.7 fix.)
+      if (data && data.agent_role === 'referral_agent') {
+        try {
+          const { data: txn } = await supabase
+            .from('transactions')
+            .select('transaction_type, status')
+            .eq('id', id)
+            .single()
+
+          if (txn && txn.status !== 'closed') {
+            const planInfo = await resolveAgentPlanSplit(data.agent_id, txn.transaction_type || null)
+            if (planInfo) {
+              const planUpdates: Record<string, any> = {
+                split_percentage: planInfo.agentSplitPct,
+                commission_plan: planInfo.planCode,
+                updated_at: new Date().toISOString(),
+              }
+              if (planInfo.planId) planUpdates.commission_plan_id = planInfo.planId
+
+              await supabase
+                .from('transaction_internal_agents')
+                .update(planUpdates)
+                .eq('id', data.id)
+
+              // Re-fetch so the response reflects the stamped plan.
+              const { data: stamped } = await supabase
+                .from('transaction_internal_agents')
+                .select(`
+                  *,
+                  user:users!transaction_internal_agents_agent_id_fkey(
+                    id, first_name, last_name, preferred_first_name, preferred_last_name,
+                    office_email, email, phone, office, commission_plan, license_number,
+                    license_expiration, referring_agent_id, revenue_share_percentage,
+                    qualifying_transaction_count, qualifying_transaction_target,
+                    waive_buyer_processing_fees,
+                    waive_seller_processing_fees, waive_coaching_fee,
+                    cap_amount_override, post_cap_split_override,
+                    monthly_fee_paid_through
+                  )
+                `)
+                .eq('id', data.id)
+                .single()
+              if (stamped) {
+                await recomputeOfficeNet(id)
+                return NextResponse.json({ agent: stamped })
+              }
+            }
+          }
+        } catch (err) {
+          // Plan stamp failed but row was inserted; admin can set split manually.
+          console.error('Plan-default stamp on referral_agent add failed:', err)
         }
       }
 

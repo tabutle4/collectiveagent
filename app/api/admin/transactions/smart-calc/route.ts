@@ -301,8 +301,13 @@ export async function POST(request: NextRequest) {
     // Side-aware basis is multiplied by the split. agent_basis is already the
     // side's portion (per side semantics); team & non-team agents both
     // multiply basis by their agent_pct to derive agent_gross.
+    //
+    // Rounding rule (Phase 2.7): round agentGross first, then derive
+    // brokerageSplit = agentBasis - agentGross. Independent rounding could
+    // make both round-half-up and produce a sum $0.01 over basis, which
+    // shows up downstream as ugly 10.000116% brokerage percentages.
     const agentGross   = round2(agentBasis * (agentSplitPct / 100))
-    const brokerageSplit = round2(agentBasis * (firmSplitPct / 100))
+    const brokerageSplit = round2(agentBasis - agentGross)
     const teamLeadPayout = round2(agentBasis * (teamLeadPct / 100))
 
     // Processing fee with waiver check (side-aware)

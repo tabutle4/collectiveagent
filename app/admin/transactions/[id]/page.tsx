@@ -525,6 +525,11 @@ export default function AdminTransactionDetailPage() {
 
     // Calculate and apply for each agent that doesn't have values yet
     agentsList.forEach(async (a: any) => {
+      // Auto-calc only makes sense for agents whose commission drives the deal.
+      // Linked / carve-out rows (referral_agent, team_lead, momentum_partner)
+      // are entered manually. Auto-applying smart-calc results to them would
+      // overwrite their hand-entered basis and split. (Phase 2.7 fix.)
+      if (!['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role)) return
       // Skip if already applied or has values saved
       if (autoCalcApplied.has(a.id) || parseFloat(a.agent_gross || 0) > 0) return
       // Skip if already paid
@@ -672,9 +677,18 @@ export default function AdminTransactionDetailPage() {
         body: JSON.stringify({ action: 'update_transaction', updates }),
       })
       setData((prev: any) => ({ ...prev, transaction: { ...prev.transaction, ...updates } }))
-      // The server may auto-derive fields (e.g. sales_volume from
-      // monthly_rent × lease_term on leases). Reload to pick those up.
-      if ('monthly_rent' in updates || 'lease_term' in updates) {
+      // The server may auto-derive fields: sales_volume from monthly_rent ×
+      // lease_term on leases, and office_gross + gross_commission from the
+      // side commissions (single-sided AND intermediary flows). Reload to
+      // pick those server-side broadcasts up so the UI doesn't show stale
+      // values until manual refresh.
+      const RELOAD_TRIGGERS = [
+        'monthly_rent', 'lease_term',
+        'listing_side_commission', 'buying_side_commission',
+        'gross_commission', 'office_gross',
+        'transaction_type', 'is_intermediary',
+      ]
+      if (RELOAD_TRIGGERS.some(k => k in updates)) {
         await loadData()
       }
     } finally {
@@ -852,51 +866,65 @@ export default function AdminTransactionDetailPage() {
     //   brokerage_split = basis - agent_gross
     // which would be wrong for linked rows. Skipping the brokerage_split
     // write keeps the column at 0, which is what recomputeOfficeNet expects.
+    //
+    // NOTE: referral_agent is NOT a linked row — it has its own basis (a
+    // carve-out of the deal gross) and splits with the brokerage on that
+    // basis, so it gets a real brokerage_split.
     const isLinkedRow =
       agent?.agent_role === 'team_lead' || agent?.agent_role === 'momentum_partner'
+
+    // Round a value to 2 decimals. Used everywhere brokerage_split / agent_gross
+    // are derived so the two NEVER independently round-up and over-count
+    // basis by $0.01.
+    const round2 = (n: number) => Math.round(n * 100) / 100
 
     // For percentage fields that cascade, we save the percentage AND the
     // derived dollars together so the database stays consistent without
     // waiting for cascadePrimarySplit.
+    //
+    // Rounding rule (Phase 2.7): always round agent_gross FIRST, then derive
+    // brokerage_split = basis - rounded(agent_gross). This guarantees
+    // agent_gross + brokerage_split === basis (within FP precision) and
+    // eliminates the "$0.01 too high" / "10.00011%" display bug that came
+    // from independently rounding both values from the raw basis × pct.
     const updates: any = {
       [field]: value,
     }
     if (field === 'split_percentage' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
-      const newGross = (basis * value) / 100
-      updates.agent_gross = Math.round(newGross * 100) / 100
+      const newGross = round2((basis * value) / 100)
+      updates.agent_gross = newGross
       if (!isLinkedRow) {
-        updates.brokerage_split = Math.round((basis - newGross) * 100) / 100
+        updates.brokerage_split = round2(basis - newGross)
       }
     }
     if (field === 'brokerage_split_percentage' && value != null) {
       // brokerage_split_percentage is not a real column; translate the user's
       // % edit into a brokerage_split (dollar) write. Cascade updates the
-      // agent side accordingly. (Brokerage row is hidden in the UI for
-      // linked rows, so this branch is unreachable for them in practice.)
+      // agent side accordingly.
       const basis = parseFloat(agent?.agent_basis || 0)
-      const newBrokerage = (basis * value) / 100
-      updates.brokerage_split = Math.round(newBrokerage * 100) / 100
-      updates.agent_gross = Math.round((basis - newBrokerage) * 100) / 100
-      updates.split_percentage = 100 - value
+      const newBrokerage = round2((basis * value) / 100)
+      updates.brokerage_split = newBrokerage
+      updates.agent_gross = round2(basis - newBrokerage)
+      updates.split_percentage = round2(100 - value)
       // Drop the synthetic field so it does not get sent to the DB.
       delete (updates as any).brokerage_split_percentage
     }
     if (field === 'agent_basis' && value != null) {
       const sp = parseFloat(agent?.split_percentage || 0)
-      const newGross = (value * sp) / 100
-      updates.agent_gross = Math.round(newGross * 100) / 100
+      const newGross = round2((value * sp) / 100)
+      updates.agent_gross = newGross
       if (!isLinkedRow) {
-        updates.brokerage_split = Math.round((value - newGross) * 100) / 100
+        updates.brokerage_split = round2(value - newGross)
       }
     }
     if (field === 'agent_gross' && value != null) {
       const basis = parseFloat(agent?.agent_basis || 0)
       if (basis > 0) {
         const newPct = (value / basis) * 100
-        updates.split_percentage = Math.round(newPct * 100) / 100
+        updates.split_percentage = round2(newPct)
         if (!isLinkedRow) {
-          updates.brokerage_split = Math.round((basis - value) * 100) / 100
+          updates.brokerage_split = round2(basis - value)
         }
       }
     }
@@ -904,8 +932,8 @@ export default function AdminTransactionDetailPage() {
       const basis = parseFloat(agent?.agent_basis || 0)
       if (basis > 0) {
         const newPct = (value / basis) * 100
-        updates.agent_gross = Math.round((basis - value) * 100) / 100
-        updates.split_percentage = Math.round((100 - newPct) * 100) / 100
+        updates.agent_gross = round2(basis - value)
+        updates.split_percentage = round2(100 - newPct)
       }
     }
     if (field === 'team_lead_percentage' && value != null) {
@@ -2108,8 +2136,13 @@ export default function AdminTransactionDetailPage() {
 
                           {/* Team member lead source picker — only when team
                               actually has splits configured (otherwise the
-                              prompt has no effect on math) */}
-                          {calc?.is_team_member && calc?.has_team_splits && !isPaid && (
+                              prompt has no effect on math). Limited to the
+                              contract-bearing roles: the lead source only
+                              affects the PRIMARY's split, not carve-out rows
+                              like referral_agent, team_lead, or
+                              momentum_partner. */}
+                          {calc?.is_team_member && calc?.has_team_splits && !isPaid &&
+                            ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
                             <div className="mb-3 p-3 bg-purple-50/50 border border-purple-200 rounded-lg">
                               <p className="text-xs text-purple-700 mb-2">
                                 {fmtName(a.user)} is on {calc.team_lead_name ? `${calc.team_lead_name}'s team` : 'a team'}. Who sourced this lead?
@@ -2136,8 +2169,11 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Momentum partner display */}
-                          {calc?.momentum_partner_name && calc.momentum_partner_payout > 0 && (
+                          {/* Momentum partner display — only meaningful on
+                              the primary's row, since the momentum payout is
+                              derived from the primary's commission. */}
+                          {calc?.momentum_partner_name && calc.momentum_partner_payout > 0 &&
+                            ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
                             <div className="mb-3 p-3 bg-green-50/50 border border-green-200 rounded-lg">
                               <p className="text-xs text-green-700">
                                 <span className="font-semibold">{calc.momentum_partner_name}</span> earns {calc.momentum_partner_pct}% momentum partner fee: {fmt$(calc.momentum_partner_payout)}
@@ -2163,6 +2199,12 @@ export default function AdminTransactionDetailPage() {
                                 onClearOverride={(field) => clearOverrideForField(a.id, field)}
                                 onSaveTextField={(field, value) =>
                                   updateInternalAgent(a.id, { [field]: value })
+                                }
+                                onSaveBasisMode={(mode, basisPercentage) =>
+                                  updateInternalAgent(a.id, {
+                                    basis_input_mode: mode,
+                                    basis_percentage: mode === 'percentage' ? basisPercentage : null,
+                                  })
                                 }
                               />
                             )
