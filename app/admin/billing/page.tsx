@@ -125,7 +125,9 @@ export default function AdminBillingPage() {
       const debtsData = await debtsRes.json()
       const creditsData = await creditsRes.json()
 
-      const activeAgents = (usersData.users || []).filter((u: any) => u.status === 'active')
+      const activeAgents = (usersData.users || []).filter(
+        (u: any) => u.status === 'active' && u.is_licensed_agent === true
+      )
       setAgents(activeAgents)
 
       const outstandingDebts = (debtsData.records || []).filter(
