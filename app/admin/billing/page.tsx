@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, ChevronDown, ChevronUp, Send, ExternalLink } from 'lucide-react'
+import { Search, ChevronDown, ChevronUp, Send, ExternalLink, Plus, CheckCircle } from 'lucide-react'
 
 declare global {
   interface Window {
@@ -23,6 +23,13 @@ const MONTHS = [
   'October',
   'November',
   'December',
+]
+
+const MARK_PAID_METHODS = [
+  { value: 'zelle', label: 'Zelle' },
+  { value: 'check', label: 'Check' },
+  { value: 'ach', label: 'ACH' },
+  { value: 'offset', label: 'Commission Offset' },
 ]
 
 export default function AdminBillingPage() {
@@ -51,12 +58,18 @@ export default function AdminBillingPage() {
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
   const [openDebtAgentIds, setOpenDebtAgentIds] = useState<string[]>([])
-  const [openMonthlyInvoiceAgentIds, setOpenMonthlyInvoiceAgentIds] = useState<string[]>([])
+  const [monthlyStatuses, setMonthlyStatuses] = useState<Record<string, any>>({})
   const [loadingMonthlyFilter, setLoadingMonthlyFilter] = useState(true)
   const [editingRecord, setEditingRecord] = useState<string | null>(null)
   const [editDesc, setEditDesc] = useState('')
   const [editAmount, setEditAmount] = useState('')
   const [monthlyFee, setMonthlyFee] = useState(50)
+  const [showMarkPaidForm, setShowMarkPaidForm] = useState<string | null>(null)
+  const [markPaidMethod, setMarkPaidMethod] = useState('zelle')
+  const [markPaidNote, setMarkPaidNote] = useState('')
+  const [markingPaid, setMarkingPaid] = useState<string | null>(null)
+  const [creatingMissing, setCreatingMissing] = useState<string | null>(null)
+  const [bulkSending, setBulkSending] = useState(false)
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -124,11 +137,15 @@ export default function AdminBillingPage() {
     }
 
     // Load monthly invoice status in background (separate from main load - hits Payload for each agent)
+    await refreshMonthlyStatuses()
+  }
+
+  const refreshMonthlyStatuses = async () => {
     try {
       const res = await fetch('/api/payload/monthly-invoice-status')
       if (res.ok) {
         const data = await res.json()
-        setOpenMonthlyInvoiceAgentIds(data.agent_ids || [])
+        setMonthlyStatuses(data.statuses || {})
       }
     } catch (e) {
       console.error('Error loading monthly invoice status:', e)
@@ -147,7 +164,11 @@ export default function AdminBillingPage() {
     const receipts = await receiptRes.json()
     const records = await recordsRes.json()
     return {
-      invoices: invoices.invoices || [],
+      // Invoices that were zeroed out via mark-invoice-paid keep status unpaid
+      // but have no balance, so filter on amount_due to hide settled ones.
+      invoices: (invoices.invoices || []).filter(
+        (inv: any) => Number(inv.amount_due ?? inv.amount ?? 0) > 0
+      ),
       receipts: receipts.receipts || [],
       records: (records.records || []).filter((r: any) => r.status === 'outstanding'),
     }
@@ -200,13 +221,37 @@ export default function AdminBillingPage() {
     }
   }
 
+  // Returns the monthly fee billing status for an agent. State is derived from
+  // the Payload-backed monthlyStatuses map (loaded in the background), falling
+  // back to 'unknown' until that data arrives.
+  //  - waived: monthly fee waived, nothing owed
+  //  - no_account: no Payload customer ID, cannot be invoiced
+  //  - unknown: monthly status still loading
+  //  - behind: has one or more monthly invoices with a balance due
+  //  - current: has a Payload account and owes nothing on monthly fees
+  // missingCurrent is independent of the above: true when the agent has a
+  // Payload account, is not waived, and has no invoice for the current month.
   const getMonthlyStatus = (agent: any) => {
-    if (agent.monthly_fee_waived) return 'waived'
-    if (!agent.monthly_fee_paid_through) return 'unpaid'
-    const [y, m, d] = agent.monthly_fee_paid_through.split('-').map(Number)
-    const paidThrough = new Date(y, m - 1, d)
-    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
-    return paidThrough >= endOfMonth ? 'current' : 'overdue'
+    if (agent.monthly_fee_waived) {
+      return { state: 'waived', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+    }
+    if (!agent.payload_payee_id) {
+      return { state: 'no_account', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+    }
+    const s = monthlyStatuses[agent.id]
+    if (!s) {
+      return { state: 'unknown', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+    }
+    const missingCurrent = !s.has_current_month_invoice
+    if ((s.unpaid_monthly_count || 0) > 0) {
+      return {
+        state: 'behind',
+        monthsBehind: s.unpaid_monthly_count,
+        amountOwed: s.unpaid_monthly_total || 0,
+        missingCurrent,
+      }
+    }
+    return { state: 'current', monthsBehind: 0, amountOwed: 0, missingCurrent }
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -270,6 +315,112 @@ export default function AdminBillingPage() {
     } finally {
       setSending(null)
     }
+  }
+
+  // Marks a Payload invoice settled for a payment received outside Payload
+  // (Zelle / check / ACH / commission offset). Hits mark-invoice-paid, which
+  // appends a negative line item to zero the balance and, for monthly fee
+  // invoices, advances monthly_fee_paid_through.
+  const markInvoicePaid = async (agentId: string, invoiceId: string) => {
+    setMarkingPaid(invoiceId)
+    try {
+      const res = await fetch('/api/payload/mark-invoice-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: invoiceId,
+          user_id: agentId,
+          method: markPaidMethod,
+          note: markPaidNote.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to mark invoice paid')
+      setShowMarkPaidForm(null)
+      setMarkPaidNote('')
+      setMarkPaidMethod('zelle')
+      await refreshAgentData(agentId)
+      await refreshMonthlyStatuses()
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark invoice paid')
+    } finally {
+      setMarkingPaid(null)
+    }
+  }
+
+  // Creates and sends a monthly fee invoice for the current calendar month.
+  // Used by the per-agent "Create invoice" button shown when the monthly cron
+  // skipped an agent.
+  const createMissingInvoice = async (agentId: string) => {
+    const now = new Date()
+    const monthName = MONTHS[now.getMonth()]
+    const year = now.getFullYear()
+    if (!confirm(`Create and send the ${monthName} ${year} monthly invoice for this agent?`)) return
+    setCreatingMissing(agentId)
+    try {
+      const invoiceRes = await fetch('/api/payload/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: agentId, type: 'monthly', month: monthName, year }),
+      })
+      const invoiceData = await invoiceRes.json()
+      if (!invoiceData.invoice_id) throw new Error(invoiceData.error || 'Failed to create invoice')
+      await fetch('/api/payload/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceData.invoice_id, user_id: agentId }),
+      })
+      await refreshMonthlyStatuses()
+      if (agentData[agentId]) await refreshAgentData(agentId)
+    } catch (err: any) {
+      alert(err.message || 'Failed to create invoice')
+    } finally {
+      setCreatingMissing(null)
+    }
+  }
+
+  // Sends a payment reminder for every unpaid monthly invoice across all
+  // currently filtered agents.
+  const bulkSendReminders = async () => {
+    const jobs: { agentId: string; invoiceId: string }[] = []
+    for (const agent of filtered) {
+      const s = monthlyStatuses[agent.id]
+      if (!s) continue
+      for (const invoiceId of s.unpaid_monthly_invoice_ids || []) {
+        jobs.push({ agentId: agent.id, invoiceId })
+      }
+    }
+    if (jobs.length === 0) {
+      alert('No unpaid monthly invoices among the agents shown.')
+      return
+    }
+    if (
+      !confirm(
+        `Send ${jobs.length} monthly fee reminder${jobs.length === 1 ? '' : 's'} across ${
+          new Set(jobs.map(j => j.agentId)).size
+        } agent(s)?`
+      )
+    )
+      return
+    setBulkSending(true)
+    let sent = 0
+    let failed = 0
+    for (const job of jobs) {
+      try {
+        const res = await fetch('/api/payload/send-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoice_id: job.invoiceId, user_id: job.agentId }),
+        })
+        const data = await res.json()
+        if (data.success) sent++
+        else failed++
+      } catch {
+        failed++
+      }
+    }
+    setBulkSending(false)
+    alert(`Reminders sent: ${sent}${failed > 0 ? ` | Failed: ${failed}` : ''}`)
   }
 
   const sendDebtInvoice = async (agentId: string, record: any) => {
@@ -371,6 +522,7 @@ export default function AdminBillingPage() {
       })
       setShowMonthlyForm(null)
       await refreshAgentData(agentId)
+      await refreshMonthlyStatuses()
     } catch (err: any) {
       alert(err.message || 'Failed to send monthly invoice')
     } finally {
@@ -410,10 +562,34 @@ export default function AdminBillingPage() {
     }
   }
 
+  // Agents who owe one or more monthly fee invoices.
+  const owingAgents = agents.filter(a => {
+    const s = monthlyStatuses[a.id]
+    return s && (s.unpaid_monthly_count || 0) > 0
+  })
+  // Agents missing an invoice for the current month (cron likely skipped them).
+  const missingInvoiceAgents = agents.filter(a => {
+    if (a.monthly_fee_waived || !a.payload_payee_id) return false
+    const s = monthlyStatuses[a.id]
+    return s && !s.has_current_month_invoice
+  })
+  const totalMonthlyOwed = owingAgents.reduce(
+    (sum, a) => sum + (monthlyStatuses[a.id]?.unpaid_monthly_total || 0),
+    0
+  )
+  const behindTwoPlus = owingAgents.filter(
+    a => (monthlyStatuses[a.id]?.unpaid_monthly_count || 0) >= 2
+  ).length
+  const behindOne = owingAgents.filter(
+    a => (monthlyStatuses[a.id]?.unpaid_monthly_count || 0) === 1
+  ).length
+  const currentMonthName = MONTHS[new Date().getMonth()]
+
   const stats = {
     total: agents.length,
     openCustomInvoices,
-    openMonthlyInvoice: openMonthlyInvoiceAgentIds.length,
+    oweMonthly: owingAgents.length,
+    missingInvoice: missingInvoiceAgents.length,
     noPayloadAccount: agents.filter(a => !a.payload_payee_id).length,
   }
 
@@ -428,7 +604,15 @@ export default function AdminBillingPage() {
     const matchesFilter = (() => {
       if (!statusFilter) return true
       if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
-      if (statusFilter === 'openMonthlyInvoice') return openMonthlyInvoiceAgentIds.includes(a.id)
+      if (statusFilter === 'oweMonthly') {
+        const s = monthlyStatuses[a.id]
+        return s && (s.unpaid_monthly_count || 0) > 0
+      }
+      if (statusFilter === 'missingInvoice') {
+        if (a.monthly_fee_waived || !a.payload_payee_id) return false
+        const s = monthlyStatuses[a.id]
+        return s && !s.has_current_month_invoice
+      }
       if (statusFilter === 'noPayloadAccount') return !a.payload_payee_id
       return true
     })()
@@ -444,7 +628,7 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
           onClick={() => setStatusFilter(null)}
@@ -454,24 +638,36 @@ export default function AdminBillingPage() {
           {statusFilter === null && <p className="text-xs text-luxury-accent mt-1">All agents</p>}
         </div>
         <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openCustomInvoices' ? 'ring-2 ring-orange-400' : ''}`}
-          onClick={() => toggleFilter('openCustomInvoices')}
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'oweMonthly' ? 'ring-2 ring-red-400' : ''}`}
+          onClick={() => toggleFilter('oweMonthly')}
         >
-          <p className="text-xs text-luxury-gray-3 mb-1">Open Custom Invoices</p>
-          <p className="text-2xl font-semibold text-orange-500">{stats.openCustomInvoices}</p>
-          {statusFilter === 'openCustomInvoices' && (
+          <p className="text-xs text-luxury-gray-3 mb-1">Owe Monthly Fees</p>
+          <p className="text-2xl font-semibold text-red-500">
+            {loadingMonthlyFilter ? '...' : stats.oweMonthly}
+          </p>
+          {statusFilter === 'oweMonthly' && (
+            <p className="text-xs text-red-400 mt-1">Filtering ✕</p>
+          )}
+        </div>
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'missingInvoice' ? 'ring-2 ring-orange-400' : ''}`}
+          onClick={() => toggleFilter('missingInvoice')}
+        >
+          <p className="text-xs text-luxury-gray-3 mb-1">Missing {currentMonthName} Invoice</p>
+          <p className="text-2xl font-semibold text-orange-500">
+            {loadingMonthlyFilter ? '...' : stats.missingInvoice}
+          </p>
+          {statusFilter === 'missingInvoice' && (
             <p className="text-xs text-orange-400 mt-1">Filtering ✕</p>
           )}
         </div>
         <div
-          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openMonthlyInvoice' ? 'ring-2 ring-yellow-400' : ''}`}
-          onClick={() => toggleFilter('openMonthlyInvoice')}
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'openCustomInvoices' ? 'ring-2 ring-yellow-400' : ''}`}
+          onClick={() => toggleFilter('openCustomInvoices')}
         >
-          <p className="text-xs text-luxury-gray-3 mb-1">Open Monthly Invoice</p>
-          <p className="text-2xl font-semibold text-yellow-500">
-            {loadingMonthlyFilter ? '...' : stats.openMonthlyInvoice}
-          </p>
-          {statusFilter === 'openMonthlyInvoice' && (
+          <p className="text-xs text-luxury-gray-3 mb-1">Open Custom Invoices</p>
+          <p className="text-2xl font-semibold text-yellow-500">{stats.openCustomInvoices}</p>
+          {statusFilter === 'openCustomInvoices' && (
             <p className="text-xs text-yellow-400 mt-1">Filtering ✕</p>
           )}
         </div>
@@ -485,6 +681,61 @@ export default function AdminBillingPage() {
             <p className="text-xs text-luxury-accent mt-1">Filtering ✕</p>
           )}
         </div>
+      </div>
+
+      {/* Monthly fee summary */}
+      <div className="container-card mb-4">
+        {loadingMonthlyFilter ? (
+          <p className="text-xs text-luxury-gray-3">Loading monthly fee status...</p>
+        ) : owingAgents.length === 0 ? (
+          <p className="text-sm text-luxury-gray-2">
+            All agents are current on monthly fees.
+            {missingInvoiceAgents.length > 0 && (
+              <span className="text-orange-600">
+                {' '}
+                {missingInvoiceAgents.length} agent{missingInvoiceAgents.length === 1 ? '' : 's'}{' '}
+                missing a {currentMonthName} invoice.
+              </span>
+            )}
+          </p>
+        ) : (
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-semibold text-luxury-gray-1">
+                {owingAgents.length} agent{owingAgents.length === 1 ? '' : 's'} owe{' '}
+                {owingAgents.length === 1 ? 's' : ''} {formatCurrency(totalMonthlyOwed)} in monthly
+                fees
+              </p>
+              <p className="text-xs text-luxury-gray-3 mt-1">
+                {behindTwoPlus > 0 && (
+                  <span className="text-red-500 font-medium">
+                    {behindTwoPlus} two or more months behind
+                  </span>
+                )}
+                {behindTwoPlus > 0 && behindOne > 0 && ' · '}
+                {behindOne > 0 && <span>{behindOne} one month behind</span>}
+                {missingInvoiceAgents.length > 0 && (
+                  <span className="text-orange-600">
+                    {(behindTwoPlus > 0 || behindOne > 0) && ' · '}
+                    {missingInvoiceAgents.length} missing a {currentMonthName} invoice
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={bulkSendReminders}
+              disabled={bulkSending}
+              className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Send size={12} />
+              {bulkSending
+                ? 'Sending...'
+                : statusFilter
+                  ? 'Send Reminders (Filtered)'
+                  : 'Send All Reminders'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="container-card mb-4">
@@ -531,8 +782,26 @@ export default function AdminBillingPage() {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
                     <p className="text-xs text-luxury-gray-3">{agent.email}</p>
+                    {monthlyStatus.missingCurrent && (
+                      <span className="inline-block mt-1 text-xs font-medium text-orange-600">
+                        No {currentMonthName} invoice
+                      </span>
+                    )}
                   </div>
-                  <div className="flex gap-4 flex-shrink-0">
+                  <div className="flex items-center gap-4 flex-shrink-0">
+                    {monthlyStatus.missingCurrent && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          createMissingInvoice(agent.id)
+                        }}
+                        disabled={creatingMissing === agent.id}
+                        className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Plus size={11} />
+                        {creatingMissing === agent.id ? 'Creating...' : 'Create Invoice'}
+                      </button>
+                    )}
                     <div className="text-center">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Onboarding</p>
                       {agent.onboarding_fee_paid ? (
@@ -541,19 +810,25 @@ export default function AdminBillingPage() {
                         <span className="text-xs text-red-500 font-medium">Unpaid</span>
                       )}
                     </div>
-                    <div className="text-center">
+                    <div className="text-center min-w-[5rem]">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Monthly</p>
-                      {monthlyStatus === 'current' && (
+                      {monthlyStatus.state === 'current' && (
                         <span className="text-xs text-green-600 font-medium">Current</span>
                       )}
-                      {monthlyStatus === 'overdue' && (
-                        <span className="text-xs text-red-500 font-medium">Overdue</span>
+                      {monthlyStatus.state === 'behind' && (
+                        <span className="text-xs text-red-500 font-medium">
+                          {monthlyStatus.monthsBehind} mo behind ·{' '}
+                          {formatCurrency(monthlyStatus.amountOwed)}
+                        </span>
                       )}
-                      {monthlyStatus === 'unpaid' && (
-                        <span className="text-xs text-green-600 font-medium">Current</span>
-                      )}
-                      {monthlyStatus === 'waived' && (
+                      {monthlyStatus.state === 'waived' && (
                         <span className="text-xs text-luxury-gray-3 font-medium">Waived</span>
+                      )}
+                      {monthlyStatus.state === 'no_account' && (
+                        <span className="text-xs text-luxury-gray-3 font-medium">No account</span>
+                      )}
+                      {monthlyStatus.state === 'unknown' && (
+                        <span className="text-xs text-luxury-gray-3 font-medium">...</span>
                       )}
                     </div>
                   </div>
@@ -861,6 +1136,17 @@ export default function AdminBillingPage() {
                                           <Send size={11} />
                                           {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
                                         </button>
+                                        <button
+                                          onClick={() =>
+                                            setShowMarkPaidForm(
+                                              showMarkPaidForm === inv.id ? null : inv.id
+                                            )
+                                          }
+                                          className="btn btn-secondary text-xs flex items-center gap-1"
+                                        >
+                                          <CheckCircle size={11} />
+                                          {showMarkPaidForm === inv.id ? 'Cancel' : 'Mark Paid'}
+                                        </button>
                                         <span
                                           title="To void this invoice, delete it manually in the Payload dashboard."
                                           className="text-xs text-luxury-gray-3 cursor-help"
@@ -869,13 +1155,60 @@ export default function AdminBillingPage() {
                                         </span>
                                       </div>
                                     </div>
+                                    {showMarkPaidForm === inv.id && (
+                                      <div className="mt-3 pt-3 border-t border-luxury-gray-5/50 space-y-2">
+                                        <p className="text-xs text-luxury-gray-3">
+                                          Record a payment received outside Payload. This zeroes
+                                          the invoice balance with an offsetting line item.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-3 mb-1">
+                                              Method
+                                            </label>
+                                            <select
+                                              value={markPaidMethod}
+                                              onChange={e => setMarkPaidMethod(e.target.value)}
+                                              className="select-luxury text-xs"
+                                            >
+                                              {MARK_PAID_METHODS.map(m => (
+                                                <option key={m.value} value={m.value}>
+                                                  {m.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs text-luxury-gray-3 mb-1">
+                                              Note (optional)
+                                            </label>
+                                            <input
+                                              type="text"
+                                              value={markPaidNote}
+                                              onChange={e => setMarkPaidNote(e.target.value)}
+                                              className="input-luxury text-xs"
+                                              placeholder="e.g. confirmation number"
+                                            />
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={() => markInvoicePaid(agent.id, inv.id)}
+                                          disabled={markingPaid === inv.id}
+                                          className="btn btn-primary text-xs w-full disabled:opacity-50"
+                                        >
+                                          {markingPaid === inv.id
+                                            ? 'Marking Paid...'
+                                            : `Mark ${formatCurrency(inv.amount_due ?? inv.amount)} Paid`}
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
                             )}
                           </div>
 
-                          {monthlyStatus === 'overdue' && (
+                          {monthlyStatus.state === 'behind' && (
                             <div>
                               <div className="flex items-center justify-between mb-2">
                                 <p className="text-xs font-semibold text-luxury-gray-2">

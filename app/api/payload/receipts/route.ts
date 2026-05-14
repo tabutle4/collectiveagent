@@ -5,6 +5,20 @@ import { createClient } from '@/lib/supabase/server'
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
+// The amount to show for a settled invoice. total_paid only reflects real
+// Payload transactions, so it is 0 for invoices settled via a negative line
+// item (mark-invoice-paid). In that case fall back to the sum of the positive
+// charge line items, which equals what the invoice was billed for.
+function receiptAmount(inv: any): number {
+  const totalPaid = Number(inv?.total_paid) || 0
+  if (totalPaid > 0) return totalPaid
+  const charges = (inv?.items || []).reduce((sum: number, item: any) => {
+    const amt = Number(item?.amount) || 0
+    return amt > 0 ? sum + amt : sum
+  }, 0)
+  return charges
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
@@ -48,7 +62,7 @@ export async function GET(request: NextRequest) {
 
         return {
           id: inv.id,
-          amount: parseFloat(inv.total_paid ?? inv.amount) || 0,
+          amount: receiptAmount(inv),
           paid_at: inv.paid_timestamp || inv.modified_at || null,
           description: inv.items?.[0]?.type || 'Payment',
           url: pl?.url || null,
