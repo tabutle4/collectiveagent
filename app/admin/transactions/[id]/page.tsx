@@ -3067,9 +3067,18 @@ export default function AdminTransactionDetailPage() {
                         className="w-12 h-12 rounded-full object-cover object-top mb-2 border border-luxury-gray-5"
                       />
                     )}
-                    <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">
-                      {u ? fmtName(u) : (a.agent_id || 'Unknown Agent')}
-                    </p>
+                    {a.agent_id ? (
+                      <Link
+                        href={`/admin/users/${a.agent_id}`}
+                        className="block text-sm font-semibold text-luxury-accent hover:underline mb-0.5"
+                      >
+                        {u ? fmtName(u) : a.agent_id}
+                      </Link>
+                    ) : (
+                      <p className="text-sm font-semibold text-luxury-gray-1 mb-0.5">
+                        {u ? fmtName(u) : 'Unknown Agent'}
+                      </p>
+                    )}
                     <p className="text-xs text-luxury-gray-3 mb-2">
                       {u?.office_email || u?.email || ''}
                     </p>

@@ -58,6 +58,7 @@ export default function AdminBillingPage() {
   const [invoiceYear, setInvoiceYear] = useState(new Date().getFullYear())
   const [openCustomInvoices, setOpenCustomInvoices] = useState(0)
   const [openDebtAgentIds, setOpenDebtAgentIds] = useState<string[]>([])
+  const [creditAgentIds, setCreditAgentIds] = useState<string[]>([])
   const [monthlyStatuses, setMonthlyStatuses] = useState<Record<string, any>>({})
   const [loadingMonthlyFilter, setLoadingMonthlyFilter] = useState(true)
   const [editingRecord, setEditingRecord] = useState<string | null>(null)
@@ -115,12 +116,14 @@ export default function AdminBillingPage() {
   const loadAgents = async () => {
     setLoading(true)
     try {
-      const [usersRes, debtsRes] = await Promise.all([
+      const [usersRes, debtsRes, creditsRes] = await Promise.all([
         fetch('/api/users/list'),
         fetch('/api/billing?status=outstanding&debt_type=custom_invoice'),
+        fetch('/api/billing?status=outstanding&debt_type=brokerage_credit'),
       ])
       const usersData = await usersRes.json()
       const debtsData = await debtsRes.json()
+      const creditsData = await creditsRes.json()
 
       const activeAgents = (usersData.users || []).filter((u: any) => u.status === 'active')
       setAgents(activeAgents)
@@ -130,6 +133,11 @@ export default function AdminBillingPage() {
       )
       setOpenCustomInvoices(outstandingDebts.length)
       setOpenDebtAgentIds([...new Set(outstandingDebts.map((d: any) => d.agent_id))] as string[])
+
+      const outstandingCredits = (creditsData.records || []).filter(
+        (c: any) => c.status === 'outstanding' && c.debt_type === 'brokerage_credit'
+      )
+      setCreditAgentIds([...new Set(outstandingCredits.map((c: any) => c.agent_id))] as string[])
     } catch (e) {
       console.error('Error loading agents:', e)
     } finally {
@@ -590,6 +598,7 @@ export default function AdminBillingPage() {
     openCustomInvoices,
     oweMonthly: owingAgents.length,
     missingInvoice: missingInvoiceAgents.length,
+    hasCredit: creditAgentIds.length,
     noPayloadAccount: agents.filter(a => !a.payload_payee_id).length,
   }
 
@@ -604,6 +613,7 @@ export default function AdminBillingPage() {
     const matchesFilter = (() => {
       if (!statusFilter) return true
       if (statusFilter === 'openCustomInvoices') return openDebtAgentIds.includes(a.id)
+      if (statusFilter === 'hasCredit') return creditAgentIds.includes(a.id)
       if (statusFilter === 'oweMonthly') {
         const s = monthlyStatuses[a.id]
         return s && (s.unpaid_monthly_count || 0) > 0
@@ -628,7 +638,7 @@ export default function AdminBillingPage() {
     <div>
       <h1 className="page-title mb-6">BILLING</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
         <div
           className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === null ? 'ring-2 ring-luxury-accent' : ''}`}
           onClick={() => setStatusFilter(null)}
@@ -669,6 +679,16 @@ export default function AdminBillingPage() {
           <p className="text-2xl font-semibold text-yellow-500">{stats.openCustomInvoices}</p>
           {statusFilter === 'openCustomInvoices' && (
             <p className="text-xs text-yellow-400 mt-1">Filtering ✕</p>
+          )}
+        </div>
+        <div
+          className={`container-card text-center cursor-pointer transition-all hover:shadow-md ${statusFilter === 'hasCredit' ? 'ring-2 ring-green-400' : ''}`}
+          onClick={() => toggleFilter('hasCredit')}
+        >
+          <p className="text-xs text-luxury-gray-3 mb-1">Has Brokerage Credit</p>
+          <p className="text-2xl font-semibold text-green-600">{stats.hasCredit}</p>
+          {statusFilter === 'hasCredit' && (
+            <p className="text-xs text-green-500 mt-1">Filtering ✕</p>
           )}
         </div>
         <div
