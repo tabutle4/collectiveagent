@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import AppSidebar from '@/components/shared/AppSidebar'
 import { useAuth } from '@/lib/context/AuthContext'
+import { isMonthlyFeeOverdue } from '@/lib/date-utils'
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -17,16 +18,17 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     }
 
     if (!loading && user && pathname !== '/agent/fees') {
-      // Fee is waived for division agents
-      if (!user.division) {
-        // Only redirect if they've paid before but are now overdue
-        if (user.monthly_fee_paid_through) {
-          const paidThrough = new Date(user.monthly_fee_paid_through)
-          if (paidThrough < new Date()) {
-            router.push('/agent/fees?unpaid=true')
-            return
-          }
-        }
+      // monthly_fee_waived is not on the AuthContext User type yet; it is
+      // returned by /api/auth/me. Cast just that field rather than widening
+      // the shared type in this patch.
+      if (
+        isMonthlyFeeOverdue(user.monthly_fee_paid_through, {
+          waived: (user as { monthly_fee_waived?: boolean }).monthly_fee_waived,
+          division: user.division,
+        })
+      ) {
+        router.push('/agent/fees?unpaid=true')
+        return
       }
     }
   }, [loading, user, router, pathname])

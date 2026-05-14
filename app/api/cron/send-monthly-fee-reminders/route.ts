@@ -29,11 +29,16 @@ export async function GET(request: NextRequest) {
     const year = now.getFullYear()
     const monthlyFeeLabel = `${monthName} ${year} Monthly Brokerage Fee`
 
-    // Get all active, non-waived agents with a Payload ID and email
+    // Get all active, non-waived agents with a Payload ID and email.
+    // is_active and the Referral Collective filter mirror the eligibility
+    // criteria in create-monthly-invoices and apply-late-fees: deactivated
+    // agents and RC (annual, no MLS) agents should never get monthly fee
+    // reminders.
     const { data: agents, error } = await supabaseAdmin
       .from('users')
-      .select('id, preferred_first_name, first_name, office_email, email, payload_payee_id')
+      .select('id, preferred_first_name, first_name, office_email, email, payload_payee_id, mls_choice')
       .eq('status', 'active')
+      .eq('is_active', true)
       .eq('monthly_fee_waived', false)
       .not('payload_payee_id', 'is', null)
 
@@ -42,13 +47,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'No eligible agents', sent: 0 })
     }
 
+    const eligibleAgents = agents.filter(
+      (a: any) => a.mls_choice !== 'Referral Collective (No MLS)'
+    )
+
     let sent = 0
     let skipped = 0
     const errors: string[] = []
 
     // Check each agent for an unpaid monthly fee invoice in parallel
     const checks = await Promise.all(
-      agents.map(async agent => {
+      eligibleAgents.map(async agent => {
         try {
           const res = await fetch(
             `https://api.payload.com/invoices/?customer_id=${agent.payload_payee_id}&status=unpaid&limit=20`,
