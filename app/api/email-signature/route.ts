@@ -321,6 +321,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
+    // PHASE 1 ADDITION: Mark new signature generator as completed.
+    // Sets users.new_signature_completed_at to NOW() the first time this
+    // user successfully saves a signature in the in-app generator. The
+    // value is only set if currently NULL, so subsequent saves don't
+    // overwrite the original completion timestamp. The modal and nav
+    // badge in the rest of the app use this column to know whether to
+    // prompt this user to update their signature.
+    // This is fire-and-forget: we don't fail the POST if it errors,
+    // because the signature itself saved successfully. We just log it.
+    try {
+      const { error: completionError } = await supabaseAdmin
+        .from('users')
+        .update({ new_signature_completed_at: new Date().toISOString() })
+        .eq('id', auth.user.id)
+        .is('new_signature_completed_at', null)
+      if (completionError) {
+        console.error('Failed to mark signature completion:', completionError)
+      }
+    } catch (markErr) {
+      console.error('Exception marking signature completion:', markErr)
+    }
+
     return NextResponse.json({ success: true, signature: data })
   } catch (err: any) {
     console.error('email_signatures POST exception:', err)

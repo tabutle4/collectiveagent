@@ -130,6 +130,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
+        { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
       ],
     },
   },
@@ -189,6 +190,7 @@ const tcNavEntries: NavEntry[] = [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
+        { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
       ],
     },
   },
@@ -245,6 +247,7 @@ const supportNavEntries: NavEntry[] = [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
+        { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
       ],
     },
   },
@@ -454,6 +457,19 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     const Icon = item.icon
     const isActive = isPathInItem(item)
 
+    // PHASE 1 ADDITION: Show a small "UPDATE" text badge next to the
+    // "Email Signature" nav item if the user has not yet saved a
+    // signature in the new generator. The badge disappears the moment
+    // they save (user.new_signature_completed_at becomes a timestamp
+    // instead of NULL). Triggered for both /agent/email-signature and
+    // /admin/email-signature so it appears for all roles.
+    // Uses the app's existing .badge .badge-warning text-only badge
+    // classes defined in app/globals.css (amber text, no fill).
+    const isEmailSignatureItem =
+      item.href === '/agent/email-signature' || item.href === '/admin/email-signature'
+    const showNewBadge =
+      isEmailSignatureItem && user && !user.new_signature_completed_at
+
     const basePadding = nested ? 'pl-5 pr-3 py-1.5' : 'px-3 py-2'
     const iconSize = nested ? 14 : 18
     const textSize = 'text-[13px]'
@@ -514,6 +530,11 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
         <span className={`${textSize} ${isActive ? 'font-semibold' : 'font-medium'}`}>
           {item.label}
         </span>
+        {showNewBadge && (
+          <span className="badge badge-warning ml-auto" title="Update your email signature">
+            Update
+          </span>
+        )}
       </Link>
     )
   }

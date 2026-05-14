@@ -400,6 +400,11 @@ export default function WebSignatureGenerator() {
   const [savingToAccount, setSavingToAccount] = useState(false);
   const [accountSaveStatus, setAccountSaveStatus] = useState(null); // 'saved' | 'error' | null
   const [loadedFromAccount, setLoadedFromAccount] = useState(false);
+  // PHASE 1 ADDITION: After Copy succeeds, prompt user to also save their
+  // signature so they don't have to fill in the form again next time AND
+  // so adoption tracking on the admin side records them as having used
+  // the new generator. Skipping save is allowed.
+  const [showSavePromptAfterCopy, setShowSavePromptAfterCopy] = useState(false);
   const [officeData, setOfficeData] = useState(null); // { houston, irving, referral, crc } from API
   const fileInputRef = useRef(null);
   const ctaInputRef = useRef(null);
@@ -1486,6 +1491,7 @@ export default function WebSignatureGenerator() {
           await navigator.clipboard.write([clipboardItem]);
           setCopyStatus(true);
           setTimeout(() => setCopyStatus(false), 2000);
+          setShowSavePromptAfterCopy(true);
           return;
         } catch (e) {
           // ClipboardItem might not be supported, continue to fallback
@@ -1516,6 +1522,7 @@ export default function WebSignatureGenerator() {
         if (successful) {
           setCopyStatus(true);
           setTimeout(() => setCopyStatus(false), 2000);
+          setShowSavePromptAfterCopy(true);
         } else {
           throw new Error("execCommand failed");
         }
@@ -1525,6 +1532,7 @@ export default function WebSignatureGenerator() {
           await navigator.clipboard.writeText(html);
           setCopyStatus(true);
           setTimeout(() => setCopyStatus(false), 2000);
+          setShowSavePromptAfterCopy(true);
         } else {
           throw new Error("Copy not supported");
         }
@@ -2488,6 +2496,53 @@ export default function WebSignatureGenerator() {
           outputSize={cropConfig.outputSize}
           circular={cropConfig.circular}
         />
+      )}
+
+      {/* PHASE 1 ADDITION: Save prompt shown after a successful Copy.
+          Asks the user if they want to also save the signature so they don't
+          have to fill in the form again next time AND so the admin signature
+          adoption tracker records them as having used the new generator.
+          Skipping is allowed via the "Not now" button. */}
+      {showSavePromptAfterCopy && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-luxury-gray-5">
+              <h2 className="text-base font-semibold text-luxury-gray-1">
+                Save your signature?
+              </h2>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-luxury-gray-2 leading-relaxed">
+                Your signature has been copied to your clipboard. Want to save it to your account
+                so you don't have to fill in the form again next time?
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-luxury-gray-5 flex gap-2 justify-end bg-luxury-light">
+              <button
+                onClick={() => setShowSavePromptAfterCopy(false)}
+                className="btn btn-secondary text-sm"
+                disabled={savingToAccount}
+              >
+                Not now
+              </button>
+              <button
+                onClick={async () => {
+                  await saveToAccount();
+                  setShowSavePromptAfterCopy(false);
+                }}
+                className="btn btn-primary text-sm"
+                disabled={savingToAccount}
+              >
+                {savingToAccount ? 'Saving...' : 'Save signature'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

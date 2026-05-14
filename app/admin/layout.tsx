@@ -27,6 +27,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/form-builder': 'can_manage_forms',
   '/admin/reports/payouts': 'can_manage_checks',
   '/admin/reports/all-payouts': 'can_manage_checks',
+  '/admin/email-signature-status': 'can_view_all_agents',
 }
 
 function AccessDenied() {

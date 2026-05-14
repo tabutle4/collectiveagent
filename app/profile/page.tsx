@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import HeadshotUpload from '@/components/headshots/HeadshotUpload'
+import NewSignatureModal from '@/components/NewSignatureModal'
 import { useAuth } from '@/lib/context/AuthContext'
 
 function normalizeCommissionPlan(plan: string): string {
@@ -714,6 +715,8 @@ export default function ProfilePage({
 
   return (
     <div>
+      {/* New signature update prompt - shown only on the agent's own profile view */}
+      {!isAdmin && <NewSignatureModal />}
       {splitModalMember && renderSplitModal(splitModalMember.member, splitModalMember.title)}
       <h1 className="page-title mb-6">
         {isAdmin

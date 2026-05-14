@@ -21,6 +21,10 @@ interface User {
   join_date?: string
   division?: string
   monthly_fee_paid_through?: string
+  // PHASE 1 ADDITION: Tracks completion of the in-app email signature generator.
+  // NULL = has not saved a signature yet (modal/badge will show).
+  // Timestamp = first time they saved (modal/badge hidden).
+  new_signature_completed_at?: string | null
 }
 
 interface LoginCredentials {
