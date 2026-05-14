@@ -4,6 +4,40 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
+// Parse a monthly fee invoice's description to figure out which calendar month
+// it covers, and return the end-of-month date for that period. Falls back to
+// null if no recognizable month/year is found so the caller can decide what to
+// do (we keep the existing paid_through value rather than overwrite it wrong).
+function endOfBilledMonthFromInvoice(data: any): string | null {
+  const MONTHS = [
+    'january','february','march','april','may','june',
+    'july','august','september','october','november','december',
+  ]
+  const haystack = (
+    (data.description || '') + ' ' +
+    (data.items || []).map((i: any) => i.description || '').join(' ')
+  ).toLowerCase()
+
+  let monthIdx = -1
+  for (let i = 0; i < MONTHS.length; i++) {
+    if (haystack.includes(MONTHS[i])) { monthIdx = i; break }
+  }
+  const yearMatch = haystack.match(/\b(20\d{2})\b/)
+  if (monthIdx === -1 || !yearMatch) return null
+
+  const year = parseInt(yearMatch[1], 10)
+  // day 0 of next month == last day of this month
+  return new Date(year, monthIdx + 1, 0).toISOString().split('T')[0]
+}
+
+// Pick the later of two YYYY-MM-DD date strings. Used to make sure
+// monthly_fee_paid_through never rolls backward when a stale invoice
+// (e.g., a late March payment) lands after a later month was already paid.
+function laterDate(existing: string | null | undefined, candidate: string): string {
+  if (!existing) return candidate
+  return existing >= candidate ? existing : candidate
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -14,7 +48,7 @@ export async function POST(request: NextRequest) {
     if (type === 'invoice.paid' && data?.customer_id) {
       const { data: user } = await supabase
         .from('users')
-        .select('id, onboarding_fee_paid')
+        .select('id, onboarding_fee_paid, monthly_fee_paid_through')
         .eq('payload_payee_id', data.customer_id)
         .single()
 
@@ -39,17 +73,29 @@ export async function POST(request: NextRequest) {
         (item: any) => item.type === 'Monthly Fee' || item.type === 'Monthly Fee (Prorated)'
       )
       if (hasMonthlyItem) {
-        const now = new Date()
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-          .toISOString()
-          .split('T')[0]
+        // FIX: use the month/year from the invoice description, not the date
+        // the payment landed. If we can't parse the month, fall back to
+        // end-of-current-month (the old behavior).
+        const billedMonthEnd = endOfBilledMonthFromInvoice(data)
+        const fallback = (() => {
+          const now = new Date()
+          return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+        })()
+        const newPaidThrough = laterDate(user.monthly_fee_paid_through, billedMonthEnd ?? fallback)
+
         await supabase
           .from('users')
           .update({
-            monthly_fee_paid_through: endOfMonth,
+            monthly_fee_paid_through: newPaidThrough,
           })
           .eq('id', user.id)
-        console.log('Updated monthly fee paid through for user:', user.id)
+        console.log(
+          'Updated monthly fee paid through for user:',
+          user.id,
+          'to',
+          newPaidThrough,
+          billedMonthEnd ? '(from invoice month)' : '(fallback)'
+        )
 
         // If agent saved a default payment method (enabled autopay), create billing schedule
         try {
@@ -79,6 +125,7 @@ export async function POST(request: NextRequest) {
                 .single()
               const monthlyFee = companySettings?.standard_monthly_fee ?? 50
 
+              const now = new Date()
               const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
               const startDate = nextMonth.toISOString().split('T')[0]
               const fiveYearsOut = new Date(now.getFullYear() + 5, now.getMonth(), 1)
@@ -154,22 +201,27 @@ export async function POST(request: NextRequest) {
     if (type === 'automatic_payment' && data?.customer_id) {
       const { data: user } = await supabase
         .from('users')
-        .select('id')
+        .select('id, monthly_fee_paid_through')
         .eq('payload_payee_id', data.customer_id)
         .single()
 
       if (user) {
-        const now = new Date()
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-          .toISOString()
-          .split('T')[0]
+        // Autopay invoice — also try to parse the invoice description, else
+        // fall back to end-of-current-month. Use laterDate so we never roll back.
+        const billedMonthEnd = endOfBilledMonthFromInvoice(data)
+        const fallback = (() => {
+          const now = new Date()
+          return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+        })()
+        const newPaidThrough = laterDate(user.monthly_fee_paid_through, billedMonthEnd ?? fallback)
+
         await supabase
           .from('users')
           .update({
-            monthly_fee_paid_through: endOfMonth,
+            monthly_fee_paid_through: newPaidThrough,
           })
           .eq('id', user.id)
-        console.log('Updated monthly fee via autopay for user:', user.id)
+        console.log('Updated monthly fee via autopay for user:', user.id, 'to', newPaidThrough)
       }
     }
 
