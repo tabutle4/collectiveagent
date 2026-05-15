@@ -48,6 +48,14 @@ export default function AdminBillingPage() {
   const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
+  // Due date for custom invoices. Required to send. Default = +14 days from today,
+  // recomputed each session so it stays a sensible future date.
+  const defaultCustomDueDate = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 14)
+    return d.toISOString().split('T')[0]
+  })()
+  const [customDueDate, setCustomDueDate] = useState(defaultCustomDueDate)
   const [showCustomForm, setShowCustomForm] = useState<string | null>(null)
   const [showCreditForm, setShowCreditForm] = useState<string | null>(null)
   const [creditAmount, setCreditAmount] = useState('')
@@ -240,7 +248,19 @@ export default function AdminBillingPage() {
   //  - behind: has one or more monthly invoices with a balance due
   //  - current: has a Payload account and owes nothing on monthly fees
   // missingCurrent is independent of the above: true when the agent has a
-  // Payload account, is not waived, and has no invoice for the current month.
+  // Payload account, is not waived, has no invoice for the current month, AND
+  // their monthly_fee_paid_through does not already cover the current month.
+  // Fresh onboarders pay their current-month fee as a prorated line item on
+  // their onboarding invoice, which advances monthly_fee_paid_through but does
+  // not create a separate monthly invoice, so they would otherwise be falsely
+  // flagged here.
+  const currentMonthEnd = (() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+  })()
+  const isCurrentMonthCovered = (agent: any) =>
+    typeof agent.monthly_fee_paid_through === 'string' &&
+    agent.monthly_fee_paid_through >= currentMonthEnd
   const getMonthlyStatus = (agent: any) => {
     if (agent.monthly_fee_waived) {
       return { state: 'waived', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
@@ -252,7 +272,7 @@ export default function AdminBillingPage() {
     if (!s) {
       return { state: 'unknown', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
     }
-    const missingCurrent = !s.has_current_month_invoice
+    const missingCurrent = !s.has_current_month_invoice && !isCurrentMonthCovered(agent)
     if ((s.unpaid_monthly_count || 0) > 0) {
       return {
         state: 'behind',
@@ -541,7 +561,7 @@ export default function AdminBillingPage() {
   }
 
   const createAndSendCustomInvoice = async (agentId: string) => {
-    if (!customAmount || !customDesc) return
+    if (!customAmount || !customDesc || !customDueDate) return
     setCreatingInvoice(agentId)
     try {
       const invoiceRes = await fetch('/api/payload/create-invoice', {
@@ -552,6 +572,7 @@ export default function AdminBillingPage() {
           type: 'custom',
           amount: parseFloat(customAmount),
           description: customDesc,
+          due_date: customDueDate,
         }),
       })
       const invoiceData = await invoiceRes.json()
@@ -564,6 +585,7 @@ export default function AdminBillingPage() {
       setShowCustomForm(null)
       setCustomAmount('')
       setCustomDesc('')
+      setCustomDueDate(defaultCustomDueDate)
       await refreshAgentData(agentId)
     } catch (err: any) {
       alert(err.message || 'Failed to create invoice')
@@ -578,8 +600,11 @@ export default function AdminBillingPage() {
     return s && (s.unpaid_monthly_count || 0) > 0
   })
   // Agents missing an invoice for the current month (cron likely skipped them).
+  // Fresh onboarders are excluded via isCurrentMonthCovered - their current month
+  // is paid via the prorated line item on the onboarding invoice.
   const missingInvoiceAgents = agents.filter(a => {
     if (a.monthly_fee_waived || !a.payload_payee_id) return false
+    if (isCurrentMonthCovered(a)) return false
     const s = monthlyStatuses[a.id]
     return s && !s.has_current_month_invoice
   })
@@ -622,6 +647,7 @@ export default function AdminBillingPage() {
       }
       if (statusFilter === 'missingInvoice') {
         if (a.monthly_fee_waived || !a.payload_payee_id) return false
+        if (isCurrentMonthCovered(a)) return false
         const s = monthlyStatuses[a.id]
         return s && !s.has_current_month_invoice
       }
@@ -1347,10 +1373,47 @@ export default function AdminBillingPage() {
                                     />
                                   </div>
                                 </div>
+                                <div>
+                                  <label className="block text-xs text-luxury-gray-3 mb-1">
+                                    Due Date
+                                  </label>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <input
+                                      type="date"
+                                      value={customDueDate}
+                                      onChange={e => setCustomDueDate(e.target.value)}
+                                      className="input-luxury text-xs"
+                                    />
+                                    <div className="flex gap-1">
+                                      {[
+                                        { label: 'Today', days: 0 },
+                                        { label: '+7', days: 7 },
+                                        { label: '+14', days: 14 },
+                                        { label: '+30', days: 30 },
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.label}
+                                          type="button"
+                                          onClick={() => {
+                                            const d = new Date()
+                                            d.setDate(d.getDate() + opt.days)
+                                            setCustomDueDate(d.toISOString().split('T')[0])
+                                          }}
+                                          className="btn btn-secondary text-xs px-2 py-1"
+                                        >
+                                          {opt.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
                                 <button
                                   onClick={() => createAndSendCustomInvoice(agent.id)}
                                   disabled={
-                                    !customAmount || !customDesc || creatingInvoice === agent.id
+                                    !customAmount ||
+                                    !customDesc ||
+                                    !customDueDate ||
+                                    creatingInvoice === agent.id
                                   }
                                   className="btn btn-primary text-xs w-full disabled:opacity-50"
                                 >

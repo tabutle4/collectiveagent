@@ -369,6 +369,12 @@ export default function AdminTransactionDetailPage() {
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
+  // Display-only: unpaid monthly fee balance per agent on this transaction.
+  // Keyed by user id (a.agent_id). Populated on data load. Read-only - this
+  // does not affect commission, agent_net, or debts_deducted.
+  const [monthlyFeeBalances, setMonthlyFeeBalances] = useState<
+    Record<string, { count: number; total: number; invoices: any[] }>
+  >({})
 
   // Retainer modal state — opens from the agent card's "+ Add Retainer" button.
   // Creates a new TIA row with installment_kind='retainer' for this agent on
@@ -485,6 +491,43 @@ export default function AdminTransactionDetailPage() {
   useEffect(() => {
     if (user) loadData()
   }, [user, loadData])
+
+  // Fetch each agent's unpaid monthly fee balance for sidebar display only.
+  // Deduplicated by user id - the same agent can appear on more than one TIA
+  // (e.g., listing + primary split), and we only need one fetch per person.
+  useEffect(() => {
+    const tias = data?.agents || []
+    if (tias.length === 0) return
+    const userIds = Array.from(new Set(tias.map((a: any) => a.agent_id).filter(Boolean)))
+    if (userIds.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      const results = await Promise.all(
+        userIds.map(async uid => {
+          try {
+            const r = await fetch(`/api/payload/agent-monthly-fees?user_id=${uid}`, {
+              cache: 'no-store',
+            })
+            if (!r.ok) return [uid, { count: 0, total: 0, invoices: [] }] as const
+            const j = await r.json()
+            return [
+              uid,
+              { count: j.count || 0, total: j.total || 0, invoices: j.invoices || [] },
+            ] as const
+          } catch {
+            return [uid, { count: 0, total: 0, invoices: [] }] as const
+          }
+        })
+      )
+      if (cancelled) return
+      const next: Record<string, { count: number; total: number; invoices: any[] }> = {}
+      for (const [uid, balance] of results) next[uid as string] = balance
+      setMonthlyFeeBalances(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [data?.agents])
 
   useEffect(() => {
     if (activeTab !== 'check_payouts' || !id) return
@@ -3103,6 +3146,25 @@ export default function AdminTransactionDetailPage() {
                             {u.special_commission_notes}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* Display-only: unpaid monthly fees for this agent.
+                        Does not affect commission, agent_net, or debts_deducted. */}
+                    {a.agent_id && monthlyFeeBalances[a.agent_id] && monthlyFeeBalances[a.agent_id].count > 0 && (
+                      <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-xs">
+                        <p className="font-semibold text-red-700 mb-1">
+                          Unpaid Monthly Fees: ${monthlyFeeBalances[a.agent_id].total.toFixed(2)}
+                          {' '}({monthlyFeeBalances[a.agent_id].count})
+                        </p>
+                        <div className="space-y-0.5">
+                          {monthlyFeeBalances[a.agent_id].invoices.map((inv: any) => (
+                            <div key={inv.id} className="flex justify-between text-red-700">
+                              <span className="truncate pr-2">{inv.description}</span>
+                              <span className="flex-shrink-0">${Number(inv.amount_due).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 

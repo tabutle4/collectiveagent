@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
       description,
       month,
       year: invoiceYear,
+      due_date: dueDateInput,
     }: {
       user_id: string
       type: InvoiceType
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
       description?: string
       month?: string
       year?: number
+      due_date?: string
     } = await request.json()
 
     if (!user_id || !type) {
@@ -37,6 +39,17 @@ export async function POST(request: NextRequest) {
         { error: 'amount and description are required for custom invoices' },
         { status: 400 }
       )
+    }
+    // Custom invoices require an admin-chosen due date. Monthly and onboarding
+    // invoices keep their existing same-day default, which is what the cron and
+    // onboarding flow rely on.
+    if (type === 'custom') {
+      if (!dueDateInput || !/^\d{4}-\d{2}-\d{2}$/.test(dueDateInput)) {
+        return NextResponse.json(
+          { error: 'due_date (YYYY-MM-DD) is required for custom invoices' },
+          { status: 400 }
+        )
+      }
     }
 
     // Fetch fee settings
@@ -63,9 +76,12 @@ export async function POST(request: NextRequest) {
     }
 
     const today = new Date().toISOString().split('T')[0]
+    // For custom invoices, use the admin-chosen due date. Everything else keeps
+    // the existing same-day default.
+    const invoiceDueDate = type === 'custom' ? dueDateInput! : today
     const params = new URLSearchParams({
       type: 'bill',
-      due_date: today,
+      due_date: invoiceDueDate,
       processing_id: process.env.PAYLOAD_PROCESSING_ID!,
       customer_id: user.payload_payee_id,
     })
@@ -135,7 +151,7 @@ export async function POST(request: NextRequest) {
         amount_owed: amount,
         amount_paid: 0,
         date_incurred: today,
-        due_date: today,
+        due_date: invoiceDueDate,
         status: 'outstanding',
         notes: `Payload invoice ID: ${data.id}`,
       })
