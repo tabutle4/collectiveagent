@@ -72,6 +72,7 @@ export default function AdminBillingPage() {
   const [editingRecord, setEditingRecord] = useState<string | null>(null)
   const [editDesc, setEditDesc] = useState('')
   const [editAmount, setEditAmount] = useState('')
+  const [editDueDate, setEditDueDate] = useState('')
   const [monthlyFee, setMonthlyFee] = useState(50)
   const [showMarkPaidForm, setShowMarkPaidForm] = useState<string | null>(null)
   const [markPaidMethod, setMarkPaidMethod] = useState('zelle')
@@ -493,13 +494,55 @@ export default function AdminBillingPage() {
     await refreshAgentData(agentId)
   }
 
+  // Parses a Payload invoice ID out of an agent_debts row's notes column.
+  // Two formats exist depending on which create path made the row:
+  //   "Payload invoice ID: <id>"          - written by create-invoice
+  //   "<prev_notes> | Payload invoice: <id>" - written by sendDebtInvoice
+  const extractPayloadInvoiceId = (notes: string | null | undefined): string | null => {
+    if (!notes) return null
+    const m = notes.match(/Payload invoice(?: ID)?:\s*([^\s|]+)/)
+    return m ? m[1] : null
+  }
+
   const updateRecord = async (
     agentId: string,
-    recordId: string,
+    record: any,
     description: string,
-    amount: number
+    amount: number,
+    dueDate: string
   ) => {
-    await billingPost('update', { id: recordId, updates: { description, amount_owed: amount } })
+    if (!dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+      alert('Due date is required and must be a valid date.')
+      return
+    }
+    // If this agent_debts row is linked to a Payload invoice, sync the due date
+    // to Payload FIRST. If Payload rejects (e.g. invoice was paid/voided in the
+    // meantime), abort before mutating agent_debts so the two stay in sync.
+    const payloadInvoiceId = extractPayloadInvoiceId(record.notes)
+    if (payloadInvoiceId) {
+      const res = await fetch('/api/payload/update-invoice-due-date', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: payloadInvoiceId,
+          user_id: agentId,
+          due_date: dueDate,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(
+          data.error
+            ? `Payload could not update the invoice: ${data.error}. Nothing was saved.`
+            : 'Failed to update the Payload invoice. Nothing was saved.'
+        )
+        return
+      }
+    }
+    await billingPost('update', {
+      id: record.id,
+      updates: { description, amount_owed: amount, due_date: dueDate },
+    })
     setEditingRecord(null)
     await refreshAgentData(agentId)
   }
@@ -941,14 +984,49 @@ export default function AdminBillingPage() {
                                           />
                                         </div>
                                       </div>
+                                      <div>
+                                        <label className="block text-xs text-luxury-gray-3 mb-1">
+                                          Due Date
+                                        </label>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <input
+                                            type="date"
+                                            value={editDueDate}
+                                            onChange={e => setEditDueDate(e.target.value)}
+                                            className="input-luxury text-xs"
+                                          />
+                                          <div className="flex gap-1">
+                                            {[
+                                              { label: 'Today', days: 0 },
+                                              { label: '+7', days: 7 },
+                                              { label: '+14', days: 14 },
+                                              { label: '+30', days: 30 },
+                                            ].map(opt => (
+                                              <button
+                                                key={opt.label}
+                                                type="button"
+                                                onClick={() => {
+                                                  const d = new Date()
+                                                  d.setDate(d.getDate() + opt.days)
+                                                  setEditDueDate(d.toISOString().split('T')[0])
+                                                }}
+                                                className="btn btn-secondary text-xs px-2 py-1"
+                                              >
+                                                {opt.label}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
                                       <div className="flex gap-2">
                                         <button
                                           onClick={() =>
                                             updateRecord(
                                               agent.id,
-                                              record.id,
+                                              record,
                                               editDesc,
-                                              parseFloat(editAmount)
+                                              parseFloat(editAmount),
+                                              editDueDate
                                             )
                                           }
                                           className="btn btn-primary text-xs"
@@ -994,6 +1072,10 @@ export default function AdminBillingPage() {
                                             setEditingRecord(record.id)
                                             setEditDesc(record.description || '')
                                             setEditAmount(String(record.amount_owed))
+                                            setEditDueDate(
+                                              record.due_date ||
+                                                new Date().toISOString().split('T')[0]
+                                            )
                                           }}
                                           className="text-xs text-luxury-gray-3 hover:text-luxury-accent"
                                         >
