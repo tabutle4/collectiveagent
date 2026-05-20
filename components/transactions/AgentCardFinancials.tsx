@@ -7,10 +7,10 @@ import { computeCommission } from '@/lib/transactions/math'
 //  AgentCardFinancials
 //
 //  Financial breakdown section of an agent card on a transaction. Contains:
-//   • THIS SIDE     — Sales Volume (when > 0), Office Gross
-//   • SPLIT         — Agent Basis, Agent %, Brokerage %, Team Lead %
-//   • ADJUSTMENTS   — BTSA (additive), Processing/Coaching/Other fees, Rebate
-//   • TOTALS        — 1099 Amount, debt/credit preview, Agent Net
+//   • THIS SIDE     - Sales Volume (when > 0), Office Gross
+//   • SPLIT         - Agent Basis, Agent %, Brokerage %, Team Lead %
+//   • ADJUSTMENTS   - BTSA (additive), Processing/Coaching/Other fees, Rebate
+//   • TOTALS        - 1099 Amount, debt/credit preview, Agent Net
 //
 //  9 fields support inline override (click value → edit → blur to save):
 //   Agent Basis, Agent Split %, Brokerage Split %, Agent Gross,
@@ -37,11 +37,11 @@ const OVERRIDABLE_FIELDS = [
   'agent_gross',
   'brokerage_split',
   'team_lead_percentage',
+  'processing_fee',
+  'coaching_fee',
   'other_fees',
   'rebate_amount',
   'btsa_amount',
-  // Retainer rows only:
-  'processing_fee',  // serves as office's retainer fee on retainer rows
 ] as const
 export type OverridableField = typeof OVERRIDABLE_FIELDS[number]
 
@@ -131,7 +131,7 @@ function OverridableMoneyRow({
           <button
             type="button"
             onClick={onClearOverride}
-            title="Manually overridden — click to clear"
+            title="Manually overridden - click to clear"
             className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-amber-200 text-amber-900 text-[9px] font-semibold hover:bg-amber-300"
           >*</button>
         )}
@@ -300,7 +300,7 @@ function PercentRow({
           <button
             type="button"
             onClick={onClearOverride}
-            title="Manually overridden — click to clear"
+            title="Manually overridden - click to clear"
             className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-amber-200 text-amber-900 text-[9px] font-semibold hover:bg-amber-300"
           >*</button>
         )}
@@ -333,7 +333,7 @@ function sideCommissionForRow(a: any, txn: any): number {
 // ─── BasisModeToggle (referral_agent only) ───────────────────────────────────
 // Shows the current input mode ($ vs %), lets the user flip it, and (when in
 // % mode) shows an inline percentage input that saves on Enter / blur. The
-// dollar agent_basis stays as the source of truth on the row — the % is just
+// dollar agent_basis stays as the source of truth on the row - the % is just
 // the entry mechanism. On flip $→%, the current basis ÷ side_commission is
 // pre-filled as the starting % so the existing dollar amount carries over.
 //
@@ -382,7 +382,7 @@ function BasisModeToggle({
     } else {
       // Switching to %: derive % from existing basis ÷ side commission so
       // the dollars carry over to the equivalent percentage. If we can't
-      // compute (no basis yet, or no side commission), seed with 0 — the
+      // compute (no basis yet, or no side commission), seed with 0 - the
       // user types a value before the row resolves to a real dollar amount.
       let derivedPct = 0
       if (sideCommission > 0 && agentBasis > 0) {
@@ -476,13 +476,13 @@ interface AgentCardFinancialsProps {
   // Live values from billing panel state for the preview line
   appliedDebts: number
   appliedCredits: number
-  // Save handler — single field. The markOverridden flag is accepted for
+  // Save handler - single field. The markOverridden flag is accepted for
   // historical reasons but ignored; we don't track per-field overrides.
   onSaveField: (field: OverridableField, value: number | null, markOverridden: boolean) => Promise<void>
   // Trigger a recalculate so the field reverts to the computed value.
   onClearOverride: (field: OverridableField) => Promise<void>
   // Save handler for text fields on the row (e.g. other_fees_description).
-  // Optional — only the Other Fees description input uses it today.
+  // Optional - only the Other Fees description input uses it today.
   onSaveTextField?: (field: 'other_fees_description', value: string | null) => Promise<void>
   // Save handler for referral-only basis-mode toggle. When mode='percentage',
   // basisPercentage is the % value (e.g., 30 for 30% of side commission); when
@@ -504,7 +504,7 @@ export default function AgentCardFinancials({
   onSaveTextField,
   onSaveBasisMode,
 }: AgentCardFinancialsProps) {
-  // We don't track per-field overrides — the manual_overrides column was
+  // We don't track per-field overrides - the manual_overrides column was
   // removed. Always render as "not overridden" which hides the amber
   // asterisks. Inline edits still work (saved directly to the field) but
   // are overwritten on the next Recalculate.
@@ -612,7 +612,7 @@ export default function AgentCardFinancials({
   // Resolved field values (live overlay → row → calc fallback)
   const agentBasis = num(liveVal('agent_basis', a.agent_basis ?? calc?.agent_basis))
   // brokerage_split_percentage and team_lead_percentage are NOT real columns
-  // on transaction_internal_agents — they're derived from the dollar amounts.
+  // on transaction_internal_agents - they're derived from the dollar amounts.
   // split_percentage IS a real column.
   const splitPct = num(liveVal('split_percentage', a.split_percentage ?? calc?.agent_split_pct))
   const agentGross = num(liveVal('agent_gross', a.agent_gross ?? calc?.agent_gross))
@@ -643,7 +643,7 @@ export default function AgentCardFinancials({
   const debtsDeducted = num(a.debts_deducted)
   const salesVolume = num(a.sales_volume)
 
-  // LIVE recompute — always uses canonical formula
+  // LIVE recompute - always uses canonical formula
   const live = computeCommission({
     agent_gross: agentGross,
     btsa_amount: btsa,
@@ -730,7 +730,7 @@ export default function AgentCardFinancials({
   const editable = !isPaid
 
   // Linked rows (team_lead, momentum_partner, referral_agent) are carved-out
-  // payouts. BTSA and Rebate only apply to agents on the contract — they
+  // payouts. BTSA and Rebate only apply to agents on the contract - they
   // never apply to these linked roles. Other Fees CAN apply to anyone, so
   // they remain visible on linked rows. The cascade already sets
   // btsa_amount/rebate_amount to 0 on linked rows; this hides the UI rows
@@ -762,11 +762,11 @@ export default function AgentCardFinancials({
       {/* SPLIT */}
       <SectionH>Split</SectionH>
 
-      {/* Basis-input-mode toggle — referral_agent ONLY. Lets the admin enter
+      {/* Basis-input-mode toggle - referral_agent ONLY. Lets the admin enter
           the referral's carve-out as either a fixed dollar amount or a
           percentage of the side commission. In % mode the server recomputes
           the dollar agent_basis from the current side commission every time,
-          and ALSO when the side commission itself later changes — so a deal
+          and ALSO when the side commission itself later changes - so a deal
           where commission grows or shrinks keeps the referral pinned at the
           contracted %. */}
       {a.agent_role === 'referral_agent' && editable && onSaveBasisMode && (
@@ -800,7 +800,7 @@ export default function AgentCardFinancials({
           Those rows only carry the carved-out commission for that role; the
           brokerage cut already lives on the source primary's row, so this
           row would render as "Brokerage 95% / $0.00" which is misleading.
-          NOTE: referral_agent is intentionally NOT hidden here — a referral
+          NOTE: referral_agent is intentionally NOT hidden here - a referral
           agent has its own basis (a carve-out of the deal gross) and splits
           with the brokerage on that basis, so the row shows real numbers. */}
       {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && (
@@ -843,23 +843,27 @@ export default function AgentCardFinancials({
           showZero
         />
       )}
-      {processingFee > 0 && (
+      {(processingFee > 0 || editable) && (
         <OverridableMoneyRow
           label="Processing Fee"
           value={processingFee}
           isDeduction
-          isLocked
-          isEditable={false}
+          isEditable={editable}
+          isOverridden={!!overrides.processing_fee}
+          onSave={v => handleSave('processing_fee', v)}
+          onClearOverride={() => handleClear('processing_fee')}
           showZero
         />
       )}
-      {coachingFee > 0 && (
+      {(coachingFee > 0 || editable) && (
         <OverridableMoneyRow
           label="Coaching Fee"
           value={coachingFee}
           isDeduction
-          isLocked
-          isEditable={false}
+          isEditable={editable}
+          isOverridden={!!overrides.coaching_fee}
+          onSave={v => handleSave('coaching_fee', v)}
+          onClearOverride={() => handleClear('coaching_fee')}
           showZero
         />
       )}
@@ -897,7 +901,7 @@ export default function AgentCardFinancials({
         />
       )}
 
-      {/* TOTALS — billing panel goes between adjustments and totals (rendered by parent) */}
+      {/* TOTALS - billing panel goes between adjustments and totals (rendered by parent) */}
       <div className="border-t border-luxury-gray-5/50 mt-3 pt-2 space-y-1">
         <div className="flex justify-between items-center text-xs">
           <span className="text-luxury-gray-3">1099 Amount</span>

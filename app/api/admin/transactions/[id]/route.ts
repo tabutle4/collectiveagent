@@ -1789,6 +1789,57 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
+      // Resync derived row fields (amount_1099_reportable + agent_net) whenever
+      // any formula input was touched. Keeps the DB row in sync without
+      // requiring Mark Paid to run. Skipped for paid rows (locked above) and
+      // for rows where credits_applied is non-zero (those were set by Mark
+      // Paid and would be clobbered here). credits_applied is not stored on
+      // the row, so for unpaid rows we always pass 0; debts_deducted is
+      // stored and carried through.
+      const FORMULA_INPUTS = [
+        'agent_gross',
+        'btsa_amount',
+        'processing_fee',
+        'coaching_fee',
+        'other_fees',
+        'rebate_amount',
+        'debts_deducted',
+      ]
+      const touchedFormula = Object.keys(cleanUpdates).some(k => FORMULA_INPUTS.includes(k))
+      if (touchedFormula && current?.payment_status !== 'paid') {
+        const { data: fresh } = await supabase
+          .from('transaction_internal_agents')
+          .select('agent_gross, btsa_amount, processing_fee, coaching_fee, other_fees, rebate_amount, debts_deducted, installment_kind, agent_basis')
+          .eq('id', internal_agent_id)
+          .single()
+        if (fresh) {
+          // Retainer rows use agent_basis as the gross (not agent_gross).
+          // Mirrors the convention used in the Mark Paid path elsewhere in
+          // this route.
+          const grossForFormula = fresh.installment_kind === 'retainer'
+            ? num(fresh.agent_basis)
+            : num(fresh.agent_gross)
+          const { amount_1099, agent_net } = computeCommission({
+            agent_gross: grossForFormula,
+            btsa_amount: fresh.btsa_amount,
+            processing_fee: fresh.processing_fee,
+            coaching_fee: fresh.coaching_fee,
+            other_fees: fresh.other_fees,
+            rebate_amount: fresh.rebate_amount,
+            credits_applied: 0,
+            debts_deducted: fresh.debts_deducted ?? 0,
+          })
+          await supabase
+            .from('transaction_internal_agents')
+            .update({
+              amount_1099_reportable: amount_1099,
+              agent_net,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', internal_agent_id)
+        }
+      }
+
       // Office_net depends on every TIA agent_net.
       await recomputeOfficeNet(id)
 
