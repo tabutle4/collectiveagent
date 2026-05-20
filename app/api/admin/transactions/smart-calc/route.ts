@@ -58,17 +58,21 @@ export async function GET(request: NextRequest) {
         if (membership && membership.team) {
           const team = Array.isArray(membership.team) ? membership.team[0] : membership.team
 
-          const { data: teamLeadRecord } = await supabase
+          // Teams may have multiple active leads (co-leads). Architecture pays
+          // ONE team_lead per primary, so pick the oldest active lead.
+          const { data: teamLeadCandidates } = await supabase
             .from('team_leads')
             .select(`
-              id, agent_id,
+              id, agent_id, effective_date, created_at,
               agent:users!team_leads_agent_id_fkey(
                 id, first_name, last_name, preferred_first_name, preferred_last_name
               )
             `)
             .eq('team_id', team.id)
             .is('end_date', null)
-            .single()
+            .order('effective_date', { ascending: true, nullsFirst: false })
+            .order('created_at', { ascending: true })
+          const teamLeadRecord = teamLeadCandidates?.[0] || null
 
           const { data: splits } = await supabase
             .from('team_agreement_splits')
@@ -136,11 +140,11 @@ export async function GET(request: NextRequest) {
 // Inputs:
 //   agent_id          required
 //   side              optional ('buyer' | 'seller' | 'tenant' | 'landlord')
-//   agent_basis       optional — explicit dollar basis (overrides side-derived)
-//   transaction       optional — full transaction record (for side-derived basis)
-//   transaction_type  optional — used for processing fee + plan type
-//   lead_source       optional ('team_lead' | 'own' | 'firm') — defaults to 'own'
-//   is_lease          optional — defaults to derived from transaction_type
+//   agent_basis       optional - explicit dollar basis (overrides side-derived)
+//   transaction       optional - full transaction record (for side-derived basis)
+//   transaction_type  optional - used for processing fee + plan type
+//   lead_source       optional ('team_lead' | 'own' | 'firm') - defaults to 'own'
+//   is_lease          optional - defaults to derived from transaction_type
 //
 // Output: agent_basis, agent_split_pct, agent_gross, brokerage_split, fees,
 //   team_lead_payout, momentum_partner_payout, agent_net (via computeCommission),
@@ -218,17 +222,21 @@ export async function POST(request: NextRequest) {
     if (membershipData && membershipData.team) {
       const team = Array.isArray(membershipData.team) ? membershipData.team[0] : membershipData.team
 
-      const { data: teamLeadRecord } = await supabase
+      // Teams may have multiple active leads (co-leads). Architecture pays
+      // ONE team_lead per primary, so pick the oldest active lead.
+      const { data: teamLeadCandidates } = await supabase
         .from('team_leads')
         .select(`
-          id, agent_id,
+          id, agent_id, effective_date, created_at,
           agent:users!team_leads_agent_id_fkey(
             id, first_name, last_name, preferred_first_name, preferred_last_name
           )
         `)
         .eq('team_id', team.id)
         .is('end_date', null)
-        .single()
+        .order('effective_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true })
+      const teamLeadRecord = teamLeadCandidates?.[0] || null
 
       const teamLeadAgent = teamLeadRecord?.agent
         ? (Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent)
@@ -268,7 +276,7 @@ export async function POST(request: NextRequest) {
       .eq('code', transactionType)
       .single()
 
-    // Splits — defaults from plan, then overridden by team agreement if applicable
+    // Splits - defaults from plan, then overridden by team agreement if applicable
     let agentSplitPct = commissionPlan?.agent_split_percentage ?? 85
     let firmSplitPct  = commissionPlan?.firm_split_percentage  ?? 15
     let teamLeadPct   = 0
@@ -316,7 +324,7 @@ export async function POST(request: NextRequest) {
     if (cat === 'buying' && agent.waive_buyer_processing_fees) processingFee = 0
     if (cat === 'listing' && agent.waive_seller_processing_fees) processingFee = 0
 
-    // Momentum partner payout — paid OUT of the brokerage's portion, but
+    // Momentum partner payout - paid OUT of the brokerage's portion, but
     // calculated as a % of the agent's full basis (commission_amount), NOT
     // of brokerage_split. The basis represents what the agent earned for
     // the brokerage; the referrer (momentum partner) gets a cut of that.

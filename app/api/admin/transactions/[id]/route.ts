@@ -156,13 +156,18 @@ async function computeCommissionBreakdown(args: {
   let teamSplits: any[] = []
   if (membership?.team) {
     const teamRow: any = Array.isArray(membership.team) ? membership.team[0] : membership.team
-    const { data: teamLead } = await supabase
+    // Teams may have multiple active leads (co-leads). The split architecture
+    // supports only one team_lead_pct payout, so pick the oldest active lead
+    // as the primary recipient of team_lead_commission. Sort by effective_date
+    // first (oldest = original lead), then created_at as a tiebreaker.
+    const { data: leads } = await supabase
       .from('team_leads')
-      .select('agent_id')
+      .select('agent_id, effective_date, created_at')
       .eq('team_id', teamRow.id)
       .is('end_date', null)
-      .maybeSingle()
-    teamLeadId = teamLead?.agent_id || null
+      .order('effective_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true })
+    teamLeadId = leads?.[0]?.agent_id || null
 
     const { data: splits } = await supabase
       .from('team_agreement_splits')
