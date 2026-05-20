@@ -160,12 +160,13 @@ async function computeCommissionBreakdown(args: {
     // supports only one team_lead_pct payout, so pick the oldest active lead
     // as the primary recipient of team_lead_commission. Sort by effective_date
     // first (oldest = original lead), then created_at as a tiebreaker.
+    // (team_leads uses start_date, not effective_date)
     const { data: leads } = await supabase
       .from('team_leads')
-      .select('agent_id, effective_date, created_at')
+      .select('agent_id, start_date, created_at')
       .eq('team_id', teamRow.id)
       .is('end_date', null)
-      .order('effective_date', { ascending: true, nullsFirst: false })
+      .order('start_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
     teamLeadId = leads?.[0]?.agent_id || null
 

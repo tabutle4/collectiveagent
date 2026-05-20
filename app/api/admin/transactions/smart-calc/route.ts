@@ -63,14 +63,14 @@ export async function GET(request: NextRequest) {
           const { data: teamLeadCandidates } = await supabase
             .from('team_leads')
             .select(`
-              id, agent_id, effective_date, created_at,
+              id, agent_id, start_date, created_at,
               agent:users!team_leads_agent_id_fkey(
                 id, first_name, last_name, preferred_first_name, preferred_last_name
               )
             `)
             .eq('team_id', team.id)
             .is('end_date', null)
-            .order('effective_date', { ascending: true, nullsFirst: false })
+            .order('start_date', { ascending: true, nullsFirst: false })
             .order('created_at', { ascending: true })
           const teamLeadRecord = teamLeadCandidates?.[0] || null
 
@@ -227,14 +227,14 @@ export async function POST(request: NextRequest) {
       const { data: teamLeadCandidates } = await supabase
         .from('team_leads')
         .select(`
-          id, agent_id, effective_date, created_at,
+          id, agent_id, start_date, created_at,
           agent:users!team_leads_agent_id_fkey(
             id, first_name, last_name, preferred_first_name, preferred_last_name
           )
         `)
         .eq('team_id', team.id)
         .is('end_date', null)
-        .order('effective_date', { ascending: true, nullsFirst: false })
+        .order('start_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true })
       const teamLeadRecord = teamLeadCandidates?.[0] || null
 
