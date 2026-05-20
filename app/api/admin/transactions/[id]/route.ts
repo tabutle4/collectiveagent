@@ -453,6 +453,18 @@ async function recomputeGrossAndOffice(transactionId: string): Promise<void> {
         .eq('transaction_id', transactionId),
     ])
     if (!txn) return
+
+    // Legacy data protection: if both sides are NULL (absent, not zero),
+    // this is legacy data imported from Brokermint with office_gross
+    // populated but no per-side breakdown. Computing 0+0=0 would wipe
+    // real commission data. Leave office_gross AND gross_commission
+    // alone; the runtime never had jurisdiction over these rows. As
+    // soon as either side gets populated through the UI, this function
+    // takes over.
+    if (txn.listing_side_commission == null && txn.buying_side_commission == null) {
+      return
+    }
+
     const btsaTotal = (tias || []).reduce(
       (s, t) => s + (parseFloat(String(t.btsa_amount ?? 0)) || 0),
       0
