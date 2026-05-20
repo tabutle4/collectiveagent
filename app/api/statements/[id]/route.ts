@@ -156,6 +156,8 @@ export async function GET(
       : '--'
 
     const grossCommission = parseFloat(txn?.gross_commission || tia.agent_basis || 0)
+    const officeGross = parseFloat(txn?.office_gross || 0)
+    const btsaAmount = parseFloat(tia.btsa_amount || 0)
     const commissionPct = txn?.sales_price
       ? ((grossCommission / parseFloat(txn.sales_price)) * 100).toFixed(2)
       : '0'
@@ -175,6 +177,8 @@ export async function GET(
       sales_price: fmt$(txn?.sales_price || txn?.monthly_rent),
       commission_plan: plan,
       gross_commission: fmt$(grossCommission),
+      office_gross: fmt$(officeGross),
+      btsa_amount: btsaAmount > 0 ? fmt$(btsaAmount) : null,
       commission_pct: commissionPct,
       payment_date: fmtDate(tia.payment_date),
       payment_method: tia.payment_method || 'ACH',
@@ -330,7 +334,17 @@ function generateStatementHTML(data: Record<string, any>): string {
     <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Commission calculation</div>
     <div style="font-size: 11px; color: #333;">
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Gross Commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span>Side Commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span style="font-weight: 500;">${data.office_gross}</span>
+      </div>
+      ${data.btsa_amount ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>+ BTSA <span style="color: #999; font-size: 9px; margin-left: 6px;">paid in addition to commission</span></span>
+        <span style="font-weight: 500;">${data.btsa_amount}</span>
+      </div>
+      ` : ''}
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Gross Commission</span>
         <span style="font-weight: 500;">${data.gross_commission}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">

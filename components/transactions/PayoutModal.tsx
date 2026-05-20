@@ -94,6 +94,24 @@ function initBrokerageForm(b: any) {
     payment_date:      b.payment_date?.substring(0, 10) || '',
     payment_method:    b.payment_method    || '',
     payment_reference: b.payment_reference || '',
+    // Brokerage details
+    brokerage_address: b.brokerage_address || '',
+    brokerage_city:    b.brokerage_city    || '',
+    brokerage_state:   b.brokerage_state   || '',
+    brokerage_zip:     b.brokerage_zip     || '',
+    broker_name:       b.broker_name       || '',
+    broker_phone:      b.broker_phone      || '',
+    broker_email:      b.broker_email      || '',
+    side:              b.side              || '',
+    // Agent contact
+    agent_phone:       b.agent_phone       || '',
+    agent_email:       b.agent_email       || '',
+    // 1099 / W-9
+    amount_1099_reportable: b.amount_1099_reportable != null ? String(b.amount_1099_reportable) : '',
+    w9_on_file:        b.w9_on_file === true,
+    federal_id_type:   b.federal_id_type   || '',
+    federal_id_number: b.federal_id_number || '',
+    notes:             b.notes             || '',
   }
 }
 
@@ -110,7 +128,169 @@ function emptyNewBrokerage() {
     _id: uid(), brokerage_name: '', brokerage_role: '', agent_name: '',
     commission_amount: '', payment_status: 'pending',
     payment_date: '', payment_method: '', payment_reference: '',
+    // Brokerage details
+    brokerage_address: '', brokerage_city: '', brokerage_state: '', brokerage_zip: '',
+    broker_name: '', broker_phone: '', broker_email: '', side: '',
+    // Agent contact
+    agent_phone: '', agent_email: '',
+    // 1099 / W-9
+    amount_1099_reportable: '', w9_on_file: false,
+    federal_id_type: '', federal_id_number: '', notes: '',
   }
+}
+
+function MoreBrokerageDetails({
+  values,
+  onChange,
+}: {
+  values: Record<string, any>
+  onChange: (field: string, value: any) => void
+}) {
+  const [openSections, setOpenSections] = useState<{ details: boolean; agent: boolean; tax: boolean }>({
+    details: false,
+    agent: false,
+    tax: false,
+  })
+  const toggle = (k: 'details' | 'agent' | 'tax') =>
+    setOpenSections(p => ({ ...p, [k]: !p[k] }))
+
+  return (
+    <div className="col-span-2 mt-1 space-y-2">
+      {/* Brokerage details */}
+      <div className="border-t border-luxury-gray-5 pt-2">
+        <button
+          type="button"
+          onClick={() => toggle('details')}
+          className="w-full flex items-center justify-between py-1"
+        >
+          <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Brokerage details</span>
+          {openSections.details ? <ChevronUp size={13} className="text-luxury-gray-3" /> : <ChevronDown size={13} className="text-luxury-gray-3" />}
+        </button>
+        {openSections.details && (
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Field label="Side">
+              <select
+                className="select-luxury text-xs"
+                value={values.side || ''}
+                onChange={e => onChange('side', e.target.value)}
+              >
+                <option value="">Select...</option>
+                <option value="buyer">Buyer</option>
+                <option value="seller">Seller</option>
+                <option value="tenant">Tenant</option>
+                <option value="landlord">Landlord</option>
+              </select>
+            </Field>
+            <Field label="Broker Name">
+              <input type="text" className="input-luxury text-xs" value={values.broker_name || ''} onChange={e => onChange('broker_name', e.target.value)} />
+            </Field>
+            <Field label="Broker Phone">
+              <input type="tel" className="input-luxury text-xs" value={values.broker_phone || ''} onChange={e => onChange('broker_phone', e.target.value)} />
+            </Field>
+            <Field label="Broker Email">
+              <input type="email" className="input-luxury text-xs" value={values.broker_email || ''} onChange={e => onChange('broker_email', e.target.value)} />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Address">
+                <input type="text" className="input-luxury text-xs" value={values.brokerage_address || ''} onChange={e => onChange('brokerage_address', e.target.value)} />
+              </Field>
+            </div>
+            <Field label="City">
+              <input type="text" className="input-luxury text-xs" value={values.brokerage_city || ''} onChange={e => onChange('brokerage_city', e.target.value)} />
+            </Field>
+            <Field label="State">
+              <input type="text" className="input-luxury text-xs" value={values.brokerage_state || ''} onChange={e => onChange('brokerage_state', e.target.value)} placeholder="TX" />
+            </Field>
+            <Field label="ZIP">
+              <input type="text" className="input-luxury text-xs" value={values.brokerage_zip || ''} onChange={e => onChange('brokerage_zip', e.target.value)} />
+            </Field>
+          </div>
+        )}
+      </div>
+
+      {/* Agent contact */}
+      <div className="border-t border-luxury-gray-5 pt-2">
+        <button
+          type="button"
+          onClick={() => toggle('agent')}
+          className="w-full flex items-center justify-between py-1"
+        >
+          <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Agent contact</span>
+          {openSections.agent ? <ChevronUp size={13} className="text-luxury-gray-3" /> : <ChevronDown size={13} className="text-luxury-gray-3" />}
+        </button>
+        {openSections.agent && (
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Field label="Agent Phone">
+              <input type="tel" className="input-luxury text-xs" value={values.agent_phone || ''} onChange={e => onChange('agent_phone', e.target.value)} />
+            </Field>
+            <Field label="Agent Email">
+              <input type="email" className="input-luxury text-xs" value={values.agent_email || ''} onChange={e => onChange('agent_email', e.target.value)} />
+            </Field>
+          </div>
+        )}
+      </div>
+
+      {/* 1099 / W-9 */}
+      <div className="border-t border-luxury-gray-5 pt-2">
+        <button
+          type="button"
+          onClick={() => toggle('tax')}
+          className="w-full flex items-center justify-between py-1"
+        >
+          <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">1099 and W-9</span>
+          {openSections.tax ? <ChevronUp size={13} className="text-luxury-gray-3" /> : <ChevronDown size={13} className="text-luxury-gray-3" />}
+        </button>
+        {openSections.tax && (
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Field label="1099 Reportable">
+              <input
+                type="number"
+                step="0.01"
+                className="input-luxury text-xs"
+                value={values.amount_1099_reportable || ''}
+                onChange={e => onChange('amount_1099_reportable', e.target.value)}
+                placeholder="0.00"
+              />
+            </Field>
+            <Field label="W-9 on File">
+              <select
+                className="select-luxury text-xs"
+                value={values.w9_on_file === true ? 'yes' : 'no'}
+                onChange={e => onChange('w9_on_file', e.target.value === 'yes')}
+              >
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </Field>
+            <Field label="Federal ID Type">
+              <select
+                className="select-luxury text-xs"
+                value={values.federal_id_type || ''}
+                onChange={e => onChange('federal_id_type', e.target.value)}
+              >
+                <option value="">Select...</option>
+                <option value="SSN">SSN</option>
+                <option value="EIN">EIN</option>
+              </select>
+            </Field>
+            <Field label="Federal ID Number">
+              <input type="text" className="input-luxury text-xs" value={values.federal_id_number || ''} onChange={e => onChange('federal_id_number', e.target.value)} />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Notes">
+                <textarea
+                  className="input-luxury text-xs"
+                  rows={2}
+                  value={values.notes || ''}
+                  onChange={e => onChange('notes', e.target.value)}
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function PayoutModal({ transactionId, agents, onClose, onSaved }: PayoutModalProps) {
@@ -178,9 +358,28 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
   }, [transactionId])
 
   const setAgentF     = (id: string, field: string, value: any) => setAgentForms(p => ({ ...p, [id]: { ...p[id], [field]: value } }))
-  const setBrokerageF = (id: string, field: string, value: any) => setBrokerageForms(p => ({ ...p, [id]: { ...p[id], [field]: value } }))
+
+  // Auto-sync rule: when commission_amount changes, mirror the new value into
+  // amount_1099_reportable, but ONLY if the user hasn't manually edited it
+  // (i.e. it's currently empty or still equal to the prior commission_amount).
+  // Once the user types a deviating 1099 value, we never overwrite it.
+  const syncCommissionTo1099 = (prev: any, field: string, value: any) => {
+    const next = { ...prev, [field]: value }
+    if (field === 'commission_amount') {
+      const prevCommission = String(prev?.commission_amount ?? '')
+      const prev1099 = String(prev?.amount_1099_reportable ?? '')
+      if (prev1099 === '' || prev1099 === prevCommission) {
+        next.amount_1099_reportable = value
+      }
+    }
+    return next
+  }
+
+  const setBrokerageF = (id: string, field: string, value: any) =>
+    setBrokerageForms(p => ({ ...p, [id]: syncCommissionTo1099(p[id], field, value) }))
   const setNewAgentF  = (rowId: string, field: string, value: any) => setNewAgentRows(p => p.map(r => r._id === rowId ? { ...r, [field]: value } : r))
-  const setNewBrokerageF = (rowId: string, field: string, value: any) => setNewBrokerageRows(p => p.map(r => r._id === rowId ? { ...r, [field]: value } : r))
+  const setNewBrokerageF = (rowId: string, field: string, value: any) =>
+    setNewBrokerageRows(p => p.map(r => r._id === rowId ? syncCommissionTo1099(r, field, value) : r))
 
   const filteredUsers = (rowId: string) => {
     const q = (agentSearch[rowId] || '').toLowerCase()
@@ -252,6 +451,21 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
             payment_date:      f.payment_date || null,
             payment_method:    f.payment_method || null,
             payment_reference: f.payment_reference || null,
+            brokerage_address: f.brokerage_address || null,
+            brokerage_city:    f.brokerage_city    || null,
+            brokerage_state:   f.brokerage_state   || null,
+            brokerage_zip:     f.brokerage_zip     || null,
+            broker_name:       f.broker_name       || null,
+            broker_phone:      f.broker_phone      || null,
+            broker_email:      f.broker_email      || null,
+            side:              f.side              || null,
+            agent_phone:       f.agent_phone       || null,
+            agent_email:       f.agent_email       || null,
+            amount_1099_reportable: f.amount_1099_reportable !== '' ? parseFloat(f.amount_1099_reportable) : null,
+            w9_on_file:        f.w9_on_file === true,
+            federal_id_type:   f.federal_id_type   || null,
+            federal_id_number: f.federal_id_number || null,
+            notes:             f.notes             || null,
           },
         }))
       }
@@ -282,6 +496,21 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
             payment_date:      r.payment_date || null,
             payment_method:    r.payment_method || null,
             payment_reference: r.payment_reference || null,
+            brokerage_address: r.brokerage_address,
+            brokerage_city:    r.brokerage_city,
+            brokerage_state:   r.brokerage_state,
+            brokerage_zip:     r.brokerage_zip,
+            broker_name:       r.broker_name,
+            broker_phone:      r.broker_phone,
+            broker_email:      r.broker_email,
+            side:              r.side,
+            agent_phone:       r.agent_phone,
+            agent_email:       r.agent_email,
+            amount_1099_reportable: r.amount_1099_reportable !== '' ? parseFloat(r.amount_1099_reportable) : null,
+            w9_on_file:        r.w9_on_file === true ? true : null,
+            federal_id_type:   r.federal_id_type,
+            federal_id_number: r.federal_id_number,
+            notes:             r.notes,
           },
         }))
       }
@@ -476,6 +705,10 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                           method={f.payment_method} reference={f.payment_reference}
                           onChange={(field, val) => setBrokerageF(b.id, field, val)}
                         />
+                        <MoreBrokerageDetails
+                          values={f}
+                          onChange={(field, val) => setBrokerageF(b.id, field, val)}
+                        />
                       </div>
                     </div>
                   )
@@ -508,6 +741,10 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                       <PaymentFields
                         status={row.payment_status} date={row.payment_date}
                         method={row.payment_method} reference={row.payment_reference}
+                        onChange={(field, val) => setNewBrokerageF(row._id, field, val)}
+                      />
+                      <MoreBrokerageDetails
+                        values={row}
                         onChange={(field, val) => setNewBrokerageF(row._id, field, val)}
                       />
                     </div>

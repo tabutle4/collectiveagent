@@ -1,7 +1,7 @@
 /**
  * Canonical commission math for Collective Realty Co.
  *
- * Single source of truth — every place that computes agent_net or
+ * Single source of truth - every place that computes agent_net or
  * amount_1099_reportable MUST use these functions. Do not inline the
  * formulas anywhere else. Locked 2026-05-04 (Phase 2.6).
  *
@@ -12,7 +12,7 @@
  * Notes:
  *   agent_gross is ALREADY post-team-split for team members. Team leads sit on
  *   their own TIA row linked via source_tia_id. Do NOT deduct
- *   team_lead_commission from either formula — it was carved out at the
+ *   team_lead_commission from either formula - it was carved out at the
  *   team-split step.
  *
  *   rebate is a client-facing credit that comes out of agent commission and
@@ -20,7 +20,7 @@
  *
  *   credits ADD to amount_1099. A credit reduces a fee the agent owes (e.g.
  *   $50 credit applied to a $150 processing fee → effective $100 fee).
- *   That extra $50 the agent keeps IS reportable income — same tax
+ *   That extra $50 the agent keeps IS reportable income - same tax
  *   treatment as a fee waiver.
  *
  *   debts reduce cash out only, not tax liability (the debt being paid
@@ -137,9 +137,9 @@ export function deductionLines(
  *
  * Used at every event that mutates inputs so the stored office_net column
  * stays in sync. Sources of truth for inputs:
- *   • office_gross — transactions table
- *   • agent_net — each TIA row
- *   • amount_1099_reportable — each TEB row (post-fee net to outside brokerage)
+ *   • office_gross - transactions table
+ *   • agent_net - each TIA row
+ *   • amount_1099_reportable - each TEB row (post-fee net to outside brokerage)
  */
 export function computeOfficeNet(args: {
   office_gross: number | string | null | undefined
@@ -156,4 +156,31 @@ export function computeOfficeNet(args: {
     0
   )
   return round2(gross - tiaTotal - tebTotal)
+}
+
+/**
+ * Gross / office_gross derivation from side commissions + BTSA.
+ *
+ *   office_gross     = listing_side_commission + buying_side_commission
+ *   gross_commission = office_gross + sum(TIA.btsa_amount)
+ *
+ * office_gross is the brokerage's commission from the deal sides only - it
+ * never includes BTSA. gross_commission is the full gross the brokerage
+ * received including BTSA paid through to agents. Single-sided deals work
+ * naturally: the unused side is 0, so office_gross = the one side.
+ *
+ * Both values are stored on the transactions table and recomputed on every
+ * event that can change a side commission or any TIA btsa_amount.
+ */
+export function computeGrossFromSides(args: {
+  listing_side_commission?: number | string | null
+  buying_side_commission?: number | string | null
+  btsa_total?: number | string | null
+}): { office_gross: number; gross_commission: number } {
+  const listing = num(args.listing_side_commission)
+  const buying = num(args.buying_side_commission)
+  const btsa = num(args.btsa_total)
+  const office_gross = round2(listing + buying)
+  const gross_commission = round2(office_gross + btsa)
+  return { office_gross, gross_commission }
 }

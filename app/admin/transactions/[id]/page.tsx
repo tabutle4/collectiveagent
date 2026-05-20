@@ -376,7 +376,7 @@ export default function AdminTransactionDetailPage() {
     Record<string, { count: number; total: number; invoices: any[] }>
   >({})
 
-  // Retainer modal state — opens from the agent card's "+ Add Retainer" button.
+  // Retainer modal state - opens from the agent card's "+ Add Retainer" button.
   // Creates a new TIA row with installment_kind='retainer' for this agent on
   // this transaction. Retainer rows have simple math: basis - retainer_fee.
   // No team lead, no momentum partner, no BTSA, no rebate.
@@ -652,7 +652,7 @@ export default function AdminTransactionDetailPage() {
   const [recalcRowId, setRecalcRowId] = useState<string | null>(null)
 
   // Per-agent applied billing: which debts/credits are checked on each agent
-  // card. Local UI state only — applied to agent_debts at Mark Paid.
+  // card. Local UI state only - applied to agent_debts at Mark Paid.
   // Map of internal_agent_id -> { debts, credits, debt_ids, credit_ids }
   const [billingApplied, setBillingApplied] = useState<Record<string, {
     debts: number; credits: number; debt_ids: string[]; credit_ids: string[]
@@ -714,11 +714,23 @@ export default function AdminTransactionDetailPage() {
   const updateTransaction = async (updates: any) => {
     setSaving(true)
     try {
-      await fetch(`/api/admin/transactions/${id}`, {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_transaction', updates }),
       })
+      if (!res.ok) {
+        let msg = 'Save failed.'
+        try {
+          const d = await res.json()
+          if (d?.error) msg = `Save failed: ${d.error}`
+        } catch {}
+        alert(msg)
+        // Reload from DB so the UI shows the actual saved state, not the
+        // edit that didn't persist.
+        await loadData()
+        return
+      }
       setData((prev: any) => ({ ...prev, transaction: { ...prev.transaction, ...updates } }))
       // The server may auto-derive fields: sales_volume from monthly_rent ×
       // lease_term on leases, and office_gross + gross_commission from the
@@ -734,6 +746,9 @@ export default function AdminTransactionDetailPage() {
       if (RELOAD_TRIGGERS.some(k => k in updates)) {
         await loadData()
       }
+    } catch (err: any) {
+      alert(err?.message ? `Save failed: ${err.message}` : 'Save failed. Check your connection and try again.')
+      await loadData()
     } finally {
       setSaving(false)
     }
@@ -866,11 +881,21 @@ export default function AdminTransactionDetailPage() {
   const updateInternalAgent = async (internalAgentId: string, updates: any) => {
     setSaving(true)
     try {
-      await fetch(`/api/admin/transactions/${id}`, {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_internal_agent', internal_agent_id: internalAgentId, updates }),
       })
+      if (!res.ok) {
+        let msg = 'Save failed.'
+        try {
+          const d = await res.json()
+          if (d?.error) msg = `Save failed: ${d.error}`
+        } catch {}
+        alert(msg)
+        await loadData()
+        return
+      }
       // Optimistic local merge so the UI updates instantly with the user's edit.
       setData((prev: any) => ({
         ...prev,
@@ -885,6 +910,9 @@ export default function AdminTransactionDetailPage() {
       // team_lead / momentum_partner rows. The route returns {success: true}
       // only, so reload to pick up those changes.
       await loadData()
+    } catch (err: any) {
+      alert(err?.message ? `Save failed: ${err.message}` : 'Save failed. Check your connection and try again.')
+      await loadData()
     } finally {
       setSaving(false)
     }
@@ -892,7 +920,7 @@ export default function AdminTransactionDetailPage() {
 
   // Save a single editable field on a TIA, ALSO flagging it as manually
   // overridden. The cascade for derived fields (gross/brokerage/etc) is
-  // Saves a field's value directly. We don't track overrides — every
+  // Saves a field's value directly. We don't track overrides - every
   // recalculate freshly overwrites computed fields. So the markOverridden
   // flag is accepted for prop compatibility but ignored.
   const saveOverridableField = async (
@@ -904,13 +932,13 @@ export default function AdminTransactionDetailPage() {
     const agent = (data?.agents || []).find((a: any) => a.id === internalAgentId)
 
     // Linked rows (team_lead, momentum_partner) carry only the carved-out
-    // payout for that role — their brokerage_split is always 0 by design.
+    // payout for that role - their brokerage_split is always 0 by design.
     // The cascade math below assumes a primary row where
     //   brokerage_split = basis - agent_gross
     // which would be wrong for linked rows. Skipping the brokerage_split
     // write keeps the column at 0, which is what recomputeOfficeNet expects.
     //
-    // NOTE: referral_agent is NOT a linked row — it has its own basis (a
+    // NOTE: referral_agent is NOT a linked row - it has its own basis (a
     // carve-out of the deal gross) and splits with the brokerage on that
     // basis, so it gets a real brokerage_split.
     const isLinkedRow =
@@ -1015,7 +1043,7 @@ export default function AdminTransactionDetailPage() {
           }),
         })
       } catch {
-        // ignore — admin can still Recalculate manually
+        // ignore - admin can still Recalculate manually
       }
       await loadData()
     }
@@ -1072,7 +1100,7 @@ export default function AdminTransactionDetailPage() {
           billingRecords = d?.records || []
         }
       } catch {
-        // Fall through with empty list — the apply loop will skip ids that don't match
+        // Fall through with empty list - the apply loop will skip ids that don't match
       }
 
       const debtsToApply = applied.debt_ids
@@ -1807,7 +1835,7 @@ export default function AdminTransactionDetailPage() {
                     type="number"
                     onSave={(f, v) => updateTransaction({ [f]: v })}
                   />
-                  {/* Office Gross is read-only — auto-derived from sides by
+                  {/* Office Gross is read-only - auto-derived from sides by
                       the API. The auto-derive runs on single-sided deals
                       (one of listing_side / buying_side is 0); for
                       dual-sided deals admin sets the side commissions
@@ -1816,7 +1844,7 @@ export default function AdminTransactionDetailPage() {
                     label="Office Gross"
                     value={fmt$(txn.office_gross || 0)}
                   />
-                  {/* BTSA breakdown — itemized lines per agent appear ABOVE
+                  {/* BTSA breakdown - itemized lines per agent appear ABOVE
                       the computed Gross row. BTSA is per-agent (stored on
                       TIA), paid in addition to the contract commission, and
                       only applies to contract roles (primary / listing /
@@ -2117,7 +2145,7 @@ export default function AdminTransactionDetailPage() {
                                   {recalcRowId === a.id ? 'Recalculating...' : 'Recalculate'}
                                 </button>
                               )}
-                              {/* + Add Retainer — only on primary/listing/co rows that aren't themselves retainers */}
+                              {/* + Add Retainer - only on primary/listing/co rows that aren't themselves retainers */}
                               {['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && a.installment_kind !== 'retainer' && (
                                 <button
                                   onClick={() => openRetainerModal(a)}
@@ -2177,7 +2205,7 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Team member lead source picker — only when team
+                          {/* Team member lead source picker - only when team
                               actually has splits configured (otherwise the
                               prompt has no effect on math). Limited to the
                               contract-bearing roles: the lead source only
@@ -2212,7 +2240,7 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Momentum partner display — only meaningful on
+                          {/* Momentum partner display - only meaningful on
                               the primary's row, since the momentum payout is
                               derived from the primary's commission. */}
                           {calc?.momentum_partner_name && calc.momentum_partner_payout > 0 &&
@@ -2225,7 +2253,7 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Financial breakdown — sectioned layout with overrides */}
+                          {/* Financial breakdown - sectioned layout with overrides */}
                           {(() => {
                             const applied = billingApplied[a.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
                             return (
@@ -2253,7 +2281,7 @@ export default function AdminTransactionDetailPage() {
                             )
                           })()}
 
-                          {/* Billing — debts and credits, between adjustments and totals */}
+                          {/* Billing - debts and credits, between adjustments and totals */}
                           <AgentBillingPanel
                             agentId={a.agent_id}
                             tiaId={a.id}
@@ -2647,7 +2675,7 @@ export default function AdminTransactionDetailPage() {
                             ? `${a.user.preferred_first_name || a.user.first_name} ${a.user.preferred_last_name || a.user.last_name}`
                             : a.agent_id || 'Agent'
                           // Staged debts/credits for THIS tia (selected on
-                          // the commissions tab — debt rows already marked
+                          // the commissions tab - debt rows already marked
                           // paid+offset, agent's TIA may still be pending).
                           const stagedAll = ((a.billing?.staged as any[]) || []).filter(
                             (r: any) => r.offset_transaction_agent_id === a.id
@@ -3201,7 +3229,7 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )}
 
-                    {/* Agent Billing — per-agent debts/credits across all
+                    {/* Agent Billing - per-agent debts/credits across all
                         transactions. Renders inside each agent card so every
                         agent on this deal has their own visible billing
                         summary. Reads `a.billing` which the API computes for

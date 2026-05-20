@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getLeadSourceBucket } from '@/lib/transactions/constants'
-import { computeCommission } from '@/lib/transactions/math'
+import { computeCommission, computeGrossFromSides } from '@/lib/transactions/math'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import {
   buildStatementEmail,
@@ -60,7 +60,7 @@ const LOCKED_TEB_FIELDS = new Set([
   'agent_phone',
 ])
 
-// Alias to central helper — keeps existing call sites stable
+// Alias to central helper - keeps existing call sites stable
 const isLeaseType = isLeaseTransactionType
 
 function num(v: any): number {
@@ -74,7 +74,7 @@ function num(v: any): number {
 // no team_lead row is created.
 //
 // team_lead_commission on the primary's TIA row is informational tracking only
-// and is NOT deducted from agent_net or amount_1099_reportable — the team
+// and is NOT deducted from agent_net or amount_1099_reportable - the team
 // lead's cut has already been carved out of agent_gross at the team-split step.
 async function computeCommissionBreakdown(args: {
   agentId: string
@@ -95,7 +95,7 @@ async function computeCommissionBreakdown(args: {
   } = args
   const isLease = isLeaseType(transactionType)
 
-  // Existing TIA row — preserves manual fields (btsa, other_fees, rebate,
+  // Existing TIA row - preserves manual fields (btsa, other_fees, rebate,
   // debts) when recalculating so ad-hoc adjustments survive.
   const { data: existingTia } = await supabase
     .from('transaction_internal_agents')
@@ -122,7 +122,7 @@ async function computeCommissionBreakdown(args: {
     ? agent.lease_commission_plan
     : agent.commission_plan || ''
 
-  // Commission plan (fuzzy match — data mixes codes and names)
+  // Commission plan (fuzzy match - data mixes codes and names)
   const { data: plans } = await supabase
     .from('commission_plans')
     .select('*')
@@ -238,7 +238,7 @@ async function computeCommissionBreakdown(args: {
     agent.waive_seller_processing_fees
   ) processingFee = 0
 
-  // Amounts — all percentages apply to the commission_amount (basis).
+  // Amounts - all percentages apply to the commission_amount (basis).
   const agentGross = commissionAmount * (agentSplitPct / 100)
   const brokerageSplit = commissionAmount * (firmSplitPct / 100)
   // Team lead payout is ONLY non-zero when the agent is on a team with a split
@@ -297,7 +297,7 @@ async function computeCommissionBreakdown(args: {
 }
 
 /**
- * cascadePrimarySplit — shared helper used by both the apply_primary_split
+ * cascadePrimarySplit - shared helper used by both the apply_primary_split
  * action and the update_internal_agent auto-cascade. Recomputes the primary
  * row's commission math AND upserts the linked team_lead / momentum_partner
  * rows so derived payouts stay consistent.
@@ -323,7 +323,7 @@ async function computeCommissionBreakdown(args: {
  *
  * Why momentum gets subtracted explicitly:
  *   Momentum partner rows have brokerage_split = 0 by construction (linked
- *   row design — brokerage cut lives on the source primary's row), so they
+ *   row design - brokerage cut lives on the source primary's row), so they
  *   don't appear in the brokerage_split sum. But the cash IS paid out of
  *   the brokerage's portion. Without this subtraction office_net would
  *   over-count by the momentum payout total.
@@ -331,7 +331,7 @@ async function computeCommissionBreakdown(args: {
  * Why this formula and not the old gross-minus-agent_net version:
  *   The old formula assumed agent_net came out of office_gross. That breaks
  *   on deals with BTSA (paid to agent by buyer, never on brokerage books)
- *   or rebates (agent's own funds going to client) — both inflate agent_net
+ *   or rebates (agent's own funds going to client) - both inflate agent_net
  *   without touching brokerage cash, so subtracting agent_net from office_gross
  *   over-deducts and produces wrong (sometimes negative) results.
  *
@@ -343,6 +343,13 @@ async function computeCommissionBreakdown(args: {
  * Idempotent and safe to call repeatedly. Failures are logged but never throw.
  */
 async function recomputeOfficeNet(transactionId: string): Promise<void> {
+  // office_gross + gross_commission are inputs that must be current before
+  // office_net is derived. Every caller of recomputeOfficeNet is a mutation
+  // that could also have changed a side commission or a TIA btsa_amount, so
+  // settle the derived gross fields first. Safe: recomputeGrossAndOffice
+  // writes office_gross/gross_commission only; the office_net math below
+  // reads brokerage_split/fees (not office_gross), so there is no cycle.
+  await recomputeGrossAndOffice(transactionId)
   try {
     const [{ data: tias }, { data: tebs }, { data: stagedRecs }] = await Promise.all([
       supabase
@@ -420,6 +427,54 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
   }
 }
 
+/**
+ * Recompute and persist office_gross and gross_commission from the deal's
+ * side commissions and the total BTSA across its internal-agent rows.
+ *
+ *   office_gross     = listing_side_commission + buying_side_commission
+ *   gross_commission = office_gross + sum(TIA.btsa_amount)
+ *
+ * Must run BEFORE recomputeOfficeNet at every mutation that can change a
+ * side commission or any TIA btsa_amount, because office_net derivation
+ * downstream depends on a correct office_gross. Idempotent; logged, never
+ * throws.
+ */
+async function recomputeGrossAndOffice(transactionId: string): Promise<void> {
+  try {
+    const [{ data: txn }, { data: tias }] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('listing_side_commission, buying_side_commission')
+        .eq('id', transactionId)
+        .single(),
+      supabase
+        .from('transaction_internal_agents')
+        .select('btsa_amount')
+        .eq('transaction_id', transactionId),
+    ])
+    if (!txn) return
+    const btsaTotal = (tias || []).reduce(
+      (s, t) => s + (parseFloat(String(t.btsa_amount ?? 0)) || 0),
+      0
+    )
+    const { office_gross, gross_commission } = computeGrossFromSides({
+      listing_side_commission: txn.listing_side_commission,
+      buying_side_commission: txn.buying_side_commission,
+      btsa_total: btsaTotal,
+    })
+    await supabase
+      .from('transactions')
+      .update({
+        office_gross,
+        gross_commission,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', transactionId)
+  } catch (err) {
+    console.error('recomputeGrossAndOffice failed for', transactionId, err)
+  }
+}
+
 async function cascadePrimarySplit(args: {
   transactionId: string
   internalAgentId: string
@@ -464,11 +519,11 @@ async function cascadePrimarySplit(args: {
     transactionType: txn?.transaction_type || null,
   })
 
-  // Update primary row — commission math via canonical computeCommission().
+  // Update primary row - commission math via canonical computeCommission().
   // Existing manual fields (btsa_amount, other_fees, rebate_amount,
   // debts_deducted) are loaded from the row and used in the calculation,
   // so ad-hoc adjustments are preserved through recalc. Every recalc
-  // freshly overwrites the computed columns — there is no per-field
+  // freshly overwrites the computed columns - there is no per-field
   // override flag.
   //
   // Rounding rule (Phase 2.7): round agent_gross to 2 decimals FIRST, then
@@ -655,9 +710,9 @@ async function cascadePrimarySplit(args: {
 }
 
 /**
- * resolveAgentPlanSplit — looks up an agent's commission plan and returns
+ * resolveAgentPlanSplit - looks up an agent's commission plan and returns
  * its default agent split percentage. Mirrors the plan-resolution logic
- * inside computeCommissionBreakdown (lines ~120–186) but skips the team /
+ * inside computeCommissionBreakdown (lines ~120-186) but skips the team /
  * processing-fee / momentum-partner work, because for a referral_agent row
  * on add we ONLY want the plan's default split. Used by add_internal_agent
  * to pre-fill split_percentage / commission_plan / commission_plan_id on
@@ -684,7 +739,7 @@ async function resolveAgentPlanSplit(
     : agent.commission_plan || ''
   if (!planCode) return null
 
-  // Fuzzy match (data mixes codes and names) — same approach the cascade uses.
+  // Fuzzy match (data mixes codes and names) - same approach the cascade uses.
   const { data: plans } = await supabase
     .from('commission_plans')
     .select('id, code, name, agent_split_percentage')
@@ -696,14 +751,14 @@ async function resolveAgentPlanSplit(
 
   let agentSplitPct: number | null = plan?.agent_split_percentage ?? null
 
-  // Custom plan string fallback (e.g., "Custom 85/15 Cap") — parser is the
+  // Custom plan string fallback (e.g., "Custom 85/15 Cap") - parser is the
   // same one cascadePrimarySplit calls.
   if (agentSplitPct == null) {
     const parsed = parseCustomPlanSplit(planCode)
     if (parsed) agentSplitPct = parsed.agentPct
   }
 
-  // Final safety net — match the cascade's `?? 85` default so behavior
+  // Final safety net - match the cascade's `?? 85` default so behavior
   // stays consistent across the codebase.
   if (agentSplitPct == null) agentSplitPct = 85
 
@@ -715,20 +770,20 @@ async function resolveAgentPlanSplit(
 }
 
 /**
- * rebalanceReferralCarveouts — when a referral_agent's agent_basis changes
+ * rebalanceReferralCarveouts - when a referral_agent's agent_basis changes
  * (set, edited, or deleted), the SAME-SIDE primary's agent_basis must be
  * adjusted so the two pools sum to the side commission. Example: side
  * commission $5,000, referral basis $2,000 → primary basis $3,000.
  *
  * Trigger points (callers must invoke this manually):
- *   • update_internal_agent  — when role=referral_agent AND agent_basis touched
- *   • delete_internal_agent  — when the deleted row was a referral_agent
- *   • delete_internal_agent_cascade — same
+ *   • update_internal_agent  - when role=referral_agent AND agent_basis touched
+ *   • delete_internal_agent  - when the deleted row was a referral_agent
+ *   • delete_internal_agent_cascade - same
  *
  * Scope decisions:
  *   • Only rebalances if a same-side primary exists. Otherwise no-op.
  *   • Primary lookup prefers primary_agent > listing_agent > co_agent. If
- *     multiple matches exist on a side, only the first one is adjusted —
+ *     multiple matches exist on a side, only the first one is adjusted -
  *     multi-primary same-side carve-out splits are out of scope and the
  *     admin handles those manually.
  *   • Skips if the target primary is paid (basis is locked).
@@ -814,7 +869,7 @@ async function rebalanceReferralCarveouts(
 }
 
 /**
- * recomputePercentageBasedReferrals — when the side commission on a deal
+ * recomputePercentageBasedReferrals - when the side commission on a deal
  * changes, every referral_agent row on that side with basis_input_mode =
  * 'percentage' needs its agent_basis re-derived as
  *   new_basis = new_side_commission × basis_percentage / 100
@@ -826,7 +881,7 @@ async function rebalanceReferralCarveouts(
  *     ('seller' / 'landlord' for listing_side_commission,
  *      'buyer' / 'tenant' for buying_side_commission).
  *   • Pass the NEW side commission as it should now be (already saved).
- *   • Run rebalanceReferralCarveouts(transactionId, side) AFTER this — the
+ *   • Run rebalanceReferralCarveouts(transactionId, side) AFTER this - the
  *     same-side primary's basis needs to absorb the new referral total.
  *
  * Safety guards:
@@ -1289,7 +1344,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           // source must already be set; then editing sales_volume directly
           // sticks until a driver changes again. Direct sales_volume edits
           // are preserved by the `'sales_volume' in cleanUpdates`
-          // short-circuit — when the caller passes sales_volume explicitly,
+          // short-circuit - when the caller passes sales_volume explicitly,
           // no broadcast runs.
           if (!('sales_volume' in cleanUpdates)) {
             if (isLease) {
@@ -1313,7 +1368,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           // qualification (move_in_date) from 1099 timing (closed_date) and
           // some agent-side queries fall back to closing_date when
           // move_in_date is null. Keeping the two columns in lockstep on
-          // leases avoids that fallback divergence — every report sees the
+          // leases avoids that fallback divergence - every report sees the
           // same value regardless of which column it queries. Only fires
           // when the caller didn't already pass closing_date explicitly.
           if (isLease && 'move_in_date' in cleanUpdates && !('closing_date' in cleanUpdates)) {
@@ -1369,7 +1424,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           // read-only and removed the editable Gross Commission row, so the
           // only user-editable inputs for an intermediary deal are the two
           // side commissions. Without this block, office_gross would stay
-          // stale after side edits — breaking office_net (which depends on
+          // stale after side edits - breaking office_net (which depends on
           // it) and the per-agent basis fallback in lib/transactions/sides.ts
           // which uses office_gross when no side is set.
           if (
@@ -1398,7 +1453,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // row on that side with basis_input_mode='percentage' must have its
       // agent_basis recomputed from the new side commission. After the
       // referral rows update, the same-side primary's basis needs to absorb
-      // the change — same flow as a manual referral basis edit.
+      // the change - same flow as a manual referral basis edit.
       const listingChanged = 'listing_side_commission' in cleanUpdates
       const buyingChanged = 'buying_side_commission' in cleanUpdates
 
@@ -1416,7 +1471,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           if (saved) {
             if (listingChanged) {
               const newListing = num(saved.listing_side_commission)
-              // Pick whichever side label the existing referral rows use —
+              // Pick whichever side label the existing referral rows use -
               // sellers + landlords both map to listing_side_commission.
               for (const sideLabel of ['seller', 'landlord']) {
                 const updated = await recomputePercentageBasedReferrals(id, sideLabel, newListing)
@@ -1436,15 +1491,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
           }
         } catch (recomputeErr: any) {
-          // Log but don't fail the user's transaction save — the txn IS
+          // Log but don't fail the user's transaction save - the txn IS
           // saved; downstream rows can be re-triggered by editing again.
           console.error('Percentage-based referral recompute failed:', recomputeErr)
         }
       }
 
-      // Office_net depends on office_gross. Recompute when office_gross was
-      // touched (directly OR via the auto-derive above).
-      if ('office_gross' in cleanUpdates) await recomputeOfficeNet(id)
+      // office_gross + gross_commission are DERIVED from side commissions and
+      // total BTSA (never entered directly). recomputeOfficeNet settles those
+      // first, then office_net. Trigger it whenever a side commission, a
+      // legacy gross/office driver, transaction_type, or is_intermediary was
+      // touched.
+      const grossDrivers = [
+        'listing_side_commission',
+        'buying_side_commission',
+        'gross_commission',
+        'office_gross',
+        'transaction_type',
+        'is_intermediary',
+      ]
+      if (grossDrivers.some(k => k in cleanUpdates)) {
+        await recomputeOfficeNet(id)
+      }
       return NextResponse.json({ success: true })
     }
 
@@ -1567,12 +1635,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // 'percentage', the dollar agent_basis is derived server-side from
       // the current side commission. This protects against stale-state
       // drift (FE's cached side commission older than the DB's) and means
-      // the FE doesn't need to know the formula — it just sends mode +
+      // the FE doesn't need to know the formula - it just sends mode +
       // percentage. agent_gross and brokerage_split are also recomputed
       // from the new basis using the row's split_percentage (Phase 2.7
       // rounding rule: round gross first, derive brokerage as residual).
       //
-      // For 'amount' mode (or when mode is absent), behavior is unchanged —
+      // For 'amount' mode (or when mode is absent), behavior is unchanged -
       // the FE's agent_basis flows through as-is.
       const cleanUpdates: any = { ...(updates || {}) }
       if (
@@ -1676,7 +1744,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             ? (updates.referred_agent_id || null)
             : (current.referred_agent_id || null)
 
-          // Only cascade when we have a real basis (>0) — otherwise nothing to
+          // Only cascade when we have a real basis (>0) - otherwise nothing to
           // compute and we'd write zero values into linked rows.
           if (effectiveBasis > 0) {
             await cascadePrimarySplit({
@@ -1688,7 +1756,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             })
           }
         } catch (cascadeErr: any) {
-          // Log but don't fail the user's field update — the primary row IS
+          // Log but don't fail the user's field update - the primary row IS
           // updated; the cascade can be re-triggered by editing again.
           console.error('Auto-cascade failed:', cascadeErr)
         }
@@ -1698,12 +1766,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // When a referral_agent's agent_basis changes, the SAME-SIDE primary's
       // basis must shrink/grow to keep the pool = side commission. Runs
       // before recomputeOfficeNet so office_net reflects the new primary
-      // basis on the same request. (Phase 2.7 fix — change #2.)
+      // basis on the same request. (Phase 2.7 fix - change #2.)
       //
       // Also fires on basis_input_mode / basis_percentage edits: the BE may
       // have just recomputed agent_basis from a new percentage value, and
       // we want the same-side primary to re-absorb. Checking these keys in
-      // `updates` (not cleanUpdates) is intentional — they describe what
+      // `updates` (not cleanUpdates) is intentional - they describe what
       // the USER changed, not server-side derivations.
       if (
         current?.agent_role === 'referral_agent' &&
@@ -1716,7 +1784,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         try {
           await rebalanceReferralCarveouts(id, current.side ?? null)
         } catch (rebalanceErr: any) {
-          // Log but don't fail the user's update — the referral row IS saved.
+          // Log but don't fail the user's update - the referral row IS saved.
           console.error('Referral carve-out rebalance failed:', rebalanceErr)
         }
       }
@@ -1754,7 +1822,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (error) throw error
 
-      // Rebalance the same-side primary if we removed a referral_agent —
+      // Rebalance the same-side primary if we removed a referral_agent -
       // their carve-out is gone so the primary's basis goes back up.
       if (existing.agent_role === 'referral_agent') {
         try {
@@ -1822,14 +1890,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
-      // Delete the primary — DB cascades the linked rows
+      // Delete the primary - DB cascades the linked rows
       const { error: delErr } = await supabase
         .from('transaction_internal_agents')
         .delete()
         .eq('id', internal_agent_id)
       if (delErr) throw delErr
 
-      // Rebalance the same-side primary if we removed a referral_agent —
+      // Rebalance the same-side primary if we removed a referral_agent -
       // their carve-out is gone so the primary's basis goes back up.
       if (row.agent_role === 'referral_agent') {
         try {
@@ -1961,7 +2029,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Auto-stamp commission math when adding a roleable agent on a
       // commission-bearing role. Derives basis from the agent's side commission
       // (when known) or falls back to office_gross. Skipped silently if no
-      // basis available — admin can click Recalculate later.
+      // basis available - admin can click Recalculate later.
       if (data && ['primary_agent', 'listing_agent', 'co_agent'].includes(data.agent_role)) {
         const { data: txn } = await supabase
           .from('transactions')
@@ -2159,7 +2227,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       const optional = [
         'side',
-        'agent_name', 'agent_email', 'agent_phone', 'broker_name', 'brokerage_dba',
+        'agent_name', 'agent_email', 'agent_phone',
+        'broker_name', 'broker_phone', 'broker_email',
+        'brokerage_dba',
         'brokerage_ein', 'brokerage_address', 'brokerage_city', 'brokerage_state',
         'brokerage_zip', 'federal_id_type', 'federal_id_number', 'commission_amount',
         'amount_1099_reportable', 'w9_on_file', 'w9_date_received', 'payment_date',
@@ -2224,7 +2294,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       // Get transaction type + status. Never overwrite a closed transaction's
-      // commission values — they may be migrated historical data.
+      // commission values - they may be migrated historical data.
       const { data: txn } = await supabase
         .from('transactions')
         .select('transaction_type, status')
@@ -2249,7 +2319,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         transactionType: txn?.transaction_type || null,
       })
 
-      // Update primary row — uses canonical computeCommission() which
+      // Update primary row - uses canonical computeCommission() which
       // includes existing btsa, other_fees, rebate, debts so manual
       // adjustments are preserved.
       const primaryUpdates: any = {
@@ -2276,7 +2346,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (updErr) throw updErr
 
-      // Helper — build full column set for a linked (team_lead or momentum_partner) row.
+      // Helper - build full column set for a linked (team_lead or momentum_partner) row.
       // Every non-manual field is set explicitly so nothing is left at DB default.
       async function buildLinkedRowFields(
         linkedAgentId: string,
@@ -2332,7 +2402,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Upsert team_lead row — keyed by source_tia_id so each primary gets its
+      // Upsert team_lead row - keyed by source_tia_id so each primary gets its
       // own dedicated TL row. On re-apply, we find the existing row by
       // source_tia_id and update it; we never blow away TL rows from other
       // contributing primaries.
@@ -2382,7 +2452,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           teamLeadTiaId = newTl.id
         }
       } else {
-        // No TL payout this round — if a stale TL row exists tied to this
+        // No TL payout this round - if a stale TL row exists tied to this
         // primary from a prior apply, clean it up (unless paid).
         const { data: staleTl } = await supabase
           .from('transaction_internal_agents')
@@ -2399,7 +2469,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Upsert momentum_partner row — same provenance pattern
+      // Upsert momentum_partner row - same provenance pattern
       let momentumTiaId: string | null = null
       if (breakdown.momentumPartnerId && breakdown.momentumPartnerPayout > 0) {
         const { data: existingMp } = await supabase
@@ -2678,7 +2748,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Funds are in hand by the time staging happens, so the debt is fully
     // marked paid right away (status=paid, amount_paid bumped to owed,
     // offset_* set, date_resolved=today). Does NOT touch the TIA's
-    // payment_status — that's a separate Mark Paid step.
+    // payment_status - that's a separate Mark Paid step.
     //
     // body: { internal_agent_id, debt_id?, credit_id? }
     if (action === 'stage_debt' || action === 'stage_credit') {
@@ -2702,7 +2772,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (rec.status !== 'outstanding') {
         return NextResponse.json({ error: 'Only outstanding records can be staged' }, { status: 409 })
       }
-      // Already staged on a DIFFERENT txn — refuse.
+      // Already staged on a DIFFERENT txn - refuse.
       if (
         rec.offset_transaction_id &&
         rec.offset_transaction_id !== id
@@ -2987,7 +3057,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
       //   agent_net   = amount_1099 − debts
       //
-      // team_lead_commission on primary TIA is informational only — it was
+      // team_lead_commission on primary TIA is informational only - it was
       // carved out of agent_gross at apply_primary_split time. Do NOT pass
       // it as a deduction here.
       //
@@ -3058,7 +3128,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Apply credits — same agent_debts table, record_type='credit'.
+      // Apply credits - same agent_debts table, record_type='credit'.
       // Mark the credit row as paid (consumed) and link to this transaction.
       if (credits_to_apply && credits_to_apply.length > 0) {
         for (const creditApp of credits_to_apply) {
@@ -3089,7 +3159,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease.
-      // Fires ONCE per (transaction_id, agent_id) pair — not once per installment.
+      // Fires ONCE per (transaction_id, agent_id) pair - not once per installment.
       // Check first: has any other paid TIA row exists for this agent on this transaction?
       const countsThis = counts_toward_progress !== false
       if (
