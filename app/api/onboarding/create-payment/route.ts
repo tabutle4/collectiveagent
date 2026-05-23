@@ -83,6 +83,70 @@ export async function POST(request: NextRequest) {
     let proratedAmount = 0
     let proratedLabel = ''
 
+    // Step 1.5: Void any existing unpaid invoices that contain an onboarding or
+    // annual membership line item for this customer. Each visit to the token
+    // page generates a freshly prorated invoice, so any prior unpaid one must
+    // be voided to avoid leaving duplicates that could be auto-paid later. If
+    // voiding any single invoice fails, abort here so the customer never sees
+    // a state where two unpaid invoices coexist.
+    try {
+      const listRes = await fetch(
+        `https://api.payload.com/invoices/?customer_id=${payloadCustomerId}&status=unpaid&limit=50`,
+        { headers: { Authorization: plAuth() } }
+      )
+      const listData = await listRes.json()
+      const onboardingItemTypes = new Set([
+        'Onboarding Fee',
+        'Monthly Fee (Prorated)',
+        'Annual Membership Fee',
+      ])
+      const stale = (listData.values || []).filter((inv: any) =>
+        (inv.items || []).some((item: any) => onboardingItemTypes.has(item?.type))
+      )
+      for (const inv of stale) {
+        const voidRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: plAuth(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ status: 'voided' }),
+        })
+        const voidData = await voidRes.json().catch(() => null)
+        // Require Payload to confirm both that the request succeeded and that
+        // the returned invoice's status is voided. A 200 alone is not enough.
+        // If anything is off, abort before creating the new invoice so the
+        // customer never ends up with two unpaid invoices on their account.
+        if (!voidRes.ok || voidData?.status !== 'voided') {
+          console.error(
+            'Could not confirm void on stale onboarding invoice:',
+            inv.id,
+            'http_ok:',
+            voidRes.ok,
+            'returned_status:',
+            voidData?.status,
+            'response:',
+            voidData
+          )
+          return NextResponse.json(
+            {
+              error:
+                'Could not clear a previous unpaid onboarding invoice. Please contact the office.',
+            },
+            { status: 500 }
+          )
+        }
+      }
+    } catch (err) {
+      console.error('Error clearing stale onboarding invoices:', err)
+      return NextResponse.json(
+        {
+          error: 'Could not check for previous onboarding invoices. Please try again in a moment.',
+        },
+        { status: 500 }
+      )
+    }
+
     // Step 2: Build invoice based on agent type
     const params = new URLSearchParams({
       type: 'bill',
@@ -153,9 +217,10 @@ export async function POST(request: NextRequest) {
 
     const invoiceId = invoiceData.id
 
-    // Step 4: Get checkout token
-    // Referral agents: no auto-billing (they pay annually, not monthly)
-    // Standard agents: offer auto-billing for monthly fees
+    // Step 4: Get checkout token. Onboarding payment is a one-time charge for
+    // both standard and referral agents. No autopay setup here. Autopay opt-in
+    // happens later on the first regular monthly invoice payment link, which
+    // uses Payload's standard checkout that already has the toggle built in.
     const checkoutIntent: any = {
       checkout_plugin: {
         amount: invoiceAmount,
@@ -164,12 +229,6 @@ export async function POST(request: NextRequest) {
         card_payments: true,
         bank_account_payments: true,
       },
-    }
-
-    // Only show auto-billing toggle for standard agents (who have monthly fees)
-    if (!isReferralAgent) {
-      checkoutIntent.checkout_plugin.auto_billing_toggle = true
-      checkoutIntent.checkout_plugin.keep_active_toggle = true
     }
 
     const tokenRes = await fetch('https://api.payload.com/access_tokens', {
