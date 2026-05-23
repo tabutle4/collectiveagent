@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
         (inv.items || []).some((item: any) => onboardingItemTypes.has(item?.type))
       )
       for (const inv of stale) {
+        // 1. Submit the void
         const voidRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
           method: 'PUT',
           headers: {
@@ -112,21 +113,36 @@ export async function POST(request: NextRequest) {
           },
           body: new URLSearchParams({ status: 'voided' }),
         })
-        const voidData = await voidRes.json().catch(() => null)
-        // Require Payload to confirm both that the request succeeded and that
-        // the returned invoice's status is voided. A 200 alone is not enough.
-        // If anything is off, abort before creating the new invoice so the
-        // customer never ends up with two unpaid invoices on their account.
-        if (!voidRes.ok || voidData?.status !== 'voided') {
+        if (!voidRes.ok) {
+          const errBody = await voidRes.json().catch(() => null)
+          console.error('Failed to submit void for stale onboarding invoice:', inv.id, errBody)
+          return NextResponse.json(
+            {
+              error:
+                'Could not clear a previous unpaid onboarding invoice. Please contact the office.',
+            },
+            { status: 500 }
+          )
+        }
+
+        // 2. Verify the void took effect by re-fetching the invoice and
+        // confirming its status is voided. A 200 on the PUT alone is not
+        // enough; we want a positive confirmation before creating a new
+        // invoice that could otherwise coexist with a still-unpaid duplicate.
+        const verifyRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
+          headers: { Authorization: plAuth() },
+        })
+        const verifyData = await verifyRes.json().catch(() => null)
+        if (!verifyRes.ok || verifyData?.status !== 'voided') {
           console.error(
-            'Could not confirm void on stale onboarding invoice:',
+            'Could not confirm voided status for stale onboarding invoice:',
             inv.id,
-            'http_ok:',
-            voidRes.ok,
-            'returned_status:',
-            voidData?.status,
+            'verify_ok:',
+            verifyRes.ok,
+            'verify_status:',
+            verifyData?.status,
             'response:',
-            voidData
+            verifyData
           )
           return NextResponse.json(
             {
