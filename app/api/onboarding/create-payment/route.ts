@@ -83,12 +83,14 @@ export async function POST(request: NextRequest) {
     let proratedAmount = 0
     let proratedLabel = ''
 
-    // Step 1.5: Void any existing unpaid invoices that contain an onboarding or
-    // annual membership line item for this customer. Each visit to the token
-    // page generates a freshly prorated invoice, so any prior unpaid one must
-    // be voided to avoid leaving duplicates that could be auto-paid later. If
-    // voiding any single invoice fails, abort here so the customer never sees
-    // a state where two unpaid invoices coexist.
+    // Step 1.5: Close any existing unpaid invoices that contain an onboarding
+    // or annual membership line item for this customer. Each visit to the
+    // token page generates a freshly prorated invoice, so any prior unpaid
+    // one must be cancelled to avoid leaving duplicates that could be
+    // auto-paid later. Per Payload's invoice API, the terminal cancellation
+    // status is 'closed' (not 'voided' - that value only applies to
+    // transactions). If closing any single invoice fails, abort here so the
+    // customer never sees a state where two unpaid invoices coexist.
     try {
       const listRes = await fetch(
         `https://api.payload.com/invoices/?customer_id=${payloadCustomerId}&status=unpaid&limit=50`,
@@ -104,18 +106,18 @@ export async function POST(request: NextRequest) {
         (inv.items || []).some((item: any) => onboardingItemTypes.has(item?.type))
       )
       for (const inv of stale) {
-        // 1. Submit the void
-        const voidRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
+        // 1. Submit the close
+        const closeRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
           method: 'PUT',
           headers: {
             Authorization: plAuth(),
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: new URLSearchParams({ status: 'voided' }),
+          body: new URLSearchParams({ status: 'closed' }),
         })
-        if (!voidRes.ok) {
-          const errBody = await voidRes.json().catch(() => null)
-          console.error('Failed to submit void for stale onboarding invoice:', inv.id, errBody)
+        if (!closeRes.ok) {
+          const errBody = await closeRes.json().catch(() => null)
+          console.error('Failed to submit close for stale onboarding invoice:', inv.id, errBody)
           return NextResponse.json(
             {
               error:
@@ -125,17 +127,17 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // 2. Verify the void took effect by re-fetching the invoice and
-        // confirming its status is voided. A 200 on the PUT alone is not
+        // 2. Verify the close took effect by re-fetching the invoice and
+        // confirming its status is closed. A 200 on the PUT alone is not
         // enough; we want a positive confirmation before creating a new
         // invoice that could otherwise coexist with a still-unpaid duplicate.
         const verifyRes = await fetch(`https://api.payload.com/invoices/${inv.id}`, {
           headers: { Authorization: plAuth() },
         })
         const verifyData = await verifyRes.json().catch(() => null)
-        if (!verifyRes.ok || verifyData?.status !== 'voided') {
+        if (!verifyRes.ok || verifyData?.status !== 'closed') {
           console.error(
-            'Could not confirm voided status for stale onboarding invoice:',
+            'Could not confirm closed status for stale onboarding invoice:',
             inv.id,
             'verify_ok:',
             verifyRes.ok,
