@@ -2690,8 +2690,12 @@ export default function AdminTransactionDetailPage() {
                             (s: number, c: any) => s + (parseFloat(c.amount_owed ?? 0) - parseFloat(c.amount_remaining ?? 0)),
                             0
                           )
-                          const previewedNet =
-                            parseFloat(a.agent_net || 0) - stagedDebtTotal + stagedCreditTotal
+                          // When the TIA is paid, a.agent_net already reflects
+                          // any debts_deducted (saved at Mark Paid). Don't apply
+                          // staged adjustments again or we'd double-count.
+                          const previewedNet = a.payment_status === 'paid'
+                            ? parseFloat(a.agent_net || 0)
+                            : parseFloat(a.agent_net || 0) - stagedDebtTotal + stagedCreditTotal
                           return (
                             <div key={a.id} className="inner-card">
                               <div className="flex items-center justify-between">

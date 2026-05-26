@@ -96,21 +96,35 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
     load()
   }, [load])
 
-  // Notify parent whenever the checked sets or amounts change
+  // Notify parent whenever the checked sets or amounts change.
+  // When the TIA is not yet paid, include already-staged records (the
+  // "applied" rows in the bottom section) so the preview on the agent
+  // card reflects all upcoming deductions. When the TIA is paid, those
+  // amounts are already in TIA.debts_deducted (rendered as "Debts
+  // (saved)") so excluding them here avoids double-counting.
   useEffect(() => {
-    const debtTotal = debts
-      .filter(d => checkedDebts.has(d.id))
-      .reduce((s, d) => s + (d.amount_remaining ?? d.amount_owed), 0)
-    const creditTotal = credits
-      .filter(c => checkedCredits.has(c.id))
-      .reduce((s, c) => s + (c.amount_remaining ?? c.amount_owed), 0)
+    const stagedDebts = isPaid ? [] : appliedDebts
+    const stagedCredits = isPaid ? [] : appliedCredits
+
+    const debtTotal =
+      debts
+        .filter(d => checkedDebts.has(d.id))
+        .reduce((s, d) => s + (d.amount_remaining ?? d.amount_owed), 0) +
+      stagedDebts.reduce((s, d) => s + (d.amount_paid ?? d.amount_owed), 0)
+
+    const creditTotal =
+      credits
+        .filter(c => checkedCredits.has(c.id))
+        .reduce((s, c) => s + (c.amount_remaining ?? c.amount_owed), 0) +
+      stagedCredits.reduce((s, c) => s + (c.amount_paid ?? c.amount_owed), 0)
+
     onAppliedChange({
       debts: debtTotal,
       credits: creditTotal,
-      debt_ids: Array.from(checkedDebts),
-      credit_ids: Array.from(checkedCredits),
+      debt_ids: [...Array.from(checkedDebts), ...stagedDebts.map(d => d.id)],
+      credit_ids: [...Array.from(checkedCredits), ...stagedCredits.map(c => c.id)],
     })
-  }, [debts, credits, checkedDebts, checkedCredits, onAppliedChange])
+  }, [debts, credits, appliedDebts, appliedCredits, isPaid, checkedDebts, checkedCredits, onAppliedChange])
 
   const toggleDebt = async (id: string) => {
     if (isPaid) return
