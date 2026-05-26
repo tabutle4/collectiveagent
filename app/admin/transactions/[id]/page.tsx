@@ -1380,8 +1380,14 @@ export default function AdminTransactionDetailPage() {
   // For each agent, the actual cash payout = agent_net minus staged debts plus
   // staged credits. Staged debts are paid out of brokerage funds (not the
   // agent's pocket), so they reduce what we cut to the agent.
-  const totalAgentNets = agents.reduce((s: number, a: any) => {
+ const totalAgentNets = agents.reduce((s: number, a: any) => {
     const baseNet = parseFloat(a.agent_net || 0)
+    // When the TIA is paid, baseNet already reflects any debts_deducted
+    // (saved at Mark Paid). Don't apply staged adjustments again or we'd
+    // double-count, matching previewedNet logic below.
+    if (a.payment_status === 'paid') {
+      return s + baseNet
+    }
     const stagedRows = ((a.billing?.staged as any[]) || []).filter(
       (r: any) => r.offset_transaction_agent_id === a.id
     )
