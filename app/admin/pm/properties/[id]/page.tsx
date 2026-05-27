@@ -105,7 +105,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
       }
       const data = await res.json()
       setProperty(data.property)
-      setLeases(data.leases || [])
+      setLeases(data.property?.pm_leases || [])
       
       // Populate form
       const p = data.property
