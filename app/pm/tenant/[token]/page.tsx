@@ -143,6 +143,13 @@ export default function TenantDashboardPage() {
     return parseDate(dueDate) < now
   }
 
+  // Currently due = unpaid invoices whose due_date is today or earlier.
+  // Future invoices (next month, etc) are not "currently due" even though they exist as records.
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  const currentlyDueInvoices = unpaidInvoices.filter(inv => parseDate(inv.due_date) <= today)
+  const totalDue = currentlyDueInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
+
   if (loading) {
     return (
       <div className="min-h-screen bg-luxury-light flex items-center justify-center">
@@ -169,7 +176,7 @@ export default function TenantDashboardPage() {
     )
   }
 
-  const { tenant, lease, currentBalance } = data
+  const { tenant, lease } = data
 
   return (
     <div className="min-h-screen bg-luxury-light">
@@ -199,20 +206,20 @@ export default function TenantDashboardPage() {
         <div className="container-card mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Current Balance</p>
-              <p className={`text-3xl font-bold ${currentBalance > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
-                {formatMoney(currentBalance)}
+              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Currently Due</p>
+              <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
+                {formatMoney(totalDue)}
               </p>
-              {currentBalance > 0 && (
+              {totalDue > 0 && (
                 <p className="text-sm text-luxury-gray-3 mt-1">
-                  {unpaidInvoices.length} unpaid invoice{unpaidInvoices.length !== 1 ? 's' : ''}
+                  {currentlyDueInvoices.length} invoice{currentlyDueInvoices.length !== 1 ? 's' : ''} due now
                 </p>
               )}
             </div>
-            {currentBalance === 0 && (
+            {totalDue === 0 && (
               <div className="text-center">
                 <CheckCircle size={48} className="text-green-500 mx-auto" />
-                <p className="text-sm text-green-600 mt-1">All paid up!</p>
+                <p className="text-sm text-green-600 mt-1">All caught up!</p>
               </div>
             )}
           </div>

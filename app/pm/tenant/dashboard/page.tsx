@@ -511,19 +511,19 @@ function TenantDashboardContent() {
         <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mb-6">
           {/* Total Due */}
           <div className="container-card">
-            <h2 className="field-label mb-2">Total Due</h2>
+            <h2 className="field-label mb-2">Currently Due</h2>
             <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
               {formatMoney(totalDue)}
             </p>
             {totalDue > 0 && (
               <p className="text-sm text-luxury-gray-3 mt-1">
-                Amount currently due
+                Amount due now
               </p>
             )}
             {totalDue === 0 && (
               <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
                 <CheckCircle size={16} />
-                All paid up!
+                All caught up!
               </p>
             )}
           </div>

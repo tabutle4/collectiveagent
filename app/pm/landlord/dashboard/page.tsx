@@ -32,6 +32,7 @@ interface Property {
   state: string
   zip: string
   status: string
+  pm_agreement_id: string | null
   pm_leases?: {
     id: string
     lease_start: string
@@ -50,6 +51,7 @@ interface Property {
 interface Agreement {
   id: string
   management_fee_pct: number
+  management_fee_flat: number | null
   commencement_date: string
   expiration_date: string | null
   status: string
@@ -600,26 +602,43 @@ function LandlordDashboardContent() {
               <div className="container-card">
                 <h2 className="field-label mb-4 flex items-center gap-2">
                   <Calendar size={16} />
-                  Agreement
+                  {agreements.length === 1 ? 'Agreement' : 'Agreements'}
                 </h2>
-                {agreements.map((a) => (
-                  <div key={a.id} className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-luxury-gray-3">Management Fee</span>
-                      <span className="font-medium text-luxury-gray-1">{a.management_fee_pct}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-luxury-gray-3">Start Date</span>
-                      <span className="text-luxury-gray-1">{formatDate(a.commencement_date)}</span>
-                    </div>
-                    {a.expiration_date && (
-                      <div className="flex justify-between">
-                        <span className="text-luxury-gray-3">Expires</span>
-                        <span className="text-luxury-gray-1">{formatDate(a.expiration_date)}</span>
+                <div className="space-y-5">
+                  {agreements.map((a) => {
+                    // Find property addresses linked to this agreement
+                    const linkedAddresses = properties
+                      .filter(p => p.pm_agreement_id === a.id)
+                      .map(p => p.property_address)
+                    return (
+                      <div key={a.id} className="text-sm space-y-2">
+                        {linkedAddresses.length > 0 && (
+                          <p className="text-xs text-luxury-gray-3 mb-1">
+                            For {linkedAddresses.join(', ')}
+                          </p>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-luxury-gray-3">Management Fee</span>
+                          <span className="font-medium text-luxury-gray-1">
+                            {a.management_fee_flat != null
+                              ? `${formatMoney(Number(a.management_fee_flat))} / mo`
+                              : `${a.management_fee_pct}%`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-luxury-gray-3">Start Date</span>
+                          <span className="text-luxury-gray-1">{formatDate(a.commencement_date)}</span>
+                        </div>
+                        {a.expiration_date && (
+                          <div className="flex justify-between">
+                            <span className="text-luxury-gray-3">Expires</span>
+                            <span className="text-luxury-gray-1">{formatDate(a.expiration_date)}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    )
+                  })}
+                </div>
               </div>
             )}
 
