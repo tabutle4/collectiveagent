@@ -388,12 +388,15 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
         parseFloat(String(t.other_fees ?? 0)),
       0
     )
-    // Momentum partner payouts come from the brokerage's portion. Their own
-    // brokerage_split row is 0, but their agent_gross is real cash leaving
-    // the brokerage and must be subtracted here.
-    const momentumPayoutsTotal = (tias || []).reduce(
+    // Brokerage outflows: payouts that come out of the brokerage's portion
+    // of a deal. Both momentum partner and team lead rows have brokerage_split=0
+    // on their own row (they don't earn a side), but their agent_gross is real
+    // cash leaving the brokerage and must be subtracted from office_net.
+    // Without subtracting team_lead.agent_gross, the Brokerage Net display
+    // overstates the brokerage's take-home by the team lead payout amount.
+    const brokerageOutflowsTotal = (tias || []).reduce(
       (s, t) =>
-        t.agent_role === 'momentum_partner'
+        (t.agent_role === 'momentum_partner' || t.agent_role === 'team_lead')
           ? s + parseFloat(String(t.agent_gross ?? 0))
           : s,
       0
@@ -420,7 +423,7 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
           stagedDebtsTotal -
           stagedCreditsTotal -
           externalTotal -
-          momentumPayoutsTotal) *
+          brokerageOutflowsTotal) *
           100
       ) / 100
 
@@ -1634,7 +1637,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Check current row + payment status
       const { data: current } = await supabase
         .from('transaction_internal_agents')
-        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id, side, split_percentage')
+        .select('payment_status, agent_role, agent_basis, lead_source, referred_agent_id, side, split_percentage, installment_kind')
         .eq('id', internal_agent_id)
         .single()
 
@@ -1824,7 +1827,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         'debts_deducted',
       ]
       const touchedFormula = Object.keys(cleanUpdates).some(k => FORMULA_INPUTS.includes(k))
-      if (touchedFormula && current?.payment_status !== 'paid') {
+      // For retainer rows, agent_basis is the source-of-truth gross (not
+      // agent_gross), and the main cascade above returns early for retainer
+      // rows. Without an explicit resync trigger here, editing the retainer
+      // amount would update agent_basis but leave amount_1099_reportable and
+      // agent_net stale at whatever value they held at creation.
+      const touchedRetainerBasis = 'agent_basis' in cleanUpdates && current?.installment_kind === 'retainer'
+      if ((touchedFormula || touchedRetainerBasis) && current?.payment_status !== 'paid') {
         const { data: fresh } = await supabase
           .from('transaction_internal_agents')
           .select('agent_gross, btsa_amount, processing_fee, coaching_fee, other_fees, rebate_amount, debts_deducted, installment_kind, agent_basis')
@@ -2358,6 +2367,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (!['primary_agent', 'listing_agent', 'co_agent'].includes(primaryTia.agent_role)) {
         return NextResponse.json(
           { error: `apply_primary_split is only valid for primary_agent/listing_agent/co_agent rows (got ${primaryTia.agent_role})` },
+          { status: 400 }
+        )
+      }
+
+      // Retainer rows don't use the commission cascade. They have their own
+      // simple structure (basis minus retainer_fee = net). Running apply_primary_split
+      // on a retainer would overwrite the correct retainer values with commission
+      // split math. The UI hides the Recalculate button on retainer rows, but
+      // we enforce here too in case the action is hit via API directly.
+      if (primaryTia.installment_kind === 'retainer') {
+        return NextResponse.json(
+          { error: 'Cannot apply commission split on a retainer row. Retainer rows use their own fee structure (basis minus retainer_fee = net) and do not split via commission plan.' },
           { status: 400 }
         )
       }

@@ -2140,8 +2140,12 @@ export default function AdminTransactionDetailPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {/* Recalculate */}
-                              {!isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
+                              {/* Recalculate - excluded for retainer rows, which have their own
+                                  fee structure (basis minus retainer_fee = net) and don't use the
+                                  commission cascade. Without this guard, clicking Recalculate
+                                  on a retainer applies the commission plan split and corrupts
+                                  amount_1099_reportable and agent_gross. */}
+                              {!isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && a.installment_kind !== 'retainer' && (
                                 <button
                                   onClick={() => recalculateRow(a)}
                                   disabled={recalcRowId === a.id}
