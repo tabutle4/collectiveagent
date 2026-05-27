@@ -388,15 +388,19 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
         parseFloat(String(t.other_fees ?? 0)),
       0
     )
-    // Brokerage outflows: payouts that come out of the brokerage's portion
-    // of a deal. Both momentum partner and team lead rows have brokerage_split=0
-    // on their own row (they don't earn a side), but their agent_gross is real
-    // cash leaving the brokerage and must be subtracted from office_net.
-    // Without subtracting team_lead.agent_gross, the Brokerage Net display
-    // overstates the brokerage's take-home by the team lead payout amount.
-    const brokerageOutflowsTotal = (tias || []).reduce(
+    // Momentum partner payouts come from the brokerage's portion. Their own
+    // brokerage_split row is 0, but their agent_gross is real cash leaving
+    // the brokerage and must be subtracted here.
+    //
+    // NOTE: team_lead payouts are NOT subtracted here. Under Model A team
+    // splits, the team lead portion is already carved out of the primary
+    // row's brokerage_split by computeCommissionBreakdown (the three
+    // percentages — agent_split + firm_split + team_lead — sum to 100%
+    // of basis). Subtracting team_lead.agent_gross here would
+    // double-deduct it.
+    const momentumPayoutsTotal = (tias || []).reduce(
       (s, t) =>
-        (t.agent_role === 'momentum_partner' || t.agent_role === 'team_lead')
+        t.agent_role === 'momentum_partner'
           ? s + parseFloat(String(t.agent_gross ?? 0))
           : s,
       0
@@ -423,7 +427,7 @@ async function recomputeOfficeNet(transactionId: string): Promise<void> {
           stagedDebtsTotal -
           stagedCreditsTotal -
           externalTotal -
-          brokerageOutflowsTotal) *
+          momentumPayoutsTotal) *
           100
       ) / 100
 
