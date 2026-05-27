@@ -618,21 +618,28 @@ export default function AgentCardFinancials({
   const agentGross = num(liveVal('agent_gross', a.agent_gross ?? calc?.agent_gross))
   const brokerageSplit = num(liveVal('brokerage_split', a.brokerage_split ?? calc?.brokerage_split))
   const teamLeadComm = num(a.team_lead_commission ?? calc?.team_lead_payout)
-  // Derive brokerage % from the split_percentage column (canonical input).
-  // The brokerage takes whatever the agent doesn't, so brokerage% = 100 - agent%.
-  // Re-deriving from (brokerage_split / basis) * 100 picked up rounding error
-  // from the rounded dollars and produced ugly values like 10.000116%. Using
-  // 100 - splitPct keeps the displayed percent clean. When the agent has no
-  // basis yet (referral_agent row before manual entry) the same fallback
-  // applies, so the visual still reads 10% / 90% etc.
-  const brokerageSplitPct = num(
-    liveVal('brokerage_split_percentage', 100 - splitPct)
-  )
+
+  // Team lead percentage: derived from team_lead_commission / agent_basis.
+  // Round to 2 decimals - dividing rounded dollars can produce floating-point
+  // artifacts like 5.000579710144928% when the cents don't divide cleanly.
+  // 5.00 is accurate to the penny and matches what users expect to see.
   const teamLeadPct = num(
     liveVal(
       'team_lead_percentage',
-      agentBasis > 0 ? (teamLeadComm / agentBasis) * 100 : (calc?.team_lead_pct ?? 0)
+      agentBasis > 0
+        ? Math.round((teamLeadComm / agentBasis) * 10000) / 100
+        : (calc?.team_lead_pct ?? 0)
     )
+  )
+
+  // Brokerage percentage: under Model A team splits, three percentages
+  // (agent + firm + team_lead) all apply to the basis and sum to 100%, with
+  // the firm's actual portion being 100 - agent% - team_lead%. For non-team
+  // deals teamLeadPct is 0 and this reduces to (100 - agent%), the original
+  // behavior. This keeps the displayed brokerage% consistent with the
+  // brokerage_split dollar amount stored on the row.
+  const brokerageSplitPct = num(
+    liveVal('brokerage_split_percentage', 100 - splitPct - teamLeadPct)
   )
   const otherFees = num(liveVal('other_fees', a.other_fees))
   const rebate = num(liveVal('rebate_amount', a.rebate_amount))
@@ -806,7 +813,7 @@ export default function AgentCardFinancials({
       {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && (
         <PercentRow
           label="Brokerage"
-          pctValue={brokerageSplitPct || (100 - splitPct)}
+          pctValue={brokerageSplitPct || (100 - splitPct - teamLeadPct)}
           dollarValue={brokerageSplit}
           isEditable={editable}
           isMuted
