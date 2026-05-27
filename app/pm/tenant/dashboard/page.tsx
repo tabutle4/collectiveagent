@@ -512,7 +512,7 @@ function TenantDashboardContent() {
           {/* Total Due */}
           <div className="container-card">
             <h2 className="field-label mb-2">Currently Due</h2>
-            <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
+            <p className={`text-2xl font-semibold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
               {formatMoney(totalDue)}
             </p>
             {totalDue > 0 && (

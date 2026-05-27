@@ -204,25 +204,21 @@ export default function TenantDashboardPage() {
       <main className="max-w-4xl mx-auto p-4 sm:p-6">
         {/* Balance Card */}
         <div className="container-card mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Currently Due</p>
-              <p className={`text-3xl font-bold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
-                {formatMoney(totalDue)}
-              </p>
-              {totalDue > 0 && (
-                <p className="text-sm text-luxury-gray-3 mt-1">
-                  {currentlyDueInvoices.length} invoice{currentlyDueInvoices.length !== 1 ? 's' : ''} due now
-                </p>
-              )}
-            </div>
-            {totalDue === 0 && (
-              <div className="text-center">
-                <CheckCircle size={48} className="text-green-500 mx-auto" />
-                <p className="text-sm text-green-600 mt-1">All caught up!</p>
-              </div>
-            )}
-          </div>
+          <h2 className="field-label mb-2">Currently Due</h2>
+          <p className={`text-2xl font-semibold ${totalDue > 0 ? 'text-luxury-accent' : 'text-green-600'}`}>
+            {formatMoney(totalDue)}
+          </p>
+          {totalDue > 0 && (
+            <p className="text-sm text-luxury-gray-3 mt-1">
+              {currentlyDueInvoices.length} invoice{currentlyDueInvoices.length !== 1 ? 's' : ''} due now
+            </p>
+          )}
+          {totalDue === 0 && (
+            <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+              <CheckCircle size={16} />
+              All caught up!
+            </p>
+          )}
         </div>
 
         {/* Property Info */}

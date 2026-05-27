@@ -265,13 +265,13 @@ export default function TenantDetailPage() {
             Copy Link
           </button>
           <a
-            href={`${window.location.origin}/pm/tenant/${tenant.dashboard_token}`}
+            href={`${window.location.origin}/pm/tenant/dashboard?preview=${tenant.id}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-secondary flex items-center gap-2"
           >
             <ExternalLink size={14} />
-            Open Portal
+            Preview Portal
           </a>
         </div>
       </div>
