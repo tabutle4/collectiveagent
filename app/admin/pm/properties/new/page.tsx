@@ -4,19 +4,13 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Home, ArrowLeft, Save } from 'lucide-react'
+import { AgreementOption } from '@/types/pm'
 
 interface Landlord {
   id: string
   first_name: string
   last_name: string
   email: string
-}
-
-interface AgreementOption {
-  id: string
-  commencement_date: string | null
-  expiration_date: string | null
-  status: string
 }
 
 export default function NewPropertyPage() {

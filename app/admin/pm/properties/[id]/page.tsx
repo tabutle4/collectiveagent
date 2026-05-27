@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Home, ArrowLeft, Save, Plus, ExternalLink } from 'lucide-react'
+import { AgreementOption } from '@/types/pm'
 
 interface Property {
   id: string
@@ -34,13 +35,6 @@ interface Property {
     email: string
     dashboard_token: string
   }
-}
-
-interface AgreementOption {
-  id: string
-  commencement_date: string | null
-  expiration_date: string | null
-  status: string
 }
 
 interface Lease {
