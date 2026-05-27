@@ -68,13 +68,21 @@ interface Agreement {
   id: string
   commencement_date: string | null
   expiration_date: string | null
+  auto_renews: boolean
   management_fee_pct: number
+  management_fee_flat: number | null
   management_fee_minimum: number | null
+  leasing_fee_pct: number | null
+  leasing_fee_flat: number | null
   maintenance_coord_fee_pct: number | null
   renewal_fee_pct: number | null
   renewal_fee_flat: number | null
   eviction_fee: number | null
   repair_limit_without_approval: number | null
+  reserve_per_unit: number | null
+  coop_broker_fee_pct: number | null
+  lease_term_min_months: number | null
+  lease_term_max_months: number | null
   agreement_pdf_url: string | null
   notes: string | null
   status: string
@@ -114,12 +122,20 @@ function AgreementEditor({
     status: agreement.status || 'active',
     commencement_date: agreement.commencement_date || '',
     expiration_date: agreement.expiration_date || '',
+    auto_renews: agreement.auto_renews ?? true,
     management_fee_pct: agreement.management_fee_pct || 10,
+    management_fee_flat: agreement.management_fee_flat ?? '',
+    leasing_fee_pct: agreement.leasing_fee_pct ?? '',
+    leasing_fee_flat: agreement.leasing_fee_flat ?? '',
     maintenance_coord_fee_pct: agreement.maintenance_coord_fee_pct || '',
     renewal_fee_pct: agreement.renewal_fee_pct || '',
     renewal_fee_flat: agreement.renewal_fee_flat || '',
     eviction_fee: agreement.eviction_fee || '',
     repair_limit_without_approval: agreement.repair_limit_without_approval || '',
+    reserve_per_unit: agreement.reserve_per_unit ?? '',
+    coop_broker_fee_pct: agreement.coop_broker_fee_pct ?? '',
+    lease_term_min_months: agreement.lease_term_min_months ?? '',
+    lease_term_max_months: agreement.lease_term_max_months ?? '',
     agreement_pdf_url: agreement.agreement_pdf_url || '',
     notes: agreement.notes || '',
     referring_agent_id: agreement.referring_agent_id || '',
@@ -141,12 +157,34 @@ function AgreementEditor({
       status: form.status,
       commencement_date: form.commencement_date || null,
       expiration_date: form.expiration_date || null,
-      management_fee_pct: parseFloat(String(form.management_fee_pct)) || 10,
+      auto_renews: form.auto_renews,
+      management_fee_pct: parseFloat(String(form.management_fee_pct)) || 0,
+      management_fee_flat: form.management_fee_flat !== '' && form.management_fee_flat !== null
+        ? parseFloat(String(form.management_fee_flat))
+        : null,
+      leasing_fee_pct: form.leasing_fee_pct !== '' && form.leasing_fee_pct !== null
+        ? parseFloat(String(form.leasing_fee_pct))
+        : null,
+      leasing_fee_flat: form.leasing_fee_flat !== '' && form.leasing_fee_flat !== null
+        ? parseFloat(String(form.leasing_fee_flat))
+        : null,
       maintenance_coord_fee_pct: form.maintenance_coord_fee_pct ? parseFloat(String(form.maintenance_coord_fee_pct)) : null,
       renewal_fee_pct: form.renewal_fee_pct ? parseFloat(String(form.renewal_fee_pct)) : null,
       renewal_fee_flat: form.renewal_fee_flat ? parseFloat(String(form.renewal_fee_flat)) : null,
       eviction_fee: form.eviction_fee ? parseFloat(String(form.eviction_fee)) : null,
       repair_limit_without_approval: form.repair_limit_without_approval ? parseFloat(String(form.repair_limit_without_approval)) : null,
+      reserve_per_unit: form.reserve_per_unit !== '' && form.reserve_per_unit !== null
+        ? parseFloat(String(form.reserve_per_unit))
+        : null,
+      coop_broker_fee_pct: form.coop_broker_fee_pct !== '' && form.coop_broker_fee_pct !== null
+        ? parseFloat(String(form.coop_broker_fee_pct))
+        : null,
+      lease_term_min_months: form.lease_term_min_months !== '' && form.lease_term_min_months !== null
+        ? parseInt(String(form.lease_term_min_months), 10)
+        : null,
+      lease_term_max_months: form.lease_term_max_months !== '' && form.lease_term_max_months !== null
+        ? parseInt(String(form.lease_term_max_months), 10)
+        : null,
       agreement_pdf_url: form.agreement_pdf_url || null,
       notes: form.notes || null,
       referring_agent_id: form.referring_agent_id || null,
@@ -203,6 +241,19 @@ function AgreementEditor({
           />
         </div>
       </div>
+
+      {/* Auto Renews toggle */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.auto_renews}
+          onChange={e => updateField('auto_renews', e.target.checked)}
+          className="rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+        />
+        <span className="text-sm text-luxury-gray-2">
+          Automatically renews on a month-to-month basis after expiration
+        </span>
+      </label>
 
       {/* Row 2: Fees */}
       <div>
@@ -271,6 +322,121 @@ function AgreementEditor({
                 placeholder="0"
               />
             </div>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-4 gap-4 mt-4">
+          <div>
+            <label className="field-label">Management Fee Flat</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.management_fee_flat}
+                onChange={e => updateField('management_fee_flat', e.target.value)}
+                min="0"
+                step="25"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Leasing Fee %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.leasing_fee_pct}
+                onChange={e => updateField('leasing_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder="0"
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Leasing Fee Flat</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.leasing_fee_flat}
+                onChange={e => updateField('leasing_fee_flat', e.target.value)}
+                min="0"
+                step="25"
+                placeholder="0"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Coop Broker Fee %</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.coop_broker_fee_pct}
+                onChange={e => updateField('coop_broker_fee_pct', e.target.value)}
+                min="0"
+                max="100"
+                step="0.5"
+                placeholder="0"
+              />
+              <span className="text-sm text-luxury-gray-3">%</span>
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-luxury-gray-3 mt-3">
+          When Management Fee Flat is set, it overrides Management Fee %. Same for Leasing Fee Flat vs Leasing Fee %.
+        </p>
+      </div>
+
+      {/* Reserve & Lease Term */}
+      <div>
+        <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          Reserve &amp; Lease Term
+        </h3>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div>
+            <label className="field-label">Reserve Per Unit</label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-luxury-gray-3">$</span>
+              <input
+                type="number"
+                className="input-luxury"
+                value={form.reserve_per_unit}
+                onChange={e => updateField('reserve_per_unit', e.target.value)}
+                min="0"
+                step="50"
+                placeholder="500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="field-label">Lease Term Min (months)</label>
+            <input
+              type="number"
+              className="input-luxury"
+              value={form.lease_term_min_months}
+              onChange={e => updateField('lease_term_min_months', e.target.value)}
+              min="0"
+              step="1"
+              placeholder="12"
+            />
+          </div>
+          <div>
+            <label className="field-label">Lease Term Max (months)</label>
+            <input
+              type="number"
+              className="input-luxury"
+              value={form.lease_term_max_months}
+              onChange={e => updateField('lease_term_max_months', e.target.value)}
+              min="0"
+              step="1"
+              placeholder="24"
+            />
           </div>
         </div>
       </div>
@@ -415,7 +581,7 @@ export default function LandlordDetailPage() {
   const [leases, setLeases] = useState<Lease[]>([])
   const [disbursements, setDisbursements] = useState<Disbursement[]>([])
   const [allTenants, setAllTenants] = useState<Tenant[]>([])
-  const [agreement, setAgreement] = useState<Agreement | null>(null)
+  const [agreements, setAgreements] = useState<Agreement[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [sendingInvite, setSendingInvite] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
@@ -490,10 +656,14 @@ export default function LandlordDetailPage() {
         // Data is nested in landlord object from API
         setProperties(data.landlord.managed_properties || [])
         setDisbursements(data.landlord.landlord_disbursements || [])
-        // Get first active agreement (there should only be one)
-        const agreements = data.landlord.pm_agreements || []
-        const activeAgreement = agreements.find((a: Agreement) => a.status === 'active') || agreements[0] || null
-        setAgreement(activeAgreement)
+        // Keep all agreements, sorted newest first by commencement_date
+        const allAgreements: Agreement[] = data.landlord.pm_agreements || []
+        const sorted = [...allAgreements].sort((a, b) => {
+          const aDate = a.commencement_date || ''
+          const bDate = b.commencement_date || ''
+          return bDate.localeCompare(aDate)
+        })
+        setAgreements(sorted)
       }
 
       // Fetch leases separately to get tenant info
@@ -622,13 +792,12 @@ export default function LandlordDetailPage() {
     }
   }
 
-  const handleSaveAgreement = async (updates: Record<string, any>) => {
-    if (!agreement) return
+  const handleSaveAgreement = async (agreementId: string, updates: Record<string, any>) => {
     setSavingAgreement(true)
     setErrorMessage('')
     setSuccessMessage('')
     try {
-      const res = await fetch(`/api/pm/agreements/${agreement.id}`, {
+      const res = await fetch(`/api/pm/agreements/${agreementId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
@@ -1134,24 +1303,52 @@ export default function LandlordDetailPage() {
           {/* Agreement Tab */}
           {activeTab === 'agreement' && (
             <div>
-              {!agreement ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-luxury-gray-3 mb-4">No agreement found for this landlord</p>
-                  <button
-                    onClick={handleCreateAgreement}
-                    disabled={savingAgreement}
-                    className="btn btn-primary text-sm"
-                  >
-                    {savingAgreement ? 'Creating...' : 'Create Agreement'}
-                  </button>
-                </div>
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-sm text-luxury-gray-3">
+                  {agreements.length === 0
+                    ? 'No agreements yet'
+                    : `${agreements.length} agreement${agreements.length === 1 ? '' : 's'} on file`}
+                </p>
+                <button
+                  onClick={handleCreateAgreement}
+                  disabled={savingAgreement}
+                  className="btn btn-primary text-sm flex items-center gap-2"
+                >
+                  <Plus size={14} />
+                  {savingAgreement ? 'Creating...' : agreements.length === 0 ? 'Create Agreement' : 'Add Another Agreement'}
+                </button>
+              </div>
+
+              {agreements.length === 0 ? (
+                <p className="text-sm text-luxury-gray-3 text-center py-8">
+                  Click the button above to create an agreement for this landlord.
+                </p>
               ) : (
-                <AgreementEditor
-                  agreement={agreement}
-                  agents={agents}
-                  saving={savingAgreement}
-                  onSave={handleSaveAgreement}
-                />
+                <div className="space-y-6">
+                  {agreements.map(ag => (
+                    <div key={ag.id} className="inner-card">
+                      <div className="flex items-center justify-between mb-4 pb-3 border-b border-luxury-gray-5">
+                        <div>
+                          <p className="text-sm font-semibold text-luxury-gray-1">
+                            {formatDate(ag.commencement_date)} {ag.expiration_date ? `to ${formatDate(ag.expiration_date)}` : '(no end date)'}
+                          </p>
+                          <p className="text-xs text-luxury-gray-3">ID: {ag.id.slice(0, 8)}</p>
+                        </div>
+                        <span className={`text-xs font-medium ${
+                          ag.status === 'active' ? 'text-green-600' : 'text-luxury-gray-3'
+                        }`}>
+                          {ag.status}
+                        </span>
+                      </div>
+                      <AgreementEditor
+                        agreement={ag}
+                        agents={agents}
+                        saving={savingAgreement}
+                        onSave={(updates) => handleSaveAgreement(ag.id, updates)}
+                      />
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

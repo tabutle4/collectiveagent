@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     const {
       landlord_id, commencement_date, expiration_date, auto_renews,
-      management_fee_pct, management_fee_minimum,
+      management_fee_pct, management_fee_flat, management_fee_minimum,
       leasing_fee_pct, leasing_fee_flat,
       renewal_fee_pct, renewal_fee_flat,
       maintenance_coord_fee_pct, eviction_fee,
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
         expiration_date: expiration_date || null,
         auto_renews: auto_renews ?? true,
         management_fee_pct: management_fee_pct ?? 10,
+        management_fee_flat: management_fee_flat ?? null,
         management_fee_minimum: management_fee_minimum || null,
         leasing_fee_pct: leasing_fee_pct ?? 75,
         leasing_fee_flat: leasing_fee_flat || null,

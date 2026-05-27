@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         managed_properties(id, property_address, city, status),
-        pm_agreements(id, status, management_fee_pct)
+        pm_agreements(id, status, management_fee_pct, management_fee_flat)
       `)
       .order('created_at', { ascending: false })
 

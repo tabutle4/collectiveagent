@@ -23,10 +23,13 @@ export async function GET(
           pm_leases(id, tenant_id, lease_start, lease_end, monthly_rent, status)
         ),
         pm_agreements(
-          id, commencement_date, expiration_date, status,
-          management_fee_pct, management_fee_minimum,
+          id, commencement_date, expiration_date, auto_renews, status,
+          management_fee_pct, management_fee_flat, management_fee_minimum,
+          leasing_fee_pct, leasing_fee_flat,
           maintenance_coord_fee_pct, renewal_fee_pct, renewal_fee_flat,
           eviction_fee, repair_limit_without_approval,
+          reserve_per_unit, coop_broker_fee_pct,
+          lease_term_min_months, lease_term_max_months,
           agreement_pdf_url, notes,
           referring_agent_id, agent_fee_pct,
           referring_agent:users!pm_agreements_referring_agent_id_fkey(

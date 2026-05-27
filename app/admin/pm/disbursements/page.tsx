@@ -55,6 +55,7 @@ interface Landlord {
     id: string
     status: string
     management_fee_pct: number
+    management_fee_flat: number | null
   }[]
 }
 
@@ -275,12 +276,15 @@ export default function DisbursementsPage() {
       management_fee: '',
     }))
 
-    // Auto-set management fee percentage if agreement exists
+    // Auto-set management fee if agreement exists.
+    // management_fee_flat overrides management_fee_pct when set.
     const landlord = landlords.find(l => l.id === landlordId)
     if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
       const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
       if (activeAgreement && createForm.gross_rent) {
-        const fee = (parseFloat(createForm.gross_rent) * activeAgreement.management_fee_pct / 100).toFixed(2)
+        const fee = activeAgreement.management_fee_flat != null
+          ? Number(activeAgreement.management_fee_flat).toFixed(2)
+          : (parseFloat(createForm.gross_rent) * activeAgreement.management_fee_pct / 100).toFixed(2)
         setCreateForm(prev => ({ ...prev, landlord_id: landlordId, property_id: '', management_fee: fee }))
       }
     }
@@ -288,14 +292,17 @@ export default function DisbursementsPage() {
 
   const handleGrossRentChange = (value: string) => {
     setCreateForm(prev => ({ ...prev, gross_rent: value }))
-    
-    // Auto-calculate management fee if landlord selected
+
+    // Auto-calculate management fee if landlord selected.
+    // management_fee_flat overrides management_fee_pct when set.
     if (createForm.landlord_id) {
       const landlord = landlords.find(l => l.id === createForm.landlord_id)
       if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
         const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
         if (activeAgreement && value) {
-          const fee = (parseFloat(value) * activeAgreement.management_fee_pct / 100).toFixed(2)
+          const fee = activeAgreement.management_fee_flat != null
+            ? Number(activeAgreement.management_fee_flat).toFixed(2)
+            : (parseFloat(value) * activeAgreement.management_fee_pct / 100).toFixed(2)
           setCreateForm(prev => ({ ...prev, gross_rent: value, management_fee: fee }))
           return
         }

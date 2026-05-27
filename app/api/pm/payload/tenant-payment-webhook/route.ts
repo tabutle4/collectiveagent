@@ -144,24 +144,29 @@ export async function POST(request: NextRequest) {
 
       console.log('Invoice marked paid:', invoice.id)
 
-      // Get PM agreement to calculate management fee
+      // Get PM agreement to calculate management fee.
+      // management_fee_flat overrides management_fee_pct when set (not null).
       let managementFeePct = 10 // Default
+      let managementFeeFlat: number | null = null
       const property = invoice.managed_properties as any
       if (property?.pm_agreement_id) {
         const { data: agreement } = await supabase
           .from('pm_agreements')
-          .select('management_fee_pct')
+          .select('management_fee_pct, management_fee_flat')
           .eq('id', property.pm_agreement_id)
           .single()
 
         if (agreement) {
           managementFeePct = agreement.management_fee_pct
+          managementFeeFlat = agreement.management_fee_flat
         }
       }
 
       // Calculate disbursement amounts
       const grossRent = paidAmount
-      const managementFee = grossRent * (managementFeePct / 100)
+      const managementFee = managementFeeFlat != null
+        ? Number(managementFeeFlat)
+        : grossRent * (managementFeePct / 100)
       const netAmount = grossRent - managementFee
 
       // Create pending disbursement for landlord

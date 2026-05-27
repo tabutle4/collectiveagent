@@ -12,14 +12,23 @@ interface Landlord {
   email: string
 }
 
+interface AgreementOption {
+  id: string
+  commencement_date: string | null
+  expiration_date: string | null
+  status: string
+}
+
 export default function NewPropertyPage() {
   const router = useRouter()
   const [landlords, setLandlords] = useState<Landlord[]>([])
+  const [landlordAgreements, setLandlordAgreements] = useState<AgreementOption[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
     landlord_id: '',
+    pm_agreement_id: '',
     property_address: '',
     unit: '',
     city: '',
@@ -42,6 +51,38 @@ export default function NewPropertyPage() {
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // When the selected landlord changes, fetch that landlord's agreements
+  // and reset the agreement selection.
+  useEffect(() => {
+    if (!form.landlord_id) {
+      setLandlordAgreements([])
+      if (form.pm_agreement_id) {
+        setForm(f => ({ ...f, pm_agreement_id: '' }))
+      }
+      return
+    }
+    let cancelled = false
+    const fetchAgreements = async () => {
+      try {
+        const res = await fetch(`/api/pm/agreements?landlord_id=${form.landlord_id}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled) return
+        setLandlordAgreements(data.agreements || [])
+        // Reset selection if the previously chosen agreement isn't from this landlord
+        setForm(f => {
+          const stillValid = (data.agreements || []).some((a: AgreementOption) => a.id === f.pm_agreement_id)
+          return stillValid ? f : { ...f, pm_agreement_id: '' }
+        })
+      } catch (err) {
+        console.error('Failed to load landlord agreements:', err)
+      }
+    }
+    fetchAgreements()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.landlord_id])
 
   const checkAuth = async () => {
     const res = await fetch('/api/auth/me')
@@ -80,6 +121,7 @@ export default function NewPropertyPage() {
           bathrooms: form.bathrooms ? Number(form.bathrooms) : null,
           square_feet: form.square_feet ? Number(form.square_feet) : null,
           year_built: form.year_built ? Number(form.year_built) : null,
+          pm_agreement_id: form.pm_agreement_id || null,
         }),
       })
 
@@ -134,6 +176,40 @@ export default function NewPropertyPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* PM Agreement Selection (filtered to selected landlord) */}
+          <div>
+            <label className="field-label">Property Management Agreement</label>
+            <select
+              name="pm_agreement_id"
+              value={form.pm_agreement_id}
+              onChange={handleChange}
+              disabled={!form.landlord_id}
+              className="select-luxury w-full"
+            >
+              <option value="">None / Unassigned</option>
+              {landlordAgreements.map((ag) => {
+                const startStr = ag.commencement_date
+                  ? new Date(`${ag.commencement_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'No start date'
+                const endStr = ag.expiration_date
+                  ? new Date(`${ag.expiration_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'no end'
+                return (
+                  <option key={ag.id} value={ag.id}>
+                    {startStr} to {endStr} ({ag.status})
+                  </option>
+                )
+              })}
+            </select>
+            <p className="text-xs text-luxury-gray-3 mt-2">
+              {!form.landlord_id
+                ? 'Select a landlord first to see available agreements.'
+                : landlordAgreements.length === 0
+                  ? 'This landlord has no agreements yet. You can link one later from the property edit page.'
+                  : 'Selects which agreement governs disbursements for this property. Can be changed later.'}
+            </p>
           </div>
 
           {/* Address Section */}

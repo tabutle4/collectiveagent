@@ -26,6 +26,7 @@ interface Property {
   status: string
   notes: string | null
   landlord_id: string
+  pm_agreement_id: string | null
   landlords?: {
     id: string
     first_name: string
@@ -33,6 +34,13 @@ interface Property {
     email: string
     dashboard_token: string
   }
+}
+
+interface AgreementOption {
+  id: string
+  commencement_date: string | null
+  expiration_date: string | null
+  status: string
 }
 
 interface Lease {
@@ -76,7 +84,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     hoa_email: '',
     status: 'active',
     notes: '',
+    pm_agreement_id: '',
   })
+  const [landlordAgreements, setLandlordAgreements] = useState<AgreementOption[]>([])
 
   useEffect(() => {
     checkAuth()
@@ -124,7 +134,21 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         hoa_email: p.hoa_email || '',
         status: p.status || 'active',
         notes: p.notes || '',
+        pm_agreement_id: p.pm_agreement_id || '',
       })
+
+      // Load this landlord's agreements for the picker
+      if (p.landlord_id) {
+        try {
+          const agRes = await fetch(`/api/pm/agreements?landlord_id=${p.landlord_id}`)
+          if (agRes.ok) {
+            const agData = await agRes.json()
+            setLandlordAgreements(agData.agreements || [])
+          }
+        } catch (agErr) {
+          console.error('Failed to load landlord agreements:', agErr)
+        }
+      }
     } catch (err) {
       console.error('Failed to load property:', err)
     } finally {
@@ -148,6 +172,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           bathrooms: form.bathrooms ? Number(form.bathrooms) : null,
           square_feet: form.square_feet ? Number(form.square_feet) : null,
           year_built: form.year_built ? Number(form.year_built) : null,
+          pm_agreement_id: form.pm_agreement_id || null,
         }),
       })
 
@@ -392,6 +417,38 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   className="textarea-luxury w-full"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* PM Agreement */}
+          <div className="container-card">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Property Management Agreement</p>
+            <div>
+              <label className="field-label">Active Agreement</label>
+              <select
+                name="pm_agreement_id"
+                value={form.pm_agreement_id}
+                onChange={handleChange}
+                className="select-luxury w-full"
+              >
+                <option value="">None / Unassigned</option>
+                {landlordAgreements.map((ag) => {
+                  const startStr = ag.commencement_date
+                    ? new Date(`${ag.commencement_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : 'No start date'
+                  const endStr = ag.expiration_date
+                    ? new Date(`${ag.expiration_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : 'no end'
+                  return (
+                    <option key={ag.id} value={ag.id}>
+                      {startStr} to {endStr} ({ag.status})
+                    </option>
+                  )
+                })}
+              </select>
+              <p className="text-xs text-luxury-gray-3 mt-2">
+                Selects which of this landlord&apos;s agreements governs disbursements for this property. Changing this updates future disbursement calculations. Past disbursements are not recalculated.
+              </p>
             </div>
           </div>
 
