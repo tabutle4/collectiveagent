@@ -551,21 +551,24 @@ async function cascadePrimarySplit(args: {
   // freshly overwrites the computed columns - there is no per-field
   // override flag.
   //
-  // Rounding rule (Phase 2.7): round agent_gross to 2 decimals FIRST, then
-  // derive brokerage_split = commissionAmount - rounded(agent_gross). This
-  // guarantees the two ALWAYS sum to commissionAmount and eliminates the
-  // "$0.01 too high / 10.000116%" rounding artifact that came from
-  // independently rounding both values from raw basis × pct.
+  // Rounding rule: round agent_gross and team_lead to 2 decimals FIRST, then
+  // derive brokerage_split = commissionAmount - rounded(agent_gross) -
+  // rounded(team_lead). This guarantees the three values ALWAYS sum to
+  // commissionAmount and eliminates the "$0.01 too high" rounding artifact
+  // that came from independently rounding each from raw basis x pct. For
+  // non-team rows breakdown.teamLeadPayout is 0, reducing to the original
+  // two-way residual safely.
   const roundedAgentGross = Math.round(breakdown.agentGross * 100) / 100
+  const roundedTeamLead = Math.round(breakdown.teamLeadPayout * 100) / 100
   const primaryUpdates: Record<string, any> = {
     commission_plan: breakdown.planCode,
     agent_basis: commissionAmount,
     split_percentage: breakdown.agentSplitPct,
     agent_gross: roundedAgentGross,
-    brokerage_split: Math.round((commissionAmount - roundedAgentGross) * 100) / 100,
+    brokerage_split: Math.round((commissionAmount - roundedAgentGross - roundedTeamLead) * 100) / 100,
     processing_fee: Math.round(breakdown.processingFee * 100) / 100,
     coaching_fee: Math.round(breakdown.coachingFee * 100) / 100,
-    team_lead_commission: Math.round(breakdown.teamLeadPayout * 100) / 100,
+    team_lead_commission: roundedTeamLead,
     agent_net: Math.round(breakdown.primaryAgentNet * 100) / 100,
     amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
     updated_at: new Date().toISOString(),
@@ -2413,6 +2416,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         transactionType: txn?.transaction_type || null,
       })
 
+      // Same rounding rule as the recalc path: round agent_gross and
+      // team_lead first, derive brokerage_split as the residual so the
+      // three slices ALWAYS sum to commAmt (no $0.01 over-attribution
+      // when both raw values would round-half-up).
+      const roundedAgentGross = Math.round(breakdown.agentGross * 100) / 100
+      const roundedTeamLead = Math.round(breakdown.teamLeadPayout * 100) / 100
+
       // Update primary row - uses canonical computeCommission() which
       // includes existing btsa, other_fees, rebate, debts so manual
       // adjustments are preserved.
@@ -2420,11 +2430,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         commission_plan: breakdown.planCode,
         agent_basis: commAmt,
         split_percentage: breakdown.agentSplitPct,
-        agent_gross: Math.round(breakdown.agentGross * 100) / 100,
-        brokerage_split: Math.round(breakdown.brokerageSplit * 100) / 100,
+        agent_gross: roundedAgentGross,
+        brokerage_split: Math.round((commAmt - roundedAgentGross - roundedTeamLead) * 100) / 100,
         processing_fee: Math.round(breakdown.processingFee * 100) / 100,
         coaching_fee: Math.round(breakdown.coachingFee * 100) / 100,
-        team_lead_commission: Math.round(breakdown.teamLeadPayout * 100) / 100,
+        team_lead_commission: roundedTeamLead,
         agent_net: Math.round(breakdown.primaryAgentNet * 100) / 100,
         amount_1099_reportable: Math.round(breakdown.primary1099 * 100) / 100,
         counts_toward_progress: !breakdown.isLease,

@@ -310,13 +310,14 @@ export async function POST(request: NextRequest) {
     // side's portion (per side semantics); team & non-team agents both
     // multiply basis by their agent_pct to derive agent_gross.
     //
-    // Rounding rule (Phase 2.7): round agentGross first, then derive
-    // brokerageSplit = agentBasis - agentGross. Independent rounding could
-    // make both round-half-up and produce a sum $0.01 over basis, which
-    // shows up downstream as ugly 10.000116% brokerage percentages.
+    // Rounding rule: round agentGross and teamLeadPayout first, then derive
+    // brokerageSplit = agentBasis - agentGross - teamLeadPayout. Independent
+    // rounding of each slice could make multiple values round-half-up and
+    // produce a sum $0.01 over basis, which shows up downstream as wrong
+    // brokerage preview amounts on team transactions.
     const agentGross   = round2(agentBasis * (agentSplitPct / 100))
-    const brokerageSplit = round2(agentBasis - agentGross)
     const teamLeadPayout = round2(agentBasis * (teamLeadPct / 100))
+    const brokerageSplit = round2(agentBasis - agentGross - teamLeadPayout)
 
     // Processing fee with waiver check (side-aware)
     let processingFee = processingFeeType?.processing_fee || 0
