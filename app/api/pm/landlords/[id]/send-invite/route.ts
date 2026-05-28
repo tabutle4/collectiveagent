@@ -35,6 +35,7 @@ export async function POST(
     const { error: emailError } = await resend.emails.send({
       from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
       to: landlord.email,
+      bcc: 'office@collectiverealtyco.com',
       subject: 'Access Your Landlord Portal',
       html,
     })
