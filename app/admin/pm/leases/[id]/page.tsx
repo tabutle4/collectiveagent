@@ -360,7 +360,72 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                 </select>
               </div>
             </div>
-
+            <div className="mt-4 pt-4 border-t border-luxury-gray-5">
+              <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+                Late Fees
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="field-label">Grace Days</label>
+                  <input
+                    type="number"
+                    name="late_fee_grace_days"
+                    value={form.late_fee_grace_days}
+                    onChange={handleChange}
+                    min="0"
+                    className="input-luxury w-full"
+                  />
+                  <p className="text-xs text-luxury-gray-3 mt-1">Days after due date</p>
+                </div>
+                <div>
+                  <label className="field-label">Initial Fee</label>
+                  <input
+                    type="number"
+                    name="late_fee_initial"
+                    value={form.late_fee_initial}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    className="input-luxury w-full"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Daily Fee</label>
+                  <input
+                    type="number"
+                    name="late_fee_daily"
+                    value={form.late_fee_daily}
+                    onChange={handleChange}
+                    min="0"
+                    step="0.01"
+                    className="input-luxury w-full"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Max Days</label>
+                  <input
+                    type="number"
+                    name="late_fee_max_days"
+                    value={form.late_fee_max_days}
+                    onChange={handleChange}
+                    min="0"
+                    className="input-luxury w-full"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 w-1/2">
+                <label className="field-label">Returned Payment Fee</label>
+                <input
+                  type="number"
+                  name="returned_payment_fee"
+                  value={form.returned_payment_fee}
+                  onChange={handleChange}
+                  min="0"
+                  step="0.01"
+                  className="input-luxury w-full"
+                />
+              </div>
+            </div>
             <div className="mt-4 pt-4 border-t border-luxury-gray-5">
               <label className="field-label">Notes</label>
               <textarea
