@@ -54,7 +54,12 @@ export default function PMDashboardPage() {
       const disbursementsList = disbursementsData.disbursements || []
 
       const pendingDisb = disbursementsList.filter((d: any) => d.payment_status === 'pending')
-      const completedDisb = disbursementsList.filter((d: any) => d.payment_status === 'completed')
+      // Both 'completed' and 'paid' are settled terminal states - 'paid' is
+      // written by manual mark-paid, 'completed' is reserved for future ACH
+      // automation. Either should count in the completed total.
+      const completedDisb = disbursementsList.filter(
+        (d: any) => d.payment_status === 'completed' || d.payment_status === 'paid'
+      )
       const incompleteSetup = landlordsList.filter(
         (l: any) => l.w9_status !== 'completed' || l.bank_status !== 'connected'
       ).length

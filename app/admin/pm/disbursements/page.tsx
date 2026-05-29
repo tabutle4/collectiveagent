@@ -162,7 +162,9 @@ export default function DisbursementsPage() {
         newStats.totalPending += d.net_amount
       }
       else if (d.payment_status === 'processing') newStats.processing++
-      else if (d.payment_status === 'completed') newStats.completed++
+      // 'paid' is the value written by manual mark-paid; 'completed' is reserved
+      // for future ACH automation. Both indicate the disbursement is settled.
+      else if (d.payment_status === 'completed' || d.payment_status === 'paid') newStats.completed++
       else if (d.payment_status === 'failed') newStats.failed++
     })
     
@@ -194,6 +196,8 @@ export default function DisbursementsPage() {
       pending: { bg: 'bg-amber-50 text-amber-700', icon: <Clock size={12} /> },
       processing: { bg: 'bg-blue-50 text-blue-700', icon: <Send size={12} /> },
       completed: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
+      // 'paid' shares styling with 'completed' - both are settled terminal states.
+      paid: { bg: 'bg-green-50 text-green-700', icon: <CheckCircle size={12} /> },
       failed: { bg: 'bg-red-50 text-red-700', icon: <AlertCircle size={12} /> },
     }
     const style = styles[status] || styles.pending
@@ -555,9 +559,9 @@ export default function DisbursementsPage() {
                           )}
                         </>
                       )}
-                      {disbursement.payment_status === 'completed' && (
+                      {(disbursement.payment_status === 'completed' || disbursement.payment_status === 'paid') && (
                         <span className="text-xs text-green-600">
-                          ACH Complete
+                          {disbursement.payment_status === 'completed' ? 'ACH Complete' : 'Paid'}
                         </span>
                       )}
                       {disbursement.payment_status === 'failed' && (

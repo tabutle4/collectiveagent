@@ -83,10 +83,17 @@ interface Activity {
 interface Repair {
   id: string
   title: string
+  description: string | null
   category: string
   urgency: string
   status: string
   created_at: string
+  completed_at: string | null
+  photos: string[]
+  vendor_name: string | null
+  vendor_phone: string | null
+  vendor_email: string | null
+  estimated_cost: number | null
   actual_cost: number | null
   managed_properties?: {
     property_address: string
@@ -131,6 +138,10 @@ function LandlordDashboardContent() {
   const [error, setError] = useState<string | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const [isAdminPreview, setIsAdminPreview] = useState(false)
+  // Repairs are paginated client-side. Landlords get full history but only
+  // 5 cards render initially, then "Load more" reveals the next 5.
+  const REPAIRS_PAGE_SIZE = 5
+  const [repairsVisible, setRepairsVisible] = useState(REPAIRS_PAGE_SIZE)
   const [requestingW9, setRequestingW9] = useState(false)
   const [requestingBank, setRequestingBank] = useState(false)
 
@@ -675,6 +686,9 @@ function LandlordDashboardContent() {
           <h2 className="field-label mb-4 flex items-center gap-2">
             <Wrench size={16} />
             Repair Requests
+            {repairs.length > 0 && (
+              <span className="text-xs text-luxury-gray-3 font-normal">({repairs.length})</span>
+            )}
           </h2>
           {repairs.length === 0 ? (
             <div className="text-center py-6">
@@ -682,34 +696,124 @@ function LandlordDashboardContent() {
               <p className="text-sm text-luxury-gray-3">No repair requests</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {repairs.slice(0, 5).map((repair) => (
-                <div key={repair.id} className="inner-card">
-                  <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <p className="font-medium text-luxury-gray-1">{repair.title}</p>
-                      <p className="text-xs text-luxury-gray-3">
-                        {repair.managed_properties?.property_address} • {repair.category}
-                      </p>
+            <>
+              <div className="space-y-3">
+                {repairs.slice(0, repairsVisible).map((repair) => {
+                  const urgencyStyle =
+                    repair.urgency === 'emergency' ? 'bg-red-50 text-red-700' :
+                    repair.urgency === 'urgent' ? 'bg-amber-50 text-amber-700' :
+                    'bg-luxury-gray-5 text-luxury-gray-2'
+                  const statusStyle =
+                    repair.status === 'completed' ? 'text-green-600' :
+                    repair.status === 'in_progress' ? 'text-blue-600' :
+                    repair.status === 'approved' ? 'text-purple-600' :
+                    repair.status === 'cancelled' ? 'text-luxury-gray-3' :
+                    'text-amber-600'
+                  const photos = Array.isArray(repair.photos) ? repair.photos : []
+                  return (
+                    <div key={repair.id} className="inner-card">
+                      {/* Header row: title + status */}
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-luxury-gray-1">{repair.title}</p>
+                          <p className="text-xs text-luxury-gray-3 mt-0.5">
+                            {repair.managed_properties?.property_address} • {repair.category}
+                          </p>
+                        </div>
+                        <span className={`text-xs capitalize font-medium ${statusStyle} shrink-0`}>
+                          {repair.status.replace('_', ' ')}
+                        </span>
+                      </div>
+
+                      {/* Urgency badge */}
+                      <div className="mb-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full capitalize ${urgencyStyle}`}>
+                          {repair.urgency}
+                        </span>
+                      </div>
+
+                      {/* Description (initial request) - not the message thread */}
+                      {repair.description && (
+                        <p className="text-sm text-luxury-gray-1 whitespace-pre-wrap mb-2">
+                          {repair.description}
+                        </p>
+                      )}
+
+                      {/* Photos as thumbnails */}
+                      {photos.length > 0 && (
+                        <div className="flex gap-2 flex-wrap mb-2">
+                          {photos.map((url, i) => (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block w-16 h-16 rounded overflow-hidden border border-luxury-gray-5 hover:opacity-80"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`Repair photo ${i + 1}`} className="w-full h-full object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Vendor + cost info */}
+                      {(repair.vendor_name || repair.estimated_cost || repair.actual_cost) && (
+                        <div className="mt-2 pt-2 border-t border-luxury-gray-5 grid grid-cols-2 gap-2 text-xs">
+                          {repair.vendor_name && (
+                            <div>
+                              <p className="text-luxury-gray-3">Vendor</p>
+                              <p className="text-luxury-gray-1">{repair.vendor_name}</p>
+                              {repair.vendor_phone && (
+                                <p className="text-luxury-gray-2">{repair.vendor_phone}</p>
+                              )}
+                              {repair.vendor_email && (
+                                <p className="text-luxury-gray-2 truncate">{repair.vendor_email}</p>
+                              )}
+                            </div>
+                          )}
+                          {(repair.estimated_cost || repair.actual_cost) && (
+                            <div>
+                              {repair.actual_cost ? (
+                                <>
+                                  <p className="text-luxury-gray-3">Actual Cost</p>
+                                  <p className="font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-luxury-gray-3">Estimated</p>
+                                  <p className="text-luxury-gray-1">{formatMoney(repair.estimated_cost || 0)}</p>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Timestamps footer */}
+                      <div className="mt-2 pt-2 border-t border-luxury-gray-5 flex items-center justify-between text-xs text-luxury-gray-3">
+                        <span>Submitted {formatDate(repair.created_at)}</span>
+                        {repair.completed_at && (
+                          <span>Completed {formatDate(repair.completed_at)}</span>
+                        )}
+                      </div>
                     </div>
-                    <span className={`text-xs capitalize ${
-                      repair.status === 'completed' ? 'text-green-600' :
-                      repair.status === 'in_progress' ? 'text-blue-600' :
-                      repair.status === 'approved' ? 'text-purple-600' :
-                      'text-amber-600'
-                    }`}>
-                      {repair.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-luxury-gray-3">
-                    <span>{formatDate(repair.created_at)}</span>
-                    {repair.actual_cost && (
-                      <span className="font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</span>
-                    )}
-                  </div>
+                  )
+                })}
+              </div>
+
+              {/* Load more - only renders when more rows exist beyond current page */}
+              {repairs.length > repairsVisible && (
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => setRepairsVisible(v => v + REPAIRS_PAGE_SIZE)}
+                    className="btn btn-secondary text-xs"
+                  >
+                    Load more ({repairs.length - repairsVisible} remaining)
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 

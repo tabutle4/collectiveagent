@@ -3,7 +3,15 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileText, ArrowLeft, Save, Send, ExternalLink } from 'lucide-react'
+import { FileText, ArrowLeft, Save, Send, ExternalLink, Upload, Trash2, FileUp, Plus } from 'lucide-react'
+
+interface LeaseDocument {
+  id: string
+  document_name: string
+  file_url: string
+  file_name: string
+  uploaded_at: string
+}
 
 interface Lease {
   id: string
@@ -19,6 +27,7 @@ interface Lease {
   late_fee_max_days: number | null
   late_fee_cap_pct: number | null
   returned_payment_fee: number | null
+  lease_pdf_url: string | null
   status: string
   notes: string | null
   property_id: string
@@ -67,10 +76,15 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
   const router = useRouter()
   const [lease, setLease] = useState<Lease | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [documents, setDocuments] = useState<LeaseDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [uploadingLease, setUploadingLease] = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [newDocName, setNewDocName] = useState('')
+  const [newDocFile, setNewDocFile] = useState<File | null>(null)
 
   const [form, setForm] = useState({
     lease_start: '',
@@ -136,6 +150,92 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
       console.error('Failed to load lease:', err)
     } finally {
       setLoading(false)
+    }
+    // Load named documents after the lease is set. Sequential (not parallel),
+    // but documents are non-critical so the page renders while they fetch.
+    // Errors here are swallowed so the page still renders if the docs API
+    // is unavailable for any reason.
+    try {
+      const docsRes = await fetch(`/api/pm/leases/${id}/documents`)
+      if (docsRes.ok) {
+        const docsData = await docsRes.json()
+        setDocuments(docsData.documents || [])
+      }
+    } catch (err) {
+      console.error('Failed to load lease documents:', err)
+    }
+  }
+
+  const handleUploadLease = async (file: File) => {
+    setUploadingLease(true)
+    setError('')
+    setSuccess('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch(`/api/pm/leases/${id}/upload-lease`, {
+        method: 'POST',
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to upload lease')
+      setSuccess(lease?.lease_pdf_url ? 'Lease replaced' : 'Lease uploaded')
+      loadLease()
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingLease(false)
+    }
+  }
+
+  const handleUploadDocument = async () => {
+    if (!newDocName.trim() || !newDocFile) {
+      setError('Document name and file are both required')
+      return
+    }
+    setUploadingDoc(true)
+    setError('')
+    setSuccess('')
+    try {
+      // Warn if the name collides with an existing doc - the API will upsert,
+      // overwriting silently, so we surface the intent in the UI message.
+      const isOverwrite = documents.some(
+        d => d.document_name.toLowerCase() === newDocName.trim().toLowerCase()
+      )
+
+      const fd = new FormData()
+      fd.append('document_name', newDocName.trim())
+      fd.append('file', newDocFile)
+      const res = await fetch(`/api/pm/leases/${id}/documents`, {
+        method: 'POST',
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to upload document')
+      setSuccess(isOverwrite ? `"${newDocName.trim()}" replaced` : `"${newDocName.trim()}" uploaded`)
+      setNewDocName('')
+      setNewDocFile(null)
+      loadLease()
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingDoc(false)
+    }
+  }
+
+  const handleDeleteDocument = async (docId: string, docName: string) => {
+    if (!confirm(`Delete "${docName}"? This removes the file from OneDrive and the tenant portal.`)) return
+    try {
+      const res = await fetch(`/api/pm/lease-documents/${docId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to delete document')
+      setSuccess(`"${docName}" deleted`)
+      loadLease()
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -438,6 +538,128 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                 rows={2}
                 className="textarea-luxury w-full"
               />
+            </div>
+          </div>
+
+          {/* Documents */}
+          <div className="container-card">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
+              Documents
+            </p>
+
+            {/* Lease PDF row - replaces (or sets) lease_pdf_url */}
+            <div className="inner-card mb-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <FileText size={20} className="text-luxury-accent mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-luxury-gray-1">Lease</p>
+                    {lease?.lease_pdf_url ? (
+                      <a
+                        href={lease.lease_pdf_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-luxury-accent hover:underline flex items-center gap-1 mt-0.5"
+                      >
+                        View current lease <ExternalLink size={11} />
+                      </a>
+                    ) : (
+                      <p className="text-xs text-luxury-gray-3 mt-0.5">No lease uploaded yet</p>
+                    )}
+                  </div>
+                </div>
+                <label className="btn btn-secondary text-xs py-1 px-3 cursor-pointer flex items-center gap-1 shrink-0">
+                  <Upload size={12} />
+                  {uploadingLease ? 'Uploading...' : lease?.lease_pdf_url ? 'Replace' : 'Upload'}
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                    disabled={uploadingLease}
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f) handleUploadLease(f)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Additional named documents (amendments, addenda, etc.) */}
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-luxury-gray-2 mb-2">
+                Additional Documents
+              </p>
+              {documents.length === 0 ? (
+                <p className="text-sm text-luxury-gray-3 py-2">
+                  No additional documents. Add amendments, addenda, or other lease-related files below.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map(doc => (
+                    <div key={doc.id} className="inner-card flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <FileText size={18} className="text-luxury-gray-2 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-luxury-gray-1 truncate">{doc.document_name}</p>
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-luxury-accent hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                            View <ExternalLink size={11} />
+                          </a>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id, doc.document_name)}
+                        className="text-luxury-gray-3 hover:text-red-600 shrink-0"
+                        title="Delete document"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add or replace a named document */}
+            <div className="pt-3 border-t border-luxury-gray-5">
+              <p className="text-xs font-semibold text-luxury-gray-2 mb-2">
+                Add or Replace Document
+              </p>
+              <p className="text-xs text-luxury-gray-3 mb-2">
+                Typing an existing document name and uploading replaces that document.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={newDocName}
+                  onChange={e => setNewDocName(e.target.value)}
+                  placeholder="Document name (e.g., Lease Amendment 1)"
+                  className="input-luxury flex-1"
+                />
+                <label className="btn btn-secondary text-xs py-2 px-3 cursor-pointer flex items-center gap-1 justify-center">
+                  <FileUp size={14} />
+                  {newDocFile ? newDocFile.name : 'Choose file'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={e => setNewDocFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+                <button
+                  onClick={handleUploadDocument}
+                  disabled={uploadingDoc || !newDocName.trim() || !newDocFile}
+                  className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1 justify-center"
+                >
+                  <Plus size={14} />
+                  {uploadingDoc ? 'Uploading...' : 'Add'}
+                </button>
+              </div>
             </div>
           </div>
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck, ExternalLink, Edit2, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck, ExternalLink, Edit2, CheckCircle, Upload } from 'lucide-react'
 import Link from 'next/link'
 
 interface Landlord {
@@ -111,11 +111,13 @@ function AgreementEditor({
   agents,
   saving,
   onSave,
+  onUploaded,
 }: {
   agreement: Agreement
   agents: Agent[]
   saving: boolean
   onSave: (updates: Record<string, any>) => void
+  onUploaded: () => void
 }) {
   // Form state
   const [form, setForm] = useState({
@@ -136,12 +138,16 @@ function AgreementEditor({
     coop_broker_fee_pct: agreement.coop_broker_fee_pct ?? '',
     lease_term_min_months: agreement.lease_term_min_months ?? '',
     lease_term_max_months: agreement.lease_term_max_months ?? '',
-    agreement_pdf_url: agreement.agreement_pdf_url || '',
     notes: agreement.notes || '',
     referring_agent_id: agreement.referring_agent_id || '',
     agent_fee_pct: agreement.agent_fee_pct || 0,
   })
   const [hasChanges, setHasChanges] = useState(false)
+  // Upload state for the PM agreement PDF. The upload route writes
+  // agreement_pdf_url directly to the row, bypassing this form's save flow,
+  // so we don't keep agreement_pdf_url in `form` anymore.
+  const [uploadingAgreement, setUploadingAgreement] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   const updateField = (field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -185,7 +191,6 @@ function AgreementEditor({
       lease_term_max_months: form.lease_term_max_months !== '' && form.lease_term_max_months !== null
         ? parseInt(String(form.lease_term_max_months), 10)
         : null,
-      agreement_pdf_url: form.agreement_pdf_url || null,
       notes: form.notes || null,
       referring_agent_id: form.referring_agent_id || null,
       agent_fee_pct: parseFloat(String(form.agent_fee_pct)) || 0,
@@ -529,17 +534,61 @@ function AgreementEditor({
         )}
       </div>
 
-      {/* Row 5: Agreement URL + Notes */}
+      {/* Row 5: Agreement PDF + Notes */}
       <div className="grid md:grid-cols-2 gap-4">
         <div>
-          <label className="field-label">Agreement PDF URL</label>
-          <input
-            type="url"
-            className="input-luxury"
-            value={form.agreement_pdf_url}
-            onChange={e => updateField('agreement_pdf_url', e.target.value)}
-            placeholder="https://..."
-          />
+          <label className="field-label">PM Agreement</label>
+          <div className="flex items-center gap-2">
+            {agreement.agreement_pdf_url ? (
+              <a
+                href={agreement.agreement_pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-luxury-accent hover:underline flex items-center gap-1 flex-1 min-w-0"
+              >
+                <FileText size={14} className="shrink-0" />
+                <span className="truncate">View current PM agreement</span>
+                <ExternalLink size={11} className="shrink-0" />
+              </a>
+            ) : (
+              <span className="text-sm text-luxury-gray-3 flex-1">No PM agreement uploaded</span>
+            )}
+            <label className="btn btn-secondary text-xs py-1 px-3 cursor-pointer flex items-center gap-1 shrink-0">
+              <Upload size={12} />
+              {uploadingAgreement ? 'Uploading...' : agreement.agreement_pdf_url ? 'Replace' : 'Upload'}
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                disabled={uploadingAgreement}
+                onChange={async e => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  setUploadingAgreement(true)
+                  setUploadError('')
+                  try {
+                    const fd = new FormData()
+                    fd.append('file', f)
+                    const res = await fetch(`/api/pm/agreements/${agreement.id}/upload`, {
+                      method: 'POST',
+                      body: fd,
+                    })
+                    const data = await res.json()
+                    if (!res.ok) throw new Error(data.error || 'Failed to upload PM agreement')
+                    onUploaded()
+                  } catch (err: any) {
+                    setUploadError(err.message)
+                  } finally {
+                    setUploadingAgreement(false)
+                  }
+                }}
+              />
+            </label>
+          </div>
+          {uploadError && (
+            <p className="text-xs text-red-600 mt-1">{uploadError}</p>
+          )}
         </div>
         <div>
           <label className="field-label">Notes</label>
@@ -1345,6 +1394,7 @@ export default function LandlordDetailPage() {
                         agents={agents}
                         saving={savingAgreement}
                         onSave={(updates) => handleSaveAgreement(ag.id, updates)}
+                        onUploaded={loadLandlordData}
                       />
                     </div>
                   ))}

@@ -32,7 +32,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Disbursement not found' }, { status: 404 })
     }
 
-    if (disbursement.payment_status === 'completed') {
+    // Block re-processing of any disbursement that's already settled or
+    // in flight. 'completed' = ACH done; 'paid' = manually marked paid
+    // (Zelle/check/ACH outside Payload); 'processing' = Payload ACH currently
+    // in flight. All three mean Payload should not initiate another payout.
+    if (['completed', 'paid', 'processing'].includes(disbursement.payment_status)) {
       return NextResponse.json({ error: 'Disbursement already processed' }, { status: 400 })
     }
 

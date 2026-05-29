@@ -76,8 +76,22 @@ export async function GET(request: NextRequest) {
       rent_due_day: activeLease.rent_due_day || 1,
       lease_start: activeLease.lease_start,
       lease_end: activeLease.lease_end,
-      security_deposit: activeLease.security_deposit || 0
+      security_deposit: activeLease.security_deposit || 0,
+      lease_pdf_url: activeLease.lease_pdf_url || null,
     } : null
+
+    // Fetch named lease documents (amendments, addenda, etc.) for the active
+    // lease. Empty array if no lease or no docs - the tenant portal renders
+    // the Documents section conditionally.
+    let leaseDocuments: any[] = []
+    if (activeLease) {
+      const { data: docs } = await supabase
+        .from('pm_lease_documents')
+        .select('id, document_name, file_url, file_name, uploaded_at')
+        .eq('lease_id', activeLease.id)
+        .order('uploaded_at', { ascending: false })
+      leaseDocuments = docs || []
+    }
 
     // Fetch all invoices for this tenant (oldest/current first)
     const { data: invoices } = await supabase
@@ -138,6 +152,7 @@ export async function GET(request: NextRequest) {
         phone: tenant.phone
       },
       lease,
+      leaseDocuments,
       invoices: formattedInvoices,
       repairs: repairs || [],
       currentBalance

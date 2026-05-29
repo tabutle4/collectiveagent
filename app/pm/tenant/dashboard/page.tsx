@@ -24,7 +24,8 @@ import {
   Plus,
   MessageCircle,
   Send,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react'
 
 interface Invoice {
@@ -57,6 +58,15 @@ interface Lease {
   lease_start: string
   lease_end: string
   security_deposit: number
+  lease_pdf_url: string | null
+}
+
+interface LeaseDocument {
+  id: string
+  document_name: string
+  file_url: string
+  file_name: string
+  uploaded_at: string
 }
 
 interface Tenant {
@@ -93,6 +103,7 @@ interface Repair {
 interface DashboardData {
   tenant: Tenant
   lease: Lease | null
+  leaseDocuments: LeaseDocument[]
   invoices: Invoice[]
   repairs: Repair[]
   currentBalance: number
@@ -557,6 +568,57 @@ function TenantDashboardContent() {
             </div>
           )}
         </div>
+
+        {/* Lease Documents - shown only if there's a lease and at least the
+            lease PDF or one named document exists. Tenant gets read-only
+            access; admin manages uploads from the admin lease detail page. */}
+        {lease && (lease.lease_pdf_url || (data?.leaseDocuments && data.leaseDocuments.length > 0)) && (
+          <div className="container-card mb-6">
+            <h2 className="field-label mb-4 flex items-center gap-2">
+              <FileText size={16} />
+              Lease Documents
+            </h2>
+            <div className="space-y-2">
+              {lease.lease_pdf_url && (
+                <a
+                  href={lease.lease_pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inner-card flex items-center justify-between gap-3 hover:bg-luxury-light/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText size={18} className="text-luxury-accent shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-luxury-gray-1">Lease</p>
+                      <p className="text-xs text-luxury-gray-3">View the signed lease agreement</p>
+                    </div>
+                  </div>
+                  <ExternalLink size={14} className="text-luxury-gray-3 shrink-0" />
+                </a>
+              )}
+              {data?.leaseDocuments?.map(doc => (
+                <a
+                  key={doc.id}
+                  href={doc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inner-card flex items-center justify-between gap-3 hover:bg-luxury-light/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText size={18} className="text-luxury-gray-2 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-luxury-gray-1 truncate">{doc.document_name}</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Added {formatDate(doc.uploaded_at)}
+                      </p>
+                    </div>
+                  </div>
+                  <ExternalLink size={14} className="text-luxury-gray-3 shrink-0" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Unpaid Invoices */}
         {unpaidInvoices.length > 0 && (

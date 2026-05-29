@@ -95,7 +95,9 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(10)
 
-    // Fetch repair requests
+    // Fetch repair requests - return full history so landlord can see every
+    // request across the relationship. The client paginates display via a
+    // "Load more" button to keep the initial render fast.
     const { data: repairs } = await supabase
       .from('repair_requests')
       .select(`
@@ -108,15 +110,19 @@ export async function GET(request: NextRequest) {
       `)
       .eq('landlord_id', landlordId)
       .order('created_at', { ascending: false })
-      .limit(10)
 
-    const recentActivity = (recentDisbursements || []).map(d => ({
-      type: 'disbursement',
-      description: `${d.payment_status === 'completed' ? 'Received' : 'Pending'} disbursement for ${new Date(2000, (d.period_month || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${d.period_year}`,
-      date: d.payment_date || d.created_at,
-      amount: d.net_amount,
-      status: d.payment_status === 'completed' ? 'completed' : 'pending'
-    }))
+    const recentActivity = (recentDisbursements || []).map(d => {
+      // Both 'completed' and 'paid' mean the disbursement settled. Anything
+      // else (pending, processing, failed) renders as Pending to the landlord.
+      const isSettled = d.payment_status === 'completed' || d.payment_status === 'paid'
+      return {
+        type: 'disbursement',
+        description: `${isSettled ? 'Received' : 'Pending'} disbursement for ${new Date(2000, (d.period_month || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${d.period_year}`,
+        date: d.payment_date || d.created_at,
+        amount: d.net_amount,
+        status: isSettled ? 'completed' : 'pending'
+      }
+    })
 
     // Determine setup status
     const setupStatus = {
