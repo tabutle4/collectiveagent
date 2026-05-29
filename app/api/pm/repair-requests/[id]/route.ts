@@ -194,20 +194,15 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // If marking as deducted from disbursement, create ledger entry
-    if (updates.payment_status === 'deducted_from_rent' && updates.actual_cost) {
-      await supabase
-        .from('pm_ledger')
-        .insert({
-          landlord_id: repair.landlord_id,
-          property_id: repair.property_id,
-          entry_type: 'repair_expense',
-          description: `Repair: ${repair.title}`,
-          amount: -Math.abs(parseFloat(updates.actual_cost)),
-          reference_type: 'repair_request',
-          reference_id: id
-        })
-    }
+    // pm_ledger has been deprecated as part of the deposits-on-invoices
+    // refactor. Repair expenses live on the repair_requests row itself
+    // (actual_cost + deducted_from_disbursement_id).
+    //
+    // KNOWN GAP: marking a repair as 'deducted_from_rent' no longer creates
+    // any row that the disbursement form surfaces - the form only shows
+    // landlord_disbursement_deductions. Admin must currently create a
+    // matching deduction row by hand. Followup: auto-create a pending
+    // landlord_disbursement_deductions row here.
 
     return NextResponse.json({ repair, success: true })
   } catch (error: any) {

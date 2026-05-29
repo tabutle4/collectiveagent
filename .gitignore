@@ -8,3 +8,7 @@ tsconfig.tsbuildinfo
 phase*_patch/
 phase*_patch.zip
 tsconfig.tsbuildinfo
+# Deploy artifacts - never commit these
+zip*_pm_*.zip
+deploy_pkg/
+*.zip

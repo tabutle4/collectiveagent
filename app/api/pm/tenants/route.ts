@@ -12,6 +12,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const search = searchParams.get('search')
+    const propertyId = searchParams.get('property_id')
+
+    // If filtering by property, first find which tenants have leases there.
+    // The tenants table has no direct property_id column - the relationship
+    // is through pm_leases (a tenant may have had leases at multiple
+    // properties over time).
+    let tenantIdsAtProperty: string[] | null = null
+    if (propertyId) {
+      const { data: leasesAtProperty } = await supabase
+        .from('pm_leases')
+        .select('tenant_id')
+        .eq('property_id', propertyId)
+      tenantIdsAtProperty = (leasesAtProperty || []).map((l: any) => l.tenant_id)
+      // No tenants at this property - short-circuit
+      if (tenantIdsAtProperty.length === 0) {
+        return NextResponse.json({ tenants: [] })
+      }
+    }
 
     let query = supabase
       .from('tenants')
@@ -26,6 +44,10 @@ export async function GET(request: NextRequest) {
 
     if (status && status !== 'all') {
       query = query.eq('status', status)
+    }
+
+    if (tenantIdsAtProperty) {
+      query = query.in('id', tenantIdsAtProperty)
     }
 
     if (search) {

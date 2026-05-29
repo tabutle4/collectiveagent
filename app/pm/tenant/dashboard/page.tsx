@@ -35,6 +35,8 @@ interface Invoice {
   rent_amount: number
   late_fee: number
   other_charges: number
+  deposit_amount: number
+  deposit_description: string | null
   total_amount: number
   due_date: string
   status: string
@@ -718,6 +720,11 @@ function TenantDashboardContent() {
                         <p className="font-bold text-luxury-gray-1 text-lg">
                           {formatMoney(invoice.total_amount)}
                         </p>
+                        {invoice.deposit_amount > 0 && (
+                          <p className="text-xs text-luxury-gray-3">
+                            incl. {formatMoney(invoice.deposit_amount)} security deposit
+                          </p>
+                        )}
                         {invoice.late_fee > 0 && (
                           <p className="text-xs text-red-600">
                             incl. {formatMoney(invoice.late_fee)} late fee

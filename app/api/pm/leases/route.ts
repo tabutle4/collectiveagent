@@ -147,6 +147,10 @@ export async function POST(request: NextRequest) {
     const dueDayNum = rent_due_day || 1
 
     let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+    // Track whether we've emitted the first invoice yet. The first invoice
+    // (for the lease_start month) carries the security deposit as its own
+    // line; subsequent invoices are rent only.
+    let isFirstInvoice = true
 
     while (current <= endDate) {
       const periodMonth = current.getMonth() + 1
@@ -154,6 +158,8 @@ export async function POST(request: NextRequest) {
 
       // Due date is the rent_due_day of this month
       const dueDate = new Date(periodYear, periodMonth - 1, dueDayNum)
+
+      const depositOnThisInvoice = isFirstInvoice ? Number(security_deposit || 0) : 0
 
       invoices.push({
         property_id,
@@ -165,11 +171,14 @@ export async function POST(request: NextRequest) {
         rent_amount: monthly_rent,
         late_fee: 0,
         other_charges: 0,
-        total_amount: monthly_rent,
+        deposit_amount: depositOnThisInvoice,
+        deposit_description: depositOnThisInvoice > 0 ? 'Security deposit' : null,
+        total_amount: monthly_rent + depositOnThisInvoice,
         due_date: dueDate.toISOString().split('T')[0],
         status: 'pending',
       })
 
+      isFirstInvoice = false
       // Move to next month
       current.setMonth(current.getMonth() + 1)
     }

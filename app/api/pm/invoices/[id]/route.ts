@@ -68,6 +68,7 @@ export async function PATCH(
       ? ['notes', 'status']
       : [
           'rent_amount', 'late_fee', 'other_charges', 'other_charges_description',
+          'deposit_amount', 'deposit_description',
           'total_amount', 'due_date', 'status', 'notes',
           'paid_at', 'paid_amount', 'payment_method',
         ]
@@ -79,11 +80,16 @@ export async function PATCH(
       }
     }
 
-    // Recalculate total if amounts changed
-    if (updates.rent_amount !== undefined || updates.late_fee !== undefined || updates.other_charges !== undefined) {
+    // Recalculate total if any amount changed. Total includes deposit.
+    if (
+      updates.rent_amount !== undefined ||
+      updates.late_fee !== undefined ||
+      updates.other_charges !== undefined ||
+      updates.deposit_amount !== undefined
+    ) {
       const { data: inv } = await supabase
         .from('tenant_invoices')
-        .select('rent_amount, late_fee, other_charges')
+        .select('rent_amount, late_fee, other_charges, deposit_amount')
         .eq('id', resolvedParams.id)
         .single()
 
@@ -91,7 +97,8 @@ export async function PATCH(
         const rentAmt = updates.rent_amount ?? inv.rent_amount
         const lateFee = updates.late_fee ?? inv.late_fee
         const otherCharges = updates.other_charges ?? inv.other_charges
-        filteredUpdates.total_amount = rentAmt + lateFee + otherCharges
+        const depositAmt = updates.deposit_amount ?? inv.deposit_amount ?? 0
+        filteredUpdates.total_amount = Number(rentAmt) + Number(lateFee) + Number(otherCharges) + Number(depositAmt)
       }
     }
 

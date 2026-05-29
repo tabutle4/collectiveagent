@@ -115,6 +115,8 @@ export async function GET(request: NextRequest) {
       rent_amount: inv.rent_amount,
       late_fee: inv.late_fee || 0,
       other_charges: inv.other_charges || 0,
+      deposit_amount: inv.deposit_amount || 0,
+      deposit_description: inv.deposit_description || null,
       total_amount: inv.total_amount,
       due_date: inv.due_date,
       status: inv.status,

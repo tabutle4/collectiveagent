@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Banknote, Search, ArrowLeft, Send, CheckCircle, Clock, AlertCircle, Building2, Plus, X } from 'lucide-react'
@@ -50,6 +50,7 @@ interface Landlord {
     property_address: string
     city: string
     status: string
+    pm_agreement_id: string | null
   }[]
   pm_agreements?: {
     id: string
@@ -92,12 +93,36 @@ export default function DisbursementsPage() {
     property_id: '',
     gross_rent: '',
     management_fee: '',
+    deposit_amount: '',
     other_deductions: '',
     other_deductions_description: '',
     period_month: new Date().getMonth() + 1,
     period_year: new Date().getFullYear(),
     notes: '',
   })
+  // Disbursement target: landlord (default) or tenant. Tenant mode uses a
+  // simpler form because tenant disbursements have no fee splits.
+  const [disbursementTarget, setDisbursementTarget] = useState<'landlord' | 'tenant'>('landlord')
+  const [tenantForm, setTenantForm] = useState({
+    tenant_id: '',
+    amount: '',
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+    notes: '',
+  })
+  // Pending deductions for the selected property: admin checks which ones
+  // to attach to this disbursement at create time.
+  const [pendingDeductions, setPendingDeductions] = useState<any[]>([])
+  const [selectedDeductionIds, setSelectedDeductionIds] = useState<string[]>([])
+  const [tenantsForLandlord, setTenantsForLandlord] = useState<any[]>([])
+  // Held-in-trust balance for the selected property, scoped to the
+  // current landlord. Loaded on property change so tenant disbursement
+  // mode can warn when the refund amount exceeds available funds.
+  const [heldInTrust, setHeldInTrust] = useState<number | null>(null)
+  // Counter ref to ignore stale fetches when admin switches property
+  // rapidly. Each property change bumps the counter; only fetches whose
+  // counter still matches the latest get applied to state.
+  const propertyFetchCounter = useRef(0)
 
   useEffect(() => {
     checkAuth()
@@ -262,14 +287,46 @@ export default function DisbursementsPage() {
       property_id: '',
       gross_rent: '',
       management_fee: '',
+      deposit_amount: '',
       other_deductions: '',
       other_deductions_description: '',
       period_month: new Date().getMonth() + 1,
       period_year: new Date().getFullYear(),
       notes: '',
     })
+    setTenantForm({
+      tenant_id: '',
+      amount: '',
+      period_month: new Date().getMonth() + 1,
+      period_year: new Date().getFullYear(),
+      notes: '',
+    })
+    setDisbursementTarget('landlord')
+    setPendingDeductions([])
+    setSelectedDeductionIds([])
+    setTenantsForLandlord([])
+    setHeldInTrust(null)
     setShowCreateModal(true)
     loadLandlords()
+  }
+
+  // Locate the agreement attached to a specific property within the loaded
+  // landlord blob. A landlord may have several agreements (one per property);
+  // resolving by property is required to avoid picking a wrong fee structure.
+  const getAgreementForProperty = (landlordId: string, propertyId: string) => {
+    const landlord = landlords.find(l => l.id === landlordId)
+    if (!landlord) return null
+    const property = landlord.managed_properties?.find(p => p.id === propertyId)
+    if (!property?.pm_agreement_id) return null
+    return landlord.pm_agreements?.find(a => a.id === property.pm_agreement_id) || null
+  }
+
+  const computeMgmtFee = (agreement: { management_fee_pct: number; management_fee_flat: number | null } | null, gross: string): string => {
+    if (!agreement || !gross) return ''
+    if (agreement.management_fee_flat != null) {
+      return Number(agreement.management_fee_flat).toFixed(2)
+    }
+    return (parseFloat(gross) * agreement.management_fee_pct / 100).toFixed(2)
   }
 
   const handleLandlordChange = (landlordId: string) => {
@@ -279,51 +336,171 @@ export default function DisbursementsPage() {
       property_id: '',
       management_fee: '',
     }))
+    setPendingDeductions([])
+    setSelectedDeductionIds([])
+    // Also reset tenant form's tenant select; tenants will load when a
+    // property is chosen (under the tenant disbursement path).
+    setTenantForm(prev => ({ ...prev, tenant_id: '' }))
+    setTenantsForLandlord([])
+    setHeldInTrust(null)
+  }
 
-    // Auto-set management fee if agreement exists.
-    // management_fee_flat overrides management_fee_pct when set.
-    const landlord = landlords.find(l => l.id === landlordId)
-    if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
-      const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
-      if (activeAgreement && createForm.gross_rent) {
-        const fee = activeAgreement.management_fee_flat != null
-          ? Number(activeAgreement.management_fee_flat).toFixed(2)
-          : (parseFloat(createForm.gross_rent) * activeAgreement.management_fee_pct / 100).toFixed(2)
-        setCreateForm(prev => ({ ...prev, landlord_id: landlordId, property_id: '', management_fee: fee }))
+  const handlePropertyChange = async (propertyId: string) => {
+    // Bump the fetch counter and capture it locally. Any fetch whose
+    // counter no longer matches by the time it resolves is stale and
+    // its result is discarded - prevents the older fetch from
+    // overwriting newer state when admin clicks property A → B → A.
+    const myFetch = ++propertyFetchCounter.current
+
+    setCreateForm(prev => ({
+      ...prev,
+      property_id: propertyId,
+      management_fee: '',
+    }))
+    setSelectedDeductionIds([])
+
+    // Property deselected ("Select property..." chosen). Clear everything
+    // that was specific to the previous property.
+    if (!propertyId) {
+      setPendingDeductions([])
+      setTenantsForLandlord([])
+      setHeldInTrust(null)
+      return
+    }
+
+    // Recompute management fee using THIS property's agreement.
+    const agreement = getAgreementForProperty(createForm.landlord_id, propertyId)
+    setCreateForm(prev => ({
+      ...prev,
+      property_id: propertyId,
+      management_fee: computeMgmtFee(agreement, prev.gross_rent),
+    }))
+
+    // Load pending deductions for this property so admin can attach them.
+    try {
+      const res = await fetch(
+        `/api/pm/landlord-disbursement-deductions?property_id=${propertyId}&pending=true`
+      )
+      if (res.ok && myFetch === propertyFetchCounter.current) {
+        const data = await res.json()
+        setPendingDeductions(data.deductions || [])
       }
+    } catch (err) {
+      console.error('Failed to load pending deductions:', err)
+    }
+
+    // Tenants for this property (for tenant disbursement mode). Includes
+    // former tenants - any tenant who ever leased here may still have
+    // a refundable deposit.
+    try {
+      const res = await fetch(`/api/pm/tenants?property_id=${propertyId}`)
+      if (res.ok && myFetch === propertyFetchCounter.current) {
+        const data = await res.json()
+        setTenantsForLandlord(data.tenants || [])
+      }
+    } catch (err) {
+      console.error('Failed to load tenants for property:', err)
+    }
+
+    // Held-in-trust balance for this property. Used by the tenant
+    // disbursement form to warn when the refund amount exceeds what's
+    // actually in trust.
+    try {
+      const res = await fetch(
+        `/api/pm/held-in-trust?landlord_id=${createForm.landlord_id}&property_id=${propertyId}`
+      )
+      if (res.ok && myFetch === propertyFetchCounter.current) {
+        const data = await res.json()
+        setHeldInTrust(Number(data.heldInTrust ?? 0))
+      }
+    } catch (err) {
+      console.error('Failed to load held-in-trust balance:', err)
     }
   }
 
   const handleGrossRentChange = (value: string) => {
     setCreateForm(prev => ({ ...prev, gross_rent: value }))
 
-    // Auto-calculate management fee if landlord selected.
-    // management_fee_flat overrides management_fee_pct when set.
-    if (createForm.landlord_id) {
-      const landlord = landlords.find(l => l.id === createForm.landlord_id)
-      if (landlord && landlord.pm_agreements && landlord.pm_agreements.length > 0) {
-        const activeAgreement = landlord.pm_agreements.find(a => a.status === 'active')
-        if (activeAgreement && value) {
-          const fee = activeAgreement.management_fee_flat != null
-            ? Number(activeAgreement.management_fee_flat).toFixed(2)
-            : (parseFloat(value) * activeAgreement.management_fee_pct / 100).toFixed(2)
-          setCreateForm(prev => ({ ...prev, gross_rent: value, management_fee: fee }))
-          return
-        }
-      }
+    // Auto-calculate management fee using the selected property's agreement.
+    if (createForm.landlord_id && createForm.property_id) {
+      const agreement = getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+      setCreateForm(prev => ({
+        ...prev,
+        gross_rent: value,
+        management_fee: computeMgmtFee(agreement, value),
+      }))
     }
   }
+
+  const toggleDeduction = (deductionId: string) => {
+    setSelectedDeductionIds(prev =>
+      prev.includes(deductionId)
+        ? prev.filter(id => id !== deductionId)
+        : [...prev, deductionId]
+    )
+  }
+
+  const selectedDeductionsTotal = pendingDeductions
+    .filter(d => selectedDeductionIds.includes(d.id))
+    .reduce((sum, d) => sum + Number(d.amount || 0), 0)
 
   const calculateNetAmount = () => {
     const gross = parseFloat(createForm.gross_rent) || 0
     const mgmtFee = parseFloat(createForm.management_fee) || 0
     const other = parseFloat(createForm.other_deductions) || 0
-    return gross - mgmtFee - other
+    return gross - mgmtFee - other - selectedDeductionsTotal
   }
 
   const handleCreateDisbursement = async () => {
+    // Tenant disbursement path
+    if (disbursementTarget === 'tenant') {
+      if (!createForm.landlord_id || !createForm.property_id || !tenantForm.tenant_id || !tenantForm.amount) {
+        alert('Please fill in landlord, property, tenant, and amount')
+        return
+      }
+      if (parseFloat(tenantForm.amount) <= 0) {
+        alert('Amount must be greater than zero')
+        return
+      }
+      setCreating(true)
+      try {
+        const res = await fetch('/api/pm/tenant-disbursements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenantForm.tenant_id,
+            landlord_id: createForm.landlord_id,
+            property_id: createForm.property_id,
+            amount: parseFloat(tenantForm.amount),
+            period_month: tenantForm.period_month,
+            period_year: tenantForm.period_year,
+            notes: tenantForm.notes || null,
+          })
+        })
+        if (res.ok) {
+          setShowCreateModal(false)
+          loadDisbursements()
+        } else {
+          const data = await res.json()
+          alert(data.error || 'Failed to create tenant disbursement')
+        }
+      } catch (err) {
+        console.error('Failed to create tenant disbursement:', err)
+        alert('Failed to create tenant disbursement')
+      } finally {
+        setCreating(false)
+      }
+      return
+    }
+
+    // Landlord disbursement path
     if (!createForm.landlord_id || !createForm.property_id || !createForm.gross_rent) {
       alert('Please fill in landlord, property, and gross rent')
+      return
+    }
+
+    if (parseFloat(createForm.gross_rent) <= 0) {
+      alert('Cannot disburse on $0 gross rent. Wait for the next month with rent received - pending deductions will carry over.')
       return
     }
 
@@ -343,8 +520,10 @@ export default function DisbursementsPage() {
           property_id: createForm.property_id,
           gross_rent: parseFloat(createForm.gross_rent),
           management_fee: parseFloat(createForm.management_fee) || 0,
+          deposit_amount: parseFloat(createForm.deposit_amount) || 0,
           other_deductions: parseFloat(createForm.other_deductions) || 0,
           other_deductions_description: createForm.other_deductions_description || null,
+          deduction_ids: selectedDeductionIds,
           period_month: createForm.period_month,
           period_year: createForm.period_year,
           notes: createForm.notes || null,
@@ -605,7 +784,9 @@ export default function DisbursementsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold text-luxury-gray-1">Create Disbursement</h2>
+              <h2 className="text-lg font-semibold text-luxury-gray-1">
+                {disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
+              </h2>
               <button onClick={() => setShowCreateModal(false)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
                 <X size={20} />
               </button>
@@ -616,6 +797,35 @@ export default function DisbursementsPage() {
                 <div className="text-center py-4 text-luxury-gray-3">Loading landlords...</div>
               ) : (
                 <>
+                  {/* Target toggle: landlord (rent disbursement) or tenant (deposit refund) */}
+                  <div>
+                    <label className="field-label">Disburse to</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDisbursementTarget('landlord')}
+                        className={`px-3 py-2 rounded border text-sm ${
+                          disbursementTarget === 'landlord'
+                            ? 'bg-luxury-accent text-white border-luxury-accent'
+                            : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
+                        }`}
+                      >
+                        Landlord (rent)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDisbursementTarget('tenant')}
+                        className={`px-3 py-2 rounded border text-sm ${
+                          disbursementTarget === 'tenant'
+                            ? 'bg-luxury-accent text-white border-luxury-accent'
+                            : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
+                        }`}
+                      >
+                        Tenant (deposit refund)
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Landlord */}
                   <div>
                     <label className="field-label">Landlord</label>
@@ -639,7 +849,7 @@ export default function DisbursementsPage() {
                     <label className="field-label">Property</label>
                     <select
                       value={createForm.property_id}
-                      onChange={(e) => setCreateForm(prev => ({ ...prev, property_id: e.target.value }))}
+                      onChange={(e) => handlePropertyChange(e.target.value)}
                       className="select-luxury w-full"
                       disabled={!createForm.landlord_id}
                     >
@@ -660,8 +870,15 @@ export default function DisbursementsPage() {
                     <div>
                       <label className="field-label">Period Month</label>
                       <select
-                        value={createForm.period_month}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, period_month: parseInt(e.target.value) }))}
+                        value={disbursementTarget === 'tenant' ? tenantForm.period_month : createForm.period_month}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value)
+                          if (disbursementTarget === 'tenant') {
+                            setTenantForm(prev => ({ ...prev, period_month: val }))
+                          } else {
+                            setCreateForm(prev => ({ ...prev, period_month: val }))
+                          }
+                        }}
                         className="select-luxury w-full"
                       >
                         {[...Array(12)].map((_, i) => (
@@ -674,108 +891,304 @@ export default function DisbursementsPage() {
                     <div>
                       <label className="field-label">Period Year</label>
                       <select
-                        value={createForm.period_year}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, period_year: parseInt(e.target.value) }))}
+                        value={disbursementTarget === 'tenant' ? tenantForm.period_year : createForm.period_year}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value)
+                          if (disbursementTarget === 'tenant') {
+                            setTenantForm(prev => ({ ...prev, period_year: val }))
+                          } else {
+                            setCreateForm(prev => ({ ...prev, period_year: val }))
+                          }
+                        }}
                         className="select-luxury w-full"
                       >
-                        {[2024, 2025, 2026, 2027].map(year => (
-                          <option key={year} value={year}>{year}</option>
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
                     </div>
                   </div>
 
-                  {/* Gross Rent */}
-                  <div>
-                    <label className="field-label">Gross Rent Collected</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={createForm.gross_rent}
-                        onChange={(e) => handleGrossRentChange(e.target.value)}
-                        className="input-luxury w-full pl-7"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Management Fee */}
-                  <div>
-                    <label className="field-label">
-                      Management Fee
-                      {selectedLandlord?.pm_agreements?.find(a => a.status === 'active') && (
-                        <span className="text-luxury-gray-3 font-normal ml-1">
-                          ({selectedLandlord?.pm_agreements?.find(a => a.status === 'active')?.management_fee_pct}% of gross)
-                        </span>
-                      )}
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={createForm.management_fee}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, management_fee: e.target.value }))}
-                        className="input-luxury w-full pl-7"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Other Deductions */}
-                  <div>
-                    <label className="field-label">Other Deductions (optional)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={createForm.other_deductions}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions: e.target.value }))}
-                        className="input-luxury w-full pl-7"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-
-                  {parseFloat(createForm.other_deductions) > 0 && (
-                    <div>
-                      <label className="field-label">Deduction Description</label>
-                      <input
-                        type="text"
-                        value={createForm.other_deductions_description}
-                        onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions_description: e.target.value }))}
-                        className="input-luxury w-full"
-                        placeholder="e.g., Repair expense, HOA fee"
-                      />
-                    </div>
-                  )}
-
-                  {/* Net Amount Preview */}
-                  {createForm.gross_rent && (
-                    <div className="inner-card">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-luxury-gray-3">Net Amount to Landlord</span>
-                        <span className={`text-xl font-bold ${calculateNetAmount() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatMoney(calculateNetAmount())}
-                        </span>
+                  {disbursementTarget === 'landlord' ? (
+                    <>
+                      {/* Gross Rent */}
+                      <div>
+                        <label className="field-label">Gross Rent Collected</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={createForm.gross_rent}
+                            onChange={(e) => handleGrossRentChange(e.target.value)}
+                            className="input-luxury w-full pl-7"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        {createForm.gross_rent !== '' && parseFloat(createForm.gross_rent) === 0 && (
+                          <p className="text-xs text-amber-700 mt-1">
+                            Cannot disburse on $0 gross rent. Wait for the next month with rent received. Pending deductions will carry over.
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  )}
 
-                  {/* Notes */}
-                  <div>
-                    <label className="field-label">Notes (optional)</label>
-                    <textarea
-                      value={createForm.notes}
-                      onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
-                      className="input-luxury w-full"
-                      rows={2}
-                      placeholder="Any additional notes..."
-                    />
-                  </div>
+                      {/* Management Fee */}
+                      {(() => {
+                        const ag = createForm.property_id
+                          ? getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+                          : null
+                        const feeLabel = ag?.management_fee_flat != null
+                          ? `($${Number(ag.management_fee_flat).toFixed(2)} flat per agreement)`
+                          : ag?.management_fee_pct
+                            ? `(${ag.management_fee_pct}% of rent)`
+                            : ''
+                        return (
+                          <div>
+                            <label className="field-label">
+                              Management Fee
+                              {feeLabel && (
+                                <span className="text-luxury-gray-3 font-normal ml-1">{feeLabel}</span>
+                              )}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={createForm.management_fee}
+                                onChange={(e) => setCreateForm(prev => ({ ...prev, management_fee: e.target.value }))}
+                                className="input-luxury w-full pl-7"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Deposit returned to landlord (rare - usually deposit stays in trust) */}
+                      <div>
+                        <label className="field-label">
+                          Deposit Returned to Landlord (optional)
+                          <span className="text-luxury-gray-3 font-normal ml-1">
+                            (use when releasing deposit funds to landlord)
+                          </span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={createForm.deposit_amount}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, deposit_amount: e.target.value }))}
+                            className="input-luxury w-full pl-7"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Pending deductions panel - shown when property is selected */}
+                      {createForm.property_id && pendingDeductions.length > 0 && (
+                        <div>
+                          <label className="field-label">
+                            Pending Deductions
+                            <span className="text-luxury-gray-3 font-normal ml-1">
+                              (check to attach to this disbursement)
+                            </span>
+                          </label>
+                          <div className="space-y-2 border border-luxury-gray-5 rounded p-3">
+                            {pendingDeductions.map(d => {
+                              const isSelected = selectedDeductionIds.includes(d.id)
+                              return (
+                                <label
+                                  key={d.id}
+                                  className="flex items-center justify-between gap-3 cursor-pointer text-sm"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => toggleDeduction(d.id)}
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="font-medium text-luxury-gray-1 truncate">{d.label}</p>
+                                      {d.description && (
+                                        <p className="text-xs text-luxury-gray-3 truncate">{d.description}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="text-luxury-gray-1 shrink-0">
+                                    {formatMoney(Number(d.amount))}
+                                  </span>
+                                </label>
+                              )
+                            })}
+                            {selectedDeductionsTotal > 0 && (
+                              <div className="pt-2 mt-2 border-t border-luxury-gray-5 flex justify-between text-sm font-medium">
+                                <span className="text-luxury-gray-2">Selected total</span>
+                                <span className="text-luxury-gray-1">{formatMoney(selectedDeductionsTotal)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other Deductions (legacy single-field, kept for back-compat) */}
+                      <div>
+                        <label className="field-label">Other Deductions (optional, single-line)</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={createForm.other_deductions}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions: e.target.value }))}
+                            className="input-luxury w-full pl-7"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      {parseFloat(createForm.other_deductions) > 0 && (
+                        <div>
+                          <label className="field-label">Deduction Description</label>
+                          <input
+                            type="text"
+                            value={createForm.other_deductions_description}
+                            onChange={(e) => setCreateForm(prev => ({ ...prev, other_deductions_description: e.target.value }))}
+                            className="input-luxury w-full"
+                            placeholder="e.g., Repair expense, HOA fee"
+                          />
+                        </div>
+                      )}
+
+                      {/* Net Amount Preview - splits net rent from deposit
+                          return so admin sees both numbers clearly. The
+                          landlord actually receives net rent + deposit
+                          return as one combined check. */}
+                      {createForm.gross_rent && parseFloat(createForm.gross_rent) > 0 && (
+                        <div className="inner-card">
+                          {parseFloat(createForm.deposit_amount) > 0 ? (
+                            <>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm text-luxury-gray-3">Net Rent to Landlord</span>
+                                <span className={`text-base font-semibold ${calculateNetAmount() >= 0 ? 'text-luxury-gray-1' : 'text-red-600'}`}>
+                                  {formatMoney(calculateNetAmount())}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm text-luxury-gray-3">Deposit Returned to Landlord</span>
+                                <span className="text-base font-semibold text-luxury-gray-1">
+                                  {formatMoney(parseFloat(createForm.deposit_amount) || 0)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center pt-2 border-t border-luxury-gray-5">
+                                <span className="text-sm text-luxury-gray-3">Total to Landlord</span>
+                                <span className={`text-xl font-bold ${calculateNetAmount() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {formatMoney(calculateNetAmount() + (parseFloat(createForm.deposit_amount) || 0))}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-luxury-gray-3">Net Amount to Landlord</span>
+                              <span className={`text-xl font-bold ${calculateNetAmount() >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatMoney(calculateNetAmount())}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      <div>
+                        <label className="field-label">Notes (optional)</label>
+                        <textarea
+                          value={createForm.notes}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, notes: e.target.value }))}
+                          className="input-luxury w-full"
+                          rows={2}
+                          placeholder="Any additional notes..."
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    /* Tenant disbursement path */
+                    <>
+                      <div>
+                        <label className="field-label">Tenant</label>
+                        <select
+                          value={tenantForm.tenant_id}
+                          onChange={(e) => setTenantForm(prev => ({ ...prev, tenant_id: e.target.value }))}
+                          className="select-luxury w-full"
+                          disabled={!createForm.property_id}
+                        >
+                          <option value="">Select tenant...</option>
+                          {tenantsForLandlord.map((t: any) => (
+                            <option key={t.id} value={t.id}>
+                              {t.first_name} {t.last_name}
+                            </option>
+                          ))}
+                        </select>
+                        {createForm.property_id && tenantsForLandlord.length === 0 && (
+                          <p className="text-xs text-luxury-gray-3 mt-1">No tenants found for this property</p>
+                        )}
+                      </div>
+
+                      {/* Held-in-trust balance for this property */}
+                      {createForm.property_id && heldInTrust !== null && (
+                        <div className="inner-card">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-luxury-gray-3">Deposits held in trust for this property</span>
+                            <span className="text-lg font-semibold text-luxury-gray-1">
+                              {formatMoney(heldInTrust)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="field-label">
+                          Amount
+                          <span className="text-luxury-gray-3 font-normal ml-1">
+                            (reduces deposits held in trust)
+                          </span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={tenantForm.amount}
+                            onChange={(e) => setTenantForm(prev => ({ ...prev, amount: e.target.value }))}
+                            className="input-luxury w-full pl-7"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        {/* Warn (do not block) when the refund exceeds the
+                            available trust balance. Admin may still proceed
+                            if they know what they are doing - this is
+                            advisory, not a hard stop. */}
+                        {tenantForm.amount !== '' &&
+                          heldInTrust !== null &&
+                          parseFloat(tenantForm.amount) > heldInTrust && (
+                            <p className="text-xs text-amber-700 mt-1">
+                              Warning: this refund exceeds the {formatMoney(heldInTrust)} currently held in trust for this property. Trust balance will go negative if you proceed.
+                            </p>
+                          )}
+                      </div>
+
+                      <div>
+                        <label className="field-label">Notes (optional)</label>
+                        <textarea
+                          value={tenantForm.notes}
+                          onChange={(e) => setTenantForm(prev => ({ ...prev, notes: e.target.value }))}
+                          className="input-luxury w-full"
+                          rows={2}
+                          placeholder="Reason: security deposit refund, overpayment refund, etc."
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -791,9 +1204,16 @@ export default function DisbursementsPage() {
               <button
                 onClick={handleCreateDisbursement}
                 className="btn btn-primary"
-                disabled={creating || !createForm.landlord_id || !createForm.property_id || !createForm.gross_rent}
+                disabled={
+                  creating ||
+                  !createForm.landlord_id ||
+                  !createForm.property_id ||
+                  (disbursementTarget === 'landlord'
+                    ? !createForm.gross_rent || parseFloat(createForm.gross_rent) <= 0
+                    : !tenantForm.tenant_id || !tenantForm.amount || parseFloat(tenantForm.amount) <= 0)
+                }
               >
-                {creating ? 'Creating...' : 'Create Disbursement'}
+                {creating ? 'Creating...' : disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
               </button>
             </div>
           </div>

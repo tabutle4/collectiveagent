@@ -19,7 +19,10 @@ export async function GET(
     const { data: disbursement, error } = await supabase
       .from('landlord_disbursements')
       .select(`
-        id, lease_id, landlord_id, gross_rent, management_fee, agent_fee, net_amount,
+        id, lease_id, landlord_id, property_id, tenant_invoice_id,
+        gross_rent, management_fee, agent_fee, deposit_amount,
+        other_deductions, other_deductions_description,
+        net_amount, amount_1099_reportable,
         payment_status, payment_date, payment_method, payment_reference,
         period_month, period_year, notes, payload_payout_id, created_at, updated_at,
         landlords(id, first_name, last_name, email),
@@ -60,7 +63,8 @@ export async function PATCH(
     // Allowed fields for update
     const allowedFields = [
       'payment_status', 'payment_date', 'payment_method', 'payment_reference',
-      'gross_rent', 'management_fee', 'agent_fee', 'net_amount', 'notes',
+      'gross_rent', 'management_fee', 'agent_fee', 'deposit_amount',
+      'net_amount', 'notes',
       'payload_payout_id',
     ]
 
@@ -68,6 +72,38 @@ export async function PATCH(
     for (const key of Object.keys(updates)) {
       if (allowedFields.includes(key)) {
         filteredUpdates[key] = updates[key]
+      }
+    }
+
+    // If any amount field changed and net_amount wasn't explicitly set,
+    // recompute it: net = gross_rent - management_fee - other_deductions - sum(line-item deductions)
+    // The recompute pulls the current row + applied deductions to use the latest values.
+    if (
+      filteredUpdates.net_amount === undefined &&
+      (filteredUpdates.gross_rent !== undefined ||
+        filteredUpdates.management_fee !== undefined ||
+        filteredUpdates.deposit_amount !== undefined)
+    ) {
+      const { data: current } = await supabase
+        .from('landlord_disbursements')
+        .select('gross_rent, management_fee, other_deductions, deposit_amount')
+        .eq('id', resolvedParams.id)
+        .single()
+
+      const { data: deductionRows } = await supabase
+        .from('landlord_disbursement_deductions')
+        .select('amount')
+        .eq('disbursement_id', resolvedParams.id)
+
+      if (current) {
+        const gross = Number(filteredUpdates.gross_rent ?? current.gross_rent ?? 0)
+        const mgmt = Number(filteredUpdates.management_fee ?? current.management_fee ?? 0)
+        const otherOld = Number(current.other_deductions ?? 0)
+        const lineItems = (deductionRows || []).reduce(
+          (sum: number, d: any) => sum + Number(d.amount || 0),
+          0
+        )
+        filteredUpdates.net_amount = gross - mgmt - otherOld - lineItems
       }
     }
 

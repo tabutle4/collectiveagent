@@ -18,25 +18,64 @@ export async function POST(request: NextRequest) {
       tenant_invoice_id,
       gross_rent,
       management_fee,
+      deposit_amount,
       other_deductions,
       other_deductions_description,
+      deduction_ids,
       period_month,
       period_year,
       notes,
     } = body
 
     // Validate required fields
-    if (!landlord_id || !property_id || !gross_rent || !period_month || !period_year) {
+    if (!landlord_id || !property_id || gross_rent == null || !period_month || !period_year) {
       return NextResponse.json(
         { error: 'Landlord, property, gross rent, and period are required' },
         { status: 400 }
       )
     }
 
-    // Calculate net amount
-    const mgmtFee = management_fee || 0
-    const otherDed = other_deductions || 0
-    const netAmount = gross_rent - mgmtFee - otherDed
+    // Block $0 gross rent. Without rent there is nothing to disburse;
+    // pending deductions stay pending until the next month with rent.
+    if (Number(gross_rent) <= 0) {
+      return NextResponse.json(
+        { error: 'Cannot disburse on $0 gross rent. Add the next month with rent received, and these deductions will carry over.' },
+        { status: 400 }
+      )
+    }
+
+    const mgmtFee = Number(management_fee) || 0
+    const depositAmt = Number(deposit_amount) || 0
+    const otherDed = Number(other_deductions) || 0
+
+    // Sum line-item deductions being attached at create time, if any.
+    // Pending rows in landlord_disbursement_deductions that get attached
+    // via deduction_ids reduce the net the same as legacy other_deductions.
+    let lineItemTotal = 0
+    if (Array.isArray(deduction_ids) && deduction_ids.length > 0) {
+      const { data: dedRows } = await supabase
+        .from('landlord_disbursement_deductions')
+        .select('id, amount, disbursement_id')
+        .in('id', deduction_ids)
+
+      // Reject if any deduction is already attached to another disbursement
+      const alreadyAttached = (dedRows || []).filter(
+        (d: any) => d.disbursement_id && d.disbursement_id !== null
+      )
+      if (alreadyAttached.length > 0) {
+        return NextResponse.json(
+          { error: 'One or more selected deductions are already attached to another disbursement.' },
+          { status: 400 }
+        )
+      }
+
+      lineItemTotal = (dedRows || []).reduce(
+        (sum: number, d: any) => sum + Number(d.amount || 0),
+        0
+      )
+    }
+
+    const netAmount = Number(gross_rent) - mgmtFee - otherDed - lineItemTotal
 
     if (netAmount < 0) {
       return NextResponse.json(
@@ -52,7 +91,7 @@ export async function POST(request: NextRequest) {
       .eq('property_id', property_id)
       .eq('period_month', period_month)
       .eq('period_year', period_year)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       return NextResponse.json(
@@ -61,18 +100,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch PM agreement to get agent fee split
-    const { data: agreement } = await supabase
-      .from('pm_agreements')
-      .select(`
-        id, management_fee_pct, referring_agent_id, agent_fee_pct,
-        referring_agent:users!pm_agreements_referring_agent_id_fkey(
-          id, preferred_first_name, first_name, preferred_last_name, last_name
-        )
-      `)
-      .eq('landlord_id', landlord_id)
-      .eq('status', 'active')
+    // Fetch PM agreement scoped to THIS property (not landlord-wide).
+    // A landlord may have multiple properties with different agreements;
+    // the right one to use for fee splits is the one attached to the
+    // specific property being disbursed.
+    const { data: propertyRow } = await supabase
+      .from('managed_properties')
+      .select('pm_agreement_id')
+      .eq('id', property_id)
       .single()
+
+    let agreement: any = null
+    if (propertyRow?.pm_agreement_id) {
+      const { data: ag } = await supabase
+        .from('pm_agreements')
+        .select(`
+          id, management_fee_pct, management_fee_flat, referring_agent_id, agent_fee_pct,
+          referring_agent:users!pm_agreements_referring_agent_id_fkey(
+            id, preferred_first_name, first_name, preferred_last_name, last_name
+          )
+        `)
+        .eq('id', propertyRow.pm_agreement_id)
+        .single()
+      agreement = ag
+    }
 
     // Create the disbursement
     const { data: disbursement, error } = await supabase
@@ -84,6 +135,7 @@ export async function POST(request: NextRequest) {
         tenant_invoice_id: tenant_invoice_id || null,
         gross_rent,
         management_fee: mgmtFee,
+        deposit_amount: depositAmt,
         other_deductions: otherDed,
         other_deductions_description: other_deductions_description || null,
         net_amount: netAmount,
@@ -102,12 +154,58 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
+    // Attach any line-item deductions to this newly-created disbursement.
+    // Stamps disbursement_id and applied_at on each row.
+    //
+    // CRITICAL: this is a two-step write. If the UPDATE fails after the
+    // disbursement INSERT succeeded, we'd leave a disbursement with the
+    // deducted net but no deduction rows pointing back to it. To prevent
+    // double-counting on the next disbursement, we roll back the insert
+    // on failure.
+    //
+    // Note on cascade: landlord_disbursement_deductions.disbursement_id
+    // is ON DELETE CASCADE. So if the attach actually committed but our
+    // response read failed (network blip), naively deleting the disbursement
+    // would also wipe the deduction rows. Detach first (NULL out
+    // disbursement_id on the rows we just tried to attach), then delete the
+    // disbursement. The detach is idempotent: rows already at NULL stay
+    // at NULL.
+    if (Array.isArray(deduction_ids) && deduction_ids.length > 0) {
+      const { error: attachError } = await supabase
+        .from('landlord_disbursement_deductions')
+        .update({
+          disbursement_id: disbursement.id,
+          applied_at: new Date().toISOString(),
+        })
+        .in('id', deduction_ids)
+
+      if (attachError) {
+        // Detach any rows that might have committed, then delete the
+        // disbursement. Deductions revert to pending and are re-suggested
+        // on the next disbursement attempt.
+        await supabase
+          .from('landlord_disbursement_deductions')
+          .update({ disbursement_id: null, applied_at: null })
+          .in('id', deduction_ids)
+        await supabase
+          .from('landlord_disbursements')
+          .delete()
+          .eq('id', disbursement.id)
+
+        console.error('Failed to attach deductions, rolled back disbursement:', attachError)
+        return NextResponse.json(
+          { error: 'Failed to attach deductions. Please try again.' },
+          { status: 500 }
+        )
+      }
+    }
+
     // Create pm_fee_payouts records if there's a management fee
     const feePayouts: any[] = []
     if (mgmtFee > 0) {
       const agentFeePct = agreement?.agent_fee_pct || 0
-      // Agent fee is % of gross rent, not % of management fee
-      const agentAmount = gross_rent * (agentFeePct / 100)
+      // Agent fee is % of gross rent (rent only), not % of management fee
+      const agentAmount = Number(gross_rent) * (agentFeePct / 100)
       const brokerageAmount = mgmtFee - agentAmount
 
       // Agent payout (if there's a referring agent with a fee percentage)
