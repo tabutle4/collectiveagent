@@ -35,7 +35,20 @@ export async function GET(
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ tenant })
+    // The tenant page expects leases and invoices at the top level
+    // (setLeases(data.leases), setInvoices(data.invoices)), but the Supabase
+    // join nests them under tenant.pm_leases and tenant.tenant_invoices.
+    // Surface them as siblings so the page renders rather than always
+    // showing zero rows. Most recent invoices first.
+    const leases = (tenant as any).pm_leases || []
+    const invoices = ((tenant as any).tenant_invoices || []).slice().sort(
+      (a: any, b: any) => {
+        if (a.period_year !== b.period_year) return b.period_year - a.period_year
+        return b.period_month - a.period_month
+      }
+    )
+
+    return NextResponse.json({ tenant, leases, invoices })
   } catch (error: any) {
     console.error('Error fetching tenant:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
