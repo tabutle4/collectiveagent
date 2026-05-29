@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
     // manually authorized payments; 'automatic_payment' covers autopay.
     const trigger = body?.trigger
     const triggeredOn = body?.triggered_on
-    const isPaymentTrigger = trigger === 'payment' || trigger === 'automatic_payment'
+    const isPaymentTrigger = trigger === 'payment' || trigger === 'automatic_payment' || trigger === 'processed'
 
     if (!isPaymentTrigger || triggeredOn?.object !== 'transaction' || !triggeredOn?.id) {
       return NextResponse.json({ received: true })
