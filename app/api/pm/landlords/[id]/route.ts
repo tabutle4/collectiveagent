@@ -20,6 +20,7 @@ export async function GET(
         *,
         managed_properties(
           id, property_address, unit, city, state, zip, unit_count, status,
+          pm_agreement_id,
           pm_leases(id, tenant_id, lease_start, lease_end, monthly_rent, status)
         ),
         pm_agreements(

@@ -29,6 +29,7 @@ interface Property {
   state: string
   zip: string
   status: string
+  pm_agreement_id: string | null
 }
 
 interface Tenant {
@@ -1374,13 +1375,29 @@ export default function LandlordDetailPage() {
                 </p>
               ) : (
                 <div className="space-y-6">
-                  {agreements.map(ag => (
+                  {agreements.map(ag => {
+                    // Each agreement is linked from one or more properties via
+                    // managed_properties.pm_agreement_id. List them under the
+                    // header so admins can tell which property's terms this is.
+                    const linkedProperties = properties.filter(p => p.pm_agreement_id === ag.id)
+                    return (
                     <div key={ag.id} className="inner-card">
                       <div className="flex items-center justify-between mb-4 pb-3 border-b border-luxury-gray-5">
                         <div>
                           <p className="text-sm font-semibold text-luxury-gray-1">
                             {formatDate(ag.commencement_date)} {ag.expiration_date ? `to ${formatDate(ag.expiration_date)}` : '(no end date)'}
                           </p>
+                          {linkedProperties.length > 0 ? (
+                            <p className="text-xs text-luxury-gray-2 mt-0.5">
+                              {linkedProperties.map(p =>
+                                `${p.property_address}${p.unit ? ` ${p.unit}` : ''}`
+                              ).join(' · ')}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-luxury-gray-3 italic mt-0.5">
+                              Not linked to any property yet
+                            </p>
+                          )}
                           <p className="text-xs text-luxury-gray-3">ID: {ag.id.slice(0, 8)}</p>
                         </div>
                         <span className={`text-xs font-medium ${
@@ -1397,7 +1414,8 @@ export default function LandlordDetailPage() {
                         onUploaded={loadLandlordData}
                       />
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
