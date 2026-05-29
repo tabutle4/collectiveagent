@@ -264,25 +264,31 @@ export default function AdminBillingPage() {
     agent.monthly_fee_paid_through >= currentMonthEnd
   const getMonthlyStatus = (agent: any) => {
     if (agent.monthly_fee_waived) {
-      return { state: 'waived', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+      return { state: 'waived', monthsBehind: 0, amountOwed: 0, missingCurrent: false, upcomingCount: 0, upcomingTotal: 0 }
     }
     if (!agent.payload_payee_id) {
-      return { state: 'no_account', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+      return { state: 'no_account', monthsBehind: 0, amountOwed: 0, missingCurrent: false, upcomingCount: 0, upcomingTotal: 0 }
     }
     const s = monthlyStatuses[agent.id]
     if (!s) {
-      return { state: 'unknown', monthsBehind: 0, amountOwed: 0, missingCurrent: false }
+      return { state: 'unknown', monthsBehind: 0, amountOwed: 0, missingCurrent: false, upcomingCount: 0, upcomingTotal: 0 }
     }
     const missingCurrent = !s.has_current_month_invoice && !isCurrentMonthCovered(agent)
-    if ((s.unpaid_monthly_count || 0) > 0) {
+    const upcomingCount = s.upcoming_count || 0
+    const upcomingTotal = s.upcoming_total || 0
+    // "Behind" means overdue, not merely unpaid. A fee billed ahead of its due
+    // date is upcoming, not behind, so it no longer flips the agent to behind.
+    if ((s.overdue_count || 0) > 0) {
       return {
         state: 'behind',
-        monthsBehind: s.unpaid_monthly_count,
-        amountOwed: s.unpaid_monthly_total || 0,
+        monthsBehind: s.overdue_count,
+        amountOwed: s.overdue_total || 0,
         missingCurrent,
+        upcomingCount,
+        upcomingTotal,
       }
     }
-    return { state: 'current', monthsBehind: 0, amountOwed: 0, missingCurrent }
+    return { state: 'current', monthsBehind: 0, amountOwed: 0, missingCurrent, upcomingCount, upcomingTotal }
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -410,19 +416,20 @@ export default function AdminBillingPage() {
     }
   }
 
-  // Sends a payment reminder for every unpaid monthly invoice across all
-  // currently filtered agents.
+  // Sends a payment reminder for every OVERDUE monthly invoice across all
+  // currently filtered agents. Upcoming (not-yet-due) invoices are skipped so
+  // agents are not nagged about a fee that is not late.
   const bulkSendReminders = async () => {
     const jobs: { agentId: string; invoiceId: string }[] = []
     for (const agent of filtered) {
       const s = monthlyStatuses[agent.id]
       if (!s) continue
-      for (const invoiceId of s.unpaid_monthly_invoice_ids || []) {
+      for (const invoiceId of s.overdue_invoice_ids || []) {
         jobs.push({ agentId: agent.id, invoiceId })
       }
     }
     if (jobs.length === 0) {
-      alert('No unpaid monthly invoices among the agents shown.')
+      alert('No overdue monthly invoices among the agents shown.')
       return
     }
     if (
@@ -637,10 +644,16 @@ export default function AdminBillingPage() {
     }
   }
 
-  // Agents who owe one or more monthly fee invoices.
+  // Agents who are behind = have one or more OVERDUE monthly fee invoices.
+  // Unpaid-but-not-yet-due invoices are tracked separately as upcoming.
   const owingAgents = agents.filter(a => {
     const s = monthlyStatuses[a.id]
-    return s && (s.unpaid_monthly_count || 0) > 0
+    return s && (s.overdue_count || 0) > 0
+  })
+  // Agents with an unpaid invoice that is not yet due (informational only).
+  const upcomingAgents = agents.filter(a => {
+    const s = monthlyStatuses[a.id]
+    return s && (s.overdue_count || 0) === 0 && (s.upcoming_count || 0) > 0
   })
   // Agents missing an invoice for the current month (cron likely skipped them).
   // Fresh onboarders are excluded via isCurrentMonthCovered - their current month
@@ -652,14 +665,18 @@ export default function AdminBillingPage() {
     return s && !s.has_current_month_invoice
   })
   const totalMonthlyOwed = owingAgents.reduce(
-    (sum, a) => sum + (monthlyStatuses[a.id]?.unpaid_monthly_total || 0),
+    (sum, a) => sum + (monthlyStatuses[a.id]?.overdue_total || 0),
+    0
+  )
+  const totalUpcoming = upcomingAgents.reduce(
+    (sum, a) => sum + (monthlyStatuses[a.id]?.upcoming_total || 0),
     0
   )
   const behindTwoPlus = owingAgents.filter(
-    a => (monthlyStatuses[a.id]?.unpaid_monthly_count || 0) >= 2
+    a => (monthlyStatuses[a.id]?.overdue_count || 0) >= 2
   ).length
   const behindOne = owingAgents.filter(
-    a => (monthlyStatuses[a.id]?.unpaid_monthly_count || 0) === 1
+    a => (monthlyStatuses[a.id]?.overdue_count || 0) === 1
   ).length
   const currentMonthName = MONTHS[new Date().getMonth()]
 
@@ -686,7 +703,7 @@ export default function AdminBillingPage() {
       if (statusFilter === 'hasCredit') return creditAgentIds.includes(a.id)
       if (statusFilter === 'oweMonthly') {
         const s = monthlyStatuses[a.id]
-        return s && (s.unpaid_monthly_count || 0) > 0
+        return s && (s.overdue_count || 0) > 0
       }
       if (statusFilter === 'missingInvoice') {
         if (a.monthly_fee_waived || !a.payload_payee_id) return false
@@ -812,6 +829,12 @@ export default function AdminBillingPage() {
                   </span>
                 )}
               </p>
+              {upcomingAgents.length > 0 && (
+                <p className="text-xs text-luxury-gray-3 mt-0.5">
+                  {upcomingAgents.length} with an upcoming invoice not yet due ·{' '}
+                  {formatCurrency(totalUpcoming)}
+                </p>
+              )}
             </div>
             <button
               onClick={bulkSendReminders}
@@ -904,7 +927,14 @@ export default function AdminBillingPage() {
                     <div className="text-center min-w-[5rem]">
                       <p className="text-xs text-luxury-gray-3 mb-0.5">Monthly</p>
                       {monthlyStatus.state === 'current' && (
-                        <span className="text-xs text-green-600 font-medium">Current</span>
+                        <span className="text-xs text-green-600 font-medium">
+                          Current
+                          {monthlyStatus.upcomingCount > 0 && (
+                            <span className="text-luxury-gray-3 font-normal">
+                              {' '}· {formatCurrency(monthlyStatus.upcomingTotal)} due soon
+                            </span>
+                          )}
+                        </span>
                       )}
                       {monthlyStatus.state === 'behind' && (
                         <span className="text-xs text-red-500 font-medium">
@@ -1524,6 +1554,7 @@ export default function AdminBillingPage() {
                                       </p>
                                       <p className="text-xs text-luxury-gray-3">
                                         {formatDate(r.paid_at)}
+                                        {r.method ? ` · ${r.method}` : ''}
                                       </p>
                                     </div>
                                     <div className="flex items-center gap-2">

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     if (!user?.payload_payee_id) return NextResponse.json({ receipts: [] })
 
     const res = await fetch(
-      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&status=paid&limit=20`,
+      `https://api.payload.com/invoices/?customer_id=${user.payload_payee_id}&limit=50`,
       { headers: { Authorization: authHeader() } }
     )
 
@@ -52,8 +52,18 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json()
 
+    // A receipt is any invoice that is settled: balance due of zero or less and
+    // a positive amount that was actually billed. Keying off amount_due rather
+    // than the invoice status string is what the owe list does too, so an
+    // invoice settled manually via mark-invoice-paid - which Payload leaves
+    // flagged "unpaid" with a zero balance - shows here just like a real card
+    // or bank payment. The old status=paid filter hid those entirely.
+    const settled = (data.values || []).filter(
+      (inv: any) => Number(inv.amount_due ?? 0) <= 0 && receiptAmount(inv) > 0
+    )
+
     const receipts = await Promise.all(
-      (data.values || []).map(async (inv: any) => {
+      settled.map(async (inv: any) => {
         const { data: pl } = await supabase
           .from('payment_links')
           .select('url')
@@ -64,13 +74,28 @@ export async function GET(request: NextRequest) {
           id: inv.id,
           amount: receiptAmount(inv),
           paid_at: inv.paid_timestamp || inv.modified_at || null,
-          description: inv.items?.[0]?.type || 'Payment',
+          // Label by the invoice's own description (e.g. "June 2026 Monthly
+          // Brokerage Fee") so the row says what it was for. Labeling by the
+          // first line item's type produced confusing rows where two payments
+          // for the same month showed as "Payment" and "Monthly Fee".
+          description: inv.description || inv.items?.[0]?.type || 'Payment',
+          // How it was settled, so a recorded Zelle/check is not mistaken for a
+          // duplicate of a card charge. total_paid only reflects real Payload
+          // transactions; a zero balance with no total_paid was recorded by hand.
+          method: Number(inv?.total_paid) > 0 ? 'Paid' : 'Recorded manually',
           url: pl?.url || null,
         }
       })
     )
 
-    return NextResponse.json({ receipts })
+    // Most recent first, capped at 20.
+    receipts.sort((a: any, b: any) => {
+      const ta = a.paid_at ? new Date(a.paid_at).getTime() : 0
+      const tb = b.paid_at ? new Date(b.paid_at).getTime() : 0
+      return tb - ta
+    })
+
+    return NextResponse.json({ receipts: receipts.slice(0, 20) })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

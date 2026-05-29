@@ -17,21 +17,40 @@ const METHOD_LABELS: Record<string, string> = {
 // covers, and return the end-of-month date for that period as 'YYYY-MM-DD'.
 // Returns null if no recognizable month/year is found (e.g. a custom invoice),
 // in which case the caller leaves monthly_fee_paid_through untouched.
-function endOfBilledMonthFromInvoice(description: string | null | undefined): string | null {
+function endOfBilledMonthFromInvoice(invoice: any): string | null {
   const MONTHS = [
     'january', 'february', 'march', 'april', 'may', 'june',
     'july', 'august', 'september', 'october', 'november', 'december',
   ]
-  const haystack = (description || '').toLowerCase()
-  let monthIdx = -1
-  for (let i = 0; i < MONTHS.length; i++) {
-    if (haystack.includes(MONTHS[i])) { monthIdx = i; break }
+  const haystack = (
+    (invoice?.description || '') + ' ' +
+    (invoice?.items || []).map((i: any) => i?.description || '').join(' ')
+  ).toLowerCase()
+
+  // Keep the LATEST "<month> <year>" pair so a manually settled invoice that
+  // bundles more than one month advances paid_through to the last month, not
+  // the first.
+  const re = new RegExp(`\\b(${MONTHS.join('|')})\\s+(20\\d{2})\\b`, 'g')
+  let best: { year: number; monthIdx: number } | null = null
+  let m: RegExpExecArray | null
+  while ((m = re.exec(haystack)) !== null) {
+    const monthIdx = MONTHS.indexOf(m[1])
+    const year = parseInt(m[2], 10)
+    if (!best || year > best.year || (year === best.year && monthIdx > best.monthIdx)) {
+      best = { year, monthIdx }
+    }
   }
-  const yearMatch = haystack.match(/\b(20\d{2})\b/)
-  if (monthIdx === -1 || !yearMatch) return null
-  const year = parseInt(yearMatch[1], 10)
+  if (!best) {
+    let monthIdx = -1
+    for (let i = 0; i < MONTHS.length; i++) {
+      if (haystack.includes(MONTHS[i])) { monthIdx = i; break }
+    }
+    const yearMatch = haystack.match(/\b(20\d{2})\b/)
+    if (monthIdx === -1 || !yearMatch) return null
+    best = { year: parseInt(yearMatch[1], 10), monthIdx }
+  }
   // day 0 of next month == last day of this month
-  return new Date(year, monthIdx + 1, 0).toISOString().split('T')[0]
+  return new Date(best.year, best.monthIdx + 1, 0).toISOString().split('T')[0]
 }
 
 // Pick the later of two YYYY-MM-DD date strings, so monthly_fee_paid_through
@@ -84,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the invoice to read its current balance and description.
-    const invRes = await fetch(`https://api.payload.com/invoices/${invoice_id}`, {
+    const invRes = await fetch(`https://api.payload.com/invoices/${invoice_id}?fields[]=*&fields[]=items`, {
       headers: { Authorization: authHeader() },
     })
     const invoice = await invRes.json()
@@ -139,7 +158,7 @@ export async function POST(request: NextRequest) {
     // If this is a monthly fee invoice, advance monthly_fee_paid_through to the
     // end of the billed month. laterDate ensures we never roll the value
     // backward. Custom/non-monthly invoices leave the column untouched.
-    const billedMonthEnd = endOfBilledMonthFromInvoice(invoice.description)
+    const billedMonthEnd = endOfBilledMonthFromInvoice(invoice)
     let updatedPaidThrough: string | null = null
     if (billedMonthEnd) {
       updatedPaidThrough = laterDate(user.monthly_fee_paid_through, billedMonthEnd)

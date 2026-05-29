@@ -20,6 +20,15 @@ export type AgentMonthlyStatus = {
   unpaid_monthly_count: number
   unpaid_monthly_total: number
   unpaid_monthly_invoice_ids: string[]
+  // Overdue = unpaid AND past its due date. This is what "behind" should mean.
+  overdue_count: number
+  overdue_total: number
+  overdue_invoice_ids: string[]
+  // Upcoming = unpaid but not yet due (e.g. next month's fee billed early).
+  // Not behind; surfaced separately so it stops inflating the behind count.
+  upcoming_count: number
+  upcoming_total: number
+  upcoming_invoice_ids: string[]
   has_current_month_invoice: boolean
 }
 
@@ -85,6 +94,20 @@ export async function GET(request: NextRequest) {
               (inv: any) => Number(inv.amount_due ?? 0) > 0
             )
 
+            // Split unpaid invoices by due date. An invoice is only "overdue"
+            // once its due date has passed; a fee billed ahead of its due date
+            // (the next month's, created early by the cron) is "upcoming" and
+            // must not make the agent look behind. A missing or unparseable due
+            // date is treated as overdue so nothing slips by unnoticed.
+            const today = new Date().toISOString().split('T')[0]
+            const isOverdue = (inv: any) => {
+              const d = inv?.due_date
+              if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(d)) return true
+              return d.slice(0, 10) < today
+            }
+            const overdue = unpaidMonthly.filter((inv: any) => isOverdue(inv))
+            const upcoming = unpaidMonthly.filter((inv: any) => !isOverdue(inv))
+
             const status: AgentMonthlyStatus = {
               unpaid_monthly_count: unpaidMonthly.length,
               unpaid_monthly_total: unpaidMonthly.reduce(
@@ -92,6 +115,18 @@ export async function GET(request: NextRequest) {
                 0
               ),
               unpaid_monthly_invoice_ids: unpaidMonthly.map((inv: any) => inv.id),
+              overdue_count: overdue.length,
+              overdue_total: overdue.reduce(
+                (sum: number, inv: any) => sum + Number(inv.amount_due ?? 0),
+                0
+              ),
+              overdue_invoice_ids: overdue.map((inv: any) => inv.id),
+              upcoming_count: upcoming.length,
+              upcoming_total: upcoming.reduce(
+                (sum: number, inv: any) => sum + Number(inv.amount_due ?? 0),
+                0
+              ),
+              upcoming_invoice_ids: upcoming.map((inv: any) => inv.id),
               has_current_month_invoice: monthlyInvoices.some(
                 (inv: any) =>
                   typeof inv.description === 'string' &&

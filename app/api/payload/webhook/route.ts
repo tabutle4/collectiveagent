@@ -18,16 +18,38 @@ function endOfBilledMonthFromInvoice(data: any): string | null {
     (data.items || []).map((i: any) => i.description || '').join(' ')
   ).toLowerCase()
 
-  let monthIdx = -1
-  for (let i = 0; i < MONTHS.length; i++) {
-    if (haystack.includes(MONTHS[i])) { monthIdx = i; break }
+  // Find every "<month> <year>" pair and keep the LATEST one. A single invoice
+  // can bundle more than one month (for example a prepayment whose line items
+  // are "June 2026 Monthly Brokerage Fee" and "July 2026 Monthly Brokerage
+  // Fee"), and paid_through must advance to the last month covered, not the
+  // first. The old logic stopped at the first month it saw and left those
+  // agents short a month.
+  const re = new RegExp(`\\b(${MONTHS.join('|')})\\s+(20\\d{2})\\b`, 'g')
+  let best: { year: number; monthIdx: number } | null = null
+  let m: RegExpExecArray | null
+  while ((m = re.exec(haystack)) !== null) {
+    const monthIdx = MONTHS.indexOf(m[1])
+    const year = parseInt(m[2], 10)
+    if (!best || year > best.year || (year === best.year && monthIdx > best.monthIdx)) {
+      best = { year, monthIdx }
+    }
   }
-  const yearMatch = haystack.match(/\b(20\d{2})\b/)
-  if (monthIdx === -1 || !yearMatch) return null
 
-  const year = parseInt(yearMatch[1], 10)
+  // Fallback for descriptions that mention a month and a year but not adjacent
+  // (e.g. a prorated onboarding line "...remaining in May"): take the first
+  // month found and the first year found, matching the previous behavior.
+  if (!best) {
+    let monthIdx = -1
+    for (let i = 0; i < MONTHS.length; i++) {
+      if (haystack.includes(MONTHS[i])) { monthIdx = i; break }
+    }
+    const yearMatch = haystack.match(/\b(20\d{2})\b/)
+    if (monthIdx === -1 || !yearMatch) return null
+    best = { year: parseInt(yearMatch[1], 10), monthIdx }
+  }
+
   // day 0 of next month == last day of this month
-  return new Date(year, monthIdx + 1, 0).toISOString().split('T')[0]
+  return new Date(best.year, best.monthIdx + 1, 0).toISOString().split('T')[0]
 }
 
 // Pick the later of two YYYY-MM-DD date strings. Used to make sure
