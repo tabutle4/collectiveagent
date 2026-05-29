@@ -1528,6 +1528,12 @@ export default function LandlordDetailPage() {
                           <p className="text-sm font-semibold text-luxury-gray-1">
                             {getMonthName(disb.period_month)} {disb.period_year}
                           </p>
+                          {disb.managed_properties && (
+                            <p className="text-xs text-luxury-gray-2">
+                              {disb.managed_properties.property_address}
+                              {disb.managed_properties.unit ? ` ${disb.managed_properties.unit}` : ''}
+                            </p>
+                          )}
                           <p className="text-xs text-luxury-gray-3">
                             Gross: {formatCurrency(disb.gross_rent)} · 
                             Fee: {formatCurrency(disb.management_fee)}

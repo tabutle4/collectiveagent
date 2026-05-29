@@ -37,7 +37,10 @@ export async function GET(
           )
         ),
         landlord_disbursements(
-          id, gross_rent, management_fee, net_amount, payment_status, payment_date, period_month, period_year
+          id, gross_rent, management_fee, net_amount, payment_status, payment_date, period_month, period_year,
+          managed_properties:property_id (
+            id, property_address, unit, city, state
+          )
         )
       `)
       .eq('id', resolvedParams.id)
