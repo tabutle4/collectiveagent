@@ -3,20 +3,24 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Banknote, Search, ArrowLeft, Send, CheckCircle, Clock, AlertCircle, Building2, Plus, X } from 'lucide-react'
+import { Banknote, Search, ArrowLeft, Send, CheckCircle, Clock, AlertCircle, Building2, Plus, X, Pencil } from 'lucide-react'
 
 interface Disbursement {
   id: string
   gross_rent: number
   management_fee: number
+  deposit_amount: number
   other_deductions: number
   other_deductions_description: string | null
   net_amount: number
   payment_status: string
   payment_date: string | null
+  payment_method: string | null
+  payment_reference: string | null
   payload_payout_id: string | null
   period_month: number
   period_year: number
+  notes: string | null
   landlord_id: string
   tenant_invoice_id: string
   property_id: string
@@ -123,6 +127,23 @@ export default function DisbursementsPage() {
   // rapidly. Each property change bumps the counter; only fetches whose
   // counter still matches the latest get applied to state.
   const propertyFetchCounter = useRef(0)
+  // Edit disbursement modal state. Distinct from create modal so admins
+  // can flip between viewing the list and editing a row without losing the
+  // half-built create form (and vice versa).
+  const [editingDisbursement, setEditingDisbursement] = useState<Disbursement | null>(null)
+  const [editForm, setEditForm] = useState({
+    gross_rent: '',
+    management_fee: '',
+    deposit_amount: '',
+    other_deductions: '',
+    other_deductions_description: '',
+    payment_status: 'pending',
+    payment_date: '',
+    payment_method: '',
+    payment_reference: '',
+    notes: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
     checkAuth()
@@ -202,6 +223,72 @@ export default function DisbursementsPage() {
       return () => clearTimeout(timer)
     }
   }, [search, statusFilter])
+
+  const openEditDisbursement = (disbursement: Disbursement) => {
+    setEditingDisbursement(disbursement)
+    setEditForm({
+      gross_rent: String(disbursement.gross_rent ?? ''),
+      management_fee: String(disbursement.management_fee ?? ''),
+      deposit_amount: String(disbursement.deposit_amount ?? ''),
+      other_deductions: String(disbursement.other_deductions ?? ''),
+      other_deductions_description: disbursement.other_deductions_description || '',
+      payment_status: disbursement.payment_status,
+      payment_date: disbursement.payment_date || '',
+      payment_method: disbursement.payment_method || '',
+      payment_reference: disbursement.payment_reference || '',
+      notes: disbursement.notes || '',
+    })
+  }
+
+  const closeEditDisbursement = () => {
+    setEditingDisbursement(null)
+  }
+
+  const saveEditDisbursement = async () => {
+    if (!editingDisbursement) return
+
+    // Guard rails. Net is recomputed server-side from gross + mgmt + deductions,
+    // but we surface a client-side preview to avoid wasted round trips.
+    if (parseFloat(editForm.gross_rent) < 0) {
+      alert('Gross rent cannot be negative')
+      return
+    }
+
+    setSavingEdit(true)
+    try {
+      const body: Record<string, any> = {
+        gross_rent: parseFloat(editForm.gross_rent) || 0,
+        management_fee: parseFloat(editForm.management_fee) || 0,
+        deposit_amount: parseFloat(editForm.deposit_amount) || 0,
+        other_deductions: parseFloat(editForm.other_deductions) || 0,
+        other_deductions_description: editForm.other_deductions_description || null,
+        payment_status: editForm.payment_status,
+        payment_date: editForm.payment_date || null,
+        payment_method: editForm.payment_method || null,
+        payment_reference: editForm.payment_reference || null,
+        notes: editForm.notes || null,
+      }
+
+      const res = await fetch(`/api/pm/disbursements/${editingDisbursement.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (res.ok) {
+        closeEditDisbursement()
+        loadDisbursements()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save disbursement')
+      }
+    } catch (err) {
+      console.error('Failed to save disbursement:', err)
+      alert('Failed to save disbursement')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
 
   const formatDate = (date: string) => {
     const dateStr = date.includes('T') ? date : `${date}T12:00:00`
@@ -717,41 +804,51 @@ export default function DisbursementsPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {disbursement.payment_status === 'pending' && (
-                        <>
-                          {canProcess(disbursement) ? (
-                            <button
-                              onClick={() => processDisbursement(disbursement.id)}
-                              disabled={processingId === disbursement.id}
-                              className="btn btn-primary text-xs py-1 px-3 inline-flex items-center gap-1"
-                            >
-                              <Send size={12} />
-                              {processingId === disbursement.id ? 'Processing...' : 'Process ACH'}
-                            </button>
-                          ) : (
-                            <Link
-                              href={`/admin/pm/landlords/${disbursement.landlord_id}`}
-                              className="text-xs text-luxury-accent hover:underline"
-                            >
-                              Setup Bank First
-                            </Link>
-                          )}
-                        </>
-                      )}
-                      {(disbursement.payment_status === 'completed' || disbursement.payment_status === 'paid') && (
-                        <span className="text-xs text-green-600">
-                          {disbursement.payment_status === 'completed' ? 'ACH Complete' : 'Paid'}
-                        </span>
-                      )}
-                      {disbursement.payment_status === 'failed' && (
+                      <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => processDisbursement(disbursement.id)}
-                          disabled={processingId === disbursement.id}
-                          className="btn btn-secondary text-xs py-1 px-3"
+                          onClick={() => openEditDisbursement(disbursement)}
+                          className="btn btn-secondary text-xs py-1 px-3 inline-flex items-center gap-1"
+                          title="Edit disbursement"
                         >
-                          Retry
+                          <Pencil size={12} />
+                          Edit
                         </button>
-                      )}
+                        {disbursement.payment_status === 'pending' && (
+                          <>
+                            {canProcess(disbursement) ? (
+                              <button
+                                onClick={() => processDisbursement(disbursement.id)}
+                                disabled={processingId === disbursement.id}
+                                className="btn btn-primary text-xs py-1 px-3 inline-flex items-center gap-1"
+                              >
+                                <Send size={12} />
+                                {processingId === disbursement.id ? 'Processing...' : 'Process ACH'}
+                              </button>
+                            ) : (
+                              <Link
+                                href={`/admin/pm/landlords/${disbursement.landlord_id}`}
+                                className="text-xs text-luxury-accent hover:underline"
+                              >
+                                Setup Bank First
+                              </Link>
+                            )}
+                          </>
+                        )}
+                        {(disbursement.payment_status === 'completed' || disbursement.payment_status === 'paid') && (
+                          <span className="text-xs text-green-600">
+                            {disbursement.payment_status === 'completed' ? 'ACH Complete' : 'Paid'}
+                          </span>
+                        )}
+                        {disbursement.payment_status === 'failed' && (
+                          <button
+                            onClick={() => processDisbursement(disbursement.id)}
+                            disabled={processingId === disbursement.id}
+                            className="btn btn-secondary text-xs py-1 px-3"
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1214,6 +1311,222 @@ export default function DisbursementsPage() {
                 }
               >
                 {creating ? 'Creating...' : disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Disbursement Modal */}
+      {editingDisbursement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">Edit Disbursement</h2>
+              <button
+                onClick={closeEditDisbursement}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="inner-card">
+                <div className="text-xs text-luxury-gray-3 uppercase tracking-widest mb-1">
+                  Disbursement
+                </div>
+                <div className="text-sm text-luxury-gray-1">
+                  {getMonthName(editingDisbursement.period_month)} {editingDisbursement.period_year}
+                </div>
+                {editingDisbursement.landlords && (
+                  <div className="text-xs text-luxury-gray-3 mt-1">
+                    {editingDisbursement.landlords.first_name} {editingDisbursement.landlords.last_name}
+                  </div>
+                )}
+                {editingDisbursement.managed_properties && (
+                  <div className="text-xs text-luxury-gray-3">
+                    {editingDisbursement.managed_properties.property_address}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="field-label">Gross Rent</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.gross_rent}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, gross_rent: e.target.value }))}
+                      className="input-luxury w-full pl-7"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="field-label">Management Fee</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editForm.management_fee}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, management_fee: e.target.value }))}
+                      className="input-luxury w-full pl-7"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="field-label">
+                  Deposit Returned to Landlord
+                  <span className="text-luxury-gray-3 font-normal ml-1">
+                    (only when releasing deposit funds to landlord)
+                  </span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.deposit_amount}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, deposit_amount: e.target.value }))}
+                    className="input-luxury w-full pl-7"
+                  />
+                </div>
+              </div>
+
+              {/* Other Deductions: legacy single-line field. Line-item
+                  deductions are managed separately via the Pending
+                  Deductions panel and are not edited from here. */}
+              <div>
+                <label className="field-label">Other Deductions (single-line)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.other_deductions}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, other_deductions: e.target.value }))}
+                    className="input-luxury w-full pl-7"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {parseFloat(editForm.other_deductions) > 0 && (
+                <div>
+                  <label className="field-label">Deduction Description</label>
+                  <input
+                    type="text"
+                    value={editForm.other_deductions_description}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, other_deductions_description: e.target.value }))}
+                    className="input-luxury w-full"
+                    placeholder="e.g., Repair expense, HOA fee"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="field-label">Payment Status</label>
+                <select
+                  value={editForm.payment_status}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, payment_status: e.target.value }))}
+                  className="select-luxury w-full"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="processing">Processing</option>
+                  <option value="completed">Completed</option>
+                  <option value="paid">Paid</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+
+              {/* When status is completed/paid, show payment details */}
+              {['completed', 'paid'].includes(editForm.payment_status) && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Payment Date</label>
+                      <input
+                        type="date"
+                        value={editForm.payment_date}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, payment_date: e.target.value }))}
+                        className="input-luxury w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Method</label>
+                      <input
+                        type="text"
+                        value={editForm.payment_method}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, payment_method: e.target.value }))}
+                        className="input-luxury w-full"
+                        placeholder="ACH, check, Zelle, etc."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="field-label">Reference Number</label>
+                    <input
+                      type="text"
+                      value={editForm.payment_reference}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, payment_reference: e.target.value }))}
+                      className="input-luxury w-full"
+                      placeholder="Check number, confirmation ID, etc."
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="field-label">Notes</label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                  className="input-luxury w-full"
+                  rows={2}
+                />
+              </div>
+
+              {/* Net preview - server will recompute, but show admin what
+                  the result will look like. The actual net also subtracts
+                  any attached line-item deductions, which are not editable
+                  from this modal (use the Pending Deductions panel). */}
+              <div className="inner-card">
+                <div className="flex justify-between items-center text-sm text-luxury-gray-3">
+                  <span>New Net (excluding line-item deductions)</span>
+                  <span className="font-semibold text-luxury-gray-1">
+                    {formatMoney(
+                      (parseFloat(editForm.gross_rent) || 0) -
+                      (parseFloat(editForm.management_fee) || 0) -
+                      (parseFloat(editForm.other_deductions) || 0)
+                    )}
+                  </span>
+                </div>
+                <p className="text-xs text-luxury-gray-3 mt-1">
+                  Server will recompute final net including any attached deductions.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={closeEditDisbursement}
+                className="btn btn-secondary"
+                disabled={savingEdit}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditDisbursement}
+                className="btn btn-primary"
+                disabled={savingEdit}
+              >
+                {savingEdit ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

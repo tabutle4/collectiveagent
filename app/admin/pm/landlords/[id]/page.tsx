@@ -638,6 +638,22 @@ export default function LandlordDetailPage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
+  // Pending deductions sub-section on the Disbursements tab.
+  // pendingDeductions: rows where disbursement_id IS NULL (waiting to be
+  // applied to a future disbursement). Scoped landlord-wide; the property
+  // column tells admin which property each deduction belongs to.
+  const [pendingDeductions, setPendingDeductions] = useState<any[]>([])
+  const [loadingDeductions, setLoadingDeductions] = useState(false)
+  const [showAddDeductionModal, setShowAddDeductionModal] = useState(false)
+  const [deductionForm, setDeductionForm] = useState({
+    property_id: '',
+    label: '',
+    amount: '',
+    description: '',
+    incurred_date: '',
+  })
+  const [savingDeduction, setSavingDeduction] = useState(false)
+
   // Modal states
   const [showPropertyModal, setShowPropertyModal] = useState(false)
   const [showLeaseModal, setShowLeaseModal] = useState(false)
@@ -695,6 +711,102 @@ export default function LandlordDetailPage() {
     loadAllTenants()
     loadAgents()
   }, [landlordId])
+
+  // Load pending deductions only when the Disbursements tab is active so
+  // we don't fetch for landlords whose admin never opens that tab.
+  useEffect(() => {
+    if (activeTab === 'disbursements') {
+      loadPendingDeductions()
+    }
+  }, [activeTab, landlordId])
+
+  const loadPendingDeductions = async () => {
+    setLoadingDeductions(true)
+    try {
+      const res = await fetch(
+        `/api/pm/landlord-disbursement-deductions?landlord_id=${landlordId}&pending=true`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setPendingDeductions(data.deductions || [])
+      }
+    } catch (err) {
+      console.error('Error loading pending deductions:', err)
+    } finally {
+      setLoadingDeductions(false)
+    }
+  }
+
+  const openAddDeductionModal = () => {
+    setDeductionForm({
+      property_id: properties.length === 1 ? properties[0].id : '',
+      label: '',
+      amount: '',
+      description: '',
+      incurred_date: '',
+    })
+    setShowAddDeductionModal(true)
+  }
+
+  const saveDeduction = async () => {
+    if (!deductionForm.property_id || !deductionForm.label || !deductionForm.amount) {
+      alert('Property, label, and amount are required')
+      return
+    }
+    if (parseFloat(deductionForm.amount) <= 0) {
+      alert('Amount must be greater than zero')
+      return
+    }
+
+    setSavingDeduction(true)
+    try {
+      const res = await fetch('/api/pm/landlord-disbursement-deductions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          landlord_id: landlordId,
+          property_id: deductionForm.property_id,
+          label: deductionForm.label,
+          amount: parseFloat(deductionForm.amount),
+          description: deductionForm.description || null,
+          incurred_date: deductionForm.incurred_date || null,
+        }),
+      })
+
+      if (res.ok) {
+        setShowAddDeductionModal(false)
+        loadPendingDeductions()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save deduction')
+      }
+    } catch (err) {
+      console.error('Error saving deduction:', err)
+      alert('Failed to save deduction')
+    } finally {
+      setSavingDeduction(false)
+    }
+  }
+
+  const deleteDeduction = async (deductionId: string) => {
+    if (!confirm('Delete this pending deduction?')) return
+
+    try {
+      const res = await fetch(
+        `/api/pm/landlord-disbursement-deductions/${deductionId}`,
+        { method: 'DELETE' }
+      )
+      if (res.ok) {
+        loadPendingDeductions()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete deduction')
+      }
+    } catch (err) {
+      console.error('Error deleting deduction:', err)
+      alert('Failed to delete deduction')
+    }
+  }
 
   const loadLandlordData = async () => {
     setLoading(true)
@@ -1597,6 +1709,82 @@ export default function LandlordDetailPage() {
                   ))}
                 </div>
               )}
+
+              {/* Pending Deductions sub-section. Sits below the
+                  disbursements list. Pending = disbursement_id IS NULL,
+                  i.e. waiting to be attached to a future disbursement. */}
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+                    Pending Deductions
+                  </h3>
+                  <button
+                    onClick={openAddDeductionModal}
+                    className="btn btn-secondary text-xs flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add Deduction
+                  </button>
+                </div>
+
+                {loadingDeductions ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">
+                    Loading deductions...
+                  </p>
+                ) : pendingDeductions.length === 0 ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">
+                    No pending deductions. Add one to apply against a future disbursement.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {pendingDeductions.map((d: any) => (
+                      <div key={d.id} className="inner-card">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                                {d.label}
+                              </p>
+                              {d.source_repair_id && (
+                                <span className="text-xs text-luxury-gray-3 shrink-0">
+                                  (from repair)
+                                </span>
+                              )}
+                            </div>
+                            {d.managed_properties && (
+                              <p className="text-xs text-luxury-gray-2 truncate">
+                                {d.managed_properties.property_address}
+                                {d.managed_properties.unit ? ` ${d.managed_properties.unit}` : ''}
+                              </p>
+                            )}
+                            {d.description && (
+                              <p className="text-xs text-luxury-gray-3 truncate">
+                                {d.description}
+                              </p>
+                            )}
+                            {d.incurred_date && (
+                              <p className="text-xs text-luxury-gray-3">
+                                Incurred {formatDate(d.incurred_date)}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-sm font-semibold text-luxury-gray-1">
+                              {formatCurrency(Number(d.amount))}
+                            </span>
+                            <button
+                              onClick={() => deleteDeduction(d.id)}
+                              className="text-luxury-gray-3 hover:text-red-600"
+                              title="Delete deduction"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1873,6 +2061,104 @@ export default function LandlordDetailPage() {
                 >
                   {markingPaid ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
                   {markingPaid ? 'Saving...' : 'Mark as Paid'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Pending Deduction Modal */}
+      {showAddDeductionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="container-card max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Add Pending Deduction</h2>
+              <button
+                onClick={() => setShowAddDeductionModal(false)}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="field-label">Property</label>
+                <select
+                  value={deductionForm.property_id}
+                  onChange={(e) => setDeductionForm(prev => ({ ...prev, property_id: e.target.value }))}
+                  className="select-luxury w-full"
+                >
+                  <option value="">Select property...</option>
+                  {properties.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.property_address}{p.unit ? ` ${p.unit}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="field-label">Label</label>
+                <input
+                  type="text"
+                  value={deductionForm.label}
+                  onChange={(e) => setDeductionForm(prev => ({ ...prev, label: e.target.value }))}
+                  className="input-luxury w-full"
+                  placeholder="e.g., HOA fee, lawn care, commission"
+                />
+              </div>
+
+              <div>
+                <label className="field-label">Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={deductionForm.amount}
+                    onChange={(e) => setDeductionForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="input-luxury w-full pl-7"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="field-label">Incurred Date (optional)</label>
+                <input
+                  type="date"
+                  value={deductionForm.incurred_date}
+                  onChange={(e) => setDeductionForm(prev => ({ ...prev, incurred_date: e.target.value }))}
+                  className="input-luxury w-full"
+                />
+              </div>
+
+              <div>
+                <label className="field-label">Description (optional)</label>
+                <textarea
+                  value={deductionForm.description}
+                  onChange={(e) => setDeductionForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="input-luxury w-full"
+                  rows={2}
+                  placeholder="Additional context"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowAddDeductionModal(false)}
+                  className="btn btn-secondary"
+                  disabled={savingDeduction}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveDeduction}
+                  className="btn btn-primary"
+                  disabled={savingDeduction}
+                >
+                  {savingDeduction ? 'Saving...' : 'Add Deduction'}
                 </button>
               </div>
             </div>

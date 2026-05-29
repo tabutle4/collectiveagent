@@ -64,6 +64,7 @@ export async function PATCH(
     const allowedFields = [
       'payment_status', 'payment_date', 'payment_method', 'payment_reference',
       'gross_rent', 'management_fee', 'agent_fee', 'deposit_amount',
+      'other_deductions', 'other_deductions_description',
       'net_amount', 'notes',
       'payload_payout_id',
     ]
@@ -77,12 +78,15 @@ export async function PATCH(
 
     // If any amount field changed and net_amount wasn't explicitly set,
     // recompute it: net = gross_rent - management_fee - other_deductions - sum(line-item deductions)
-    // The recompute pulls the current row + applied deductions to use the latest values.
+    // Uses the new value from filteredUpdates when present, otherwise falls
+    // back to the current row's value. This way changing only other_deductions
+    // still triggers a correct net recalc.
     if (
       filteredUpdates.net_amount === undefined &&
       (filteredUpdates.gross_rent !== undefined ||
         filteredUpdates.management_fee !== undefined ||
-        filteredUpdates.deposit_amount !== undefined)
+        filteredUpdates.deposit_amount !== undefined ||
+        filteredUpdates.other_deductions !== undefined)
     ) {
       const { data: current } = await supabase
         .from('landlord_disbursements')
@@ -98,12 +102,12 @@ export async function PATCH(
       if (current) {
         const gross = Number(filteredUpdates.gross_rent ?? current.gross_rent ?? 0)
         const mgmt = Number(filteredUpdates.management_fee ?? current.management_fee ?? 0)
-        const otherOld = Number(current.other_deductions ?? 0)
+        const other = Number(filteredUpdates.other_deductions ?? current.other_deductions ?? 0)
         const lineItems = (deductionRows || []).reduce(
           (sum: number, d: any) => sum + Number(d.amount || 0),
           0
         )
-        filteredUpdates.net_amount = gross - mgmt - otherOld - lineItems
+        filteredUpdates.net_amount = gross - mgmt - other - lineItems
       }
     }
 

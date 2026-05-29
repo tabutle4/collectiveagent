@@ -194,15 +194,56 @@ export async function PATCH(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // pm_ledger has been deprecated as part of the deposits-on-invoices
-    // refactor. Repair expenses live on the repair_requests row itself
-    // (actual_cost + deducted_from_disbursement_id).
+    // Auto-create a pending deduction the FIRST time a repair gets marked
+    // payment_status='deducted_from_rent' with actual_cost > 0.
     //
-    // KNOWN GAP: marking a repair as 'deducted_from_rent' no longer creates
-    // any row that the disbursement form surfaces - the form only shows
-    // landlord_disbursement_deductions. Admin must currently create a
-    // matching deduction row by hand. Followup: auto-create a pending
-    // landlord_disbursement_deductions row here.
+    // Idempotent: the deductions table has a source_repair_id FK that links
+    // back here. Subsequent edits never create duplicates - if a deduction
+    // already exists for this repair, we leave it alone (admin manages it
+    // manually via the Pending Deductions panel).
+    //
+    // If the repair status is later reverted (no longer deducted_from_rent),
+    // the deduction row stays in place. It is up to admin to delete it or
+    // change its assignment via the deductions UI.
+    if (
+      repair.payment_status === 'deducted_from_rent' &&
+      repair.actual_cost &&
+      Number(repair.actual_cost) > 0
+    ) {
+      const { data: existingDeduction } = await supabase
+        .from('landlord_disbursement_deductions')
+        .select('id')
+        .eq('source_repair_id', repair.id)
+        .maybeSingle()
+
+      if (!existingDeduction) {
+        const repairTitle = repair.title || 'Repair'
+        const { error: dedError } = await supabase
+          .from('landlord_disbursement_deductions')
+          .insert({
+            landlord_id: repair.landlord_id,
+            property_id: repair.property_id,
+            label: `Repair: ${repairTitle}`,
+            description: repair.description || null,
+            amount: Number(repair.actual_cost),
+            incurred_date: repair.completed_at
+              ? repair.completed_at.split('T')[0]
+              : null,
+            source_repair_id: repair.id,
+            created_by: auth.user.id,
+          })
+
+        if (dedError) {
+          console.error(
+            'Failed to auto-create deduction for repair',
+            repair.id,
+            dedError
+          )
+          // Do NOT roll back the repair update. The deduction can be added
+          // manually via the Pending Deductions panel if this fails.
+        }
+      }
+    }
 
     return NextResponse.json({ repair, success: true })
   } catch (error: any) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign } from 'lucide-react'
+import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign, Pencil, X } from 'lucide-react'
 
 interface Invoice {
   id: string
@@ -12,12 +12,15 @@ interface Invoice {
   late_fee: number
   other_charges: number
   other_charges_description: string | null
+  deposit_amount: number
+  deposit_description: string | null
   total_amount: number
   due_date: string
   status: string
   paid_at: string | null
   paid_amount: number | null
   payload_payment_link_url: string | null
+  notes: string | null
   tenant_id: string
   landlord_id: string
   property_id: string
@@ -53,6 +56,21 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [sendingId, setSendingId] = useState<string | null>(null)
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
+  // Edit modal state. Holds the invoice being edited, the form values, and
+  // a saving flag while PATCH is in flight.
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
+  const [editForm, setEditForm] = useState({
+    rent_amount: '',
+    late_fee: '',
+    other_charges: '',
+    other_charges_description: '',
+    deposit_amount: '',
+    deposit_description: '',
+    due_date: '',
+    status: 'pending',
+    notes: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
   const [stats, setStats] = useState<Stats>({
     pending: 0,
     sent: 0,
@@ -211,6 +229,73 @@ export default function InvoicesPage() {
     }
   }
 
+  const openEditModal = (invoice: Invoice) => {
+    setEditingInvoice(invoice)
+    setEditForm({
+      rent_amount: String(invoice.rent_amount ?? ''),
+      late_fee: String(invoice.late_fee ?? ''),
+      other_charges: String(invoice.other_charges ?? ''),
+      other_charges_description: invoice.other_charges_description || '',
+      deposit_amount: String(invoice.deposit_amount ?? ''),
+      deposit_description: invoice.deposit_description || '',
+      due_date: invoice.due_date,
+      status: invoice.status,
+      notes: invoice.notes || '',
+    })
+  }
+
+  const closeEditModal = () => {
+    setEditingInvoice(null)
+  }
+
+  const saveEdit = async () => {
+    if (!editingInvoice) return
+
+    setSavingEdit(true)
+    try {
+      // Build PATCH body. For paid invoices, only notes/status are editable
+      // per server-side allowlist; sending other fields is harmless but
+      // pointless. For unpaid, exclude 'paid' as a target status - paid
+      // marking happens in Payload, not here.
+      const isPaid = editingInvoice.status === 'paid'
+      const body: Record<string, any> = isPaid
+        ? {
+            notes: editForm.notes || null,
+            status: editForm.status,
+          }
+        : {
+            rent_amount: parseFloat(editForm.rent_amount) || 0,
+            late_fee: parseFloat(editForm.late_fee) || 0,
+            other_charges: parseFloat(editForm.other_charges) || 0,
+            other_charges_description: editForm.other_charges_description || null,
+            deposit_amount: parseFloat(editForm.deposit_amount) || 0,
+            deposit_description: editForm.deposit_description || null,
+            due_date: editForm.due_date,
+            status: editForm.status,
+            notes: editForm.notes || null,
+          }
+
+      const res = await fetch(`/api/pm/invoices/${editingInvoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      if (res.ok) {
+        closeEditModal()
+        loadInvoices()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save invoice')
+      }
+    } catch (err) {
+      console.error('Failed to save invoice:', err)
+      alert('Failed to save invoice')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   const isOverdue = (invoice: Invoice) => {
     if (['paid', 'cancelled'].includes(invoice.status)) return false
     const now = new Date()
@@ -358,6 +443,14 @@ export default function InvoicesPage() {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEditModal(invoice)}
+                          className="btn btn-secondary text-xs py-1 px-3 flex items-center gap-1"
+                          title="Edit invoice"
+                        >
+                          <Pencil size={12} />
+                          Edit
+                        </button>
                         {invoice.status === 'pending' && (
                           <button
                             onClick={() => sendInvoice(invoice.id)}
@@ -404,6 +497,232 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+      {/* Edit Invoice Modal */}
+      {editingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">Edit Invoice</h2>
+              <button
+                onClick={closeEditModal}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="inner-card">
+                <div className="text-xs text-luxury-gray-3 uppercase tracking-widest mb-1">
+                  Invoice
+                </div>
+                <div className="text-sm text-luxury-gray-1">
+                  {getMonthName(editingInvoice.period_month)} {editingInvoice.period_year}
+                </div>
+                {editingInvoice.tenants && (
+                  <div className="text-xs text-luxury-gray-3 mt-1">
+                    {editingInvoice.tenants.first_name} {editingInvoice.tenants.last_name}
+                  </div>
+                )}
+                {editingInvoice.managed_properties && (
+                  <div className="text-xs text-luxury-gray-3">
+                    {editingInvoice.managed_properties.property_address}
+                  </div>
+                )}
+              </div>
+
+              {editingInvoice.status === 'paid' ? (
+                // Paid invoices: only notes + status editable. Payments are
+                // tracked in Payload so we deliberately do not let admin
+                // touch rent/late_fee/etc on a paid invoice.
+                <>
+                  <div className="text-xs text-amber-700">
+                    This invoice has been paid. Only notes and status are editable here.
+                  </div>
+                  <div>
+                    <label className="field-label">Status</label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="select-luxury w-full"
+                    >
+                      <option value="paid">Paid</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Notes</label>
+                    <textarea
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                      className="input-luxury w-full"
+                      rows={3}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Rent Amount</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.rent_amount}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, rent_amount: e.target.value }))}
+                          className="input-luxury w-full pl-7"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="field-label">Late Fee</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editForm.late_fee}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, late_fee: e.target.value }))}
+                          className="input-luxury w-full pl-7"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="field-label">Other Charges</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editForm.other_charges}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, other_charges: e.target.value }))}
+                        className="input-luxury w-full pl-7"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {parseFloat(editForm.other_charges) > 0 && (
+                    <div>
+                      <label className="field-label">Other Charges Description</label>
+                      <input
+                        type="text"
+                        value={editForm.other_charges_description}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, other_charges_description: e.target.value }))}
+                        className="input-luxury w-full"
+                        placeholder="e.g., Pet fee, utility reimbursement"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="field-label">Security Deposit</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editForm.deposit_amount}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, deposit_amount: e.target.value }))}
+                        className="input-luxury w-full pl-7"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+
+                  {parseFloat(editForm.deposit_amount) > 0 && (
+                    <div>
+                      <label className="field-label">Deposit Description</label>
+                      <input
+                        type="text"
+                        value={editForm.deposit_description}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, deposit_description: e.target.value }))}
+                        className="input-luxury w-full"
+                        placeholder="e.g., Security deposit"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="field-label">Due Date</label>
+                    <input
+                      type="date"
+                      value={editForm.due_date}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, due_date: e.target.value }))}
+                      className="input-luxury w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="field-label">Status</label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="select-luxury w-full"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="sent">Sent</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      Paid status is set automatically when payment is received in Payload.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="field-label">Notes</label>
+                    <textarea
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                      className="input-luxury w-full"
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Recalculated total preview */}
+                  <div className="inner-card">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-luxury-gray-3">New Total</span>
+                      <span className="text-xl font-bold text-luxury-gray-1">
+                        {formatMoney(
+                          (parseFloat(editForm.rent_amount) || 0) +
+                          (parseFloat(editForm.late_fee) || 0) +
+                          (parseFloat(editForm.other_charges) || 0) +
+                          (parseFloat(editForm.deposit_amount) || 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={closeEditModal}
+                className="btn btn-secondary"
+                disabled={savingEdit}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="btn btn-primary"
+                disabled={savingEdit}
+              >
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
