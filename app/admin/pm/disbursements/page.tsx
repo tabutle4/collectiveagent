@@ -145,6 +145,35 @@ export default function DisbursementsPage() {
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // Charged-basis monthly fees modal state. Opens via "Run Monthly
+  // Charged Fees" button. Calls preview API first, shows table of unpaid
+  // invoices that would be auto-charged, then calls run API on confirm.
+  const [showChargedBasisModal, setShowChargedBasisModal] = useState(false)
+  const today = new Date()
+  // Default to previous month (most common use: day 1-7 of new month,
+  // processing prior month's unpaid invoices).
+  const defaultPrevMonth = today.getMonth() === 0 ? 12 : today.getMonth()
+  const defaultPrevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear()
+  const [chargedBasisForm, setChargedBasisForm] = useState({
+    month: defaultPrevMonth,
+    year: defaultPrevYear,
+  })
+  const [chargedBasisPreview, setChargedBasisPreview] = useState<any | null>(null)
+  const [chargedBasisLoading, setChargedBasisLoading] = useState(false)
+  const [chargedBasisRunning, setChargedBasisRunning] = useState(false)
+
+  // Create Statement modal state - small wizard to pick landlord +
+  // property + period, then redirects to the statement view.
+  const [showCreateStatementModal, setShowCreateStatementModal] = useState(false)
+  const [statementForm, setStatementForm] = useState({
+    landlord_id: '',
+    property_id: '',
+    period_type: 'monthly' as 'monthly' | 'annual',
+    period_month: defaultPrevMonth,
+    period_year: defaultPrevYear,
+  })
+  const [statementCreating, setStatementCreating] = useState(false)
+
   useEffect(() => {
     checkAuth()
   }, [])
@@ -287,6 +316,117 @@ export default function DisbursementsPage() {
       alert('Failed to save disbursement')
     } finally {
       setSavingEdit(false)
+    }
+  }
+
+  // Charged-basis modal handlers
+  const openChargedBasisModal = () => {
+    setShowChargedBasisModal(true)
+    setChargedBasisPreview(null)
+    // Auto-load preview for default month on open
+    loadChargedBasisPreview(defaultPrevMonth, defaultPrevYear)
+  }
+
+  const closeChargedBasisModal = () => {
+    setShowChargedBasisModal(false)
+    setChargedBasisPreview(null)
+  }
+
+  const loadChargedBasisPreview = async (month: number, year: number) => {
+    setChargedBasisLoading(true)
+    setChargedBasisPreview(null)
+    try {
+      const res = await fetch('/api/pm/charged-basis-mgmt-fees/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, year }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setChargedBasisPreview(json)
+      } else {
+        alert(json.error || 'Failed to load preview')
+      }
+    } catch (err) {
+      console.error('Failed to load charged-basis preview:', err)
+      alert('Failed to load preview')
+    } finally {
+      setChargedBasisLoading(false)
+    }
+  }
+
+  const runChargedBasis = async () => {
+    if (!chargedBasisPreview) return
+    if (chargedBasisPreview.pendingCount === 0) {
+      alert('Nothing to charge')
+      return
+    }
+
+    setChargedBasisRunning(true)
+    try {
+      const res = await fetch('/api/pm/charged-basis-mgmt-fees/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: chargedBasisForm.month,
+          year: chargedBasisForm.year,
+        }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        const msg = json.created === 1
+          ? '1 deduction created'
+          : `${json.created} deductions created`
+        const skippedMsg = json.skipped > 0 ? ` (${json.skipped} already charged)` : ''
+        alert(`Done. ${msg}${skippedMsg}.`)
+        closeChargedBasisModal()
+      } else {
+        alert(json.error || 'Failed to run charged-basis')
+      }
+    } catch (err) {
+      console.error('Failed to run charged-basis:', err)
+      alert('Failed to run')
+    } finally {
+      setChargedBasisRunning(false)
+    }
+  }
+
+  // Create Statement modal handler - posts to the new statement endpoint
+  // and redirects to the statement view on success.
+  const createStatement = async () => {
+    if (!statementForm.landlord_id || !statementForm.property_id) {
+      alert('Pick a landlord and property')
+      return
+    }
+
+    setStatementCreating(true)
+    try {
+      const body: Record<string, any> = {
+        landlord_id: statementForm.landlord_id,
+        property_id: statementForm.property_id,
+        period_type: statementForm.period_type,
+        period_year: statementForm.period_year,
+      }
+      if (statementForm.period_type === 'monthly') {
+        body.period_month = statementForm.period_month
+      }
+      const res = await fetch('/api/pm/statements/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        // Redirect to statement view (admin side)
+        window.location.href = `/admin/pm/statements/${json.statement.id}`
+      } else {
+        alert(json.error || 'Failed to generate statement')
+      }
+    } catch (err) {
+      console.error('Failed to generate statement:', err)
+      alert('Failed to generate statement')
+    } finally {
+      setStatementCreating(false)
     }
   }
 
@@ -649,13 +789,36 @@ export default function DisbursementsPage() {
             </h1>
           </div>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="btn btn-primary inline-flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Create Disbursement
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openCreateModal}
+            className="btn btn-primary inline-flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Create Disbursement
+          </button>
+          <button
+            onClick={() => {
+              setShowCreateStatementModal(true)
+              // Load landlords if not already (loadLandlords is otherwise
+              // only triggered by openCreateModal).
+              if (landlords.length === 0) {
+                loadLandlords()
+              }
+            }}
+            className="btn btn-secondary inline-flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Create Statement
+          </button>
+          <button
+            onClick={() => openChargedBasisModal()}
+            className="btn btn-secondary inline-flex items-center gap-2"
+            title="Auto-charge mgmt fee for charged-basis landlords whose tenant did not pay this period"
+          >
+            Run Monthly Charged Fees
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -1527,6 +1690,277 @@ export default function DisbursementsPage() {
                 disabled={savingEdit}
               >
                 {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run Monthly Charged Fees Modal */}
+      {showChargedBasisModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="text-lg font-semibold text-luxury-gray-1">Run Monthly Charged Fees</h2>
+                <p className="text-xs text-luxury-gray-3 mt-1">
+                  Auto-charges mgmt fee for charged-basis landlords whose tenant did not pay this period.
+                </p>
+              </div>
+              <button
+                onClick={closeChargedBasisModal}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="field-label">Month</label>
+                  <select
+                    value={chargedBasisForm.month}
+                    onChange={(e) => {
+                      const m = parseInt(e.target.value, 10)
+                      setChargedBasisForm(prev => ({ ...prev, month: m }))
+                      loadChargedBasisPreview(m, chargedBasisForm.year)
+                    }}
+                    className="select-luxury w-full"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>
+                        {new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">Year</label>
+                  <select
+                    value={chargedBasisForm.year}
+                    onChange={(e) => {
+                      const y = parseInt(e.target.value, 10)
+                      setChargedBasisForm(prev => ({ ...prev, year: y }))
+                      loadChargedBasisPreview(chargedBasisForm.month, y)
+                    }}
+                    className="select-luxury w-full"
+                  >
+                    {[today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Preview area */}
+              {chargedBasisLoading ? (
+                <p className="text-sm text-luxury-gray-3 text-center py-6">Loading preview...</p>
+              ) : !chargedBasisPreview ? (
+                <p className="text-sm text-luxury-gray-3 text-center py-6">
+                  Pick a month to see the preview.
+                </p>
+              ) : chargedBasisPreview.items.length === 0 ? (
+                <div className="inner-card text-center py-8">
+                  <p className="text-sm text-luxury-gray-1 font-medium">Nothing to charge</p>
+                  <p className="text-xs text-luxury-gray-3 mt-1">
+                    No unpaid invoices on charged-basis agreements for this period.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="inner-card">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-luxury-gray-1 font-semibold">
+                          {chargedBasisPreview.pendingCount} {chargedBasisPreview.pendingCount === 1 ? 'invoice' : 'invoices'} to charge
+                        </p>
+                        {chargedBasisPreview.alreadyChargedCount > 0 && (
+                          <p className="text-xs text-luxury-gray-3 mt-1">
+                            {chargedBasisPreview.alreadyChargedCount} already charged (skipped)
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xl font-bold text-luxury-gray-1">
+                        {formatMoney(chargedBasisPreview.totalAmount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b text-left">
+                          <th className="py-2 px-3 text-xs text-luxury-gray-3 uppercase tracking-widest">Landlord</th>
+                          <th className="py-2 px-3 text-xs text-luxury-gray-3 uppercase tracking-widest">Property</th>
+                          <th className="py-2 px-3 text-xs text-luxury-gray-3 uppercase tracking-widest text-right">Rent</th>
+                          <th className="py-2 px-3 text-xs text-luxury-gray-3 uppercase tracking-widest text-right">Fee</th>
+                          <th className="py-2 px-3 text-xs text-luxury-gray-3 uppercase tracking-widest">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chargedBasisPreview.items.map((item: any) => (
+                          <tr key={item.invoice_id} className="border-b last:border-0">
+                            <td className="py-2 px-3 text-luxury-gray-1">{item.landlord_name}</td>
+                            <td className="py-2 px-3 text-luxury-gray-2 text-xs">{item.property_address}</td>
+                            <td className="py-2 px-3 text-right text-luxury-gray-1">{formatMoney(item.rent_amount)}</td>
+                            <td className="py-2 px-3 text-right text-luxury-gray-1 font-semibold">{formatMoney(item.calculated_fee)}</td>
+                            <td className="py-2 px-3 text-xs">
+                              {item.already_charged ? (
+                                <span className="text-luxury-gray-3">Already charged</span>
+                              ) : (
+                                <span className="text-amber-700">Will charge</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={closeChargedBasisModal}
+                className="btn btn-secondary"
+                disabled={chargedBasisRunning}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runChargedBasis}
+                className="btn btn-primary"
+                disabled={
+                  chargedBasisRunning ||
+                  chargedBasisLoading ||
+                  !chargedBasisPreview ||
+                  chargedBasisPreview.pendingCount === 0
+                }
+              >
+                {chargedBasisRunning
+                  ? 'Running...'
+                  : chargedBasisPreview
+                    ? `Charge ${chargedBasisPreview.pendingCount} ${chargedBasisPreview.pendingCount === 1 ? 'Fee' : 'Fees'}`
+                    : 'Charge Fees'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Statement Modal */}
+      {showCreateStatementModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">Create Statement</h2>
+              <button
+                onClick={() => setShowCreateStatementModal(false)}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="field-label">Landlord</label>
+                <select
+                  value={statementForm.landlord_id}
+                  onChange={(e) => setStatementForm(prev => ({
+                    ...prev,
+                    landlord_id: e.target.value,
+                    property_id: '', // reset property when landlord changes
+                  }))}
+                  className="select-luxury w-full"
+                >
+                  <option value="">Select landlord...</option>
+                  {landlords.map((l: any) => (
+                    <option key={l.id} value={l.id}>
+                      {l.first_name} {l.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="field-label">Property</label>
+                <select
+                  value={statementForm.property_id}
+                  onChange={(e) => setStatementForm(prev => ({ ...prev, property_id: e.target.value }))}
+                  className="select-luxury w-full"
+                  disabled={!statementForm.landlord_id}
+                >
+                  <option value="">Select property...</option>
+                  {(landlords.find(l => l.id === statementForm.landlord_id)?.managed_properties || [])
+                    .filter((p: any) => p.status === 'active')
+                    .map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.property_address}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="field-label">Period Type</label>
+                <select
+                  value={statementForm.period_type}
+                  onChange={(e) => setStatementForm(prev => ({ ...prev, period_type: e.target.value as 'monthly' | 'annual' }))}
+                  className="select-luxury w-full"
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="annual">Annual</option>
+                </select>
+              </div>
+
+              {statementForm.period_type === 'monthly' && (
+                <div>
+                  <label className="field-label">Month</label>
+                  <select
+                    value={statementForm.period_month}
+                    onChange={(e) => setStatementForm(prev => ({ ...prev, period_month: parseInt(e.target.value, 10) }))}
+                    className="select-luxury w-full"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>
+                        {new Date(2000, m - 1).toLocaleString('default', { month: 'long' })}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="field-label">Year</label>
+                <select
+                  value={statementForm.period_year}
+                  onChange={(e) => setStatementForm(prev => ({ ...prev, period_year: parseInt(e.target.value, 10) }))}
+                  className="select-luxury w-full"
+                >
+                  {[today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={() => setShowCreateStatementModal(false)}
+                className="btn btn-secondary"
+                disabled={statementCreating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createStatement}
+                className="btn btn-primary"
+                disabled={statementCreating || !statementForm.landlord_id || !statementForm.property_id}
+              >
+                {statementCreating ? 'Generating...' : 'Generate Statement'}
               </button>
             </div>
           </div>

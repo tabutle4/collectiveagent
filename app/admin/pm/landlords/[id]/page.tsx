@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck, ExternalLink, Edit2, CheckCircle, Upload } from 'lucide-react'
 import Link from 'next/link'
+import HeldInTrustWidget from '@/components/pm/HeldInTrustWidget'
 
 interface Landlord {
   id: string
@@ -128,6 +129,7 @@ function AgreementEditor({
     auto_renews: agreement.auto_renews ?? true,
     management_fee_pct: agreement.management_fee_pct || 10,
     management_fee_flat: agreement.management_fee_flat ?? '',
+    mgmt_fee_basis: agreement.mgmt_fee_basis || 'charged',
     leasing_fee_pct: agreement.leasing_fee_pct ?? '',
     leasing_fee_flat: agreement.leasing_fee_flat ?? '',
     maintenance_coord_fee_pct: agreement.maintenance_coord_fee_pct || '',
@@ -169,6 +171,7 @@ function AgreementEditor({
       management_fee_flat: form.management_fee_flat !== '' && form.management_fee_flat !== null
         ? parseFloat(String(form.management_fee_flat))
         : null,
+      mgmt_fee_basis: form.mgmt_fee_basis || 'charged',
       leasing_fee_pct: form.leasing_fee_pct !== '' && form.leasing_fee_pct !== null
         ? parseFloat(String(form.leasing_fee_pct))
         : null,
@@ -281,6 +284,22 @@ function AgreementEditor({
               />
               <span className="text-sm text-luxury-gray-3">%</span>
             </div>
+          </div>
+          <div>
+            <label className="field-label">Fee Basis</label>
+            <select
+              className="select-luxury"
+              value={form.mgmt_fee_basis}
+              onChange={e => updateField('mgmt_fee_basis', e.target.value)}
+            >
+              <option value="charged">Charged (per agreement)</option>
+              <option value="collected">Collected (only on paid rent)</option>
+            </select>
+            <p className="text-xs text-luxury-gray-3 mt-1">
+              {form.mgmt_fee_basis === 'charged'
+                ? 'Fee owed every month even if tenant skips. Per TXR-2201 Para 6(A).'
+                : 'Fee only taken from rent actually received.'}
+            </p>
           </div>
           <div>
             <label className="field-label">Maint. Coord. Fee %</label>
@@ -654,6 +673,12 @@ export default function LandlordDetailPage() {
   })
   const [savingDeduction, setSavingDeduction] = useState(false)
 
+  // Statements sub-section on Disbursements tab. Same loading pattern as
+  // pending deductions - lazy load only when tab is opened.
+  const [statements, setStatements] = useState<any[]>([])
+  const [loadingStatements, setLoadingStatements] = useState(false)
+  const [sendingStatementId, setSendingStatementId] = useState<string | null>(null)
+
   // Modal states
   const [showPropertyModal, setShowPropertyModal] = useState(false)
   const [showLeaseModal, setShowLeaseModal] = useState(false)
@@ -712,13 +737,51 @@ export default function LandlordDetailPage() {
     loadAgents()
   }, [landlordId])
 
-  // Load pending deductions only when the Disbursements tab is active so
-  // we don't fetch for landlords whose admin never opens that tab.
+  // Load pending deductions + statements only when the Disbursements
+  // tab is active so we don't fetch for landlords whose admin never
+  // opens that tab.
   useEffect(() => {
     if (activeTab === 'disbursements') {
       loadPendingDeductions()
+      loadStatements()
     }
   }, [activeTab, landlordId])
+
+  const loadStatements = async () => {
+    setLoadingStatements(true)
+    try {
+      const res = await fetch(`/api/pm/statements?landlord_id=${landlordId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setStatements(data.statements || [])
+      }
+    } catch (err) {
+      console.error('Error loading statements:', err)
+    } finally {
+      setLoadingStatements(false)
+    }
+  }
+
+  const handleSendStatement = async (statementId: string) => {
+    if (!confirm('Send this statement to the landlord? Office will be BCC\'d.')) return
+    setSendingStatementId(statementId)
+    try {
+      const res = await fetch(`/api/pm/statements/${statementId}/send`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(`Sent to ${data.sentTo}`)
+        loadStatements()
+      } else {
+        alert(data.error || 'Send failed')
+      }
+    } catch (err: any) {
+      alert(err.message || 'Send failed')
+    } finally {
+      setSendingStatementId(null)
+    }
+  }
 
   const loadPendingDeductions = async () => {
     setLoadingDeductions(true)
@@ -1247,6 +1310,12 @@ export default function LandlordDetailPage() {
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <div>
+              {/* Held-in-Trust widget - landlord-wide aggregate (no property filter).
+                  Sits at the top so trust balance is the first thing you see. */}
+              <div className="mb-6">
+                <HeldInTrustWidget landlordId={landlordId} />
+              </div>
+
               {/* Edit/Save buttons */}
               <div className="flex justify-end mb-4">
                 {editingOverview ? (
@@ -1647,6 +1716,66 @@ export default function LandlordDetailPage() {
           {/* Disbursements Tab */}
           {activeTab === 'disbursements' && (
             <div>
+              {/* Statements sub-section */}
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                  Statements
+                </h3>
+                {loadingStatements ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">Loading statements...</p>
+                ) : statements.length === 0 ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">
+                    No statements yet. Use Create Statement on the Disbursements page.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {statements.map((s: any) => {
+                      const periodLabel = s.period_type === 'annual'
+                        ? `${s.period_year}`
+                        : `${new Date(2000, (s.period_month || 1) - 1).toLocaleString('default', { month: 'long' })} ${s.period_year}`
+                      const propertyAddr = s.managed_properties
+                        ? `${s.managed_properties.property_address}${s.managed_properties.unit ? ` ${s.managed_properties.unit}` : ''}`
+                        : ''
+                      return (
+                        <div key={s.id} className="inner-card">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-luxury-gray-1">{periodLabel}</p>
+                              {propertyAddr && (
+                                <p className="text-xs text-luxury-gray-2 truncate">{propertyAddr}</p>
+                              )}
+                              <p className="text-xs text-luxury-gray-3">
+                                Net disbursed: {formatCurrency(Number(s.total_net_disbursed || 0))}
+                                {s.sent_at && (
+                                  <> · Sent {new Date(s.sent_at).toLocaleDateString()}</>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Link
+                                href={`/admin/pm/statements/${s.id}`}
+                                className="btn btn-secondary text-xs py-1 px-3"
+                              >
+                                View
+                              </Link>
+                              {!s.sent_at && (
+                                <button
+                                  onClick={() => handleSendStatement(s.id)}
+                                  disabled={sendingStatementId === s.id}
+                                  className="btn btn-primary text-xs py-1 px-3"
+                                >
+                                  {sendingStatementId === s.id ? 'Sending...' : 'Send'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
               {disbursements.length === 0 ? (
                 <p className="text-sm text-luxury-gray-3 text-center py-8">No disbursements yet</p>
               ) : (
@@ -1747,6 +1876,11 @@ export default function LandlordDetailPage() {
                               {d.source_repair_id && (
                                 <span className="text-xs text-luxury-gray-3 shrink-0">
                                   (from repair)
+                                </span>
+                              )}
+                              {d.source_invoice_id && (
+                                <span className="text-xs text-luxury-gray-3 shrink-0">
+                                  (from unpaid invoice)
                                 </span>
                               )}
                             </div>

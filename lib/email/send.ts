@@ -133,18 +133,25 @@ export async function sendEmail({
   subject,
   html,
   cc,
+  bcc,
+  from,
+  replyTo,
 }: {
   to: string | string[]
   subject: string
   html: string
   cc?: string | string[]
+  bcc?: string | string[]
+  from?: string
+  replyTo?: string
 }): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
     const { data, error } = await resend.emails.send({
-      from: `${FROM_NAME} <${FROM_EMAIL}>`,
+      from: from || `${FROM_NAME} <${FROM_EMAIL}>`,
       to: Array.isArray(to) ? to : [to],
       cc: cc ? (Array.isArray(cc) ? cc : [cc]) : undefined,
-      replyTo: REPLY_TO,
+      bcc: bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined,
+      replyTo: replyTo || REPLY_TO,
       subject,
       html,
     })

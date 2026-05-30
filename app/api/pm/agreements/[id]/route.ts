@@ -54,6 +54,7 @@ export async function PATCH(
     const allowedFields = [
       'commencement_date', 'expiration_date', 'auto_renews',
       'management_fee_pct', 'management_fee_flat', 'management_fee_minimum',
+      'mgmt_fee_basis',
       'leasing_fee_pct', 'leasing_fee_flat',
       'renewal_fee_pct', 'renewal_fee_flat',
       'maintenance_coord_fee_pct', 'eviction_fee',

@@ -48,7 +48,7 @@ function joinAddressAndPeriod(address: string, period: string): string {
   return address || period
 }
 
-type PayoutType = 'agent' | 'external' | 'pm_fee' | 'landlord'
+type PayoutType = 'agent' | 'external' | 'pm_fee' | 'landlord' | 'brokerage_net'
 
 interface PayoutRow {
   id: string
@@ -117,6 +117,24 @@ export async function GET(request: NextRequest) {
        landlords(first_name, last_name),
        managed_properties(property_address)`,
       { orderBy: { column: 'created_at', ascending: false, nullsFirst: false } }
+    )
+
+    // Brokerage net per closed transaction. Surfaces CRC's earned portion
+    // as a payout-style row so it sits alongside agent and external
+    // broker payouts. Without this, CRC's brokerage is invisible on the
+    // All Payouts report even though every dollar paid OUT to agents
+    // and external brokers shows up.
+    //
+    // Filter: only office_net > 0 (zero/negative rows are noise).
+    // Always shown as "completed" because the brokerage net is realized
+    // at closing, not pending against a future payment.
+    const brokerageTransactions = await fetchAllRows(
+      'transactions',
+      'id, property_address, transaction_type, closed_date, office_net',
+      {
+        filters: [{ type: 'gte', column: 'office_net', value: 0.01 }],
+        orderBy: { column: 'closed_date', ascending: false, nullsFirst: false },
+      }
     )
 
     // Get agent names for internal agents (sales/lease side)
@@ -238,12 +256,40 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const allRows: PayoutRow[] = [...internalRows, ...externalRows, ...pmFeeRows, ...landlordRows]
+    const brokerageRows: PayoutRow[] = brokerageTransactions.map((t: any) => {
+      // Brokerage net is realized at closing - always shown as completed
+      // since it's already in the CRC bank account by the time the
+      // transaction has a closed_date.
+      return {
+        id:               t.id,
+        type:             'brokerage_net',
+        payee:            'Collective Realty Co.',
+        payee_type:       'brokerage',
+        address:          t.property_address || '',
+        transaction_type: friendlyType(t.transaction_type),
+        amount:           Number(t.office_net || 0),
+        payment_status:   'completed',
+        payment_date:     t.closed_date || null,
+        payment_method:   'retained',
+        transaction_id:   t.id,
+      }
+    })
+
+    const allRows: PayoutRow[] = [
+      ...internalRows,
+      ...externalRows,
+      ...pmFeeRows,
+      ...landlordRows,
+      ...brokerageRows,
+    ]
 
     // Pending summaries (computed before applying filters so the tiles
-    // remain a stable "currently outstanding" total)
-    const pendingByType = { agent: 0, external: 0, pm_fee: 0, landlord: 0 }
-    const countByType   = { agent: 0, external: 0, pm_fee: 0, landlord: 0 }
+    // remain a stable "currently outstanding" total).
+    //
+    // brokerage_net is NOT included in pendingByType because it's always
+    // 'completed' (realized at closing, not pending against a payment).
+    const pendingByType = { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 }
+    const countByType   = { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 }
     for (const r of allRows) {
       if (r.payment_status === 'pending') {
         pendingByType[r.type] += r.amount

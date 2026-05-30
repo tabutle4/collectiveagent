@@ -7,7 +7,7 @@ import { ArrowLeft, Search, X, ExternalLink, CheckCircle, Loader2 } from 'lucide
 
 interface PayoutRow {
   id: string
-  type: 'agent' | 'external' | 'pm_fee' | 'landlord'
+  type: 'agent' | 'external' | 'pm_fee' | 'landlord' | 'brokerage_net'
   payee: string
   payee_type: string
   address: string
@@ -24,6 +24,7 @@ interface PendingByType {
   external: number
   pm_fee: number
   landlord: number
+  brokerage_net: number
 }
 
 interface CountByType {
@@ -31,6 +32,7 @@ interface CountByType {
   external: number
   pm_fee: number
   landlord: number
+  brokerage_net: number
 }
 
 export default function AllPayoutsPage() {
@@ -38,8 +40,8 @@ export default function AllPayoutsPage() {
   const currentYear = new Date().getFullYear()
   
   const [rows, setRows] = useState<PayoutRow[]>([])
-  const [pendingByType, setPendingByType] = useState<PendingByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0 })
-  const [countByType, setCountByType] = useState<CountByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0 })
+  const [pendingByType, setPendingByType] = useState<PendingByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
+  const [countByType, setCountByType] = useState<CountByType>({ agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -84,8 +86,8 @@ export default function AllPayoutsPage() {
       const res = await fetch(`/api/admin/all-payouts?${params}`)
       const data = await res.json()
       setRows(data.rows || [])
-      setPendingByType(data.pendingByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0 })
-      setCountByType(data.countByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0 })
+      setPendingByType(data.pendingByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
+      setCountByType(data.countByType || { agent: 0, external: 0, pm_fee: 0, landlord: 0, brokerage_net: 0 })
     } catch (err) {
       console.error('Error loading payouts:', err)
     } finally {
@@ -128,6 +130,9 @@ export default function AllPayoutsPage() {
     if (status === 'hold') {
       return <span className="text-xs text-red-700 bg-red-50 px-2 py-0.5 rounded">On Hold</span>
     }
+    if (status === 'completed') {
+      return <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded"><CheckCircle size={12} /> Completed</span>
+    }
     return <span className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{status}</span>
   }
 
@@ -137,6 +142,7 @@ export default function AllPayoutsPage() {
       case 'external': return <span className="text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded">External</span>
       case 'pm_fee': return <span className="text-xs text-teal-700 bg-teal-50 px-2 py-0.5 rounded">PM Fee</span>
       case 'landlord': return <span className="text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded">Landlord</span>
+      case 'brokerage_net': return <span className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">CRC Brokerage</span>
       default: return <span className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{type}</span>
     }
   }

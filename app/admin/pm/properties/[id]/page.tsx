@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Home, ArrowLeft, Save, Plus, ExternalLink, X } from 'lucide-react'
 import { AgreementOption } from '@/types/pm'
+import HeldInTrustWidget from '@/components/pm/HeldInTrustWidget'
 
 interface Property {
   id: string
@@ -639,6 +640,14 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Held-in-Trust - scoped to this specific property */}
+          {property.landlord_id && (
+            <HeldInTrustWidget
+              landlordId={property.landlord_id}
+              propertyId={id}
+            />
+          )}
+
           {/* Landlord Card */}
           {property.landlords && (
             <div className="container-card">
@@ -731,6 +740,11 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                       {d.source_repair_id && (
                         <span className="text-xs text-luxury-gray-3 shrink-0">
                           (from repair)
+                        </span>
+                      )}
+                      {d.source_invoice_id && (
+                        <span className="text-xs text-luxury-gray-3 shrink-0">
+                          (from unpaid invoice)
                         </span>
                       )}
                     </div>

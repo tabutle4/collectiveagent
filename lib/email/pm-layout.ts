@@ -398,3 +398,44 @@ export function pmDisbursementEmail(
     { title: 'CRC Property Management', subtitle: 'Disbursement Processed', preheader: `Your ${monthName} disbursement of $${netAmount.toLocaleString()} has been sent` }
   )
 }
+
+/**
+ * Statement Ready email - sent when a PM statement is generated and made
+ * available to the landlord. Same styling as all other PM emails.
+ *
+ * Args:
+ *   landlordName - First name of landlord (for greeting)
+ *   propertyAddress - Property the statement is for
+ *   periodLabel - Human-readable period ("March 2026" or "2026")
+ *   netDisbursed - Total net amount disbursed during the period
+ *   statementUrl - Link to the portal view of the statement
+ */
+export function pmStatementReadyEmail(
+  landlordName: string,
+  propertyAddress: string,
+  periodLabel: string,
+  netDisbursed: number,
+  statementUrl: string
+): string {
+  return getPMEmailLayout(
+    `${pmEmailGreeting(landlordName)}
+     ${pmEmailText(`Your ${periodLabel} statement for ${propertyAddress} is ready to view.`)}
+     <div style="background-color: ${PM_EMAIL_COLORS.lightBg}; padding: 20px; border-radius: 6px; margin: 20px 0;">
+       ${pmEmailDetail('Property', propertyAddress)}
+       ${pmEmailDetail('Period', periodLabel)}
+       <hr style="border: none; border-top: 1px solid ${PM_EMAIL_COLORS.border}; margin: 12px 0;">
+       <p style="margin: 8px 0; font-size: 14px;">
+         <strong style="color: ${PM_EMAIL_COLORS.headingText};">Net Disbursed:</strong>
+         <span style="color: ${PM_EMAIL_COLORS.accent}; font-weight: 600;">$${netDisbursed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+       </p>
+     </div>
+     ${pmEmailText('Click below to view your full statement. You can save it as a PDF directly from the statement view.')}
+     ${pmEmailButton('View Statement', statementUrl)}
+     ${pmEmailSmall('If you have any questions, just reply to this email.')}`,
+    {
+      title: 'CRC Property Management',
+      subtitle: 'Statement Ready',
+      preheader: `Your ${periodLabel} statement for ${propertyAddress} is ready to view`,
+    }
+  )
+}
