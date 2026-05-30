@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useAuth } from '@/lib/context/AuthContext'
 import { 
   Building2, 
   DollarSign, 
@@ -13,7 +15,8 @@ import {
   Pencil,
   Trash2,
   Check,
-  X
+  X,
+  ShieldCheck
 } from 'lucide-react'
 
 type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'plans' | 'fees' | 'rules'
@@ -118,6 +121,7 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
 ]
 
 export default function SettingsPage() {
+  const { hasPermission } = useAuth()
   const [activeTab, setActiveTab] = useState<Tab>('brokerage')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -362,6 +366,16 @@ export default function SettingsPage() {
                   </button>
                 )
               })}
+              {hasPermission('can_manage_roles') && (
+                <Link
+                  href="/admin/permissions"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-left transition-colors text-luxury-gray-2 hover:bg-luxury-gray-6"
+                >
+                  <ShieldCheck size={18} />
+                  <span>Permissions</span>
+                  <ChevronRight size={16} className="ml-auto" />
+                </Link>
+              )}
             </div>
           </div>
 
