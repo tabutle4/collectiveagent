@@ -74,6 +74,7 @@ interface Agreement {
   management_fee_pct: number
   management_fee_flat: number | null
   management_fee_minimum: number | null
+  mgmt_fee_basis: 'collected' | 'charged' | null
   leasing_fee_pct: number | null
   leasing_fee_flat: number | null
   maintenance_coord_fee_pct: number | null

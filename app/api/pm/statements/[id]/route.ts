@@ -93,13 +93,15 @@ export async function GET(
     }
 
     // ----- Hybrid auth -----
-    // Path 1: Admin via requireAuth (users table). Admins can view any
-    // statement. requireAuth returns either { user, ... } or { error }.
-    // Try it but treat its error as "not an admin, fall through to portal".
+    // Path 1: Admin via requirePermission. Anyone with can_manage_pm can
+    // view any statement (matches the access pattern for all other PM
+    // admin routes). Try it but don't return its error - we'll fall
+    // through to the landlord portal auth path on failure.
     const adminAuth = await requireAuth(request)
-    const isAdmin = !adminAuth.error && adminAuth.user?.role === 'admin'
+    const isPmAdmin =
+      !adminAuth.error && adminAuth.permissions?.has('can_manage_pm')
 
-    if (!isAdmin) {
+    if (!isPmAdmin) {
       // Path 2: Landlord via pm_session cookie. The session row tells us
       // which landlord_id is logged in. Match against the statement's
       // landlord_id for access.
