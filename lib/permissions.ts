@@ -112,6 +112,7 @@ export type PermissionCode =
   | 'can_manage_pm_properties'
   | 'can_manage_pm_leases'
   | 'can_manage_pm_invoices'
+  | 'can_manage_pm_repairs'
   | 'can_process_pm_disbursements'
 
 // Role names as defined in the database
@@ -327,6 +328,7 @@ export async function getPermissionsObject(
     'can_manage_pm_properties',
     'can_manage_pm_leases',
     'can_manage_pm_invoices',
+    'can_manage_pm_repairs',
     'can_process_pm_disbursements',
   ]
 

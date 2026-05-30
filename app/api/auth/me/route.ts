@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
+import { getUserPermissions } from '@/lib/permissions'
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,25 +37,11 @@ export async function GET(request: NextRequest) {
       .eq('id', session.user.id)
       .single()
 
-    let permissions: string[] = []
-    if (dbUser?.role) {
-      const { data: roleData } = await supabaseAdmin
-        .from('roles')
-        .select('id')
-        .eq('name', dbUser.role)
-        .single()
-
-      if (roleData) {
-        const { data: rolePerms } = await supabaseAdmin
-          .from('role_permissions')
-          .select('permission_id, permissions(code)')
-          .eq('role_id', roleData.id)
-
-        if (rolePerms) {
-          permissions = rolePerms.map((rp: any) => rp.permissions?.code).filter(Boolean)
-        }
-      }
-    }
+    // Resolve permissions through the shared resolver so role defaults AND
+    // per-user overrides are applied. This must match the server-side gate
+    // (requirePermission -> getUserPermissions) so the UI and the API agree.
+    const permissionSet = await getUserPermissions(session.user.id)
+    const permissions: string[] = Array.from(permissionSet)
 
     return NextResponse.json({
       user: { ...session.user, ...dbUser },

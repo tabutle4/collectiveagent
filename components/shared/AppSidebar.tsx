@@ -30,6 +30,7 @@ import {
   Building2,
   Workflow,
   Mail,
+  ShieldCheck,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -282,7 +283,7 @@ const agentNav: NavItem[] = [
 export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, loading } = useAuth()
+  const { user, loading, hasPermission } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [contactOpen, setContactOpen] = useState(false)
@@ -340,6 +341,24 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   }
 
   const staffEntries = getStaffEntries()
+
+  // Append a permission-gated Permissions link for anyone who can manage roles,
+  // regardless of which role they hold. Visibility follows the permission, not
+  // a hardcoded role.
+  const staffEntriesWithExtras: NavEntry[] | null = staffEntries
+    ? [
+        ...staffEntries,
+        ...(hasPermission('can_manage_roles')
+          ? [
+              {
+                type: 'item' as const,
+                item: { href: '/admin/permissions', label: 'Permissions', icon: ShieldCheck },
+              },
+            ]
+          : []),
+      ]
+    : null
+
   const agentItems = staffEntries ? null : getAgentItems()
   const logo = logoUrl || '/logo.png'
 
@@ -594,8 +613,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
-        {staffEntries
-          ? staffEntries.map(entry =>
+        {staffEntriesWithExtras
+          ? staffEntriesWithExtras.map(entry =>
               entry.type === 'item' ? renderItem(entry.item, false) : renderGroup(entry.group)
             )
           : agentItems?.map(item => renderItem(item, false))}

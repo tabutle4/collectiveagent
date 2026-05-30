@@ -19,6 +19,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/coordination': 'can_view_listings',
   '/admin/documents': 'can_view_documents',
   '/admin/users': 'can_view_all_agents',
+  '/admin/permissions': 'can_manage_roles',
   '/admin/team-agreements': 'can_view_teams',
   '/admin/prospects': 'can_view_prospects',
   '/admin/contacts': 'can_view_all_contacts',
