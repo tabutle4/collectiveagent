@@ -92,14 +92,32 @@ export default function AgentFeesPage() {
     setLoading(false)
   }
 
+  // Today as a plain YYYY-MM-DD string so date-only comparisons avoid any
+  // timezone shift (matching the rest of this page's date handling).
+  const todayStr = new Date().toLocaleDateString('en-CA') // en-CA renders as YYYY-MM-DD
+
+  // An invoice is overdue only once its due date has passed. A missing or
+  // unparseable due date is treated as overdue so nothing is silently ignored.
+  const isInvoiceOverdue = (inv: any) => {
+    const due = inv?.due_date
+    if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(due)) return true
+    return due.slice(0, 10) < todayStr
+  }
+
   const getMonthlyStatus = () => {
     if (user?.monthly_fee_waived) return 'waived'
     if (!user?.monthly_fee_paid_through) return 'unpaid'
-    const [y, m, d] = user.monthly_fee_paid_through.split('-').map(Number)
-    const paidThrough = new Date(y, m - 1, d)
-    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
-    return paidThrough >= endOfMonth ? 'current' : 'overdue'
+    // Overdue means a monthly invoice exists that is past its due date and still
+    // unpaid. A next-month invoice that is not yet due is upcoming, not overdue,
+    // so it no longer flips the agent to overdue the way the old end-of-month
+    // comparison did.
+    const hasOverdueInvoice = openInvoices.some((inv: any) => isInvoiceOverdue(inv))
+    return hasOverdueInvoice ? 'overdue' : 'current'
   }
+
+  // Unpaid invoices that are not yet due, surfaced as "due soon" rather than
+  // counting against the agent.
+  const upcomingInvoices = openInvoices.filter((inv: any) => !isInvoiceOverdue(inv))
 
   const monthlyStatus = getMonthlyStatus()
 
@@ -221,6 +239,17 @@ export default function AgentFeesPage() {
             {user?.monthly_fee_paid_through && monthlyStatus !== 'waived' && (
               <p className="text-xs text-luxury-gray-3 mt-1">
                 Paid through {formatDate(user.monthly_fee_paid_through)}
+                {monthlyStatus === 'current' && upcomingInvoices.length > 0 && (
+                  <span>
+                    {' '}&middot; {formatCurrency(
+                      upcomingInvoices.reduce(
+                        (sum: number, inv: any) =>
+                          sum + Number(inv.amount_due ?? inv.amount ?? 0),
+                        0
+                      )
+                    )} due soon
+                  </span>
+                )}
               </p>
             )}
           </div>
