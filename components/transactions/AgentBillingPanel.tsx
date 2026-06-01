@@ -30,6 +30,13 @@ interface BillingRecord {
   offset_transaction_agent_id?: string | null
 }
 
+interface MonthlyInvoice {
+  id: string
+  description: string
+  amount_due: number
+  due_date: string | null
+}
+
 interface Props {
   agentId: string
   tiaId: string
@@ -57,6 +64,9 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   const [error, setError] = useState<string | null>(null)
   const [reversing, setReversing] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
+  // Payload monthly fee invoices (unpaid, not yet staged)
+  const [monthlyInvoices, setMonthlyInvoices] = useState<MonthlyInvoice[]>([])
+  const [stagingInvoice, setStagingInvoice] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -68,6 +78,9 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
         const records: BillingRecord[] = data?.records || []
         setDebts(records.filter(r => r.record_type !== 'credit'))
         setCredits(records.filter(r => r.record_type === 'credit'))
+      } else {
+        const errData = await outRes.json().catch(() => ({}))
+        setError(`Could not load billing records: ${errData.error || outRes.status}`)
       }
 
       // Records previously staged or paid against THIS transaction.
@@ -84,6 +97,20 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
         const records: BillingRecord[] = data?.records || []
         setAppliedDebts(records.filter(r => r.record_type !== 'credit'))
         setAppliedCredits(records.filter(r => r.record_type === 'credit'))
+      }
+      // Payload monthly fee invoices — show unpaid ones as stageable.
+      // We pass the agentId (users.id) which the API maps to payload_payee_id.
+      try {
+        const mRes = await fetch(`/api/payload/agent-monthly-fees?user_id=${agentId}`, { cache: 'no-store' })
+        if (mRes.ok) {
+          const mData = await mRes.json()
+          // Filter out any that are already staged against this transaction
+          // (they appear in appliedDebts with debt_type='monthly_fee').
+          // We rely on the reload after staging to remove them from this list.
+          setMonthlyInvoices(mData.invoices || [])
+        }
+      } catch {
+        // non-fatal — monthly invoices are a bonus, not critical
       }
     } catch {
       // silent
@@ -220,6 +247,38 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
     }
   }
 
+  const stageMonthlyInvoice = async (inv: MonthlyInvoice) => {
+    if (isPaid) return
+    setStagingInvoice(inv.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'stage_monthly_invoice',
+          internal_agent_id: tiaId,
+          agent_id: agentId,
+          invoice_id: inv.id,
+          amount: inv.amount_due,
+          description: inv.description,
+          date_incurred: inv.due_date || new Date().toISOString().split('T')[0],
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Failed to stage monthly invoice')
+        return
+      }
+      // Reload — the invoice should now appear in appliedDebts
+      await load()
+    } catch {
+      setError('Network error staging monthly invoice')
+    } finally {
+      setStagingInvoice(null)
+    }
+  }
+
   const addRecord = async (form: AddFormState, recordType: 'debt' | 'credit') => {
     setAdding(true)
     setError(null)
@@ -294,7 +353,7 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   const totalApplied = appliedDebts.length + appliedCredits.length
   const totalOutstanding = debts.length + credits.length
 
-  if (totalOutstanding === 0 && totalApplied === 0 && !showAddDebt && !showAddCredit) {
+  if (totalOutstanding === 0 && totalApplied === 0 && monthlyInvoices.length === 0 && !showAddDebt && !showAddCredit) {
     return (
       <div className="border-t border-luxury-gray-5/50 mt-2 pt-2">
         <div className="flex items-center justify-between mb-1">
@@ -321,12 +380,12 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
           Billing
           {totalApplied > 0 && (
             <span className="text-luxury-gray-3 font-normal ml-1">
-              ({totalApplied} applied{totalOutstanding > 0 ? `, ${totalOutstanding} outstanding` : ''})
+              ({totalApplied} applied{totalOutstanding + monthlyInvoices.length > 0 ? `, ${totalOutstanding + monthlyInvoices.length} outstanding` : ''})
             </span>
           )}
-          {totalApplied === 0 && totalOutstanding > 0 && (
+          {totalApplied === 0 && (totalOutstanding + monthlyInvoices.length) > 0 && (
             <span className="text-luxury-gray-3 font-normal ml-1">
-              ({totalOutstanding} outstanding)
+              ({totalOutstanding + monthlyInvoices.length} outstanding)
             </span>
           )}
         </button>
@@ -392,7 +451,36 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
             </label>
           ))}
 
-          {/* Outstanding — checkbox is local UI state until Mark Paid */}
+          {/* Payload monthly fee invoices — unpaid, stageable */}
+          {monthlyInvoices.map(inv => (
+            <label
+              key={`monthly-${inv.id}`}
+              className={`flex items-start gap-2 p-2 rounded border border-orange-200 bg-orange-50/20 ${isPaid ? 'cursor-default' : 'cursor-pointer'}`}
+              onClick={isPaid || stagingInvoice === inv.id ? undefined : () => stageMonthlyInvoice(inv)}
+            >
+              <input
+                type="checkbox"
+                checked={false}
+                readOnly
+                disabled={isPaid || stagingInvoice === inv.id}
+                className="mt-0.5"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-luxury-gray-1 truncate">
+                  {inv.description}
+                  <span className="ml-2 text-[10px] text-orange-500 font-normal">monthly fee</span>
+                </p>
+                <p className="text-[10px] text-luxury-gray-3">
+                  {inv.due_date ? fmtDate(inv.due_date) : '--'} · Payload invoice
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-orange-600 shrink-0">
+                {stagingInvoice === inv.id ? '...' : `-${fmt$(inv.amount_due)}`}
+              </span>
+            </label>
+          ))}
+
+          {/* Outstanding agent_debts — checkbox is local UI state until Mark Paid */}
           {debts.map(d => (
             <label
               key={d.id}

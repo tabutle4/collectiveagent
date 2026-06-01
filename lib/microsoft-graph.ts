@@ -150,11 +150,18 @@ class MicrosoftGraphClient {
   }
 
   async uploadFile(folderPath: string, fileName: string, fileContent: Buffer): Promise<any> {
-    const client = await this.initClient()
-
-    return await client
-      .api(`/users/${this.config.userEmail}/drive/root:/${folderPath}/${fileName}:/content`)
-      .put(fileContent)
+    const token = await getGraphToken()
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.config.userEmail)}/drive/root:/${folderPath}/${fileName}:/content`
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+      body: fileContent as unknown as BodyInit,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(`OneDrive upload failed: ${res.status} ${JSON.stringify(err)}`)
+    }
+    return res.json()
   }
 
   async createSharingLink(itemPath: string, type: 'view' | 'edit' = 'view'): Promise<string> {
@@ -204,12 +211,19 @@ class MicrosoftGraphClient {
     fileUrl: string
     downloadUrl: string
   }> {
-    const client = await this.initClient()
-
     try {
-      const uploadResponse = await client
-        .api(`/users/${this.config.userEmail}/drive/root:/${folderPath}/${fileName}:/content`)
-        .put(fileBuffer)
+      const token = await getGraphToken()
+      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(this.config.userEmail)}/drive/root:/${folderPath}/${fileName}:/content`
+      const uploadRes = await fetch(url, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+        body: fileBuffer as unknown as BodyInit,
+      })
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}))
+        throw new Error(`OneDrive upload failed: ${uploadRes.status} ${JSON.stringify(err)}`)
+      }
+      const uploadResponse = await uploadRes.json()
 
       // Create a sharing link for the file (view-only, anonymous scope)
       const sharingLink = await this.createSharingLink(`${folderPath}/${fileName}`, 'view')

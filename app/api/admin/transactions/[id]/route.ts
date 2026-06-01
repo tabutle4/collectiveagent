@@ -2867,7 +2867,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const { data: rec } = await supabase
         .from('agent_debts')
-        .select('id, status, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id')
+        .select('id, status, record_type, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id, notes')
         .eq('id', recordId)
         .single()
       if (!rec) {
@@ -2901,10 +2901,234 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         .eq('id', recordId)
       if (error) throw error
+
+      // If this debt has a linked Payload invoice (written by sendDebtInvoice
+      // as "Payload invoice: <id>" or "payload_invoice_id:<id>"), settle it
+      // in Payload via a commission-offset line item so the agent cannot also
+      // pay it directly and get double-collected. Non-fatal if Payload fails.
+      if (rec.record_type !== 'credit' && rec.notes) {
+        const notesStr = String(rec.notes)
+        const invoiceMatch =
+          notesStr.match(/Payload invoice:\s*([A-Za-z0-9_-]+)/) ||
+          notesStr.match(/payload_invoice_id:([^\s,|]+)/)
+        if (invoiceMatch) {
+          const invoiceId = invoiceMatch[1].trim()
+          const payloadAuth = () =>
+            'Basic ' + Buffer.from((process.env.PAYLOAD_SECRET_KEY ?? '') + ':').toString('base64')
+          try {
+            const invRes = await fetch(
+              `https://api.payload.com/invoices/${invoiceId}?fields[]=amount_due`,
+              { headers: { Authorization: payloadAuth() } }
+            )
+            if (invRes.ok) {
+              const inv = await invRes.json()
+              const balanceDue = Number(inv.amount_due ?? 0)
+              if (balanceDue > 0) {
+                const lineRes = await fetch('https://api.payload.com/line_items/', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: payloadAuth(),
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  body: new URLSearchParams({
+                    invoice_id: invoiceId,
+                    type: 'Payment (Commission Offset)',
+                    description: 'Commission Offset',
+                    amount: String(-balanceDue),
+                    entry_type: 'charge',
+                  }),
+                })
+                if (!lineRes.ok) {
+                  const e = await lineRes.json().catch(() => ({}))
+                  console.error('stage_debt: Payload settlement failed', e)
+                }
+              }
+            }
+          } catch (payloadErr) {
+            console.error('stage_debt: Payload call threw', payloadErr)
+          }
+        }
+      }
+
       // Staging a debt/credit changes the brokerage's net for the txn under
       // the new formula, so refresh it.
       await recomputeOfficeNet(id)
       return NextResponse.json({ success: true })
+    }
+
+    // ── Stage a Payload monthly fee invoice as a commission-offset debt ────────
+    // Staging a Payload monthly invoice does two things atomically:
+    //   1. Creates (or reuses) an agent_debts row (debt_type='monthly_fee',
+    //      notes='payload_invoice_id:XXX') so the standard staging/mark-paid
+    //      pipeline can deduct the amount from the agent's commission net.
+    //   2. Settles the Payload invoice immediately via a negative line item
+    //      (method=offset) so Payload shows $0 due and monthly_fee_paid_through
+    //      advances. This mirrors what mark-invoice-paid does for manual payments.
+    //
+    // On unstage the Payload invoice is re-opened by appending a positive
+    // reversal line item (handled in unstage_debt below).
+    //
+    // The agent_debts row is NOT a second invoice — it is the internal ledger
+    // entry that lets the commission payout system know about the deduction.
+    // It carries the Payload invoice_id in notes for linkage and reversal.
+    //
+    // body: { internal_agent_id, agent_id, invoice_id, amount, description, date_incurred }
+    if (action === 'stage_monthly_invoice') {
+      const { internal_agent_id, agent_id, invoice_id, amount, description, date_incurred } = body
+      if (!internal_agent_id || !agent_id || !invoice_id || !amount) {
+        return NextResponse.json(
+          { error: 'internal_agent_id, agent_id, invoice_id, and amount required' },
+          { status: 400 }
+        )
+      }
+
+      const payloadAuth = () =>
+        'Basic ' + Buffer.from((process.env.PAYLOAD_SECRET_KEY ?? '') + ':').toString('base64')
+
+      // Check if an agent_debts row already exists for this invoice (idempotent).
+      const { data: existing } = await supabase
+        .from('agent_debts')
+        .select('id, status, offset_transaction_id')
+        .eq('agent_id', agent_id)
+        .eq('debt_type', 'monthly_fee')
+        .ilike('notes', `%payload_invoice_id:${invoice_id}%`)
+        .maybeSingle()
+
+      if (existing?.status === 'paid' && existing.offset_transaction_id && existing.offset_transaction_id !== id) {
+        return NextResponse.json(
+          { error: 'This invoice is already staged on another transaction. Unstage it there first.' },
+          { status: 409 }
+        )
+      }
+
+      // Verify Payload invoice is still open before settling it
+      const invRes = await fetch(`https://api.payload.com/invoices/${invoice_id}?fields[]=*&fields[]=items`, {
+        headers: { Authorization: payloadAuth() },
+      })
+      if (!invRes.ok) {
+        return NextResponse.json({ error: 'Could not verify Payload invoice status' }, { status: 500 })
+      }
+      const payloadInvoice = await invRes.json()
+      const balanceDue = Number(payloadInvoice.amount_due ?? 0)
+      if (balanceDue <= 0) {
+        return NextResponse.json(
+          { error: 'This invoice has already been paid in Payload. Staging is not needed.' },
+          { status: 409 }
+        )
+      }
+
+      let debtId: string
+
+      if (existing) {
+        debtId = existing.id
+      } else {
+        // Create the agent_debts row to track the offset
+        const { data: created, error: createErr } = await supabase
+          .from('agent_debts')
+          .insert({
+            agent_id,
+            debt_type: 'monthly_fee',
+            description: description || 'Monthly Brokerage Fee',
+            amount_owed: num(amount),
+            amount_paid: 0,
+            date_incurred: date_incurred || new Date().toISOString().split('T')[0],
+            status: 'outstanding',
+            notes: `payload_invoice_id:${invoice_id}`,
+          })
+          .select('id')
+          .single()
+        if (createErr || !created) {
+          return NextResponse.json({ error: createErr?.message || 'Failed to create debt record' }, { status: 500 })
+        }
+        debtId = created.id
+      }
+
+      // Stage the debt row (mark it paid against this transaction)
+      const today = new Date().toISOString().split('T')[0]
+      const { data: rec } = await supabase
+        .from('agent_debts')
+        .select('id, amount_owed, amount_paid, amount_remaining')
+        .eq('id', debtId)
+        .single()
+      if (!rec) return NextResponse.json({ error: 'Debt record not found' }, { status: 500 })
+
+      const amountRemaining = num(rec.amount_remaining ?? rec.amount_owed)
+      const { error: stageErr } = await supabase
+        .from('agent_debts')
+        .update({
+          amount_paid: num(rec.amount_paid) + amountRemaining,
+          status: 'paid',
+          date_resolved: today,
+          offset_transaction_id: id,
+          offset_transaction_agent_id: internal_agent_id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', debtId)
+      if (stageErr) throw stageErr
+
+      // Settle the Payload invoice via negative line item (commission offset).
+      // If this call fails we still return success for the staging — the
+      // internal ledger is correct. Log the error so it can be fixed manually.
+      try {
+        const lineRes = await fetch('https://api.payload.com/line_items/', {
+          method: 'POST',
+          headers: {
+            Authorization: payloadAuth(),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            invoice_id,
+            type: 'Payment (Commission Offset)',
+            description: 'Commission Offset',
+            amount: String(-balanceDue),
+            entry_type: 'charge',
+          }),
+        })
+        if (!lineRes.ok) {
+          const errData = await lineRes.json().catch(() => ({}))
+          console.error('stage_monthly_invoice: Payload settlement failed', errData)
+        } else {
+          // Advance monthly_fee_paid_through based on the invoice month
+          const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december']
+          const haystack = (
+            (payloadInvoice?.description || '') + ' ' +
+            (payloadInvoice?.items || []).map((i: any) => i?.description || '').join(' ')
+          ).toLowerCase()
+          const re = new RegExp(`\b(${MONTHS.join('|')})\s+(20\d{2})\b`, 'g')
+          let best: { year: number; monthIdx: number } | null = null
+          let m: RegExpExecArray | null
+          while ((m = re.exec(haystack)) !== null) {
+            const monthIdx = MONTHS.indexOf(m[1])
+            const year = parseInt(m[2], 10)
+            if (!best || year > best.year || (year === best.year && monthIdx > best.monthIdx)) {
+              best = { year, monthIdx }
+            }
+          }
+          if (best) {
+            const billedMonthEnd = new Date(best.year, best.monthIdx + 1, 0).toISOString().split('T')[0]
+            const { data: agentUser } = await supabase
+              .from('users')
+              .select('monthly_fee_paid_through')
+              .eq('id', agent_id)
+              .single()
+            const existing_paid_through = agentUser?.monthly_fee_paid_through ?? null
+            const newPaidThrough = !existing_paid_through || billedMonthEnd > existing_paid_through
+              ? billedMonthEnd
+              : existing_paid_through
+            if (newPaidThrough !== existing_paid_through) {
+              await supabase
+                .from('users')
+                .update({ monthly_fee_paid_through: newPaidThrough })
+                .eq('id', agent_id)
+            }
+          }
+        }
+      } catch (payloadErr) {
+        console.error('stage_monthly_invoice: Payload call threw', payloadErr)
+      }
+
+      await recomputeOfficeNet(id)
+      return NextResponse.json({ success: true, debt_id: debtId })
     }
 
     // ── Unstage debt/credit (revert single record to outstanding) ───────────
@@ -2926,7 +3150,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const { data: rec } = await supabase
         .from('agent_debts')
-        .select('id, status, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id')
+        .select('id, status, debt_type, amount_owed, amount_paid, amount_remaining, offset_transaction_id, offset_transaction_agent_id, notes')
         .eq('id', recordId)
         .single()
       if (!rec) {
@@ -2959,6 +3183,47 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
         .eq('id', recordId)
       if (error) throw error
+
+      // If this debt had a linked Payload invoice (monthly fee OR custom invoice
+      // sent via sendDebtInvoice), re-open it by appending a positive reversal
+      // line item so the agent can still pay it directly if the offset is removed.
+      if (rec.notes) {
+        const notesStr = String(rec.notes)
+        const invoiceMatch =
+          notesStr.match(/payload_invoice_id:([^\s,|]+)/) ||
+          notesStr.match(/Payload invoice:\s*([A-Za-z0-9_-]+)/)
+        if (invoiceMatch) {
+          const invoiceId = invoiceMatch[1]
+          const payloadAuth = () =>
+            'Basic ' + Buffer.from((process.env.PAYLOAD_SECRET_KEY ?? '') + ':').toString('base64')
+          try {
+            const reversalAmount = Math.max(0, appliedHere)
+            if (reversalAmount > 0) {
+              const lineRes = await fetch('https://api.payload.com/line_items/', {
+                method: 'POST',
+                headers: {
+                  Authorization: payloadAuth(),
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                  invoice_id: invoiceId,
+                  type: 'Reversal (Commission Offset Removed)',
+                  description: 'Commission offset removed - fee is outstanding again',
+                  amount: String(reversalAmount),
+                  entry_type: 'charge',
+                }),
+              })
+              if (!lineRes.ok) {
+                const errData = await lineRes.json().catch(() => ({}))
+                console.error('unstage_debt: Payload reversal failed', errData)
+              }
+            }
+          } catch (payloadErr) {
+            console.error('unstage_debt: Payload reversal threw', payloadErr)
+          }
+        }
+      }
+
       // Unstaging changes the brokerage's net for the txn under the new
       // formula, so refresh it.
       await recomputeOfficeNet(id)

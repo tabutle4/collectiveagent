@@ -558,7 +558,10 @@ export default function AdminTransactionDetailPage() {
       .catch(() => {})
   }, [])
 
-  // Auto-calculate and auto-apply agent splits when data loads and office_gross exists
+  // Auto-calculate and auto-apply agent splits when data loads and office_gross exists.
+  // The calc ALWAYS runs for primary contract-bearing roles so that agentCalcData is
+  // populated (which drives the team lead-source picker visibility). Auto-apply only
+  // happens when agent_gross has not yet been saved.
   useEffect(() => {
     if (!data?.transaction?.office_gross || !data?.agents?.length) return
     const agentsList = data.agents || []
@@ -566,17 +569,24 @@ export default function AdminTransactionDetailPage() {
     const officeGross = parseFloat(txn.office_gross || 0)
     if (officeGross <= 0) return
 
-    // Calculate and apply for each agent that doesn't have values yet
     agentsList.forEach(async (a: any) => {
       // Auto-calc only makes sense for agents whose commission drives the deal.
       // Linked / carve-out rows (referral_agent, team_lead, momentum_partner)
       // are entered manually. Auto-applying smart-calc results to them would
       // overwrite their hand-entered basis and split. (Phase 2.7 fix.)
       if (!['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role)) return
-      // Skip if already applied or has values saved
-      if (autoCalcApplied.has(a.id) || parseFloat(a.agent_gross || 0) > 0) return
-      // Skip if already paid
-      if (a.payment_status === 'paid') return
+
+      const hasValues = parseFloat(a.agent_gross || 0) > 0
+      const alreadyApplied = autoCalcApplied.has(a.id)
+
+      // Always fetch calc to populate agentCalcData (needed for team lead-source
+      // picker). Skip the fetch entirely only when already paid AND values exist,
+      // since there's nothing useful to show in that case.
+      if (a.payment_status === 'paid' && hasValues) return
+
+      // Skip re-fetching if we already have calc data for this agent
+      // (avoids infinite re-fetch loop caused by setAgentCalcData triggering re-renders).
+      if (agentCalcData[a.agent_id]) return
 
       try {
         const res = await fetch('/api/admin/transactions/smart-calc', {
@@ -592,31 +602,34 @@ export default function AdminTransactionDetailPage() {
         })
         if (res.ok) {
           const result = await res.json()
+          // Always store calc result so UI (lead-source picker, preview) works.
           setAgentCalcData(prev => ({ ...prev, [a.agent_id]: result }))
-          
-          // Auto-apply the values to the database
-          await fetch(`/api/admin/transactions/${id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'update_internal_agent',
-              internal_agent_id: a.id,
-              updates: {
-                agent_gross: result.agent_gross,
-                brokerage_split: result.brokerage_split,
-                processing_fee: result.processing_fee,
-                coaching_fee: result.coaching_fee,
-                team_lead_commission: result.team_lead_payout || 0,
-                agent_net: result.agent_net,
-                split_percentage: result.agent_split_pct,
-              },
-            }),
-          })
-          setAutoCalcApplied(prev => new Set([...prev, a.id]))
+
+          // Only auto-apply to DB when values have not yet been saved.
+          if (!hasValues && !alreadyApplied) {
+            await fetch(`/api/admin/transactions/${id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'update_internal_agent',
+                internal_agent_id: a.id,
+                updates: {
+                  agent_gross: result.agent_gross,
+                  brokerage_split: result.brokerage_split,
+                  processing_fee: result.processing_fee,
+                  coaching_fee: result.coaching_fee,
+                  team_lead_commission: result.team_lead_payout || 0,
+                  agent_net: result.agent_net,
+                  split_percentage: result.agent_split_pct,
+                },
+              }),
+            })
+            setAutoCalcApplied(prev => new Set([...prev, a.id]))
+          }
         }
       } catch {}
     })
-  }, [data?.transaction?.office_gross, data?.agents, agentLeadSources, id, autoCalcApplied])
+  }, [data?.transaction?.office_gross, data?.agents, agentLeadSources, id, autoCalcApplied, agentCalcData])
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 

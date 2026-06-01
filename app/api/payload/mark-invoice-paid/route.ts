@@ -170,6 +170,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Resolve any matching agent_debts rows linked to this invoice.
+    // The webhook does this automatically when an agent pays via Payload
+    // checkout (real transaction), but mark-invoice-paid uses a ledger
+    // adjustment with no transaction, so no webhook fires. We mirror the
+    // webhook's resolution logic here so the billing page stops showing
+    // the debt as outstanding after a manual mark-paid.
+    const paidDate = new Date().toISOString().split('T')[0]
+    const { data: linkedDebts } = await supabaseAdmin
+      .from('agent_debts')
+      .select('id, amount_owed')
+      .eq('agent_id', user_id)
+      .eq('status', 'outstanding')
+      .ilike('notes', `%${invoice_id}%`)
+
+    if (linkedDebts && linkedDebts.length > 0) {
+      for (const debt of linkedDebts) {
+        await supabaseAdmin
+          .from('agent_debts')
+          .update({
+            status: 'resolved',
+            amount_paid: debt.amount_owed,
+            date_resolved: paidDate,
+          })
+          .eq('id', debt.id)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       amount_cleared: balanceDue,

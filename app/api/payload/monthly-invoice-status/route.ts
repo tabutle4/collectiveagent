@@ -94,6 +94,22 @@ export async function GET(request: NextRequest) {
               (inv: any) => Number(inv.amount_due ?? 0) > 0
             )
 
+            // An agent who joined mid-month pays a prorated Monthly Fee as a
+            // line item on their onboarding invoice, not as a standalone monthly
+            // invoice. isMonthlyInvoice only matches top-level descriptions like
+            // "May 2026 Monthly Brokerage Fee", so the onboarding invoice never
+            // enters monthlyInvoices. We must also check all invoices for a
+            // prorated line item whose description covers the current month —
+            // otherwise fresh agents are falsely flagged as missing their invoice.
+            const hasProRatedCurrentMonth = invoices.some((inv: any) =>
+              (inv?.items || []).some(
+                (item: any) =>
+                  (item?.type === 'Monthly Fee (Prorated)' || item?.type === 'Monthly Fee') &&
+                  typeof item?.description === 'string' &&
+                  item.description.toLowerCase().includes(currentMonthYear)
+              )
+            )
+
             // Split unpaid invoices by due date. An invoice is only "overdue"
             // once its due date has passed; a fee billed ahead of its due date
             // (the next month's, created early by the cron) is "upcoming" and
@@ -127,11 +143,17 @@ export async function GET(request: NextRequest) {
                 0
               ),
               upcoming_invoice_ids: upcoming.map((inv: any) => inv.id),
-              has_current_month_invoice: monthlyInvoices.some(
-                (inv: any) =>
-                  typeof inv.description === 'string' &&
-                  inv.description.toLowerCase().includes(currentMonthYear)
-              ),
+              // True if there is a standalone monthly invoice for this
+              // calendar month (paid or unpaid), OR if the agent paid a
+              // prorated monthly fee as part of their onboarding invoice.
+              // Either satisfies "the month has been billed/paid" so the
+              // billing page does not falsely flag a missing invoice.
+              has_current_month_invoice:
+                monthlyInvoices.some(
+                  (inv: any) =>
+                    typeof inv.description === 'string' &&
+                    inv.description.toLowerCase().includes(currentMonthYear)
+                ) || hasProRatedCurrentMonth,
             }
             return { id: u.id, status }
           } catch {
