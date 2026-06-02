@@ -78,6 +78,8 @@ export type PermissionCode =
   | 'can_send_campaign_emails'
   // Recordings
   | 'can_manage_recordings'
+  // Insights
+  | 'can_view_insights'
   | 'can_manage_email_templates'
   // Coordination & Listings (existing in DB)
   | 'can_view_listings'
@@ -311,6 +313,8 @@ export async function getPermissionsObject(
     'can_send_campaign_emails',
     // Recordings
     'can_manage_recordings',
+    // Insights
+    'can_view_insights',
     // Coordination & Listings
     'can_manage_coordination',
     'can_manage_listings',

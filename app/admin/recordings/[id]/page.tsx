@@ -10,46 +10,13 @@ const PROGRAM_NAMES = [
   'New Agent Coaching Circle',
   'Convert & Close Coaching',
   'Seasoned Agent Coaching Circle',
-  'Monthly Apartment Locator Q&A',
-  'Collective Access Division Coaching - Dallas',
-  'Collective Access Division Coaching - Houston',
-  'Monthly Lease Training',
+  'Monthly Apartment Locator Q&A With Maureen Eno',
+  'Collective Access Coaching In Dallas With Terraneka Hill',
+  'Collective Access Coaching In Houston With Eric Roberts',
+  'Collective Access Coaching In Houston And Dallas With Eric Roberts And Terraneka Hill',
+  'Monthly Lease Training With Briana Thomas',
   'Navigating the Training Center, Coaching & Onboarding',
   'Other',
-]
-
-const SHAREPOINT_FOLDERS = [
-  'Announcement Recordings',
-  'Brokermint',
-  'Builders',
-  'Business Strategy',
-  'Business Taxes',
-  'Collective Access Division Coaching - Dallas',
-  'Collective Access Division Coaching - Houston',
-  'Commercial',
-  'Comps',
-  'Contracts',
-  'Convert & Close Coaching',
-  'Daily Prospecting',
-  'Document Review',
-  'Home Warranty',
-  'Inspections',
-  'Insurance',
-  'Leasing',
-  'Lender Market Updates',
-  'Lending',
-  'Listings',
-  'Market Update',
-  'Marketing',
-  'Navigating the Training Center, Compliance, & Onboarding',
-  'New Agent Coaching Circle',
-  'New Construction',
-  'Prospecting',
-  'Representing Buyers',
-  'Representing Sellers and Landlords',
-  'Sales Meetings',
-  'Seasoned Agent Coaching Circle',
-  'Title Company Guest Trainings',
 ]
 
 function buildTitle(program: string, suggestedTitle: string): string {
@@ -63,7 +30,6 @@ function buildTitle(program: string, suggestedTitle: string): string {
 
 function extractTopics(title: string): string[] {
   const parts = title.split(' - ')
-  // Skip program name (index 0) and date (index 1), rest are topics
   return parts.slice(2).filter(Boolean)
 }
 
@@ -99,15 +65,22 @@ export default function RecordingDetailPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [sharePointUrl, setSharePointUrl] = useState('')
-
-  // AI assistant
+  const [folders, setFolders] = useState<string[]>([])
+  const [context, setContext] = useState<any>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [aiSuggesting, setAiSuggesting] = useState(false)
+  const [systemPrompt, setSystemPrompt] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // Load folders dynamically
+    fetch('/api/zoom/sharepoint-folders')
+      .then(r => r.json())
+      .then(d => { if (d.folders?.length) setFolders(d.folders) })
+
+    // Load job
     fetch(`/api/zoom/recording-jobs?id=${id}`)
       .then(r => r.json())
       .then(d => {
@@ -115,10 +88,21 @@ export default function RecordingDetailPage() {
           setJob(d.job)
           const t = d.job.final_title || d.job.suggested_title || ''
           setTitle(t)
-          setFolder(d.job.final_folder || d.job.suggested_folder || SHAREPOINT_FOLDERS[0])
+          setFolder(d.job.final_folder || d.job.suggested_folder || '')
           setTopics(extractTopics(t))
           setProgram(extractProgram(t))
           if (d.job.sharepoint_url) setSharePointUrl(d.job.sharepoint_url)
+
+          // Load recording context (Fathom + calendar)
+          const recordingDate = d.job.start_time?.slice(0, 10)
+          if (recordingDate) {
+            fetch(`/api/zoom/recording-context?date=${recordingDate}&jobId=${id}`)
+              .then(r => r.json())
+              .then(ctx => {
+                setContext(ctx)
+                setSystemPrompt(ctx.systemPrompt || '')
+              })
+          }
         }
         setLoading(false)
       })
@@ -169,15 +153,15 @@ export default function RecordingDetailPage() {
             title,
             folder,
             topics: topics.join(', '),
-            transcript: job?.transcript_excerpt || '',
-            folders: SHAREPOINT_FOLDERS.join(', '),
+            transcript: context?.transcriptExcerpt || '',
+            folders: folders.join(', '),
             programs: PROGRAM_NAMES.join(', '),
+            systemPrompt,
           },
         }),
       })
       const data = await res.json()
-      const reply = data.reply || 'Sorry, I could not generate a response.'
-      setChatMessages([...newMessages, { role: 'assistant', content: reply }])
+      setChatMessages([...newMessages, { role: 'assistant', content: data.reply }])
     } catch {
       setChatMessages([...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
     } finally {
@@ -188,45 +172,41 @@ export default function RecordingDetailPage() {
   async function aiSuggestAll() {
     setAiSuggesting(true)
     try {
-      const transcript = job?.transcript_excerpt || job?.meeting_title || ''
       const res = await fetch('/api/zoom/recording-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [{
             role: 'user',
-            content: `Given this recording, suggest 3-4 topic tags (3-6 words each, title case) and the best SharePoint folder. Respond with only this JSON: {"topics": ["Topic 1", "Topic 2", "Topic 3"], "folder": "Folder Name"}`
+            content: `Based on the calendar and transcript data, suggest the correct program name, 3-4 topic tags, and the best SharePoint folder for this recording. Respond with only this JSON: {"program": "Program Name", "topics": ["Topic 1", "Topic 2", "Topic 3"], "folder": "Folder Name", "title": "Full title in correct format"}`
           }],
           context: {
             meetingTitle: job?.meeting_title || '',
             title,
             folder,
             topics: topics.join(', '),
-            transcript,
-            folders: SHAREPOINT_FOLDERS.join(', '),
+            transcript: context?.transcriptExcerpt || '',
+            folders: folders.join(', '),
             programs: PROGRAM_NAMES.join(', '),
+            systemPrompt,
           },
         }),
       })
       const data = await res.json()
       const text = data.reply || '{}'
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
+      if (parsed.program) setProgram(parsed.program)
       if (parsed.topics) {
         setTopics(parsed.topics)
-        setTitle(rebuildTitle(program, extractDate(title), parsed.topics))
       }
-      if (parsed.folder && SHAREPOINT_FOLDERS.includes(parsed.folder)) {
-        setFolder(parsed.folder)
-      }
+      if (parsed.title) setTitle(parsed.title)
+      if (parsed.folder && folders.includes(parsed.folder)) setFolder(parsed.folder)
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        content: `I suggested these topics: ${parsed.topics?.join(', ')}. Folder set to: ${parsed.folder}. Feel free to ask me to adjust anything.`
+        content: `Based on the calendar and transcript, I suggest:\n\nProgram: ${parsed.program}\nTitle: ${parsed.title}\nFolder: ${parsed.folder}\nTopics: ${parsed.topics?.join(', ')}\n\nFeel free to adjust anything.`
       }])
-    } catch {
-      // silent fail
-    } finally {
-      setAiSuggesting(false)
-    }
+    } catch { }
+    finally { setAiSuggesting(false) }
   }
 
   async function handleConfirm() {
@@ -256,7 +236,7 @@ export default function RecordingDetailPage() {
     <div className="p-6 max-w-3xl mx-auto">
       <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">
         <p className="text-green-300 text-lg font-medium mb-2">Uploading to SharePoint</p>
-        <p className="text-luxury-gray-3 text-sm mb-4">This may take a few minutes depending on file size. Agents will receive an email when it is ready.</p>
+        <p className="text-luxury-gray-3 text-sm mb-4">This may take a few minutes. Agents will receive an email when ready.</p>
         {sharePointUrl && (
           <a href={sharePointUrl} target="_blank" rel="noopener noreferrer" className="text-luxury-accent underline text-sm block mb-4">
             View in SharePoint
@@ -279,13 +259,27 @@ export default function RecordingDetailPage() {
       <p className="text-luxury-gray-3 text-sm mb-8">Confirm the title and destination folder before uploading to SharePoint.</p>
 
       <div className="space-y-6">
-        {/* Original title */}
         <div className="container-card p-4">
           <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Original Zoom Title</p>
           <p className="text-luxury-gray-2">{job.meeting_title}</p>
+          {context?.calendarEvents?.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-luxury-dark-3">
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Scheduled Sessions This Day</p>
+              {context.calendarEvents.map((e: any, i: number) => (
+                <p key={i} className="text-luxury-gray-3 text-xs">
+                  {e.start?.dateTime?.slice(11, 16)} UTC — {e.subject}
+                  {e.hasGuest && <span className="ml-1 text-luxury-accent">[Guest presenter]</span>}
+                </p>
+              ))}
+            </div>
+          )}
+          {context?.speakers?.length > 0 && (
+            <div className="mt-2">
+              <p className="text-luxury-gray-3 text-xs">Fathom speakers: {context.speakers.join(', ')}</p>
+            </div>
+          )}
         </div>
 
-        {/* Program picker */}
         <div>
           <label className="block text-luxury-gray-2 text-sm font-medium mb-2">Program Name</label>
           <select
@@ -298,7 +292,6 @@ export default function RecordingDetailPage() {
           </select>
         </div>
 
-        {/* Topic chips */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-luxury-gray-2 text-sm font-medium">Topic Tags</label>
@@ -308,7 +301,7 @@ export default function RecordingDetailPage() {
               className="flex items-center gap-1.5 text-luxury-accent text-xs font-medium hover:opacity-80 transition-opacity disabled:opacity-50"
             >
               <Sparkles size={13} />
-              {aiSuggesting ? 'Suggesting...' : 'AI Suggest'}
+              {aiSuggesting ? 'Suggesting...' : 'AI Suggest All'}
             </button>
           </div>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -320,7 +313,7 @@ export default function RecordingDetailPage() {
                 </button>
               </span>
             ))}
-            {topics.length === 0 && <p className="text-luxury-gray-3 text-xs">No topics yet. Add some below or use AI Suggest.</p>}
+            {topics.length === 0 && <p className="text-luxury-gray-3 text-xs">No topics yet. Use AI Suggest or add manually.</p>}
           </div>
           <div className="flex gap-2">
             <input
@@ -335,7 +328,6 @@ export default function RecordingDetailPage() {
           </div>
         </div>
 
-        {/* Full title preview */}
         <div>
           <label className="block text-luxury-gray-2 text-sm font-medium mb-2">Recording Title</label>
           <input
@@ -347,7 +339,6 @@ export default function RecordingDetailPage() {
           <p className="text-luxury-gray-3 text-xs mt-1">Format: Program Name - M-D-YY - Topic 1 - Topic 2 - Topic 3</p>
         </div>
 
-        {/* Folder picker */}
         <div>
           <label className="block text-luxury-gray-2 text-sm font-medium mb-2">SharePoint Folder</label>
           <select
@@ -355,29 +346,29 @@ export default function RecordingDetailPage() {
             onChange={e => setFolder(e.target.value)}
             className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
           >
-            {SHAREPOINT_FOLDERS.map(f => <option key={f} value={f}>{f}</option>)}
+            <option value="">Select a folder...</option>
+            {folders.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
 
-        {/* AI Chat */}
         <div className="container-card p-4">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles size={14} className="text-luxury-accent" />
             <p className="text-luxury-gray-2 text-sm font-medium">AI Assistant</p>
           </div>
-          <p className="text-luxury-gray-3 text-xs mb-3">Ask me to refine the title, suggest topics, recommend a folder, or summarize what was covered.</p>
+          <p className="text-luxury-gray-3 text-xs mb-3">
+            I have access to the calendar for this day and the Fathom transcript. Ask me to identify the program, suggest a title, or explain what was covered.
+          </p>
 
           {chatMessages.length > 0 && (
             <div className="space-y-3 mb-3 max-h-60 overflow-y-auto">
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`text-sm rounded-lg px-3 py-2 ${msg.role === 'user' ? 'bg-luxury-dark-3 text-luxury-white ml-8' : 'bg-luxury-accent/10 text-luxury-gray-2 mr-8'}`}>
+                <div key={i} className={`text-sm rounded-lg px-3 py-2 whitespace-pre-wrap ${msg.role === 'user' ? 'bg-luxury-dark-3 text-luxury-white ml-8' : 'bg-luxury-accent/10 text-luxury-gray-2 mr-8'}`}>
                   {msg.content}
                 </div>
               ))}
               {chatLoading && (
-                <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-3 py-2 mr-8">
-                  Thinking...
-                </div>
+                <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-3 py-2 mr-8">Thinking...</div>
               )}
               <div ref={chatEndRef} />
             </div>
@@ -389,7 +380,7 @@ export default function RecordingDetailPage() {
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !chatLoading && askAI(chatInput)}
-              placeholder='e.g. "Make the title shorter" or "What folder fits best?"'
+              placeholder='e.g. "What program is this?" or "What was covered?"'
               className="flex-1 bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-2 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
             />
             <button
@@ -402,7 +393,6 @@ export default function RecordingDetailPage() {
           </div>
         </div>
 
-        {/* Status messages */}
         {job.status === 'uploaded' && (
           <div className="bg-green-900/30 border border-green-700 rounded-lg p-4">
             <p className="text-green-300 text-sm font-medium mb-1">Already uploaded to SharePoint</p>
@@ -418,7 +408,6 @@ export default function RecordingDetailPage() {
           <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
             <p className="text-red-300 text-sm font-medium mb-1">Previous upload failed</p>
             <p className="text-red-400 text-xs">{job.error_message}</p>
-            <p className="text-luxury-gray-3 text-xs mt-1">You can try again below.</p>
           </div>
         )}
 
