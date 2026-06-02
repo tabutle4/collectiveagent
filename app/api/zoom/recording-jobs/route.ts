@@ -3,8 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'can_manage_company_settings')
-  if (authError) return authError
+  const auth = await requirePermission(req, 'can_manage_company_settings')
+  if (auth.error) return auth.error
 
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')

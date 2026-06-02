@@ -94,8 +94,8 @@ async function uploadToSharePoint(
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'can_manage_company_settings')
-  if (authError) return authError
+  const auth = await requirePermission(req, 'can_manage_company_settings')
+  if (auth.error) return auth.error
 
   const { jobId, finalTitle, folder } = await req.json()
 
