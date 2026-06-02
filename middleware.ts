@@ -36,6 +36,7 @@ const PUBLIC_PATHS = [
   '/logo-white.png',
   '/onboard',
   '/api/headshot-square',
+  '/api/zoom/recording-complete',
 ]
 
 // Paths accessible to all authenticated users regardless of role
