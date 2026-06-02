@@ -273,8 +273,10 @@ function CheckImageUpload({
     check_amount?: number | null
     check_from?: string | null
     check_number?: string | null
-    received_date?: string | null
+    check_date?: string | null
+    cleared_date?: string | null
     payment_method?: string
+    funds_status?: string | null
     notes?: string | null
     confidence?: string
   }) => void
@@ -430,10 +432,22 @@ function CheckImageUpload({
                 <span className="font-semibold">{extracted.check_number}</span>
               </div>
             )}
-            {extracted.received_date && (
+            {extracted.check_date && (
               <div className="flex justify-between">
-                <span className="opacity-70">Date</span>
-                <span className="font-semibold">{extracted.received_date}</span>
+                <span className="opacity-70">Check Date</span>
+                <span className="font-semibold">{extracted.check_date}</span>
+              </div>
+            )}
+            {extracted.cleared_date && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Cleared</span>
+                <span className="font-semibold">{extracted.cleared_date}</span>
+              </div>
+            )}
+            {extracted.funds_status && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Funds Status</span>
+                <span className="font-semibold">{extracted.funds_status}</span>
               </div>
             )}
             {extracted.payment_method && (
@@ -558,7 +572,6 @@ function ComplianceDocumentsTab({
   const handleFileUpload = async (file: File, requiredDocId: string | null) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
-      // Step 1: Upload to OneDrive via existing route
       const fd = new FormData()
       fd.append('file', file)
       fd.append('transaction_id', transactionId)
@@ -567,11 +580,61 @@ function ComplianceDocumentsTab({
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
       const oneDriveUrl = uploadData.url
 
-      // Step 2: AI doc read (best-effort, never blocks upload)
+      // AI doc read: get summary + suggested required-doc slot assignments
+      let aiSummary: string | null = null
+      let suggestedSlots: string[] = []
+      try {
+        const extractFd = new FormData()
+        extractFd.append('file', file)
+        extractFd.append('transaction_id', transactionId)
+        const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
+        if (extractRes.ok) {
+          const extractData = await extractRes.json()
+          aiSummary = extractData.summary || null
+          suggestedSlots = extractData.suggested_slots || []
+        }
+      } catch { /* best-effort */ }
+
+      // If caller specified a slot use it; otherwise use AI suggestions (one record per slot)
+      const targetSlots: (string | null)[] = requiredDocId
+        ? [requiredDocId]
+        : suggestedSlots.length > 0 ? suggestedSlots : [null]
+
+      for (const slotId of targetSlots) {
+        await postAction('add_document', {
+          file_name: file.name,
+          file_url: oneDriveUrl,
+          onedrive_file_url: oneDriveUrl,
+          file_size: file.size,
+          file_type: file.type,
+          required_document_id: slotId || null,
+          ai_summary: aiSummary,
+        })
+      }
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingSlotId(null)
+    }
+  }
+
+  const handleReplace = async (file: File, oldDocId: string, requiredDocId: string | null) => {
+    setUploadingSlotId(oldDocId)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('transaction_id', transactionId)
+      const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
+      const oneDriveUrl = uploadData.url
+
       let aiSummary: string | null = null
       try {
         const extractFd = new FormData()
         extractFd.append('file', file)
+        extractFd.append('transaction_id', transactionId)
         const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
         if (extractRes.ok) {
           const extractData = await extractRes.json()
@@ -579,8 +642,8 @@ function ComplianceDocumentsTab({
         }
       } catch { /* best-effort */ }
 
-      // Step 3: Record in DB
-      await postAction('add_document', {
+      await postAction('replace', {
+        old_document_id: oldDocId,
         file_name: file.name,
         file_url: oneDriveUrl,
         onedrive_file_url: oneDriveUrl,
@@ -597,7 +660,24 @@ function ComplianceDocumentsTab({
     }
   }
 
-  const sendComplianceEmail = async () => {
+  const handleAssign = async (docId: string, requiredDocId: string | null) => {
+    try {
+      await postAction('assign', { document_id: docId, required_document_id: requiredDocId })
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const [emailPreview, setEmailPreview] = useState<{
+    to: string; cc: string; subject: string; html: string;
+    approved_count: number; rejected_count: number
+  } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [editableSubject, setEditableSubject] = useState('')
+  const [editableHtml, setEditableHtml] = useState('')
+
+  const openEmailPreview = async () => {
     const reviewed = docsData?.uploaded_docs.filter(
       d => d.compliance_status === 'approved' || d.compliance_status === 'rejected'
     )
@@ -605,13 +685,40 @@ function ComplianceDocumentsTab({
       setError('Approve or reject at least one document before sending the review email.')
       return
     }
+    setPreviewLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/compliance-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEmailPreview(data)
+      setEditableSubject(data.subject)
+      setEditableHtml(data.html)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const sendComplianceEmail = async () => {
+    if (!emailPreview) return
     setSending(true)
     setSendResult(null)
     setError(null)
     try {
-      const res = await fetch(`/api/admin/transactions/${transactionId}/compliance-review`, { method: 'POST' })
+      const res = await fetch(`/api/admin/transactions/${transactionId}/compliance-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send', subject: editableSubject, html: editableHtml }),
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      setEmailPreview(null)
       setSendResult(`Email sent to ${data.sent_to}. ${data.approved_count} approved, ${data.rejected_count} rejected.`)
     } catch (err: any) {
       setError(err.message)
@@ -733,17 +840,77 @@ function ComplianceDocumentsTab({
           </div>
         </div>
         <button
-          onClick={sendComplianceEmail}
-          disabled={sending || uploadedDocs.filter(d => d.compliance_status !== 'pending').length === 0}
+          onClick={openEmailPreview}
+          disabled={previewLoading || uploadedDocs.filter(d => d.compliance_status !== 'pending').length === 0}
           className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-luxury-accent text-white text-xs font-semibold hover:bg-luxury-accent/90 transition-colors disabled:opacity-50 mb-3"
         >
           <Send size={13} />
-          {sending ? 'Sending...' : 'Send Compliance Review Email'}
+          {previewLoading ? 'Building preview...' : 'Review and Send Compliance Email'}
         </button>
         <p className="text-[10px] text-luxury-gray-3 text-center">
-          Sends approved and rejected docs to the agent. Always shows as from Leah Parpan.
+          Opens a preview so you can edit before sending. Always shows as from Leah Parpan.
         </p>
       </div>
+
+      {/* Email preview/edit modal */}
+      {emailPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5">
+              <div>
+                <p className="font-semibold text-sm text-luxury-gray-1">Review Compliance Email</p>
+                <p className="text-[11px] text-luxury-gray-3 mt-0.5">
+                  To: {emailPreview.to} | CC: {emailPreview.cc}
+                </p>
+              </div>
+              <button onClick={() => setEmailPreview(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div>
+                <label className="field-label">Subject</label>
+                <input
+                  type="text"
+                  value={editableSubject}
+                  onChange={e => setEditableSubject(e.target.value)}
+                  className="input-luxury w-full text-sm mt-1"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="field-label">Email Body (HTML)</label>
+                  <span className="text-[10px] text-luxury-gray-3">
+                    {emailPreview.approved_count} approved, {emailPreview.rejected_count} rejected
+                  </span>
+                </div>
+                <textarea
+                  value={editableHtml}
+                  onChange={e => setEditableHtml(e.target.value)}
+                  className="input-luxury w-full text-xs font-mono resize-none"
+                  rows={14}
+                />
+                <p className="text-[10px] text-luxury-gray-3 mt-1">
+                  Edit the text within HTML tags to change what the agent sees.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-5 py-4 border-t border-luxury-gray-5">
+              <button onClick={() => setEmailPreview(null)} className="btn btn-secondary text-xs px-4 py-2">
+                Cancel
+              </button>
+              <button
+                onClick={sendComplianceEmail}
+                disabled={sending || !editableSubject || !editableHtml}
+                className="btn btn-primary text-xs px-5 py-2 flex items-center gap-2 disabled:opacity-50"
+              >
+                <Send size={12} />
+                {sending ? 'Sending...' : 'Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Required document slots */}
       {requiredDocs.length > 0 && (
@@ -805,7 +972,7 @@ function ComplianceDocumentsTab({
                         </div>
                       )}
                       {rejectingId !== latest.id && (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap gap-1.5 items-center">
                           {latest.compliance_status !== 'approved' && (
                             <button onClick={() => handleApprove(latest.id)} disabled={!!actionLoading}
                               className="text-[11px] font-semibold px-2.5 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-1">
@@ -824,6 +991,12 @@ function ComplianceDocumentsTab({
                               Reset
                             </button>
                           )}
+                          <label className={`text-[11px] px-2.5 py-1 text-luxury-accent border border-luxury-accent/30 rounded hover:bg-luxury-accent/5 cursor-pointer flex items-center gap-1 ${uploadingSlotId === latest.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <Upload size={10} />
+                            {uploadingSlotId === latest.id ? 'Uploading...' : 'Replace'}
+                            <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                              onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], latest.id, rd.id)} />
+                          </label>
                         </div>
                       )}
                     </div>
@@ -861,35 +1034,69 @@ function ComplianceDocumentsTab({
             ) : (
               <div className="space-y-2">
                 {unlinked.map(doc => (
-                  <div key={doc.id} className="flex items-start gap-2 p-2.5 border border-luxury-gray-5 rounded-lg">
-                    <FileText size={12} className="text-luxury-gray-3 mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <a href={doc.onedrive_file_url || doc.file_url} target="_blank" rel="noopener noreferrer"
-                        className="text-[11px] text-luxury-accent hover:underline block truncate">{doc.file_name}</a>
-                      {doc.uploader && <p className="text-[10px] text-luxury-gray-3">by {fmtDocName(doc.uploader)}</p>}
-                      {doc.compliance_status === 'pending' && doc.compliance_notes && (
-                        <div className="mt-1 p-1.5 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-800">
-                          <span className="font-semibold">AI: </span>{doc.compliance_notes}
+                  <div key={doc.id} className="p-2.5 border border-luxury-gray-5 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <FileText size={12} className="text-luxury-gray-3 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <a href={doc.onedrive_file_url || doc.file_url} target="_blank" rel="noopener noreferrer"
+                            className="text-[11px] text-luxury-accent hover:underline truncate">{doc.file_name}</a>
+                          {doc.version > 1 && (
+                            <span className="text-[9px] bg-luxury-gray-5 text-luxury-gray-2 px-1.5 py-0.5 rounded-full font-semibold shrink-0">v{doc.version}</span>
+                          )}
                         </div>
-                      )}
-                      {doc.compliance_notes && doc.compliance_status === 'rejected' && (
-                        <p className="text-[10px] text-red-600 mt-0.5">{doc.compliance_notes}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {statusBadge(doc.compliance_status)}
-                      {doc.compliance_status !== 'approved' && (
-                        <button onClick={() => handleApprove(doc.id)} disabled={!!actionLoading}
-                          className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                          <Check size={10} />
-                        </button>
-                      )}
-                      {doc.compliance_status !== 'rejected' && rejectingId !== doc.id && (
-                        <button onClick={() => { setRejectingId(doc.id); setRejectReason('') }}
-                          className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200">
-                          <X size={10} />
-                        </button>
-                      )}
+                        {doc.uploader && <p className="text-[10px] text-luxury-gray-3">by {fmtDocName(doc.uploader)}</p>}
+                        {doc.compliance_status === 'pending' && doc.compliance_notes && (
+                          <div className="mt-1 p-1.5 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-800">
+                            <span className="font-semibold">AI: </span>{doc.compliance_notes}
+                          </div>
+                        )}
+                        {doc.compliance_notes && doc.compliance_status === 'rejected' && (
+                          <p className="text-[10px] text-red-600 mt-0.5">{doc.compliance_notes}</p>
+                        )}
+                        <select
+                          value=""
+                          onChange={e => e.target.value && handleAssign(doc.id, e.target.value === 'none' ? null : e.target.value)}
+                          className="mt-1.5 text-[10px] text-luxury-gray-3 border border-luxury-gray-5 rounded px-1.5 py-0.5 bg-white w-full"
+                        >
+                          <option value="">Assign to required slot...</option>
+                          {requiredDocs.map(rd => (
+                            <option key={rd.id} value={rd.id}>{rd.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {statusBadge(doc.compliance_status)}
+                        <div className="flex gap-1 mt-1">
+                          {doc.compliance_status !== 'approved' && (
+                            <button onClick={() => handleApprove(doc.id)} disabled={!!actionLoading}
+                              className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                              <Check size={10} />
+                            </button>
+                          )}
+                          {doc.compliance_status !== 'rejected' && rejectingId !== doc.id && (
+                            <button onClick={() => { setRejectingId(doc.id); setRejectReason('') }}
+                              className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200">
+                              <X size={10} />
+                            </button>
+                          )}
+                          <label className="text-[10px] px-2 py-0.5 text-luxury-accent border border-luxury-accent/30 rounded cursor-pointer hover:bg-luxury-accent/5 flex items-center">
+                            <Upload size={9} />
+                            <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                              onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], doc.id, doc.required_document_id)} />
+                          </label>
+                        </div>
+                        {rejectingId === doc.id && (
+                          <div className="w-36 mt-1">
+                            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                              placeholder="Rejection reason..." className="input-luxury w-full text-[10px] resize-none mb-1" rows={2} autoFocus />
+                            <div className="flex gap-1">
+                              <button onClick={() => handleReject(doc.id)} className="text-[10px] px-2 py-0.5 bg-red-600 text-white rounded">Send</button>
+                              <button onClick={() => { setRejectingId(null); setRejectReason('') }} className="text-[10px] px-2 py-0.5 border border-luxury-gray-5 rounded">Cancel</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -3091,6 +3298,16 @@ export default function AdminTransactionDetailPage() {
                                 />
                               </div>
                               <div>
+                                <label className="field-label">Check Date</label>
+                                <input
+                                  type="date"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.check_date || ''}
+                                  onChange={e => updateCheckField(check.id, 'check_date', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { check_date: checkEdit.check_date })}
+                                />
+                              </div>
+                              <div>
                                 <label className="field-label">Received</label>
                                 <input
                                   type="date"
@@ -3252,11 +3469,27 @@ export default function AdminTransactionDetailPage() {
                                   if (fields.check_number) {
                                     updates.check_number = fields.check_number
                                   }
-                                  if (fields.received_date) {
-                                    updates.received_date = fields.received_date
+                                  if (fields.check_date) {
+                                    updates.check_date = fields.check_date
+                                  }
+                                  if (fields.cleared_date) {
+                                    updates.cleared_date = fields.cleared_date
+                                    // Received and deposited are the day before cleared:
+                                    // staff writes the clear date on the check when depositing,
+                                    // so received and deposited both = clear date minus 1 day
+                                    const clearD = new Date(fields.cleared_date + 'T12:00:00')
+                                    clearD.setDate(clearD.getDate() - 1)
+                                    const dayBefore = clearD.toISOString().split('T')[0]
+                                    updates.deposited_date = dayBefore
+                                    updates.received_date = dayBefore
                                   }
                                   if (fields.payment_method) {
                                     updates.payment_method = fields.payment_method
+                                  }
+                                  if (fields.funds_status) {
+                                    const existing = updates.notes || checkEdit.notes || ''
+                                    const statusNote = `Funds status: ${fields.funds_status}`
+                                    updates.notes = existing ? `${existing}\n${statusNote}` : statusNote
                                   }
                                   if (fields.notes) {
                                     const existing = checkEdit.notes || ''

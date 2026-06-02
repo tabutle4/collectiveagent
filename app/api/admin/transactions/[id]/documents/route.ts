@@ -60,6 +60,7 @@ export async function GET(
         )
       `)
       .eq('transaction_id', id)
+      .neq('compliance_status', 'superseded')
       .order('created_at', { ascending: false })
 
     if (docsErr) throw docsErr
@@ -117,6 +118,56 @@ export async function POST(
       return NextResponse.json({ doc: data })
     } catch (err: any) {
       console.error('add_document error:', err)
+      return NextResponse.json({ error: err.message }, { status: 500 })
+    }
+  }
+
+  // ── Replace: any authenticated user can replace (agent corrects and resubmits) ──
+  if (action === 'replace') {
+    const auth = await requireAuth(request)
+    if (auth.error) return auth.error
+
+    try {
+      const { old_document_id, file_name, file_url, onedrive_file_url, file_size, file_type, required_document_id, ai_summary } = body
+      if (!old_document_id || !file_name || !file_url) {
+        return NextResponse.json({ error: 'old_document_id, file_name, and file_url are required' }, { status: 400 })
+      }
+
+      const { data: oldDoc } = await supabase
+        .from('transaction_documents')
+        .select('version')
+        .eq('id', old_document_id)
+        .eq('transaction_id', id)
+        .single()
+
+      await supabase
+        .from('transaction_documents')
+        .update({ compliance_status: 'superseded', updated_at: new Date().toISOString() })
+        .eq('id', old_document_id)
+        .eq('transaction_id', id)
+
+      const { data: newDoc, error: insertError } = await supabase
+        .from('transaction_documents')
+        .insert({
+          transaction_id: id,
+          uploaded_by: auth.user!.id,
+          file_name,
+          file_url,
+          onedrive_file_url: onedrive_file_url || null,
+          file_size: file_size || null,
+          file_type: file_type || null,
+          required_document_id: required_document_id || null,
+          compliance_status: 'pending',
+          compliance_notes: ai_summary || null,
+          version: (oldDoc?.version || 1) + 1,
+        })
+        .select()
+        .single()
+
+      if (insertError) throw insertError
+      return NextResponse.json({ doc: newDoc })
+    } catch (err: any) {
+      console.error('replace error:', err)
       return NextResponse.json({ error: err.message }, { status: 500 })
     }
   }
@@ -211,6 +262,26 @@ export async function POST(
 
       if (error) throw error
       return NextResponse.json({ success: true })
+    }
+
+    // ── Assign: link a doc to a required_document slot (or unlink with null) ─
+    if (action === 'assign') {
+      const { document_id, required_document_id } = body
+      if (!document_id) return NextResponse.json({ error: 'document_id required' }, { status: 400 })
+
+      const { data, error } = await supabase
+        .from('transaction_documents')
+        .update({
+          required_document_id: required_document_id || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', document_id)
+        .eq('transaction_id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return NextResponse.json({ doc: data })
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
