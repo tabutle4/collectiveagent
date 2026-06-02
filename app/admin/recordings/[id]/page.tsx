@@ -159,33 +159,24 @@ export default function RecordingDetailPage() {
     setChatInput('')
 
     try {
-      const transcript = job?.transcript_excerpt || ''
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/zoom/recording-chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
-          system: `You are an assistant helping a real estate brokerage administrator name and categorize a Zoom training recording.
-
-Current recording info:
-- Meeting title: ${job?.meeting_title || ''}
-- Current recording title: ${title}
-- Current folder: ${folder}
-- Current topics: ${topics.join(', ')}
-- Transcript excerpt: ${transcript}
-
-Available SharePoint folders: ${SHAREPOINT_FOLDERS.join(', ')}
-Available programs: ${PROGRAM_NAMES.join(', ')}
-
-Help the user refine the title, suggest topics, or recommend a folder. When suggesting a new title or topics, format them clearly so the user can apply them. Keep responses concise and practical.`,
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          context: {
+            meetingTitle: job?.meeting_title || '',
+            title,
+            folder,
+            topics: topics.join(', '),
+            transcript: job?.transcript_excerpt || '',
+            folders: SHAREPOINT_FOLDERS.join(', '),
+            programs: PROGRAM_NAMES.join(', '),
+          },
         }),
       })
       const data = await res.json()
-      const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response.'
+      const reply = data.reply || 'Sorry, I could not generate a response.'
       setChatMessages([...newMessages, { role: 'assistant', content: reply }])
     } catch {
       setChatMessages([...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
@@ -198,34 +189,27 @@ Help the user refine the title, suggest topics, or recommend a folder. When sugg
     setAiSuggesting(true)
     try {
       const transcript = job?.transcript_excerpt || job?.meeting_title || ''
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/zoom/recording-chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 300,
-          system: 'You are helping categorize a real estate training recording. Respond only with valid JSON, no markdown.',
           messages: [{
             role: 'user',
-            content: `Given this recording:
-- Meeting title: ${job?.meeting_title}
-- Current title: ${title}
-- Transcript: ${transcript}
-
-Available folders: ${SHAREPOINT_FOLDERS.join(', ')}
-
-Suggest:
-1. 3-4 topic tags (3-6 words each, title case)
-2. The best SharePoint folder from the list above
-
-Respond with only this JSON: {"topics": ["Topic 1", "Topic 2", "Topic 3"], "folder": "Folder Name"}`
+            content: `Given this recording, suggest 3-4 topic tags (3-6 words each, title case) and the best SharePoint folder. Respond with only this JSON: {"topics": ["Topic 1", "Topic 2", "Topic 3"], "folder": "Folder Name"}`
           }],
+          context: {
+            meetingTitle: job?.meeting_title || '',
+            title,
+            folder,
+            topics: topics.join(', '),
+            transcript,
+            folders: SHAREPOINT_FOLDERS.join(', '),
+            programs: PROGRAM_NAMES.join(', '),
+          },
         }),
       })
       const data = await res.json()
-      const text = data.content?.[0]?.text || '{}'
+      const text = data.reply || '{}'
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim())
       if (parsed.topics) {
         setTopics(parsed.topics)
@@ -239,7 +223,7 @@ Respond with only this JSON: {"topics": ["Topic 1", "Topic 2", "Topic 3"], "fold
         content: `I suggested these topics: ${parsed.topics?.join(', ')}. Folder set to: ${parsed.folder}. Feel free to ask me to adjust anything.`
       }])
     } catch {
-      // silent fail — user still has manual controls
+      // silent fail
     } finally {
       setAiSuggesting(false)
     }
