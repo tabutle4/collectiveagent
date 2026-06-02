@@ -287,37 +287,102 @@ function CheckImageUpload({
   const [extracted, setExtracted] = useState<any | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
 
-  const handleFile = async (file: File) => {
+  // Compress image to under maxBytes using Canvas. PDFs returned unchanged.
+  const compressImage = (file: File, maxBytes: number): Promise<File> => {
+    return new Promise((resolve) => {
+      if (file.type === 'application/pdf' || !file.type.startsWith('image/')) { resolve(file); return }
+      if (file.size <= maxBytes) { resolve(file); return }
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const canvas = document.createElement('canvas')
+        const MAX_DIM = 2400
+        let { width, height } = img
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM }
+          else { width = Math.round(width * MAX_DIM / height); height = MAX_DIM }
+        }
+        canvas.width = width; canvas.height = height
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+        const tryQuality = (q: number) => {
+          canvas.toBlob((blob) => {
+            if (!blob) { resolve(file); return }
+            if (blob.size <= maxBytes || q <= 0.3) {
+              resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
+            } else { tryQuality(Math.max(q - 0.15, 0.3)) }
+          }, 'image/jpeg', q)
+        }
+        tryQuality(0.85)
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+      img.src = url
+    })
+  }
+
+  // Direct upload to OneDrive bypassing Vercel's 4.5MB body limit.
+  // Used for PDFs and large files — file bytes never pass through Vercel.
+  const directUploadToOneDrive = async (file: File, txnId: string): Promise<string> => {
+    const sessionRes = await fetch('/api/uploads/create-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, file_size: file.size, content_type: file.type, transaction_id: txnId }),
+    })
+    const sessionData = await sessionRes.json()
+    if (!sessionRes.ok) throw new Error(sessionData.error || 'Failed to create upload session')
+    const uploadRes = await fetch(sessionData.upload_url, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type, 'Content-Range': `bytes 0-${file.size - 1}/${file.size}`, 'Content-Length': String(file.size) },
+      body: file,
+    })
+    if (!uploadRes.ok) throw new Error(`OneDrive upload failed: ${uploadRes.status}`)
+    const item = await uploadRes.json()
+    return item.webUrl
+  }
+
+  const handleFile = async (rawFile: File) => {
+    // Compress images over 4MB; PDFs go direct to OneDrive (no Vercel size limit)
+    const isPdf = rawFile.type === 'application/pdf'
+    const compressed = isPdf ? rawFile : await compressImage(rawFile, 4 * 1024 * 1024)
+    const file = compressed
+    const useDirect = isPdf || file.size > 4 * 1024 * 1024
+
     setUploading(true)
     setExtracted(null)
     setExtractError(null)
     setPreviewUrl(URL.createObjectURL(file))
     try {
-      // Step 1: Upload to OneDrive (existing flow)
-      const fd = new FormData()
-      fd.append('file', file)
-      if (checkId) fd.append('check_id', checkId)
-      if (transactionId) fd.append('transaction_id', transactionId)
-      const res = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
-      setPreviewUrl(data.url)
-      onUploaded(data.url)
+      let fileUrl: string
+      if (useDirect && transactionId) {
+        fileUrl = await directUploadToOneDrive(file, transactionId)
+      } else {
+        const fd = new FormData()
+        fd.append('file', file)
+        if (checkId) fd.append('check_id', checkId)
+        if (transactionId) fd.append('transaction_id', transactionId)
+        const res = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Upload failed')
+        fileUrl = data.url
+      }
+      setPreviewUrl(fileUrl)
+      onUploaded(fileUrl)
       setUploading(false)
 
-      // Step 2: AI extraction (runs after upload succeeds)
+      // AI extraction (best-effort, never blocks upload)
       setExtracting(true)
       const extractFd = new FormData()
       extractFd.append('file', file)
-      const extractRes = await fetch('/api/admin/transactions/ai-check-extract', {
-        method: 'POST',
-        body: extractFd,
-      })
-      const extractData = await extractRes.json()
-      if (!extractRes.ok) {
-        setExtractError(extractData.error || 'AI extraction failed')
-      } else {
-        setExtracted(extractData.extracted)
+      try {
+        const extractRes = await fetch('/api/admin/transactions/ai-check-extract', { method: 'POST', body: extractFd })
+        const extractData = await extractRes.json().catch(() => null)
+        if (!extractRes.ok || !extractData) {
+          setExtractError(extractData?.error || 'AI extraction failed')
+        } else {
+          setExtracted(extractData.extracted)
+        }
+      } catch {
+        setExtractError('AI extraction unavailable for this file')
       }
     } catch (err: any) {
       setPreviewUrl(existingUrl || null)
@@ -501,9 +566,31 @@ function ComplianceDocumentsTab({
   const [rejectReason, setRejectReason] = useState('')
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
+  const [markingComplete, setMarkingComplete] = useState(false)
+
+  const handleMarkComplete = async () => {
+    setMarkingComplete(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark_complete' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setSendResult('File marked complete. Compliance date set on all cleared checks.')
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setMarkingComplete(false)
+    }
+  }
   const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
+  const [viewingDocId, setViewingDocId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
 
   const load = async () => {
@@ -910,6 +997,19 @@ function ComplianceDocumentsTab({
         <p className="text-[10px] text-luxury-gray-3 text-center">
           Opens a preview so you can edit before sending. Always shows as from Leah Parpan.
         </p>
+        <div className="border-t border-luxury-gray-5 mt-3 pt-3">
+          <button
+            onClick={handleMarkComplete}
+            disabled={markingComplete}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-green-600 text-green-700 text-xs font-semibold hover:bg-green-50 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle size={13} />
+            {markingComplete ? 'Marking...' : 'Mark File Complete'}
+          </button>
+          <p className="text-[10px] text-luxury-gray-3 text-center mt-1.5">
+            Sets compliance status to Complete and stamps today as the compliance date on all cleared checks.
+          </p>
+        </div>
       </div>
 
       {/* Email preview/edit modal */}
@@ -993,10 +1093,36 @@ function ComplianceDocumentsTab({
 
                   {latest ? (
                     <div>
-                      <a href={latest.onedrive_file_url || latest.file_url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-[11px] text-luxury-accent hover:underline mb-2">
-                        <FileText size={11} /> {latest.file_name}
-                      </a>
+                      <div className="flex items-center gap-2 mb-2">
+                        <button
+                          onClick={() => setViewingDocId(viewingDocId === latest.id ? null : latest.id)}
+                          className="flex items-center gap-1.5 text-[11px] text-luxury-accent hover:underline flex-1 min-w-0 text-left"
+                        >
+                          <FileText size={11} className="shrink-0" />
+                          <span className="truncate">{latest.file_name}</span>
+                        </button>
+                        <a href={latest.onedrive_file_url || latest.file_url} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-luxury-gray-3 hover:text-luxury-accent shrink-0">
+                          <ExternalLink size={9} />
+                        </a>
+                      </div>
+                      {viewingDocId === latest.id && (
+                        <div className="mb-2 rounded border border-luxury-gray-5 overflow-hidden bg-luxury-light">
+                          {(latest.file_type || '').startsWith('image/') ? (
+                            <img
+                              src={`/api/uploads/view?url=${encodeURIComponent(latest.onedrive_file_url || latest.file_url)}`}
+                              alt={latest.file_name}
+                              className="w-full max-h-96 object-contain"
+                            />
+                          ) : (
+                            <iframe
+                              src={`/api/uploads/view?url=${encodeURIComponent(latest.onedrive_file_url || latest.file_url)}`}
+                              className="w-full h-96 border-0"
+                              title={latest.file_name}
+                            />
+                          )}
+                        </div>
+                      )}
                       {latest.uploader && (
                         <p className="text-[10px] text-luxury-gray-3 mb-2">Uploaded by {fmtDocName(latest.uploader)}</p>
                       )}
@@ -1099,8 +1225,27 @@ function ComplianceDocumentsTab({
                       <FileText size={12} className="text-luxury-gray-3 mt-0.5 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <a href={doc.onedrive_file_url || doc.file_url} target="_blank" rel="noopener noreferrer"
-                            className="text-[11px] text-luxury-accent hover:underline truncate">{doc.file_name}</a>
+                          <button
+                            onClick={() => setViewingDocId(viewingDocId === doc.id ? null : doc.id)}
+                            className="text-[11px] text-luxury-accent hover:underline truncate text-left"
+                          >{doc.file_name}</button>
+                          {viewingDocId === doc.id && (
+                            <div className="mt-1 rounded border border-luxury-gray-5 overflow-hidden bg-luxury-light">
+                              {(doc.file_type || '').startsWith('image/') ? (
+                                <img
+                                  src={`/api/uploads/view?url=${encodeURIComponent(doc.onedrive_file_url || doc.file_url)}`}
+                                  alt={doc.file_name}
+                                  className="w-full max-h-96 object-contain"
+                                />
+                              ) : (
+                                <iframe
+                                  src={`/api/uploads/view?url=${encodeURIComponent(doc.onedrive_file_url || doc.file_url)}`}
+                                  className="w-full h-96 border-0"
+                                  title={doc.file_name}
+                                />
+                              )}
+                            </div>
+                          )}
                           {doc.version > 1 && (
                             <span className="text-[9px] bg-luxury-gray-5 text-luxury-gray-2 px-1.5 py-0.5 rounded-full font-semibold shrink-0">v{doc.version}</span>
                           )}
@@ -1283,6 +1428,8 @@ export default function AdminTransactionDetailPage() {
     notes: '',
   })
   const [savingContact, setSavingContact] = useState(false)
+  const [extractingContacts, setExtractingContacts] = useState(false)
+  const [contactSuggestions, setContactSuggestions] = useState<any[]>([])
 
   // Auth
   useEffect(() => {
@@ -2132,6 +2279,32 @@ export default function AdminTransactionDetailPage() {
       notes: '',
     })
     setContactModal({ open: true, editing: null })
+  }
+
+  const extractContactsWithAI = async () => {
+    if (!data?.transaction) return
+    setExtractingContacts(true)
+    setContactSuggestions([])
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/ai-checklist-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction: data.transaction,
+          agents: data.agents,
+          checklist: [],
+          checks: data.checks,
+          agent_billing: [],
+          payout_brokerages: payoutBrokerages,
+          mode: 'extract_contacts',
+        }),
+      })
+      const json = await res.json()
+      if (json.contacts && Array.isArray(json.contacts)) {
+        setContactSuggestions(json.contacts)
+      }
+    } catch { /* best-effort */ }
+    finally { setExtractingContacts(false) }
   }
 
   const openEditContact = (contact: any) => {
@@ -3950,10 +4123,63 @@ export default function AdminTransactionDetailPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h1 className="page-title">CONTACTS</h1>
-                <button onClick={openAddContact} className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
-                  <Plus size={13} /> Add Contact
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={extractContactsWithAI}
+                    disabled={extractingContacts}
+                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {extractingContacts ? 'Reading...' : <><span className="text-sm leading-none">&#10024;</span> Find Contacts</>}
+                  </button>
+                  <button onClick={openAddContact} className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1">
+                    <Plus size={13} /> Add Contact
+                  </button>
+                </div>
               </div>
+
+              {contactSuggestions.length > 0 && (
+                <div className="container-card border border-luxury-accent/30 bg-amber-50">
+                  <p className="text-xs font-semibold text-luxury-gray-1 mb-2 flex items-center gap-1.5">
+                    <span className="text-base leading-none">&#10024;</span>
+                    Claude found these contacts in the transaction data
+                  </p>
+                  <div className="space-y-2 mb-3">
+                    {contactSuggestions.map((c: any, i: number) => (
+                      <div key={i} className="flex items-start justify-between gap-2 p-2 bg-white rounded border border-luxury-gray-5">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-semibold text-luxury-gray-1">{c.name || 'Unknown'}</p>
+                          <p className="text-[10px] text-luxury-gray-3">
+                            {c.contact_type?.replace(/_/g, ' ')}
+                            {c.email ? ` · ${c.email}` : ''}
+                            {c.phone ? ` · ${c.phone}` : ''}
+                            {c.company ? ` · ${c.company}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setContactForm({
+                              contact_type: c.contact_type || '',
+                              contact_type_other: '',
+                              name: c.name || '',
+                              phone: c.phone || '',
+                              email: c.email || '',
+                              company: c.company || '',
+                              notes: c.notes || '',
+                            })
+                            setContactModal({ open: true, editing: null })
+                          }}
+                          className="text-[10px] font-semibold px-2 py-1 bg-luxury-accent text-white rounded hover:bg-luxury-accent/90 shrink-0"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => setContactSuggestions([])} className="text-[10px] text-luxury-gray-3 hover:underline">
+                    Dismiss
+                  </button>
+                </div>
+              )}
 
               {loadingContacts ? (
                 <div className="container-card text-center py-6">

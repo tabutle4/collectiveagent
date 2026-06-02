@@ -4,6 +4,44 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// Recalculate and update transactions.compliance_status based on document review state.
+// Rules:
+//   Any rejected doc present               -> 'incomplete'
+//   All required docs approved, no reject  -> 'complete'
+//   Any docs pending/in-progress           -> 'in_review'
+//   No docs at all                         -> no change
+async function syncComplianceStatus(transactionId: string): Promise<void> {
+  const { data: docs } = await supabase
+    .from('transaction_documents')
+    .select('compliance_status, required_document_id')
+    .eq('transaction_id', transactionId)
+    .neq('compliance_status', 'superseded')
+
+  if (!docs || docs.length === 0) return
+
+  const hasRejected = docs.some((d: any) => d.compliance_status === 'rejected')
+  const hasPending = docs.some((d: any) => d.compliance_status === 'pending')
+  const requiredDocs = docs.filter((d: any) => d.required_document_id)
+  const allRequiredApproved = requiredDocs.length > 0 &&
+    requiredDocs.every((d: any) => d.compliance_status === 'approved')
+
+  let newStatus: string
+  if (hasRejected) {
+    newStatus = 'incomplete'
+  } else if (allRequiredApproved && !hasPending) {
+    newStatus = 'complete'
+  } else if (docs.some((d: any) => d.compliance_status === 'approved') || hasPending) {
+    newStatus = 'in_review'
+  } else {
+    return
+  }
+
+  await supabase
+    .from('transactions')
+    .update({ compliance_status: newStatus, updated_at: new Date().toISOString() })
+    .eq('id', transactionId)
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -115,6 +153,7 @@ export async function POST(
         .single()
 
       if (error) throw error
+      await syncComplianceStatus(id)
       return NextResponse.json({ doc: data })
     } catch (err: any) {
       console.error('add_document error:', err)
@@ -197,6 +236,7 @@ export async function POST(
         .single()
 
       if (error) throw error
+      await syncComplianceStatus(id)
       return NextResponse.json({ doc: data })
     }
 
@@ -223,6 +263,7 @@ export async function POST(
         .single()
 
       if (error) throw error
+      await syncComplianceStatus(id)
       return NextResponse.json({ doc: data })
     }
 
@@ -246,6 +287,7 @@ export async function POST(
         .single()
 
       if (error) throw error
+      await syncComplianceStatus(id)
       return NextResponse.json({ doc: data })
     }
 
@@ -282,6 +324,26 @@ export async function POST(
 
       if (error) throw error
       return NextResponse.json({ doc: data })
+    }
+
+    // ── Mark file complete ───────────────────────────────────────────────────
+    if (action === 'mark_complete') {
+      const today = new Date().toISOString().split('T')[0]
+
+      await supabase
+        .from('transactions')
+        .update({ compliance_status: 'complete', updated_at: new Date().toISOString() })
+        .eq('id', id)
+
+      // Set compliance_complete_date on all cleared checks that don't have one yet
+      await supabase
+        .from('checks_received')
+        .update({ compliance_complete_date: today, updated_at: new Date().toISOString() })
+        .eq('transaction_id', id)
+        .not('cleared_date', 'is', null)
+        .is('compliance_complete_date', null)
+
+      return NextResponse.json({ success: true, compliance_status: 'complete', compliance_complete_date: today })
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })

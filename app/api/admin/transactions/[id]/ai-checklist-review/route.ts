@@ -16,7 +16,7 @@ export async function POST(
   }
 
   try {
-    const { transaction, agents, checklist, checks, agent_billing, payout_brokerages } = await request.json()
+    const { transaction, agents, checklist, checks, agent_billing, payout_brokerages, mode } = await request.json()
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction data required' }, { status: 400 })
@@ -105,6 +105,65 @@ CHECKLIST ITEMS
 ---------------
 ${checklistItems || 'No checklist'}
 `
+
+    // Contact extraction mode — identify parties from transaction data
+    if (mode === 'extract_contacts') {
+      const contactPrompt = `You are reviewing a real estate transaction for Collective Realty Co. Extract all contact information visible in this data.
+
+TRANSACTION: ${transaction.property_address || 'N/A'} | Type: ${transaction.transaction_type || 'N/A'}
+AGENTS: ${(agents || []).map((a: any) => {
+  const u = a.user
+  const name = u ? `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim() : ''
+  return `${name} (${a.agent_role}, ${a.side || ''})`
+}).join(', ')}
+CHECKS FROM: ${(checks || []).map((c: any) => c.check_from).filter(Boolean).join(', ')}
+PROPERTY ADDRESS: ${transaction.property_address || 'N/A'}
+SALES PRICE: ${transaction.sales_price || 'N/A'}
+TITLE COMPANY: ${transaction.title_company || 'N/A'}
+
+Extract all non-agent parties you can identify. Return ONLY valid JSON, no markdown:
+{
+  "contacts": [
+    {
+      "contact_type": "<one of: buyer, seller, tenant, landlord, title_company, lender, attorney, inspector, appraiser, hoa, property_manager, coop_agent, other>",
+      "name": "<full name or company name>",
+      "email": "<email if visible, else null>",
+      "phone": "<phone if visible, else null>",
+      "company": "<company name if different from name, else null>",
+      "notes": "<any relevant notes, else null>"
+    }
+  ]
+}
+
+Rules:
+- Do not include CRC agents — only the other parties (buyers, sellers, title, lender, etc.)
+- The check payer is often the title company or the buyer — include them
+- Use null for any field not clearly visible
+- Return ONLY the JSON, no explanation`
+
+      const contactRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-5',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: contactPrompt }],
+        }),
+      })
+      const contactData = await contactRes.json()
+      const contactText = contactData.content?.[0]?.text?.trim() || '{}'
+      const contactClean = contactText.replace(/```json|```/g, '').trim()
+      try {
+        const parsed = JSON.parse(contactClean)
+        return NextResponse.json({ contacts: parsed.contacts || [] })
+      } catch {
+        return NextResponse.json({ contacts: [] })
+      }
+    }
 
     const prompt = `You are a transaction review assistant for Collective Realty Co., a real estate brokerage. You are helping the operations officer review this transaction before paying agents.
 
