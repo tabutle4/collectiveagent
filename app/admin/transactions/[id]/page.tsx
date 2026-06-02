@@ -925,12 +925,43 @@ function ComplianceDocumentsTab({
             </button>
           </div>
           <div className="space-y-1.5 mb-3">
-            {Object.entries(txFieldsPreview).map(([key, val]) => (
-              <div key={key} className="flex items-center gap-2 text-[11px]">
-                <span className="text-luxury-gray-3 w-32 shrink-0 capitalize">{key.replace(/_/g, ' ')}</span>
-                <span className="font-semibold text-luxury-gray-1">{String(val)}</span>
-              </div>
-            ))}
+            {(() => {
+              const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
+              const FIELD_LABELS: Record<string, string> = {
+                commission_amount: 'Commission Amount → Office Gross',
+                listing_price: 'Listing Price → Monthly Rent',
+                property_address: 'Property Address',
+                sales_price: 'Sales Price',
+                monthly_rent: 'Monthly Rent',
+                closing_date: 'Closing Date',
+                move_in_date: 'Move-In Date',
+                lease_term: 'Lease Term (months)',
+                title_company: 'Title Company',
+              }
+              const txnEntries = Object.entries(txFieldsPreview).filter(([k]) => !CONTACT_FIELDS.includes(k))
+              const contactEntries = Object.entries(txFieldsPreview).filter(([k]) => CONTACT_FIELDS.includes(k) && txFieldsPreview[k])
+              return (
+                <>
+                  {txnEntries.map(([key, val]) => (
+                    <div key={key} className="flex items-center gap-2 text-[11px]">
+                      <span className="text-luxury-gray-3 w-44 shrink-0">{FIELD_LABELS[key] || key.replace(/_/g, ' ')}</span>
+                      <span className="font-semibold text-luxury-gray-1">{String(val)}</span>
+                    </div>
+                  ))}
+                  {contactEntries.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-luxury-gray-5">
+                      <p className="text-[10px] text-luxury-gray-3 mb-1">Also found (save via Contacts tab):</p>
+                      {contactEntries.map(([k, v]) => (
+                        <div key={k} className="flex items-center gap-2 text-[11px]">
+                          <span className="text-luxury-gray-3 w-44 shrink-0 capitalize">{k.replace(/_/g, ' ')}</span>
+                          <span className="font-semibold text-luxury-gray-1">{String(v)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
           <div className="flex gap-2">
             <button
@@ -2377,6 +2408,7 @@ export default function AdminTransactionDetailPage() {
           checks: data.checks,
           agent_billing: [],
           payout_brokerages: payoutBrokerages,
+          existing_contacts: contacts,
           mode: 'extract_contacts',
         }),
       })
@@ -4458,7 +4490,16 @@ export default function AdminTransactionDetailPage() {
               transactionAddress={txn.property_address || ''}
               oneDriveFolderUrl={txn.onedrive_folder_url}
               onFillTransactionFields={async (fields) => {
-                await updateTransaction(fields)
+                // Map extracted fields to transaction columns, skip contact-type fields
+                const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
+                const txnFields: Record<string, any> = {}
+                for (const [k, v] of Object.entries(fields)) {
+                  if (CONTACT_FIELDS.includes(k)) continue
+                  if (k === 'commission_amount') { txnFields['office_gross'] = v }
+                  else if (k === 'listing_price') { txnFields['monthly_rent'] = v }
+                  else { txnFields[k] = v }
+                }
+                if (Object.keys(txnFields).length > 0) await updateTransaction(txnFields)
               }}
             />
           )}

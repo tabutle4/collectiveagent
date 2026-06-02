@@ -16,7 +16,7 @@ export async function POST(
   }
 
   try {
-    const { transaction, agents, checklist, checks, agent_billing, payout_brokerages, mode } = await request.json()
+    const { transaction, agents, checklist, checks, agent_billing, payout_brokerages, mode, existing_contacts: rawExistingContacts } = await request.json()
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction data required' }, { status: 400 })
@@ -108,6 +108,9 @@ ${checklistItems || 'No checklist'}
 
     // Contact extraction mode — identify parties from transaction data
     if (mode === 'extract_contacts') {
+      const existing_contacts: any[] = rawExistingContacts || []
+      const existingNames = existing_contacts.map((c: any) => c.name).filter(Boolean)
+
       const contactPrompt = `You are reviewing a real estate transaction for Collective Realty Co. Extract all contact information visible in this data.
 
 TRANSACTION: ${transaction.property_address || 'N/A'} | Type: ${transaction.transaction_type || 'N/A'}
@@ -118,8 +121,13 @@ AGENTS: ${(agents || []).map((a: any) => {
 }).join(', ')}
 CHECKS FROM: ${(checks || []).map((c: any) => c.check_from).filter(Boolean).join(', ')}
 PROPERTY ADDRESS: ${transaction.property_address || 'N/A'}
-SALES PRICE: ${transaction.sales_price || 'N/A'}
+SALES PRICE / RENT: ${transaction.sales_price || transaction.monthly_rent || 'N/A'}
 TITLE COMPANY: ${transaction.title_company || 'N/A'}
+SELLER/LANDLORD NAME: ${(transaction as any).seller_name || (transaction as any).landlord_name || 'N/A'}
+SELLER/LANDLORD EMAIL: ${(transaction as any).seller_email || (transaction as any).landlord_email || 'N/A'}
+BUYER/TENANT NAME: ${(transaction as any).buyer_name || (transaction as any).tenant_name || 'N/A'}
+BUYER/TENANT EMAIL: ${(transaction as any).buyer_email || (transaction as any).tenant_email || 'N/A'}
+EXISTING CONTACTS ALREADY SAVED (do not duplicate): ${existingNames.length > 0 ? existingNames.join(', ') : 'none'}
 
 Extract all non-agent parties you can identify. Return ONLY valid JSON, no markdown:
 {
@@ -136,8 +144,11 @@ Extract all non-agent parties you can identify. Return ONLY valid JSON, no markd
 }
 
 Rules:
-- Do not include CRC agents — only the other parties (buyers, sellers, title, lender, etc.)
+- Do not include CRC agents — only the other parties (buyers, sellers, tenants, landlords, title, lender, etc.)
+- Do not duplicate contacts already in EXISTING CONTACTS
 - The check payer is often the title company or the buyer — include them
+- If seller/landlord name or email is provided above, include them as a contact
+- If buyer/tenant name or email is provided above, include them as a contact
 - Use null for any field not clearly visible
 - Return ONLY the JSON, no explanation`
 

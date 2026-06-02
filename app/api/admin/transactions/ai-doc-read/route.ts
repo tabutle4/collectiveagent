@@ -81,7 +81,10 @@ export async function POST(request: NextRequest) {
     "tenant_name": "<tenant full name if visible, else null>",
     "payer_name": "<name or company paying the commission (title company, property management co, etc), else null>",
     "payer_email": "<payer email if visible, else null>",
-    "agent_name": "<agent name listed on the document if visible, else null>"
+    "agent_name": "<agent name listed on the document if visible, else null>",
+    "seller_name": "<seller or landlord full name(s) if visible, else null>",
+    "seller_email": "<seller or landlord email if visible, else null>",
+    "listing_price": <number or null - asking price or monthly rent from a listing agreement>
   },
   "page_contents": [
     {
@@ -101,7 +104,8 @@ Rules:
 - For transaction_fields numbers (sales_price, monthly_rent, lease_term, commission_amount): return as a number, not a string.
 - commission_amount: use the total balance due or invoice total — this is the amount CRC will receive.
 - payer_name: the "TO" or bill-to party on invoices; the title company on HUD/settlement statements.
-- Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date).
+- Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date), listing agreement (has listing_price as the asking price/rent, seller_name as the landlord/seller, seller_email, property_address, agent_name).
+- For listing agreements: seller_name = the landlord or seller party, listing_price = the asking monthly rent or sales price listed in the agreement.
 - page_contents: list every distinct document or form found in this file with its starting page number. For a single-page file return one entry. For a packet list each form separately. If page numbers cannot be determined return an empty array.${slotListText}`
 
     const messageContent: any[] = []
@@ -152,8 +156,8 @@ Rules:
     // Validate transaction_fields — only pass through fields that have values
     const rawFields = parsed.transaction_fields || {}
     const transaction_fields: Record<string, any> = {}
-    const stringFields = ['property_address', 'closing_date', 'move_in_date', 'title_company', 'tenant_name', 'payer_name', 'payer_email', 'agent_name']
-    const numberFields = ['sales_price', 'monthly_rent', 'lease_term', 'commission_amount']
+    const stringFields = ['property_address', 'closing_date', 'move_in_date', 'title_company', 'tenant_name', 'payer_name', 'payer_email', 'agent_name', 'seller_name', 'seller_email']
+    const numberFields = ['sales_price', 'monthly_rent', 'lease_term', 'commission_amount', 'listing_price']
     for (const f of stringFields) {
       if (rawFields[f] && typeof rawFields[f] === 'string') transaction_fields[f] = rawFields[f]
     }
