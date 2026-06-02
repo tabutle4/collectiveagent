@@ -61,7 +61,7 @@ export default function RecordingsPage() {
             value={notifyEmail}
             onChange={e => setNotifyEmail(e.target.value)}
             placeholder="email@collectiverealtyco.com"
-            className="flex-1 bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-2 text-luxury-black text-sm focus:outline-none focus:border-luxury-accent"
+            className="flex-1 bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-2 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
           />
           <button
             onClick={saveEmail}
