@@ -38,14 +38,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data: transaction, error: transactionError } = await supabase
-      .from('transactions')
+    // Check listings table first (coordination records point to listings), fall back to transactions
+    let transaction: any = null
+    const { data: listingRow } = await supabase
+      .from('listings')
       .select('*')
       .eq('id', coordination.listing_id)
       .single()
 
-    if (transactionError || !transaction) {
-      return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
+    if (listingRow) {
+      transaction = listingRow
+    } else {
+      const { data: txnRow, error: transactionError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', coordination.listing_id)
+        .single()
+
+      if (transactionError || !txnRow) {
+        return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
+      }
+      transaction = txnRow
     }
 
     const { data: reports } = await supabase
