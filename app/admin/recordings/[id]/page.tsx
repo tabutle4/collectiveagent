@@ -106,11 +106,11 @@ export default function RecordingDetailPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <button onClick={() => router.push('/admin/recordings')}
-        className="text-luxury-gray-3 text-sm mb-6 hover:text-luxury-white transition-colors">
+        className="text-luxury-gray-3 text-sm mb-6 hover:text-luxury-black transition-colors">
         Back to Recordings
       </button>
 
-      <h1 className="text-2xl font-semibold text-luxury-white mb-2">Review Recording</h1>
+      <h1 className="text-2xl font-semibold text-luxury-black mb-2">Review Recording</h1>
       <p className="text-luxury-gray-3 text-sm mb-8">
         Confirm the title and destination folder before uploading to SharePoint.
       </p>
@@ -118,7 +118,7 @@ export default function RecordingDetailPage() {
       <div className="space-y-6">
         <div className="bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg p-4">
           <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Original Zoom Title</p>
-          <p className="text-luxury-white">{job.meeting_title}</p>
+          <p className="text-luxury-black">{job.meeting_title}</p>
         </div>
 
         <div>
@@ -129,7 +129,7 @@ export default function RecordingDetailPage() {
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
-            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
+            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-black text-sm focus:outline-none focus:border-luxury-accent"
           />
           <p className="text-luxury-gray-3 text-xs mt-1">
             Format: Program Name - M-D-YY - Topic 1 - Topic 2 - Topic 3
@@ -143,7 +143,7 @@ export default function RecordingDetailPage() {
           <select
             value={folder}
             onChange={e => setFolder(e.target.value)}
-            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
+            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-black text-sm focus:outline-none focus:border-luxury-accent"
           >
             {SHAREPOINT_FOLDERS.map(f => (
               <option key={f} value={f}>{f}</option>

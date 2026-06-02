@@ -15,7 +15,7 @@ export default function RecordingsPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-semibold text-luxury-white mb-6">Zoom Recordings</h1>
+      <h1 className="page-title mb-6">Zoom Recordings</h1>
       {loading && <p className="text-luxury-gray-3">Loading...</p>}
       {!loading && jobs.length === 0 && (
         <p className="text-luxury-gray-3">No recordings yet. They will appear here after a Zoom session ends.</p>
