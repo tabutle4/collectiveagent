@@ -6,6 +6,7 @@ import { getGraphToken } from '@/lib/microsoft-graph'
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
 const VIDEOS_FOLDER = 'Videos'
 
+// Get SharePoint site drive ID (cached in memory per cold start)
 let cachedSiteId: string | null = null
 let cachedDriveId: string | null = null
 
@@ -31,6 +32,7 @@ async function getSiteDriveId(token: string): Promise<{ siteId: string; driveId:
   return { siteId: site.id, driveId: drive.id }
 }
 
+// Upload large file to SharePoint via resumable upload session
 async function uploadToSharePoint(
   token: string,
   driveId: string,
@@ -40,6 +42,7 @@ async function uploadToSharePoint(
 ): Promise<string> {
   const itemPath = `${VIDEOS_FOLDER}/${folderPath}/${fileName}`
 
+  // Create upload session
   const sessionRes = await fetch(
     `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
     {
@@ -63,6 +66,7 @@ async function uploadToSharePoint(
 
   const { uploadUrl } = await sessionRes.json()
 
+  // Upload in 5MB chunks
   const chunkSize = 5 * 1024 * 1024
   let offset = 0
   let webUrl = ''
@@ -94,8 +98,8 @@ async function uploadToSharePoint(
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission(req, 'can_manage_company_settings')
-  if (auth.error) return auth.error
+  const authError = await requirePermission(req, 'can_manage_recordings')
+  if (authError) return authError
 
   const { jobId, finalTitle, folder } = await req.json()
 
@@ -103,6 +107,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'jobId, finalTitle, and folder are required' }, { status: 400 })
   }
 
+  // Get the job
   const { data: job, error: fetchError } = await supabaseAdmin
     .from('zoom_recording_jobs')
     .select('*')
@@ -117,12 +122,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Already uploaded' }, { status: 409 })
   }
 
+  // Mark as processing
   await supabaseAdmin
     .from('zoom_recording_jobs')
     .update({ status: 'processing', final_title: finalTitle, final_folder: folder })
     .eq('id', jobId)
 
   try {
+    // Download MP4 from Zoom
     const zoomRes = await fetch(
       `${job.mp4_download_url}?access_token=${job.zoom_token}`
     )
@@ -130,12 +137,15 @@ export async function POST(req: NextRequest) {
 
     const arrayBuffer = await zoomRes.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
+
     const fileName = `${finalTitle}.mp4`
 
+    // Upload to SharePoint
     const token = await getGraphToken()
     const { driveId } = await getSiteDriveId(token)
     const webUrl = await uploadToSharePoint(token, driveId, folder, fileName, fileBuffer)
 
+    // Mark as uploaded
     await supabaseAdmin
       .from('zoom_recording_jobs')
       .update({

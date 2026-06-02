@@ -5,6 +5,7 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+// SharePoint folder names exactly as they exist in the Training Center site
 const SHAREPOINT_FOLDERS = [
   'Announcement Recordings',
   'Collective Access Division Coaching - Dallas',
@@ -26,6 +27,7 @@ const SHAREPOINT_FOLDERS = [
   'Title Company Guest Trainings',
 ]
 
+// Guess the best folder based on the Zoom meeting title
 function guessFolderFromTitle(title: string): string {
   const lower = title.toLowerCase()
   if (lower.includes('seasoned')) return 'Seasoned Agent Coaching Circle'
@@ -48,16 +50,19 @@ function guessFolderFromTitle(title: string): string {
   return 'Announcement Recordings'
 }
 
+// Format date as M-D-YY
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
   return `${d.getMonth() + 1}-${d.getDate()}-${String(d.getFullYear()).slice(2)}`
 }
 
+// Fetch .vtt transcript text from Zoom download URL
 async function fetchTranscript(downloadUrl: string, zoomToken: string): Promise<string> {
   try {
     const res = await fetch(`${downloadUrl}?access_token=${zoomToken}`)
     if (!res.ok) return ''
     const vtt = await res.text()
+    // Strip VTT formatting - extract just the spoken lines
     const lines = vtt.split('\n')
     const spoken: string[] = []
     for (const line of lines) {
@@ -72,12 +77,13 @@ async function fetchTranscript(downloadUrl: string, zoomToken: string): Promise<
         spoken.push(trimmed)
       }
     }
-    return spoken.join(' ').slice(0, 8000)
+    return spoken.join(' ').slice(0, 8000) // Cap at 8k chars for Claude
   } catch {
     return ''
   }
 }
 
+// Ask Claude to suggest topic tags
 async function suggestTopics(transcript: string, meetingTitle: string): Promise<string[]> {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -128,7 +134,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Verify Zoom signature
+  // Verify Zoom signature for all other events
   const signature = req.headers.get('x-zm-signature') || ''
   const timestamp = req.headers.get('x-zm-request-timestamp') || ''
   const message = `v0:${timestamp}:${body}`
@@ -147,6 +153,7 @@ export async function POST(req: NextRequest) {
   const startTime: string = recording.start_time
   const zoomToken: string = payload.download_token || ''
 
+  // Find the MP4 and VTT files
   const mp4File = recording.recording_files?.find(
     (f: any) => f.file_type === 'MP4' && f.recording_type === 'shared_screen_with_speaker_view'
   ) || recording.recording_files?.find((f: any) => f.file_type === 'MP4')
@@ -157,6 +164,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No MP4 found' }, { status: 400 })
   }
 
+  // Fetch transcript and get topic suggestions
   let transcript = ''
   if (vttFile?.download_url) {
     transcript = await fetchTranscript(vttFile.download_url, zoomToken)
@@ -165,9 +173,12 @@ export async function POST(req: NextRequest) {
   const suggestedTopics = await suggestTopics(transcript, meetingTitle)
   const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
+
+  // Build suggested title
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
   const suggestedTitle = `${meetingTitle} - ${dateStr}${topicStr}`
 
+  // Save to Supabase
   const { data: job, error } = await supabaseAdmin
     .from('zoom_recording_jobs')
     .insert({
@@ -188,27 +199,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DB error' }, { status: 500 })
   }
 
+  // Look up notification email from company_settings
+  const { data: settingsRow } = await supabaseAdmin
+    .from('company_settings')
+    .select('zoom_recording_notification_email')
+    .single()
+
+  const notifyEmail = settingsRow?.zoom_recording_notification_email || 'info@collectiverealtyco.com'
   const confirmUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/recordings/${job.id}`
 
   await resend.emails.send({
     from: 'Collective Agent <notifications@coachingbrokeragetools.com>',
-    to: 'tara@collectiverealtyco.com',
+    to: notifyEmail,
     subject: `New Recording Ready to Name: ${meetingTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
         <h2 style="color: #C5A278;">New Zoom Recording Ready</h2>
         <p>A new training recording is ready to be named and uploaded to SharePoint.</p>
+        
         <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
           <tr><td style="padding: 8px; font-weight: bold; color: #666;">Meeting</td><td style="padding: 8px;">${meetingTitle}</td></tr>
           <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold; color: #666;">Date</td><td style="padding: 8px;">${dateStr}</td></tr>
           <tr><td style="padding: 8px; font-weight: bold; color: #666;">Suggested Title</td><td style="padding: 8px;">${suggestedTitle}</td></tr>
           <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold; color: #666;">Suggested Folder</td><td style="padding: 8px;">${suggestedFolder}</td></tr>
         </table>
+
         <p style="margin-top: 24px;">
           <a href="${confirmUrl}" style="background: #C5A278; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
             Review &amp; Upload to SharePoint
           </a>
         </p>
+        
         <p style="color: #999; font-size: 12px; margin-top: 24px;">Collective Agent &mdash; Collective Realty Co.</p>
       </div>
     `,
