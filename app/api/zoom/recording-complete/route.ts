@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
+import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -208,31 +209,28 @@ export async function POST(req: NextRequest) {
   const notifyEmail = settingsRow?.zoom_recording_notification_email || 'info@collectiverealtyco.com'
   const confirmUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/recordings/${job.id}`
 
+  const notifyHtml = getEmailLayout(
+    `<p class="email-greeting">New Zoom recording ready for review.</p>
+    <div class="email-section">
+      <h3>Recording Details</h3>
+      <p><strong>Meeting:</strong> ${meetingTitle}</p>
+      <p><strong>Date:</strong> ${dateStr}</p>
+      <p><strong>Suggested Title:</strong> ${suggestedTitle}</p>
+      <p><strong>Suggested Folder:</strong> ${suggestedFolder}</p>
+    </div>
+    ${emailButton('Review & Upload to SharePoint', confirmUrl)}
+    ${emailSignature('Collective Agent', 'Automated Recording System')}`,
+    {
+      title: 'New Recording Ready',
+      preheader: `New recording: ${meetingTitle}`,
+    }
+  )
+
   await resend.emails.send({
-    from: 'Collective Agent <notifications@coachingbrokeragetools.com>',
+    from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
     to: notifyEmail,
     subject: `New Recording Ready to Name: ${meetingTitle}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
-        <h2 style="color: #C5A278;">New Zoom Recording Ready</h2>
-        <p>A new training recording is ready to be named and uploaded to SharePoint.</p>
-        
-        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-          <tr><td style="padding: 8px; font-weight: bold; color: #666;">Meeting</td><td style="padding: 8px;">${meetingTitle}</td></tr>
-          <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold; color: #666;">Date</td><td style="padding: 8px;">${dateStr}</td></tr>
-          <tr><td style="padding: 8px; font-weight: bold; color: #666;">Suggested Title</td><td style="padding: 8px;">${suggestedTitle}</td></tr>
-          <tr style="background: #f9f9f9;"><td style="padding: 8px; font-weight: bold; color: #666;">Suggested Folder</td><td style="padding: 8px;">${suggestedFolder}</td></tr>
-        </table>
-
-        <p style="margin-top: 24px;">
-          <a href="${confirmUrl}" style="background: #C5A278; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-            Review &amp; Upload to SharePoint
-          </a>
-        </p>
-        
-        <p style="color: #999; font-size: 12px; margin-top: 24px;">Collective Agent &mdash; Collective Realty Co.</p>
-      </div>
-    `,
+    html: notifyHtml,
   })
 
   return NextResponse.json({ ok: true, jobId: job.id })

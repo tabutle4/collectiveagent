@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { getGraphToken } from '@/lib/microsoft-graph'
+import { Resend } from 'resend'
+import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
 const VIDEOS_FOLDER = 'Videos'
@@ -98,8 +102,8 @@ async function uploadToSharePoint(
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requirePermission(req, 'can_manage_recordings')
-  if (auth.error) return auth.error
+  const authError = await requirePermission(req, 'can_manage_recordings')
+  if (authError) return authError
 
   const { jobId, finalTitle, folder } = await req.json()
 
@@ -154,6 +158,31 @@ export async function POST(req: NextRequest) {
         uploaded_at: new Date().toISOString(),
       })
       .eq('id', jobId)
+
+    // Send email to agents group
+    const emailHtml = getEmailLayout(
+      `<p class="email-greeting">Hi Team,</p>
+      <p style="margin-bottom:16px;">A new training recording is now available in the Training Center.</p>
+      <div class="email-section">
+        <h3>Recording Details</h3>
+        <p><strong>${finalTitle}</strong></p>
+        <p style="margin-top:8px;font-size:13px;color:#888;">SharePoint &mdash; ${folder}</p>
+      </div>
+      ${emailButton('Watch the Recording', webUrl || 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter')}
+      <p style="font-size:13px;color:#888;text-align:center;margin-top:8px;">The transcript will be available in SharePoint shortly after you open the video.</p>
+      ${emailSignature('Collective Realty Co.', 'Training &amp; Coaching Team')}`,
+      {
+        title: 'New Training Recording Available',
+        preheader: finalTitle,
+      }
+    )
+
+    await resend.emails.send({
+      from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
+      to: 'agents@collectiverealtyco.com',
+      subject: `New Recording: ${finalTitle}`,
+      html: emailHtml,
+    })
 
     return NextResponse.json({ ok: true, webUrl })
   } catch (err: any) {
