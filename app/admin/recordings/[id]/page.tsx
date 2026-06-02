@@ -259,23 +259,72 @@ export default function RecordingDetailPage() {
       <p className="text-luxury-gray-3 text-sm mb-8">Confirm the title and destination folder before uploading to SharePoint.</p>
 
       <div className="space-y-6">
-        <div className="container-card p-4">
-          <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Original Zoom Title</p>
-          <p className="text-luxury-gray-2">{job.meeting_title}</p>
+        <div className="container-card p-4 space-y-3">
+          {/* Meeting identity */}
+          <div>
+            <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Zoom Meeting Title</p>
+            <p className="text-luxury-gray-2">{job.meeting_title}</p>
+          </div>
+
+          {/* Time + duration */}
+          <div className="flex flex-wrap gap-4 pt-2 border-t border-luxury-dark-3">
+            {job.start_time && (
+              <div>
+                <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">Started</p>
+                <p className="text-luxury-white text-sm font-medium">
+                  {new Date(job.start_time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
+                </p>
+              </div>
+            )}
+            {job.duration && (
+              <div>
+                <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">Duration</p>
+                <p className="text-luxury-white text-sm font-medium">{job.duration} min</p>
+              </div>
+            )}
+            {job.file_size && (
+              <div>
+                <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">File Size</p>
+                <p className="text-luxury-white text-sm font-medium">{(job.file_size / 1024 / 1024).toFixed(0)} MB</p>
+              </div>
+            )}
+          </div>
+
+          {/* Fathom transcript status */}
+          <div className="pt-2 border-t border-luxury-dark-3">
+            <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Fathom Transcript</p>
+            {context?.fathomMeetings?.length > 0 ? (
+              <div className="space-y-1">
+                {context.fathomMeetings.map((m: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-green-400 text-xs">Ready</span>
+                    <span className="text-luxury-gray-3 text-xs">{m.durationMinutes} min</span>
+                    {m.speakers?.length > 0 && (
+                      <span className="text-luxury-gray-3 text-xs">- {m.speakers.slice(0, 3).join(', ')}</span>
+                    )}
+                    {m.shareUrl && (
+                      <a href={m.shareUrl} target="_blank" rel="noopener noreferrer" className="text-luxury-accent text-xs underline ml-auto">View in Fathom</a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : context !== null ? (
+              <p className="text-luxury-gray-3 text-xs">Not yet available. Fathom typically processes within 15-30 minutes of the meeting ending.</p>
+            ) : (
+              <p className="text-luxury-gray-3 text-xs">Loading...</p>
+            )}
+          </div>
+
+          {/* Calendar events */}
           {context?.calendarEvents?.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-luxury-dark-3">
-              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Scheduled Sessions This Day</p>
+            <div className="pt-2 border-t border-luxury-dark-3">
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Scheduled Programs This Day</p>
               {context.calendarEvents.map((e: any, i: number) => (
                 <p key={i} className="text-luxury-gray-3 text-xs">
                   {e.start?.dateTime?.slice(11, 16)} UTC - {e.subject}
-                  {e.hasGuest && <span className="ml-1 text-luxury-accent">[Guest presenter]</span>}
+                  {e.hasGuest && <span className="ml-1 text-luxury-accent">[Guest]</span>}
                 </p>
               ))}
-            </div>
-          )}
-          {context?.speakers?.length > 0 && (
-            <div className="mt-2">
-              <p className="text-luxury-gray-3 text-xs">Fathom speakers: {context.speakers.join(', ')}</p>
             </div>
           )}
         </div>
