@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const data = await fetchAllRows(
       'listing_coordination',
-      `*, listing:transactions(*)`,
+      `*`,
       {
         filters,
         orderBy: { column: 'created_at', ascending: false },
