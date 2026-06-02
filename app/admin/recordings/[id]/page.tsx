@@ -3,6 +3,20 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
+const PROGRAM_NAMES = [
+  'Industry Intelligence & Market Mastery Meeting',
+  'Next Level Lead Gen & Marketing Coaching',
+  'New Agent Coaching Circle',
+  'Convert & Close Coaching',
+  'Seasoned Agent Coaching Circle',
+  'Monthly Apartment Locator Q&A',
+  'Collective Access Division Coaching - Dallas',
+  'Collective Access Division Coaching - Houston',
+  'Monthly Lease Training',
+  'Navigating the Training Center, Coaching & Onboarding',
+  'Other',
+]
+
 const SHAREPOINT_FOLDERS = [
   'Announcement Recordings',
   'Collective Access Division Coaching - Dallas',
@@ -24,11 +38,23 @@ const SHAREPOINT_FOLDERS = [
   'Title Company Guest Trainings',
 ]
 
+function buildTitle(program: string, suggestedTitle: string): string {
+  if (!suggestedTitle) return ''
+  // Replace everything before the date with the selected program name
+  // Format: Program Name - M-D-YY - Topic 1 - Topic 2
+  const parts = suggestedTitle.split(' - ')
+  if (parts.length >= 2) {
+    return [program, ...parts.slice(1)].join(' - ')
+  }
+  return program
+}
+
 export default function RecordingDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [job, setJob] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [program, setProgram] = useState('')
   const [title, setTitle] = useState('')
   const [folder, setFolder] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -49,6 +75,13 @@ export default function RecordingDetailPage() {
         setLoading(false)
       })
   }, [id])
+
+  function handleProgramChange(p: string) {
+    setProgram(p)
+    if (p && job?.suggested_title) {
+      setTitle(buildTitle(p, job.suggested_title))
+    }
+  }
 
   async function handleConfirm() {
     setUploading(true)
@@ -87,7 +120,7 @@ export default function RecordingDetailPage() {
       <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">
         <p className="text-green-300 text-lg font-medium mb-2">Uploading to SharePoint</p>
         <p className="text-luxury-gray-3 text-sm mb-4">
-          The recording is being uploaded. This may take a few minutes depending on file size.
+          This may take a few minutes depending on file size.
         </p>
         {sharePointUrl && (
           <a href={sharePointUrl} target="_blank" rel="noopener noreferrer"
@@ -106,21 +139,42 @@ export default function RecordingDetailPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <button onClick={() => router.push('/admin/recordings')}
-        className="text-luxury-gray-3 text-sm mb-6 hover:text-luxury-black transition-colors">
+        className="text-luxury-gray-3 text-sm mb-6 hover:text-luxury-white transition-colors">
         Back to Recordings
       </button>
 
-      <h1 className="text-2xl font-semibold text-luxury-black mb-2">Review Recording</h1>
+      <h1 className="page-title mb-2">Review Recording</h1>
       <p className="text-luxury-gray-3 text-sm mb-8">
         Confirm the title and destination folder before uploading to SharePoint.
       </p>
 
       <div className="space-y-6">
-        <div className="bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg p-4">
+        <div className="container-card p-4">
           <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Original Zoom Title</p>
-          <p className="text-luxury-black">{job.meeting_title}</p>
+          <p className="text-luxury-gray-2">{job.meeting_title}</p>
         </div>
 
+        {/* Program name picker */}
+        <div>
+          <label className="block text-luxury-gray-2 text-sm font-medium mb-2">
+            Program Name
+          </label>
+          <select
+            value={program}
+            onChange={e => handleProgramChange(e.target.value)}
+            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
+          >
+            <option value="">Select a program...</option>
+            {PROGRAM_NAMES.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <p className="text-luxury-gray-3 text-xs mt-1">
+            Selecting a program will update the recording title below automatically.
+          </p>
+        </div>
+
+        {/* Editable title */}
         <div>
           <label className="block text-luxury-gray-2 text-sm font-medium mb-2">
             Recording Title
@@ -129,13 +183,14 @@ export default function RecordingDetailPage() {
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
-            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-black text-sm focus:outline-none focus:border-luxury-accent"
+            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
           />
           <p className="text-luxury-gray-3 text-xs mt-1">
             Format: Program Name - M-D-YY - Topic 1 - Topic 2 - Topic 3
           </p>
         </div>
 
+        {/* Folder picker */}
         <div>
           <label className="block text-luxury-gray-2 text-sm font-medium mb-2">
             SharePoint Folder
@@ -143,7 +198,7 @@ export default function RecordingDetailPage() {
           <select
             value={folder}
             onChange={e => setFolder(e.target.value)}
-            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-black text-sm focus:outline-none focus:border-luxury-accent"
+            className="w-full bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg px-4 py-3 text-luxury-white text-sm focus:outline-none focus:border-luxury-accent"
           >
             {SHAREPOINT_FOLDERS.map(f => (
               <option key={f} value={f}>{f}</option>
