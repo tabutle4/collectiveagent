@@ -55,7 +55,7 @@ export async function POST(
     // Primary agent email - prefer primary_agent, fall back to first agent
     const primaryAgent = agents?.find(a => a.agent_role === 'primary_agent') || agents?.[0]
     const agentUser = primaryAgent?.user as any
-    const toEmail = agentUser?.office_email || agentUser?.email || txn.transaction_email
+    const toEmail = agentUser?.office_email || agentUser?.email
 
     if (!toEmail) {
       return NextResponse.json({ error: 'No agent email found for this transaction' }, { status: 400 })
