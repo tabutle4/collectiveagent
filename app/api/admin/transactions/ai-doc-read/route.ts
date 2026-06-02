@@ -82,7 +82,14 @@ export async function POST(request: NextRequest) {
     "payer_name": "<name or company paying the commission (title company, property management co, etc), else null>",
     "payer_email": "<payer email if visible, else null>",
     "agent_name": "<agent name listed on the document if visible, else null>"
-  }
+  },
+  "page_contents": [
+    {
+      "page": <page number 1-indexed>,
+      "document_name": "<name of the document or form on this page, e.g. 'One to Four Family Residential Contract', 'IABS Notice', 'Third Party Financing Addendum', 'Seller Disclosure Notice'>",
+      "notes": "<1 sentence key detail, e.g. 'Signature page', 'Contains buyer financing terms', 'Unsigned'>"
+    }
+  ]
 }
 
 Rules:
@@ -94,7 +101,8 @@ Rules:
 - For transaction_fields numbers (sales_price, monthly_rent, lease_term, commission_amount): return as a number, not a string.
 - commission_amount: use the total balance due or invoice total — this is the amount CRC will receive.
 - payer_name: the "TO" or bill-to party on invoices; the title company on HUD/settlement statements.
-- Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date).${slotListText}`
+- Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date).
+- page_contents: list every distinct document or form found in this file with its starting page number. For a single-page file return one entry. For a packet list each form separately. If page numbers cannot be determined return an empty array.${slotListText}`
 
     const messageContent: any[] = []
     if (file.type === 'application/pdf') {
@@ -127,12 +135,19 @@ Rules:
     const text = data.content?.[0]?.text?.trim() || '{}'
     const clean = text.replace(/```json|```/g, '').trim()
 
-    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any> } = {}
+    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any>; page_contents?: any[] } = {}
     try { parsed = JSON.parse(clean) } catch { /* best-effort */ }
 
     // Validate suggested IDs against the real list to prevent hallucination
     const validIds = new Set(requiredDocsList.map(r => r.id))
     const suggested_slots = (parsed.matched_slot_ids || []).filter((sid: string) => validIds.has(sid))
+
+    // Validate page_contents
+    const page_contents = Array.isArray(parsed.page_contents)
+      ? parsed.page_contents
+          .filter((p: any) => p && typeof p.page === 'number' && p.document_name)
+          .map((p: any) => ({ page: p.page, document_name: String(p.document_name), notes: p.notes || null }))
+      : []
 
     // Validate transaction_fields — only pass through fields that have values
     const rawFields = parsed.transaction_fields || {}
@@ -150,6 +165,7 @@ Rules:
       summary: parsed.summary || null,
       suggested_slots,
       transaction_fields: Object.keys(transaction_fields).length > 0 ? transaction_fields : null,
+      page_contents,
     })
   } catch (err: any) {
     console.error('ai-doc-read error:', err)

@@ -306,11 +306,50 @@ export async function POST(
       return NextResponse.json({ success: true })
     }
 
-    // ── Assign: link a doc to a required_document slot (or unlink with null) ─
+    // ── Assign: link a doc to required_document slot(s).
+    // First slot updates the existing record. Additional slots create new sibling
+    // records pointing to the same file so each slot gets its own status.
     if (action === 'assign') {
       const { document_id, required_document_id } = body
       if (!document_id) return NextResponse.json({ error: 'document_id required' }, { status: 400 })
 
+      // Fetch the source doc to copy file details
+      const { data: sourceDoc } = await supabase
+        .from('transaction_documents')
+        .select('*')
+        .eq('id', document_id)
+        .eq('transaction_id', id)
+        .single()
+
+      if (!sourceDoc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+      // If source doc already has a required_document_id, create a new sibling record
+      // rather than overwriting the original slot assignment
+      if (sourceDoc.required_document_id && sourceDoc.required_document_id !== required_document_id) {
+        const { data: newDoc, error: insertError } = await supabase
+          .from('transaction_documents')
+          .insert({
+            transaction_id: id,
+            uploaded_by: sourceDoc.uploaded_by,
+            file_name: sourceDoc.file_name,
+            file_url: sourceDoc.file_url,
+            onedrive_file_url: sourceDoc.onedrive_file_url,
+            file_size: sourceDoc.file_size,
+            file_type: sourceDoc.file_type,
+            required_document_id: required_document_id || null,
+            compliance_status: 'pending',
+            compliance_notes: sourceDoc.compliance_notes || null,
+            version: sourceDoc.version || 1,
+          })
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+        await syncComplianceStatus(id)
+        return NextResponse.json({ doc: newDoc })
+      }
+
+      // Otherwise update the existing record's slot assignment
       const { data, error } = await supabase
         .from('transaction_documents')
         .update({
@@ -323,6 +362,7 @@ export async function POST(
         .single()
 
       if (error) throw error
+      await syncComplianceStatus(id)
       return NextResponse.json({ doc: data })
     }
 

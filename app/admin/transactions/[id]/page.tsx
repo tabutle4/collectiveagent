@@ -589,6 +589,8 @@ function ComplianceDocumentsTab({
   }
   const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [assigningDocId, setAssigningDocId] = useState<string | null>(null)
+  const [assignSelected, setAssignSelected] = useState<string[]>([])
   const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
   const [viewingDocId, setViewingDocId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
@@ -660,11 +662,19 @@ function ComplianceDocumentsTab({
     }
   }
 
-  const handleFileUpload = async (file: File, requiredDocId: string | null) => {
+  const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
+      // Prepend slot label to filename so OneDrive shows "Invoice - 2026-06-02.pdf"
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+      const date = new Date().toISOString().slice(0, 10)
+      const labelPart = slotName ? slotName.replace(/[/\\?%*:|"<>]/g, '-').trim() : null
+      const namedFile = labelPart
+        ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
+        : file
+
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', namedFile)
       fd.append('transaction_id', transactionId)
       const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
       const uploadData = await uploadRes.json()
@@ -676,12 +686,17 @@ function ComplianceDocumentsTab({
       let suggestedSlots: string[] = []
       try {
         const extractFd = new FormData()
-        extractFd.append('file', file)
+        extractFd.append('file', namedFile)
         extractFd.append('transaction_id', transactionId)
         const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
         if (extractRes.ok) {
           const extractData = await extractRes.json()
-          aiSummary = extractData.summary || null
+          const summary = extractData.summary || null
+          const pageContents = extractData.page_contents || []
+          // Store as JSON so both summary and page breakdown are preserved in compliance_notes
+          aiSummary = summary
+            ? JSON.stringify({ summary, page_contents: pageContents })
+            : null
           suggestedSlots = extractData.suggested_slots || []
           // If Claude found transaction fields in the doc, offer to fill them
           if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
@@ -697,7 +712,7 @@ function ComplianceDocumentsTab({
 
       for (const slotId of targetSlots) {
         await postAction('add_document', {
-          file_name: file.name,
+          file_name: namedFile.name,
           file_url: oneDriveUrl,
           onedrive_file_url: oneDriveUrl,
           file_size: file.size,
@@ -714,11 +729,18 @@ function ComplianceDocumentsTab({
     }
   }
 
-  const handleReplace = async (file: File, oldDocId: string, requiredDocId: string | null) => {
+  const handleReplace = async (file: File, oldDocId: string, requiredDocId: string | null, slotName?: string) => {
     setUploadingSlotId(oldDocId)
     try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+      const date = new Date().toISOString().slice(0, 10)
+      const labelPart = slotName ? slotName.replace(/[/\\?%*:|"<>]/g, '-').trim() : null
+      const namedFile = labelPart
+        ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
+        : file
+
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', namedFile)
       fd.append('transaction_id', transactionId)
       const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
       const uploadData = await uploadRes.json()
@@ -728,22 +750,26 @@ function ComplianceDocumentsTab({
       let aiSummary: string | null = null
       try {
         const extractFd = new FormData()
-        extractFd.append('file', file)
+        extractFd.append('file', namedFile)
         extractFd.append('transaction_id', transactionId)
         const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
         if (extractRes.ok) {
           const extractData = await extractRes.json()
-          aiSummary = extractData.summary || null
+          const summary = extractData.summary || null
+          const pageContents = extractData.page_contents || []
+          aiSummary = summary
+            ? JSON.stringify({ summary, page_contents: pageContents })
+            : null
         }
       } catch { /* best-effort */ }
 
       await postAction('replace', {
         old_document_id: oldDocId,
-        file_name: file.name,
+        file_name: namedFile.name,
         file_url: oneDriveUrl,
         onedrive_file_url: oneDriveUrl,
-        file_size: file.size,
-        file_type: file.type,
+        file_size: namedFile.size,
+        file_type: namedFile.type,
         required_document_id: requiredDocId || null,
         ai_summary: aiSummary,
       })
@@ -755,9 +781,11 @@ function ComplianceDocumentsTab({
     }
   }
 
-  const handleAssign = async (docId: string, requiredDocId: string | null) => {
+  const handleAssign = async (docId: string, requiredDocIds: string[]) => {
     try {
-      await postAction('assign', { document_id: docId, required_document_id: requiredDocId })
+      for (const slotId of requiredDocIds) {
+        await postAction('assign', { document_id: docId, required_document_id: slotId })
+      }
       await load()
     } catch (err: any) {
       setError(err.message)
@@ -1127,14 +1155,31 @@ function ComplianceDocumentsTab({
                         <p className="text-[10px] text-luxury-gray-3 mb-2">Uploaded by {fmtDocName(latest.uploader)}</p>
                       )}
                       {/* AI summary shown while pending */}
-                      {latest.compliance_status === 'pending' && latest.compliance_notes && (
-                        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
-                          <p className="font-semibold mb-1 flex items-center gap-1">
-                            <span className="text-sm leading-none">&#10024;</span> AI Read
-                          </p>
-                          <p className="whitespace-pre-wrap">{latest.compliance_notes}</p>
-                        </div>
-                      )}
+                      {latest.compliance_status === 'pending' && latest.compliance_notes && (() => {
+                        let parsed: { summary?: string; page_contents?: any[] } | null = null
+                        try { parsed = JSON.parse(latest.compliance_notes) } catch { /* plain text */ }
+                        const summaryText = parsed?.summary || latest.compliance_notes
+                        const pages = parsed?.page_contents || []
+                        return (
+                          <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
+                            <p className="font-semibold mb-1 flex items-center gap-1">
+                              <span className="text-sm leading-none">&#10024;</span> AI Read
+                            </p>
+                            <p className="whitespace-pre-wrap mb-1">{summaryText}</p>
+                            {pages.length > 0 && (
+                              <div className="mt-1.5 pt-1.5 border-t border-amber-200">
+                                <p className="font-semibold mb-1">Document contents:</p>
+                                {pages.map((p: any, i: number) => (
+                                  <div key={i} className="flex gap-1.5 mb-0.5">
+                                    <span className="shrink-0 text-amber-600 font-semibold w-12">p.{p.page}</span>
+                                    <span>{p.document_name}{p.notes ? ` — ${p.notes}` : ''}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                       {/* Rejection reason */}
                       {latest.compliance_status === 'rejected' && latest.compliance_notes && (
                         <div className="mb-2 p-2 bg-red-50 border border-red-100 rounded text-[11px] text-red-700">
@@ -1181,7 +1226,7 @@ function ComplianceDocumentsTab({
                             <Upload size={10} />
                             {uploadingSlotId === latest.id ? 'Uploading...' : 'Replace'}
                             <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                              onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], latest.id, rd.id)} />
+                              onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], latest.id, rd.id, rd.name)} />
                           </label>
                         </div>
                       )}
@@ -1191,7 +1236,7 @@ function ComplianceDocumentsTab({
                       <Upload size={11} />
                       {uploadingSlotId === rd.id ? 'Uploading...' : 'Upload document'}
                       <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                        onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], rd.id)} />
+                        onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], rd.id, rd.name)} />
                     </label>
                   )}
                 </div>
@@ -1259,16 +1304,52 @@ function ComplianceDocumentsTab({
                         {doc.compliance_notes && doc.compliance_status === 'rejected' && (
                           <p className="text-[10px] text-red-600 mt-0.5">{doc.compliance_notes}</p>
                         )}
-                        <select
-                          value=""
-                          onChange={e => e.target.value && handleAssign(doc.id, e.target.value === 'none' ? null : e.target.value)}
-                          className="mt-1.5 text-[10px] text-luxury-gray-3 border border-luxury-gray-5 rounded px-1.5 py-0.5 bg-white w-full"
-                        >
-                          <option value="">Assign to required slot...</option>
-                          {requiredDocs.map(rd => (
-                            <option key={rd.id} value={rd.id}>{rd.name}</option>
-                          ))}
-                        </select>
+                        {assigningDocId === doc.id ? (
+                          <div className="mt-1.5 border border-luxury-gray-5 rounded p-2 bg-luxury-light">
+                            <p className="text-[10px] text-luxury-gray-3 mb-1.5 font-semibold">Assign to slot(s):</p>
+                            <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
+                              {requiredDocs.map(rd => (
+                                <label key={rd.id} className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={assignSelected.includes(rd.id)}
+                                    onChange={e => setAssignSelected(prev =>
+                                      e.target.checked ? [...prev, rd.id] : prev.filter(id => id !== rd.id)
+                                    )}
+                                    className="accent-luxury-accent"
+                                  />
+                                  <span className="text-[10px] text-luxury-gray-1">{rd.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button
+                                disabled={assignSelected.length === 0 || !!actionLoading}
+                                onClick={async () => {
+                                  await handleAssign(doc.id, assignSelected)
+                                  setAssigningDocId(null)
+                                  setAssignSelected([])
+                                }}
+                                className="text-[10px] px-2 py-1 bg-luxury-accent text-white rounded disabled:opacity-50 hover:bg-luxury-accent/90"
+                              >
+                                Assign{assignSelected.length > 0 ? ` (${assignSelected.length})` : ''}
+                              </button>
+                              <button
+                                onClick={() => { setAssigningDocId(null); setAssignSelected([]) }}
+                                className="text-[10px] px-2 py-1 border border-luxury-gray-5 rounded text-luxury-gray-3 hover:bg-white"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setAssigningDocId(doc.id); setAssignSelected([]) }}
+                            className="mt-1.5 text-[10px] text-luxury-gray-3 border border-luxury-gray-5 rounded px-1.5 py-0.5 bg-white w-full text-left hover:border-luxury-accent hover:text-luxury-accent transition-colors"
+                          >
+                            Assign to required slot...
+                          </button>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         {statusBadge(doc.compliance_status)}
