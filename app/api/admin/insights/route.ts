@@ -67,7 +67,7 @@ async function getCalendarEvents(dateFrom: string, dateTo: string) {
 
 async function getZoomAttendance(dateFrom: string, dateTo: string) {
   try {
-    // Get recordings from Zoom for the date range
+    // Get OAuth token
     const tokenRes = await fetch(
       `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
       {
@@ -78,29 +78,44 @@ async function getZoomAttendance(dateFrom: string, dateTo: string) {
         },
       }
     )
-    if (!tokenRes.ok) return []
-    const { access_token } = await tokenRes.json()
+    if (!tokenRes.ok) {
+      console.error('Zoom token failed:', tokenRes.status, await tokenRes.text())
+      return []
+    }
+    const tokenData = await tokenRes.json()
+    const access_token = tokenData.access_token
+    if (!access_token) {
+      console.error('Zoom token missing:', JSON.stringify(tokenData))
+      return []
+    }
 
-    // List past meetings in range
+    // Use report API to list past meetings in date range
     const meetingsRes = await fetch(
-      `https://api.zoom.us/v2/users/${process.env.ZOOM_HOST_EMAIL}/recordings?from=${dateFrom}&to=${dateTo}&page_size=50`,
+      `https://api.zoom.us/v2/report/users/${process.env.ZOOM_HOST_EMAIL}/meetings?from=${dateFrom}&to=${dateTo}&page_size=50&type=past`,
       { headers: { Authorization: `Bearer ${access_token}` } }
     )
-    if (!meetingsRes.ok) return []
+    if (!meetingsRes.ok) {
+      console.error('Zoom meetings failed:', meetingsRes.status, await meetingsRes.text())
+      return []
+    }
     const meetingsData = await meetingsRes.json()
     const meetings = meetingsData.meetings || []
+    console.log(`Zoom: found ${meetings.length} meetings`)
 
     const attendance: any[] = []
-    for (const meeting of meetings.slice(0, 20)) {
+    for (const meeting of meetings.slice(0, 30)) {
       try {
         const partRes = await fetch(
-          `https://api.zoom.us/v2/report/meetings/${meeting.uuid}/participants?page_size=300`,
+          `https://api.zoom.us/v2/report/meetings/${meeting.id}/participants?page_size=300`,
           { headers: { Authorization: `Bearer ${access_token}` } }
         )
-        if (!partRes.ok) continue
+        if (!partRes.ok) {
+          console.error('Zoom participants failed:', meeting.id, partRes.status)
+          continue
+        }
         const partData = await partRes.json()
         attendance.push({
-          meetingId: meeting.uuid,
+          meetingId: meeting.id,
           topic: meeting.topic,
           startTime: meeting.start_time,
           duration: meeting.duration,
@@ -110,7 +125,10 @@ async function getZoomAttendance(dateFrom: string, dateTo: string) {
             duration: p.duration,
           })),
         })
-      } catch { continue }
+      } catch (e) {
+        console.error('Zoom participant fetch error:', e)
+        continue
+      }
     }
     return attendance
   } catch {
