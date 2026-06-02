@@ -17,15 +17,27 @@ async function getAgents() {
   return data || []
 }
 
+const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
+
 async function getTransactions(dateFrom: string, dateTo: string) {
-  const { data } = await supabaseAdmin
+  const { data: txns } = await supabaseAdmin
     .from('transactions')
-    .select('id, compliance_status, created_at, transaction_type, transaction_internal_agents(id, agent_id, agent_gross, amount_1099_reportable)')
-    .gte('created_at', dateFrom)
-    .lte('created_at', dateTo)
-    .order('created_at', { ascending: false })
-    .limit(500)
-  return data || []
+    .select('id, status, transaction_type, closing_date, sales_price, monthly_rent')
+    .eq('status', 'closed')
+    .gte('closing_date', dateFrom)
+    .lte('closing_date', dateTo)
+    .limit(1000)
+
+  if (!txns || txns.length === 0) return { txns: [], tiaRows: [] }
+
+  const txnIds = txns.map((t: any) => t.id)
+
+  const { data: tiaRows } = await supabaseAdmin
+    .from('transaction_internal_agents')
+    .select('transaction_id, agent_id, agent_role, agent_net, sales_volume')
+    .in('transaction_id', txnIds)
+
+  return { txns: txns || [], tiaRows: tiaRows || [] }
 }
 
 async function getFathomMeetings(dateFrom: string, dateTo: string) {
@@ -122,19 +134,17 @@ export async function GET(req: NextRequest) {
     getZoomAttendance(dateFrom, dateTo),
   ])
 
-  // Build agent production map
-  const agentProduction: Record<string, { closes: number; volume: number; agentGross: number }> = {}
-  for (const txn of transactions) {
-    const agentsInTxn = (txn as any).transaction_internal_agents || []
-    for (const ta of agentsInTxn) {
-      const id = ta.agent_id
-      if (!id) continue
-      if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentGross: 0 }
-      if ((txn as any).compliance_status === 'complete') {
-        agentProduction[id].closes++
-        agentProduction[id].agentGross += parseFloat(ta.agent_gross || 0)
-      }
-    }
+  // Build agent production map matching dashboard logic
+  const { txns: closedTxns, tiaRows } = transactions as any
+  const agentProduction: Record<string, { closes: number; volume: number; agentNet: number }> = {}
+  for (const ta of (tiaRows || [])) {
+    const id = ta.agent_id
+    if (!id) continue
+    if (!PRODUCTION_ROLES.includes(ta.agent_role)) continue
+    if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentNet: 0 }
+    agentProduction[id].closes++
+    agentProduction[id].agentNet += parseFloat(ta.agent_net || 0)
+    agentProduction[id].volume += parseFloat(ta.sales_volume || 0)
   }
 
   // Build attendance map from Zoom
@@ -175,7 +185,7 @@ export async function GET(req: NextRequest) {
       mlsChoice: agent.mls_choice,
       joinedAt: agent.created_at,
       closes: production.closes,
-      agentGross: Math.round(production.agentGross),
+      agentGross: Math.round(production.agentNet || 0),
       attendanceSessions: attendance.sessions,
       programsAttended: attendance.names,
       speakerEngagement: speakerCount,
@@ -185,7 +195,7 @@ export async function GET(req: NextRequest) {
   // Sort by closes desc for top producers
   const topProducers = [...scorecards]
     .filter(a => a.closes > 0)
-    .sort((a, b) => b.closes - a.closes)
+    .sort((a, b) => b.closes - a.closes || b.agentGross - a.agentGross)
     .slice(0, 10)
 
   // Most consistent attendees
@@ -219,7 +229,7 @@ export async function GET(req: NextRequest) {
     summary: {
       totalAgents: agents.length,
       totalSessions: calendarEvents.filter((e: any) => !e.subject?.toLowerCase().startsWith('guest')).length,
-      totalTransactions: transactions.length,
+      totalTransactions: (transactions as any).txns?.length || 0,
       fathomRecordings: fathomMeetings.length,
     },
     scorecards,

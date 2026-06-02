@@ -105,7 +105,7 @@ export default function InsightsPage() {
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="page-title mb-1">Business Insights</h1>
+          <h1 className="page-title mb-1">Coaching Insights</h1>
           <p className="text-luxury-gray-3 text-sm">Training, attendance, and agent performance analysis.</p>
         </div>
         <div className="flex items-center gap-3">
