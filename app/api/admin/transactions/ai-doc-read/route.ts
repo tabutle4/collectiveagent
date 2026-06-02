@@ -70,13 +70,18 @@ export async function POST(request: NextRequest) {
   "summary": "<3-5 sentence plain-English summary: what type of document, parties involved, key dates, dollar amounts or compensation terms, whether signatures are present>",
   "matched_slot_ids": ["<id from the slot list that this document satisfies>"],
   "transaction_fields": {
-    "property_address": "<full property address if visible, else null>",
+    "property_address": "<full property address including unit if visible, else null>",
     "sales_price": <number or null - contract/purchase price for sales transactions>,
     "closing_date": "<YYYY-MM-DD or null - scheduled closing date>",
     "monthly_rent": <number or null - monthly rent amount for lease transactions>,
     "lease_term": <number or null - lease term in months>,
     "move_in_date": "<YYYY-MM-DD or null - move-in or lease start date>",
-    "title_company": "<title company name if visible, else null>"
+    "title_company": "<title company name if visible, else null>",
+    "commission_amount": <number or null - total commission or invoice amount due to CRC>,
+    "tenant_name": "<tenant full name if visible, else null>",
+    "payer_name": "<name or company paying the commission (title company, property management co, etc), else null>",
+    "payer_email": "<payer email if visible, else null>",
+    "agent_name": "<agent name listed on the document if visible, else null>"
   }
 }
 
@@ -86,7 +91,10 @@ Rules:
 - Only include IDs from the provided slot list. If no slot matches, return an empty array.
 - Common patterns: a sales contract PDF often also contains the Third-Party Financing Addendum; an IABS form may be combined with Disclosure of Relationship.
 - transaction_fields: extract only values clearly visible in the document. Use null for anything not present or unclear. Do not guess.
-- For transaction_fields numbers (sales_price, monthly_rent, lease_term): return as a number, not a string.${slotListText}`
+- For transaction_fields numbers (sales_price, monthly_rent, lease_term, commission_amount): return as a number, not a string.
+- commission_amount: use the total balance due or invoice total — this is the amount CRC will receive.
+- payer_name: the "TO" or bill-to party on invoices; the title company on HUD/settlement statements.
+- Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date).${slotListText}`
 
     const messageContent: any[] = []
     if (file.type === 'application/pdf') {
@@ -129,8 +137,8 @@ Rules:
     // Validate transaction_fields — only pass through fields that have values
     const rawFields = parsed.transaction_fields || {}
     const transaction_fields: Record<string, any> = {}
-    const stringFields = ['property_address', 'closing_date', 'move_in_date', 'title_company']
-    const numberFields = ['sales_price', 'monthly_rent', 'lease_term']
+    const stringFields = ['property_address', 'closing_date', 'move_in_date', 'title_company', 'tenant_name', 'payer_name', 'payer_email', 'agent_name']
+    const numberFields = ['sales_price', 'monthly_rent', 'lease_term', 'commission_amount']
     for (const f of stringFields) {
       if (rawFields[f] && typeof rawFields[f] === 'string') transaction_fields[f] = rawFields[f]
     }
