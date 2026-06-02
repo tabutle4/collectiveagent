@@ -1973,6 +1973,7 @@ export default function AdminTransactionDetailPage() {
           checklist: data?.checklist,
           checks: data?.checks,
           agent_billing: data?.agent_billing,
+          payout_brokerages: payoutBrokerages,
         }),
       })
       const json = await res.json()
@@ -2198,6 +2199,7 @@ export default function AdminTransactionDetailPage() {
     if (a.payment_status === 'paid') {
       return s + baseNet
     }
+    // Committed staged records (status=paid, offset_transaction_id set)
     const stagedRows = ((a.billing?.staged as any[]) || []).filter(
       (r: any) => r.offset_transaction_agent_id === a.id
     )
@@ -2215,7 +2217,21 @@ export default function AdminTransactionDetailPage() {
           sum + (parseFloat(c.amount_owed ?? 0) - parseFloat(c.amount_remaining ?? 0)),
         0
       )
-    return s + (baseNet - stagedDebtAmt + stagedCreditAmt)
+    // UI-selected but not yet committed (billingApplied state from the billing panel)
+    // These are amounts the user has checked but not yet clicked Mark Paid for.
+    // Compare by ID so we only skip a UI-selected debt/credit if that specific
+    // record is already in billing.staged — not just because any staged record exists.
+    const uiSelected = billingApplied[a.id] || { debts: 0, credits: 0, debt_ids: [], credit_ids: [] }
+    const stagedDebtIds = new Set(stagedRows.filter((r: any) => r.record_type !== 'credit').map((r: any) => r.id))
+    const stagedCreditIds = new Set(stagedRows.filter((r: any) => r.record_type === 'credit').map((r: any) => r.id))
+    // Sum only the UI-selected debts whose IDs are NOT already committed
+    const uiDebtAmt = (a.billing?.debts || [])
+      .filter((d: any) => uiSelected.debt_ids.includes(d.id) && !stagedDebtIds.has(d.id))
+      .reduce((sum: number, d: any) => sum + parseFloat(d.amount_remaining ?? d.amount_owed ?? 0), 0)
+    const uiCreditAmt = (a.billing?.credits || [])
+      .filter((c: any) => uiSelected.credit_ids.includes(c.id) && !stagedCreditIds.has(c.id))
+      .reduce((sum: number, c: any) => sum + parseFloat(c.amount_remaining ?? c.amount_owed ?? 0), 0)
+    return s + (baseNet - stagedDebtAmt - uiDebtAmt + stagedCreditAmt + uiCreditAmt)
   }, 0)
   const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
   const payoutBalance = totalCheckAmount - totalBrokerageAmount - totalAgentNets - totalExternalCommissions - totalCheckPayouts

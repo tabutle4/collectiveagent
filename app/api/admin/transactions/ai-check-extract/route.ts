@@ -101,9 +101,27 @@ Rules:
   const clean = text.replace(/```json|```/g, '').trim()
   const parsed = JSON.parse(clean)
 
+  // Title-case helper: checks are often scanned and names come back ALL CAPS.
+  // Preserves known acronyms (LLC, DFW, CRC, HAR, MLS, HOA, INC, LLP, etc.)
+  const PRESERVE_UPPER = new Set([
+    'LLC', 'LLP', 'INC', 'PLLC', 'LP', 'PC',
+    'DFW', 'HOU', 'HAR', 'MLS', 'CRC', 'HOA',
+    'NA', 'N/A', 'ACH', 'USA', 'US',
+  ])
+  const toTitleCase = (str: string | null): string | null => {
+    if (!str) return null
+    return str
+      .toLowerCase()
+      .replace(/\b\w+/g, word => {
+        const upper = word.toUpperCase()
+        return PRESERVE_UPPER.has(upper) ? upper : word.charAt(0).toUpperCase() + word.slice(1)
+      })
+      .trim()
+  }
+
   return {
     check_amount: typeof parsed.check_amount === 'number' ? parsed.check_amount : null,
-    check_from: parsed.check_from || null,
+    check_from: toTitleCase(parsed.check_from),
     check_number: parsed.check_number ? String(parsed.check_number) : null,
     check_date: parsed.check_date || null,
     cleared_date: parsed.cleared_date || null,

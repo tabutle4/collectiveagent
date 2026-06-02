@@ -16,7 +16,7 @@ export async function POST(
   }
 
   try {
-    const { transaction, agents, checklist, checks, agent_billing } = await request.json()
+    const { transaction, agents, checklist, checks, agent_billing, payout_brokerages } = await request.json()
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction data required' }, { status: 400 })
@@ -66,6 +66,10 @@ Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})
       return `- [${item.completion ? 'DONE' : 'PENDING'}] ${item.label}${item.description ? ': ' + item.description : ''}`
     }).join('\n')
 
+    const externalAgentSummary = (payout_brokerages || []).map((b: any) =>
+      `${b.brokerage_name} (${(b.brokerage_role || '').replace(/_/g, ' ')}): $${b.commission_amount || 0} - ${b.payment_status || 'pending'}`
+    ).join('\n') || 'None'
+
     const context = `
 TRANSACTION SUMMARY
 -------------------
@@ -83,6 +87,11 @@ AGENTS ON TRANSACTION
 ---------------------
 ${agentSummaries || 'No agents'}
 
+EXTERNAL AGENTS TO PAY (co-op brokerages or referral agents on the other side)
+-----------------------------------------------------
+${externalAgentSummary}
+Note: "Pay Other Agent" means paying a co-op brokerage or referral agent on the OPPOSITE side of this deal (not one of CRC's own agents). If there are external agents listed above, their commission must be paid before or at closing.
+
 CHECKS RECEIVED
 ---------------
 ${checkSummary || 'No checks recorded'}
@@ -95,6 +104,14 @@ ${checklistItems || 'No checklist'}
     const prompt = `You are a transaction review assistant for Collective Realty Co., a real estate brokerage. You are helping the operations officer review this transaction before paying agents.
 
 ${context}
+
+Checklist item definitions for context:
+- "Pay Other Agent" = pay a co-op brokerage or external referral agent on the other side of the deal (NOT CRC agents). Check if any external agents/brokerages are listed under EXTERNAL AGENTS TO PAY.
+- "Deposit Check" = verify a check has been received and deposited from the client/title company.
+- "Update Transaction" = ensure all transaction fields (status, dates, amounts) are accurate.
+- "Commission Plan" = verify the commission plan and split % are correct for each agent.
+- "Review Agent Account" = check for outstanding debts or credits that should be applied.
+- "Transfer Brokerage Split" = confirm the CRC brokerage portion was transferred to the CRC account.
 
 Review each PENDING checklist item based on the transaction data above. For each item, tell me:
 1. What you can confirm looks good (based on the data)
