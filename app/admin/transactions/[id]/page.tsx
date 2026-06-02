@@ -484,10 +484,12 @@ function ComplianceDocumentsTab({
   transactionId,
   transactionAddress,
   oneDriveFolderUrl,
+  onFillTransactionFields,
 }: {
   transactionId: string
   transactionAddress: string
   oneDriveFolderUrl?: string | null
+  onFillTransactionFields?: (fields: Record<string, any>) => void
 }) {
   const [docsData, setDocsData] = useState<{
     required_docs: any[]
@@ -501,6 +503,8 @@ function ComplianceDocumentsTab({
   const [sendResult, setSendResult] = useState<string | null>(null)
   const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
+  const [applyingFields, setApplyingFields] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -592,6 +596,10 @@ function ComplianceDocumentsTab({
           const extractData = await extractRes.json()
           aiSummary = extractData.summary || null
           suggestedSlots = extractData.suggested_slots || []
+          // If Claude found transaction fields in the doc, offer to fill them
+          if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
+            setTxFieldsPreview(extractData.transaction_fields)
+          }
         }
       } catch { /* best-effort */ }
 
@@ -781,6 +789,58 @@ function ComplianceDocumentsTab({
         <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
           <CheckCircle size={13} className="text-green-600 shrink-0" />
           <p className="text-xs text-green-700">{sendResult}</p>
+        </div>
+      )}
+
+      {/* Transaction fields extracted from contract — offer to fill */}
+      {txFieldsPreview && (
+        <div className="container-card border border-luxury-accent/30 bg-amber-50">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p className="text-xs font-semibold text-luxury-gray-1 flex items-center gap-1.5">
+                <span className="text-base leading-none">&#10024;</span>
+                Claude found transaction details in this document
+              </p>
+              <p className="text-[11px] text-luxury-gray-3 mt-0.5">
+                Review the fields below before applying. Nothing is saved until you confirm.
+              </p>
+            </div>
+            <button onClick={() => setTxFieldsPreview(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1 shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="space-y-1.5 mb-3">
+            {Object.entries(txFieldsPreview).map(([key, val]) => (
+              <div key={key} className="flex items-center gap-2 text-[11px]">
+                <span className="text-luxury-gray-3 w-32 shrink-0 capitalize">{key.replace(/_/g, ' ')}</span>
+                <span className="font-semibold text-luxury-gray-1">{String(val)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                if (!onFillTransactionFields) return
+                setApplyingFields(true)
+                try {
+                  await onFillTransactionFields(txFieldsPreview)
+                  setTxFieldsPreview(null)
+                } finally {
+                  setApplyingFields(false)
+                }
+              }}
+              disabled={applyingFields || !onFillTransactionFields}
+              className="text-[11px] font-semibold px-3 py-1.5 bg-luxury-accent text-white rounded hover:bg-luxury-accent/90 disabled:opacity-50"
+            >
+              {applyingFields ? 'Applying...' : 'Apply to Transaction'}
+            </button>
+            <button
+              onClick={() => setTxFieldsPreview(null)}
+              className="text-[11px] px-3 py-1.5 border border-luxury-gray-5 rounded text-luxury-gray-3 hover:bg-luxury-light"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -2234,6 +2294,29 @@ export default function AdminTransactionDetailPage() {
     return s + (baseNet - stagedDebtAmt - uiDebtAmt + stagedCreditAmt + uiCreditAmt)
   }, 0)
   const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
+
+  // Commission math check: fires when any check has a cleared_date set
+  // Compares total checks received vs office gross vs sum of agent nets
+  const clearedChecks = checks.filter((c: any) => c.cleared_date)
+  const clearedCheckTotal = clearedChecks.reduce((s: number, c: any) => s + parseFloat(c.check_amount || 0), 0)
+  const officeGross = parseFloat(txn.office_gross || 0)
+  const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
+  const MATH_TOLERANCE = 1.00 // $1 rounding tolerance
+  const commissionMathFlags: string[] = []
+  if (clearedChecks.length > 0) {
+    if (Math.abs(clearedCheckTotal - officeGross) > MATH_TOLERANCE) {
+      commissionMathFlags.push(
+        `Cleared check total ($${clearedCheckTotal.toFixed(2)}) does not match Office Gross ($${officeGross.toFixed(2)})`
+      )
+    }
+    const expectedPayout = officeGross
+    const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn.office_net || 0)
+    if (Math.abs(expectedPayout - actualPayout) > MATH_TOLERANCE) {
+      commissionMathFlags.push(
+        `Commission split does not add up: Agent Nets + External + Office Net ($${actualPayout.toFixed(2)}) vs Office Gross ($${officeGross.toFixed(2)})`
+      )
+    }
+  }
   const payoutBalance = totalCheckAmount - totalBrokerageAmount - totalAgentNets - totalExternalCommissions - totalCheckPayouts
 
   const completedCount = checklist.filter((i: any) => i.completion).length
@@ -3541,6 +3624,18 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     </div>
 
+                    {/* Commission math warning — auto-fires when a check clears */}
+                    {commissionMathFlags.length > 0 && (
+                      <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-[11px] font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
+                          <AlertCircle size={12} /> Commission Math
+                        </p>
+                        {commissionMathFlags.map((flag, i) => (
+                          <p key={i} className="text-[11px] text-amber-700">{flag}</p>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Summary row */}
                     <div className="inner-card flex justify-between items-center mb-3">
                       <span className="text-xs text-luxury-gray-3">Total Check Amount ({checks.length} check{checks.length !== 1 ? 's' : ''})</span>
@@ -4055,6 +4150,9 @@ export default function AdminTransactionDetailPage() {
               transactionId={id}
               transactionAddress={txn.property_address || ''}
               oneDriveFolderUrl={txn.onedrive_folder_url}
+              onFillTransactionFields={async (fields) => {
+                await updateTransaction(fields)
+              }}
             />
           )}
         </div>

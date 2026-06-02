@@ -44,10 +44,15 @@ export async function POST(
       const licenseExpired = expDate ? expDate < today : false
       const licenseExpiringSoon = expDate ? (expDate.getTime() - today.getTime()) < 60 * 24 * 60 * 60 * 1000 : false // 60 days
 
+      const basisPct = a.split_percentage || a.basis_percentage || null
+      const agentBasis = parseFloat(a.agent_basis || 0)
+      const brokerageSplit = parseFloat(a.brokerage_split || 0)
       return `
 Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})
   Commission Plan: ${plan}
-  Agent Gross: $${a.agent_gross || 0} | Agent Net: $${a.agent_net || 0} | Payment: ${a.payment_status || 'pending'}
+  Agent Basis (commission earned): $${agentBasis}
+  Agent Split %: ${basisPct != null ? basisPct + '%' : 'see plan'}
+  Agent Gross: $${a.agent_gross || 0} | Brokerage Split: $${brokerageSplit} | Agent Net: $${a.agent_net || 0} | Payment: ${a.payment_status || 'pending'}
   Processing Fee: $${a.processing_fee || 0} | Coaching Fee: $${a.coaching_fee || 0}
   BTSA: $${a.btsa_amount || 0}
   Team Lead Commission: $${a.team_lead_commission || 0}
@@ -107,16 +112,24 @@ ${context}
 
 Checklist item definitions for context:
 - "Pay Other Agent" = pay a co-op brokerage or external referral agent on the other side of the deal (NOT CRC agents). Check if any external agents/brokerages are listed under EXTERNAL AGENTS TO PAY.
-- "Deposit Check" = verify a check has been received and deposited from the client/title company.
+- "Deposit Check" = verify a check has been received and deposited from the client/title company. Amount should match Office Gross.
 - "Update Transaction" = ensure all transaction fields (status, dates, amounts) are accurate.
 - "Commission Plan" = verify the commission plan and split % are correct for each agent.
 - "Review Agent Account" = check for outstanding debts or credits that should be applied.
 - "Transfer Brokerage Split" = confirm the CRC brokerage portion was transferred to the CRC account.
 
+Document cross-checks to perform (flag anything that does not match):
+- CONTRACT (sales or lease): The sales_price or monthly_rent in the transaction must match what the contract says. If a check was received, the check amount should match or be explained.
+- LEASE AGREEMENT: monthly_rent × lease_term should equal sales_volume. If they differ, flag it.
+- ABB (Buyer Representation Agreement): The agent's commission basis % (Agent Split %) represents what was agreed in the ABB. If an agent's agent_gross is less than expected given the sales price and their split %, flag the discrepancy.
+- LISTING AGREEMENT: For listing-side agents, verify brokerage_split is consistent with the listing agreement commission rate (typically a % of sales price). If office_gross seems low relative to sales price, flag it.
+- REP AGREEMENT: Any agent marked as buyer or listing agent should have a commission plan that is consistent with their representation agreement. Flag if commission plan is missing or set to an unexpected value.
+- All documents: If the transaction has no checks and is marked compliance-complete, flag it as unusual.
+
 Review each PENDING checklist item based on the transaction data above. For each item, tell me:
 1. What you can confirm looks good (based on the data)
 2. What is missing or needs attention
-3. Any red flags you notice
+3. Any red flags or mismatches between the numbers
 
 Return ONLY valid JSON in this exact format (no markdown, no extra text):
 {
