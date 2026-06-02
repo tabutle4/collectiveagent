@@ -2299,18 +2299,18 @@ export default function AdminTransactionDetailPage() {
   // Compares total checks received vs office gross vs sum of agent nets
   const clearedChecks = checks.filter((c: any) => c.cleared_date)
   const clearedCheckTotal = clearedChecks.reduce((s: number, c: any) => s + parseFloat(c.check_amount || 0), 0)
-  const officeGross = parseFloat(txn.office_gross || 0)
+  const officeGross = parseFloat(txn?.office_gross || 0)
   const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
   const MATH_TOLERANCE = 1.00 // $1 rounding tolerance
   const commissionMathFlags: string[] = []
-  if (clearedChecks.length > 0) {
+  if (txn && clearedChecks.length > 0) {
     if (Math.abs(clearedCheckTotal - officeGross) > MATH_TOLERANCE) {
       commissionMathFlags.push(
         `Cleared check total ($${clearedCheckTotal.toFixed(2)}) does not match Office Gross ($${officeGross.toFixed(2)})`
       )
     }
     const expectedPayout = officeGross
-    const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn.office_net || 0)
+    const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn?.office_net || 0)
     if (Math.abs(expectedPayout - actualPayout) > MATH_TOLERANCE) {
       commissionMathFlags.push(
         `Commission split does not add up: Agent Nets + External + Office Net ($${actualPayout.toFixed(2)}) vs Office Gross ($${officeGross.toFixed(2)})`
