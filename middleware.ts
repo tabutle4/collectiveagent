@@ -37,6 +37,7 @@ const PUBLIC_PATHS = [
   '/onboard',
   '/api/headshot-square',
   '/api/zoom/recording-complete',
+  '/api/transactions/email-inbound',
 ]
 
 // Paths accessible to all authenticated users regardless of role

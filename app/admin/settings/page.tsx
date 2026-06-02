@@ -376,6 +376,16 @@ export default function SettingsPage() {
                   <ChevronRight size={16} className="ml-auto" />
                 </Link>
               )}
+              {hasPermission('can_manage_required_documents') && (
+                <Link
+                  href="/admin/settings/required-documents"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded text-sm text-left transition-colors text-luxury-gray-2 hover:bg-luxury-gray-6"
+                >
+                  <Settings2 size={18} />
+                  <span>Required Documents</span>
+                  <ChevronRight size={16} className="ml-auto" />
+                </Link>
+              )}
             </div>
           </div>
 

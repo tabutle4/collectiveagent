@@ -24,6 +24,8 @@ import {
   Edit,
   Plus,
   Pencil,
+  Upload,
+  CheckCircle,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
@@ -461,6 +463,444 @@ function CheckImageUpload({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 type NavTab = 'overview' | 'commissions' | 'check_payouts' | 'contacts' | 'documents'
+
+// ─── Compliance Documents Tab ─────────────────────────────────────────────────
+
+function ComplianceDocumentsTab({
+  transactionId,
+  transactionAddress,
+  oneDriveFolderUrl,
+}: {
+  transactionId: string
+  transactionAddress: string
+  oneDriveFolderUrl?: string | null
+}) {
+  const [docsData, setDocsData] = useState<{
+    required_docs: any[]
+    uploaded_docs: any[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<string | null>(null)
+  const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/documents`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setDocsData(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [transactionId])
+
+  const postAction = async (action: string, extra: Record<string, any> = {}) => {
+    const res = await fetch(`/api/admin/transactions/${transactionId}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...extra }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+    return data
+  }
+
+  const handleApprove = async (docId: string) => {
+    setActionLoading(docId + '_approve')
+    try {
+      await postAction('approve', { document_id: docId })
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleReject = async (docId: string) => {
+    if (!rejectReason.trim()) { setError('Please enter a rejection reason'); return }
+    setActionLoading(docId + '_reject')
+    try {
+      await postAction('reject', { document_id: docId, compliance_notes: rejectReason })
+      setRejectingId(null)
+      setRejectReason('')
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleReset = async (docId: string) => {
+    setActionLoading(docId + '_reset')
+    try {
+      await postAction('reset', { document_id: docId })
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleFileUpload = async (file: File, requiredDocId: string | null) => {
+    setUploadingSlotId(requiredDocId || 'unlinked')
+    try {
+      // Step 1: Upload to OneDrive via existing route
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('transaction_id', transactionId)
+      const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
+      const oneDriveUrl = uploadData.url
+
+      // Step 2: AI doc read (best-effort, never blocks upload)
+      let aiSummary: string | null = null
+      try {
+        const extractFd = new FormData()
+        extractFd.append('file', file)
+        const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
+        if (extractRes.ok) {
+          const extractData = await extractRes.json()
+          aiSummary = extractData.summary || null
+        }
+      } catch { /* best-effort */ }
+
+      // Step 3: Record in DB
+      await postAction('add_document', {
+        file_name: file.name,
+        file_url: oneDriveUrl,
+        onedrive_file_url: oneDriveUrl,
+        file_size: file.size,
+        file_type: file.type,
+        required_document_id: requiredDocId || null,
+        ai_summary: aiSummary,
+      })
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUploadingSlotId(null)
+    }
+  }
+
+  const sendComplianceEmail = async () => {
+    const reviewed = docsData?.uploaded_docs.filter(
+      d => d.compliance_status === 'approved' || d.compliance_status === 'rejected'
+    )
+    if (!reviewed?.length) {
+      setError('Approve or reject at least one document before sending the review email.')
+      return
+    }
+    setSending(true)
+    setSendResult(null)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/compliance-review`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setSendResult(`Email sent to ${data.sent_to}. ${data.approved_count} approved, ${data.rejected_count} rejected.`)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <h1 className="page-title">DOCUMENTS</h1>
+        <p className="text-xs text-luxury-gray-3">Loading...</p>
+      </div>
+    )
+  }
+
+  const requiredDocs = docsData?.required_docs || []
+  const uploadedDocs = docsData?.uploaded_docs || []
+  const approvedCount = uploadedDocs.filter(d => d.compliance_status === 'approved').length
+  const rejectedCount = uploadedDocs.filter(d => d.compliance_status === 'rejected').length
+  const pendingCount = uploadedDocs.filter(d => d.compliance_status === 'pending').length
+
+  const statusBadge = (status: string) => {
+    if (status === 'approved') return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+        <Check size={9} /> Approved
+      </span>
+    )
+    if (status === 'rejected') return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+        <X size={9} /> Rejected
+      </span>
+    )
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+        Pending
+      </span>
+    )
+  }
+
+  const fmtDocName = (u: any) => {
+    if (!u) return ''
+    return `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim()
+  }
+
+  return (
+    <div className="space-y-4">
+      <h1 className="page-title">DOCUMENTS</h1>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+          <AlertCircle size={13} className="text-red-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-red-700 flex-1">{error}</p>
+          <button onClick={() => setError(null)}><X size={11} className="text-red-400" /></button>
+        </div>
+      )}
+
+      {sendResult && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+          <CheckCircle size={13} className="text-green-600 shrink-0" />
+          <p className="text-xs text-green-700">{sendResult}</p>
+        </div>
+      )}
+
+      {oneDriveFolderUrl && (
+        <div className="container-card py-2.5">
+          <a href={oneDriveFolderUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 text-luxury-accent hover:underline text-xs">
+            <ExternalLink size={12} /> Open OneDrive Folder
+          </a>
+        </div>
+      )}
+
+      {/* How agents submit docs */}
+      <div className="container-card">
+        <p className="section-title mb-3">How to Submit Documents</p>
+        <div className="space-y-3">
+          <div className="p-3 bg-luxury-light rounded-lg border border-luxury-gray-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail size={12} className="text-luxury-accent shrink-0" />
+              <p className="text-xs font-semibold text-luxury-gray-1">Email Documents</p>
+            </div>
+            <p className="text-[11px] text-luxury-gray-3 mb-2">
+              Email docs as attachments, or paste Dotloop/ZipForms share links in the body.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="text-[11px] bg-white border border-luxury-gray-5 px-2 py-1 rounded font-mono text-luxury-gray-1 flex-1 truncate">
+                txndoc+{transactionId}@coachingbrokeragetools.com
+              </code>
+              <button
+                onClick={() => navigator.clipboard.writeText(`txndoc+${transactionId}@coachingbrokeragetools.com`)}
+                className="text-[10px] text-luxury-accent hover:underline shrink-0"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+          <div className="p-3 bg-luxury-light rounded-lg border border-luxury-gray-5">
+            <div className="flex items-center gap-2 mb-1">
+              <ExternalLink size={12} className="text-luxury-accent shrink-0" />
+              <p className="text-xs font-semibold text-luxury-gray-1">Share from Dotloop or ZipForms</p>
+            </div>
+            <p className="text-[11px] text-luxury-gray-3">
+              In Dotloop: open the document, click Share, copy the link. In ZipForms: open the form, click Share or Email, copy the link. Paste the link in an email to the address above and it will appear here automatically.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Compliance review controls */}
+      <div className="container-card">
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-title">Compliance Review</p>
+          <div className="flex items-center gap-3 text-[10px]">
+            {approvedCount > 0 && <span className="text-green-700 font-semibold">{approvedCount} approved</span>}
+            {rejectedCount > 0 && <span className="text-red-700 font-semibold">{rejectedCount} rejected</span>}
+            {pendingCount > 0 && <span className="text-amber-700 font-semibold">{pendingCount} pending</span>}
+          </div>
+        </div>
+        <button
+          onClick={sendComplianceEmail}
+          disabled={sending || uploadedDocs.filter(d => d.compliance_status !== 'pending').length === 0}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-luxury-accent text-white text-xs font-semibold hover:bg-luxury-accent/90 transition-colors disabled:opacity-50 mb-3"
+        >
+          <Send size={13} />
+          {sending ? 'Sending...' : 'Send Compliance Review Email'}
+        </button>
+        <p className="text-[10px] text-luxury-gray-3 text-center">
+          Sends approved and rejected docs to the agent. Always shows as from Leah Parpan.
+        </p>
+      </div>
+
+      {/* Required document slots */}
+      {requiredDocs.length > 0 && (
+        <div className="container-card">
+          <p className="section-title mb-3">Required Documents</p>
+          <div className="space-y-3">
+            {requiredDocs.map(rd => {
+              const linked = uploadedDocs.filter(d => d.required_document_id === rd.id)
+              const latest = linked[0]
+              return (
+                <div key={rd.id} className="border border-luxury-gray-5 rounded-lg p-3">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-xs font-semibold text-luxury-gray-1">{rd.name}</p>
+                      {rd.description && <p className="text-[10px] text-luxury-gray-3 mt-0.5">{rd.description}</p>}
+                      {!rd.is_required && <span className="text-[10px] text-luxury-gray-4 italic">optional</span>}
+                    </div>
+                    {latest && statusBadge(latest.compliance_status)}
+                  </div>
+
+                  {latest ? (
+                    <div>
+                      <a href={latest.onedrive_file_url || latest.file_url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-[11px] text-luxury-accent hover:underline mb-2">
+                        <FileText size={11} /> {latest.file_name}
+                      </a>
+                      {latest.uploader && (
+                        <p className="text-[10px] text-luxury-gray-3 mb-2">Uploaded by {fmtDocName(latest.uploader)}</p>
+                      )}
+                      {/* AI summary shown while pending */}
+                      {latest.compliance_status === 'pending' && latest.compliance_notes && (
+                        <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
+                          <p className="font-semibold mb-1 flex items-center gap-1">
+                            <span className="text-sm leading-none">&#10024;</span> AI Read
+                          </p>
+                          <p className="whitespace-pre-wrap">{latest.compliance_notes}</p>
+                        </div>
+                      )}
+                      {/* Rejection reason */}
+                      {latest.compliance_status === 'rejected' && latest.compliance_notes && (
+                        <div className="mb-2 p-2 bg-red-50 border border-red-100 rounded text-[11px] text-red-700">
+                          {latest.compliance_notes}
+                        </div>
+                      )}
+                      {/* Inline reject form */}
+                      {rejectingId === latest.id && (
+                        <div className="mb-2">
+                          <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                            placeholder="Explain what needs to be corrected..."
+                            className="input-luxury w-full text-xs resize-none mb-2" rows={3} autoFocus />
+                          <div className="flex gap-2">
+                            <button onClick={() => handleReject(latest.id)} disabled={!!actionLoading}
+                              className="btn text-xs px-3 py-1 bg-red-600 text-white hover:bg-red-700 rounded flex items-center gap-1">
+                              <X size={11} /> Reject
+                            </button>
+                            <button onClick={() => { setRejectingId(null); setRejectReason('') }}
+                              className="btn btn-secondary text-xs px-3 py-1">Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                      {rejectingId !== latest.id && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {latest.compliance_status !== 'approved' && (
+                            <button onClick={() => handleApprove(latest.id)} disabled={!!actionLoading}
+                              className="text-[11px] font-semibold px-2.5 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-1">
+                              <Check size={11} /> Approve
+                            </button>
+                          )}
+                          {latest.compliance_status !== 'rejected' && (
+                            <button onClick={() => { setRejectingId(latest.id); setRejectReason('') }}
+                              className="text-[11px] font-semibold px-2.5 py-1 bg-red-100 text-red-700 border border-red-200 rounded hover:bg-red-200 transition-colors flex items-center gap-1">
+                              <X size={11} /> Reject
+                            </button>
+                          )}
+                          {latest.compliance_status !== 'pending' && (
+                            <button onClick={() => handleReset(latest.id)} disabled={!!actionLoading}
+                              className="text-[11px] px-2.5 py-1 text-luxury-gray-3 border border-luxury-gray-5 rounded hover:bg-luxury-light transition-colors">
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <label className={`flex items-center gap-2 text-[11px] text-luxury-gray-3 cursor-pointer border border-dashed border-luxury-gray-5 rounded px-3 py-2 hover:border-luxury-accent transition-colors ${uploadingSlotId === rd.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Upload size={11} />
+                      {uploadingSlotId === rd.id ? 'Uploading...' : 'Upload document'}
+                      <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                        onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], rd.id)} />
+                    </label>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Additional / unlinked docs */}
+      {(() => {
+        const unlinked = uploadedDocs.filter(d => !d.required_document_id)
+        return (
+          <div className="container-card">
+            <div className="flex items-center justify-between mb-3">
+              <p className="section-title">Additional Documents</p>
+              <label className={`flex items-center gap-1.5 text-[11px] text-luxury-accent cursor-pointer hover:underline ${uploadingSlotId === 'unlinked' ? 'opacity-50 pointer-events-none' : ''}`}>
+                <Upload size={11} />
+                {uploadingSlotId === 'unlinked' ? 'Uploading...' : 'Upload'}
+                <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                  onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], null)} />
+              </label>
+            </div>
+            {unlinked.length === 0 ? (
+              <p className="text-[11px] text-luxury-gray-3 text-center py-3">No additional documents uploaded.</p>
+            ) : (
+              <div className="space-y-2">
+                {unlinked.map(doc => (
+                  <div key={doc.id} className="flex items-start gap-2 p-2.5 border border-luxury-gray-5 rounded-lg">
+                    <FileText size={12} className="text-luxury-gray-3 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <a href={doc.onedrive_file_url || doc.file_url} target="_blank" rel="noopener noreferrer"
+                        className="text-[11px] text-luxury-accent hover:underline block truncate">{doc.file_name}</a>
+                      {doc.uploader && <p className="text-[10px] text-luxury-gray-3">by {fmtDocName(doc.uploader)}</p>}
+                      {doc.compliance_status === 'pending' && doc.compliance_notes && (
+                        <div className="mt-1 p-1.5 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-800">
+                          <span className="font-semibold">AI: </span>{doc.compliance_notes}
+                        </div>
+                      )}
+                      {doc.compliance_notes && doc.compliance_status === 'rejected' && (
+                        <p className="text-[10px] text-red-600 mt-0.5">{doc.compliance_notes}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {statusBadge(doc.compliance_status)}
+                      {doc.compliance_status !== 'approved' && (
+                        <button onClick={() => handleApprove(doc.id)} disabled={!!actionLoading}
+                          className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                          <Check size={10} />
+                        </button>
+                      )}
+                      {doc.compliance_status !== 'rejected' && rejectingId !== doc.id && (
+                        <button onClick={() => { setRejectingId(doc.id); setRejectReason('') }}
+                          className="text-[10px] px-2 py-0.5 bg-red-100 text-red-700 rounded hover:bg-red-200">
+                          <X size={10} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+    </div>
+  )
+}
 
 export default function AdminTransactionDetailPage() {
   const router = useRouter()
@@ -3362,26 +3802,11 @@ export default function AdminTransactionDetailPage() {
 
           {/* ── DOCUMENTS TAB ────────────────────────────────────────────── */}
           {activeTab === 'documents' && (
-            <div className="space-y-4">
-              <h1 className="page-title">DOCUMENTS</h1>
-              {txn.onedrive_folder_url && (
-                <div className="container-card">
-                  <a
-                    href={txn.onedrive_folder_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-luxury-accent hover:underline text-sm"
-                  >
-                    <ExternalLink size={14} /> Open OneDrive Folder
-                  </a>
-                </div>
-              )}
-              <div className="container-card">
-                <p className="text-xs text-luxury-gray-3 text-center py-6">
-                  Document management coming soon.
-                </p>
-              </div>
-            </div>
+            <ComplianceDocumentsTab
+              transactionId={id}
+              transactionAddress={txn.property_address || ''}
+              oneDriveFolderUrl={txn.onedrive_folder_url}
+            />
           )}
         </div>
 
