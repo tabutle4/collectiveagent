@@ -261,19 +261,35 @@ function CheckImageUpload({
   existingUrl,
   transactionFolderPath,
   onUploaded,
+  onExtracted,
 }: {
   checkId?: string
   existingUrl?: string | null
   transactionFolderPath?: string | null
   onUploaded: (url: string) => void
+  onExtracted?: (fields: {
+    check_amount?: number | null
+    check_from?: string | null
+    check_number?: string | null
+    received_date?: string | null
+    payment_method?: string
+    notes?: string | null
+    confidence?: string
+  }) => void
 }) {
   const [uploading, setUploading] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(existingUrl || null)
+  const [extracted, setExtracted] = useState<any | null>(null)
+  const [extractError, setExtractError] = useState<string | null>(null)
 
   const handleFile = async (file: File) => {
     setUploading(true)
+    setExtracted(null)
+    setExtractError(null)
     setPreviewUrl(URL.createObjectURL(file))
     try {
+      // Step 1: Upload to OneDrive (existing flow)
       const fd = new FormData()
       fd.append('file', file)
       if (checkId) fd.append('check_id', checkId)
@@ -283,34 +299,68 @@ function CheckImageUpload({
       if (!res.ok) throw new Error(data.error || 'Upload failed')
       setPreviewUrl(data.url)
       onUploaded(data.url)
+      setUploading(false)
+
+      // Step 2: AI extraction (runs after upload succeeds)
+      setExtracting(true)
+      const extractFd = new FormData()
+      extractFd.append('file', file)
+      const extractRes = await fetch('/api/admin/transactions/ai-check-extract', {
+        method: 'POST',
+        body: extractFd,
+      })
+      const extractData = await extractRes.json()
+      if (!extractRes.ok) {
+        setExtractError(extractData.error || 'AI extraction failed')
+      } else {
+        setExtracted(extractData.extracted)
+      }
     } catch (err: any) {
       setPreviewUrl(existingUrl || null)
       alert(err.message || 'Upload failed')
     } finally {
       setUploading(false)
+      setExtracting(false)
     }
   }
 
+  const confidenceColor = extracted?.confidence === 'high'
+    ? 'text-green-700 bg-green-50 border-green-200'
+    : extracted?.confidence === 'medium'
+      ? 'text-amber-700 bg-amber-50 border-amber-200'
+      : 'text-red-700 bg-red-50 border-red-200'
+
   return (
     <div>
-      <label className="field-label">Check Photo</label>
+      <label className="field-label">Check / Payment Photo or PDF</label>
       {previewUrl ? (
         <div className="relative mt-1">
-          <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-            <img
-              src={previewUrl}
-              alt="Check"
-              className="w-full max-h-40 object-cover rounded-lg border border-luxury-gray-5"
-            />
-          </a>
+          {previewUrl.endsWith('.pdf') || previewUrl.includes('pdf') ? (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-luxury-accent hover:underline text-xs py-3 px-3 border border-luxury-gray-5 rounded-lg"
+            >
+              <FileText size={14} /> View PDF
+            </a>
+          ) : (
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+              <img
+                src={previewUrl}
+                alt="Check"
+                className="w-full max-h-40 object-cover rounded-lg border border-luxury-gray-5"
+              />
+            </a>
+          )}
           <label
-            className={`absolute bottom-2 right-2 bg-white/90 border border-luxury-gray-5 rounded-lg px-2 py-1 flex items-center gap-1 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`absolute bottom-2 right-2 bg-white/90 border border-luxury-gray-5 rounded-lg px-2 py-1 flex items-center gap-1 text-xs font-medium text-luxury-gray-2 cursor-pointer shadow-sm hover:bg-white ${uploading || extracting ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <Camera size={11} />
             {uploading ? 'Uploading...' : 'Replace'}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               capture="environment"
               className="hidden"
               onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
@@ -319,24 +369,90 @@ function CheckImageUpload({
         </div>
       ) : (
         <label
-          className={`mt-1 flex flex-col items-center justify-center gap-1.5 w-full py-5 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading ? 'opacity-50 pointer-events-none' : ''}`}
+          className={`mt-1 flex flex-col items-center justify-center gap-1.5 w-full py-5 border-2 border-dashed border-luxury-gray-5 rounded-lg cursor-pointer hover:border-luxury-accent transition-colors bg-luxury-light ${uploading || extracting ? 'opacity-50 pointer-events-none' : ''}`}
         >
           {uploading ? (
             <p className="text-xs text-luxury-gray-3">Uploading...</p>
           ) : (
             <>
               <Camera size={18} className="text-luxury-gray-3" />
-              <p className="text-xs text-luxury-gray-3">Upload check photo</p>
+              <p className="text-xs text-luxury-gray-3">Upload check, Zelle screenshot, or PDF</p>
+              <p className="text-[10px] text-luxury-gray-4">JPG, PNG, WEBP, or PDF up to 10MB</p>
             </>
           )}
           <input
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             capture="environment"
             className="hidden"
             onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
           />
         </label>
+      )}
+
+      {/* AI extraction status */}
+      {extracting && (
+        <div className="mt-2 text-xs text-luxury-gray-3 flex items-center gap-1.5 animate-pulse">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent" />
+          Reading payment details...
+        </div>
+      )}
+
+      {extractError && (
+        <p className="mt-2 text-xs text-red-500">{extractError}</p>
+      )}
+
+      {/* AI extracted fields panel */}
+      {extracted && onExtracted && (
+        <div className={`mt-2 p-3 border rounded-lg text-xs ${confidenceColor}`}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-semibold">AI Detected</p>
+            <span className="text-[10px] opacity-70">{extracted.confidence} confidence</span>
+          </div>
+          <div className="space-y-1 mb-3">
+            {extracted.check_amount != null && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Amount</span>
+                <span className="font-semibold">${Number(extracted.check_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            {extracted.check_from && (
+              <div className="flex justify-between">
+                <span className="opacity-70">From</span>
+                <span className="font-semibold">{extracted.check_from}</span>
+              </div>
+            )}
+            {extracted.check_number && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Check / Ref #</span>
+                <span className="font-semibold">{extracted.check_number}</span>
+              </div>
+            )}
+            {extracted.received_date && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Date</span>
+                <span className="font-semibold">{extracted.received_date}</span>
+              </div>
+            )}
+            {extracted.payment_method && (
+              <div className="flex justify-between">
+                <span className="opacity-70">Type</span>
+                <span className="font-semibold capitalize">{extracted.payment_method}</span>
+              </div>
+            )}
+            {extracted.notes && (
+              <div className="pt-1 border-t border-current/10 opacity-70 italic">
+                {extracted.notes}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => onExtracted(extracted)}
+            className="w-full text-center font-semibold py-1.5 rounded border border-current/30 hover:bg-current/10 transition-colors"
+          >
+            Fill Fields from AI
+          </button>
+        </div>
       )}
     </div>
   )
@@ -369,6 +485,14 @@ export default function AdminTransactionDetailPage() {
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
+  const [aiReview, setAiReview] = useState<{
+    overall: string
+    ready_to_pay: boolean
+    items: { label: string; status: string; note: string }[]
+    flags: string[]
+  } | null>(null)
+  const [aiReviewLoading, setAiReviewLoading] = useState(false)
+  const [aiReviewError, setAiReviewError] = useState<string | null>(null)
   // Display-only: unpaid monthly fee balance per agent on this transaction.
   // Keyed by user id (a.agent_id). Populated on data load. Read-only - this
   // does not affect commission, agent_net, or debts_deducted.
@@ -1185,6 +1309,32 @@ export default function AdminTransactionDetailPage() {
       alert(err.message || 'Failed to mark paid')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const runAiChecklistReview = async () => {
+    setAiReviewLoading(true)
+    setAiReviewError(null)
+    setAiReview(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/ai-checklist-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction: data?.transaction,
+          agents: data?.agents,
+          checklist: data?.checklist,
+          checks: data?.checks,
+          agent_billing: data?.agent_billing,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Review failed')
+      setAiReview(json.review)
+    } catch (err: any) {
+      setAiReviewError(err.message || 'Review failed')
+    } finally {
+      setAiReviewLoading(false)
     }
   }
 
@@ -2650,6 +2800,36 @@ export default function AdminTransactionDetailPage() {
                                 existingUrl={check.check_image_url}
                                 transactionFolderPath={txn.onedrive_folder_url}
                                 onUploaded={url => updateCheck(check.id, { check_image_url: url })}
+                                onExtracted={fields => {
+                                  // Merge extracted fields into the local edit state and save
+                                  const updates: any = {}
+                                  if (fields.check_amount != null) {
+                                    updates.check_amount = fields.check_amount
+                                  }
+                                  if (fields.check_from) {
+                                    updates.check_from = fields.check_from
+                                  }
+                                  if (fields.check_number) {
+                                    updates.check_number = fields.check_number
+                                  }
+                                  if (fields.received_date) {
+                                    updates.received_date = fields.received_date
+                                  }
+                                  if (fields.payment_method) {
+                                    updates.payment_method = fields.payment_method
+                                  }
+                                  if (fields.notes) {
+                                    const existing = checkEdit.notes || ''
+                                    updates.notes = existing ? `${existing}\n${fields.notes}` : fields.notes
+                                  }
+                                  // Update local edit state first so inputs show new values
+                                  setEditChecksData(prev => ({
+                                    ...prev,
+                                    [check.id]: { ...prev[check.id], ...updates },
+                                  }))
+                                  // Then save to DB
+                                  updateCheck(check.id, updates)
+                                }}
                               />
                             </div>
                           </>
@@ -2859,6 +3039,82 @@ export default function AdminTransactionDetailPage() {
                           <ChevronDown size={14} className="text-luxury-gray-3" />
                         )}
                       </button>
+
+                      {/* AI Review panel */}
+                      <div className="mb-3">
+                        <button
+                          onClick={runAiChecklistReview}
+                          disabled={aiReviewLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-luxury-accent/40 text-luxury-accent text-xs font-medium hover:bg-luxury-accent/5 transition-colors disabled:opacity-50"
+                        >
+                          {aiReviewLoading ? (
+                            <>
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent animate-pulse" />
+                              Reviewing...
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-base leading-none">&#10024;</span>
+                              Review Checklist with AI
+                            </>
+                          )}
+                        </button>
+
+                        {aiReviewError && (
+                          <p className="mt-2 text-xs text-red-500 text-center">{aiReviewError}</p>
+                        )}
+
+                        {aiReview && (
+                          <div className="mt-3 space-y-2">
+                            {/* Overall summary */}
+                            <div className={`p-3 rounded-lg border text-xs ${aiReview.ready_to_pay ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold">
+                                  {aiReview.ready_to_pay ? 'Looks good to pay' : 'Items need attention'}
+                                </span>
+                              </div>
+                              <p>{aiReview.overall}</p>
+                            </div>
+
+                            {/* Critical flags */}
+                            {aiReview.flags && aiReview.flags.length > 0 && (
+                              <div className="p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-xs">
+                                <p className="font-semibold mb-1">Flags</p>
+                                <ul className="space-y-1">
+                                  {aiReview.flags.map((flag: string, i: number) => (
+                                    <li key={i} className="flex items-start gap-1.5">
+                                      <span className="mt-0.5 shrink-0">&#9679;</span>
+                                      <span>{flag}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Per-item notes */}
+                            <div className="space-y-1.5">
+                              {aiReview.items.map((item: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className={`p-2.5 rounded-lg border text-xs ${
+                                    item.status === 'ok'
+                                      ? 'bg-green-50/60 border-green-200/60 text-green-800'
+                                      : item.status === 'flagged'
+                                        ? 'bg-red-50 border-red-200 text-red-800'
+                                        : item.status === 'missing'
+                                          ? 'bg-orange-50 border-orange-200 text-orange-800'
+                                          : 'bg-amber-50/60 border-amber-200/60 text-amber-800'
+                                  }`}
+                                >
+                                  <p className="font-semibold mb-0.5">{item.label}</p>
+                                  <p className="opacity-90">{item.note}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {checklistExpanded && (
                         <div className="space-y-1.5">
                           {checklist.map((item: any) => (
