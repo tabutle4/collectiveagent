@@ -9,8 +9,9 @@ const BROKER_ID = '7d99cfe9-db1e-42db-aa2a-7a42a68765f6'
 async function getAgents() {
   const { data } = await supabaseAdmin
     .from('users')
-    .select('id, first_name, last_name, email, role, status, is_active, created_at, mls_choice, office_location')
+    .select('id, first_name, last_name, email, role, status, is_active, created_at, mls_choice, is_licensed_agent')
     .eq('is_active', true)
+    .eq('is_licensed_agent', true)
     .neq('id', BROKER_ID)
     .order('first_name')
   return data || []
@@ -18,18 +19,10 @@ async function getAgents() {
 
 async function getTransactions(dateFrom: string, dateTo: string) {
   const { data } = await supabaseAdmin
-    .from('transactions')
-    .select(`
-      id, property_address, transaction_type, compliance_status, created_at, closed_date,
-      transaction_agents!inner(
-        id, agent_id, role, agent_gross, office_net, amount_1099_reportable,
-        users!inner(first_name, last_name, email)
-      )
-    `)
-    .gte('created_at', dateFrom)
-    .lte('created_at', dateTo)
-    .order('created_at', { ascending: false })
-    .limit(200)
+    .from('transaction_internal_agents')
+    .select('id, agent_id, agent_gross, amount_1099_reportable, transaction:transactions!inner(id, compliance_status, created_at, transaction_type)')
+    .not('transaction', 'is', null)
+    .limit(500)
   return data || []
 }
 
@@ -129,16 +122,14 @@ export async function GET(req: NextRequest) {
 
   // Build agent production map
   const agentProduction: Record<string, { closes: number; volume: number; agentGross: number }> = {}
-  for (const txn of transactions) {
-    const agents_list = (txn as any).transaction_agents || []
-    for (const ta of agents_list) {
-      const id = ta.agent_id
-      if (!id) continue
-      if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentGross: 0 }
-      if ((txn as any).compliance_status === 'completed') {
-        agentProduction[id].closes++
-        agentProduction[id].agentGross += parseFloat(ta.agent_gross || 0)
-      }
+  for (const ta of transactions) {
+    const id = (ta as any).agent_id
+    if (!id) continue
+    if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentGross: 0 }
+    const txn = (ta as any).transaction
+    if (txn?.compliance_status === 'completed') {
+      agentProduction[id].closes++
+      agentProduction[id].agentGross += parseFloat((ta as any).agent_gross || 0)
     }
   }
 
@@ -176,7 +167,7 @@ export async function GET(req: NextRequest) {
       id: agent.id,
       name: fullName,
       email: agent.email,
-      officeLocation: agent.office_location,
+      officeLocation: agent.mls_choice || null,
       mlsChoice: agent.mls_choice,
       joinedAt: agent.created_at,
       closes: production.closes,
@@ -224,7 +215,7 @@ export async function GET(req: NextRequest) {
     summary: {
       totalAgents: agents.length,
       totalSessions: calendarEvents.filter((e: any) => !e.subject?.toLowerCase().startsWith('guest')).length,
-      totalTransactions: transactions.length,
+      totalTransactions: [...new Set(transactions.map((t: any) => t.transaction?.id).filter(Boolean))].length,
       fathomRecordings: fathomMeetings.length,
     },
     scorecards,
@@ -234,7 +225,7 @@ export async function GET(req: NextRequest) {
     sessionsByProgram,
     transcriptSample: allTranscripts,
     rawData: {
-      agents: agents.map(a => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, email: a.email, office: a.office_location })),
+      agents: agents.map(a => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, email: a.email, office: a.mls_choice })),
       calendarEvents: calendarEvents.map((e: any) => ({ subject: e.subject, start: e.start?.dateTime })),
       fathomSessions: fathomMeetings.map(m => ({ date: m.recording_date, speakers: m.speakers, duration: m.duration_minutes })),
       zoomAttendance: zoomAttendance.map(m => ({ topic: m.topic, date: m.startTime, count: m.participants.length })),
