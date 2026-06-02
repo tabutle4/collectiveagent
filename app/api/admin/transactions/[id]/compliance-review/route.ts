@@ -117,7 +117,7 @@ export async function POST(
       from: FROM_EMAIL,
       to: [toEmail],
       cc: [CC_EMAIL],
-      reply_to: CC_EMAIL,
+      replyTo: CC_EMAIL,
       subject,
       html,
     })
