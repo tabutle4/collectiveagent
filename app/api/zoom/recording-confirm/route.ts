@@ -98,8 +98,8 @@ async function uploadToSharePoint(
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'can_manage_recordings')
-  if (authError) return authError
+  const auth = await requirePermission(req, 'can_manage_recordings')
+  if (auth.error) return auth.error
 
   const { jobId, finalTitle, folder } = await req.json()
 
