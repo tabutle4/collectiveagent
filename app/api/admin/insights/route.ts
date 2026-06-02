@@ -19,9 +19,11 @@ async function getAgents() {
 
 async function getTransactions(dateFrom: string, dateTo: string) {
   const { data } = await supabaseAdmin
-    .from('transaction_internal_agents')
-    .select('id, agent_id, agent_gross, amount_1099_reportable, transaction:transactions!inner(id, compliance_status, created_at, transaction_type)')
-    .not('transaction', 'is', null)
+    .from('transactions')
+    .select('id, compliance_status, created_at, transaction_type, transaction_internal_agents(id, agent_id, agent_gross, amount_1099_reportable)')
+    .gte('created_at', dateFrom)
+    .lte('created_at', dateTo)
+    .order('created_at', { ascending: false })
     .limit(500)
   return data || []
 }
@@ -122,14 +124,16 @@ export async function GET(req: NextRequest) {
 
   // Build agent production map
   const agentProduction: Record<string, { closes: number; volume: number; agentGross: number }> = {}
-  for (const ta of transactions) {
-    const id = (ta as any).agent_id
-    if (!id) continue
-    if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentGross: 0 }
-    const txn = (ta as any).transaction
-    if (txn?.compliance_status === 'completed') {
-      agentProduction[id].closes++
-      agentProduction[id].agentGross += parseFloat((ta as any).agent_gross || 0)
+  for (const txn of transactions) {
+    const agentsInTxn = (txn as any).transaction_internal_agents || []
+    for (const ta of agentsInTxn) {
+      const id = ta.agent_id
+      if (!id) continue
+      if (!agentProduction[id]) agentProduction[id] = { closes: 0, volume: 0, agentGross: 0 }
+      if ((txn as any).compliance_status === 'complete') {
+        agentProduction[id].closes++
+        agentProduction[id].agentGross += parseFloat(ta.agent_gross || 0)
+      }
     }
   }
 
@@ -215,7 +219,7 @@ export async function GET(req: NextRequest) {
     summary: {
       totalAgents: agents.length,
       totalSessions: calendarEvents.filter((e: any) => !e.subject?.toLowerCase().startsWith('guest')).length,
-      totalTransactions: [...new Set(transactions.map((t: any) => t.transaction?.id).filter(Boolean))].length,
+      totalTransactions: transactions.length,
       fathomRecordings: fathomMeetings.length,
     },
     scorecards,
