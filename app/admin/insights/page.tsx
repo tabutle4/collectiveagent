@@ -206,7 +206,7 @@ export default function InsightsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-luxury-gray-3 text-sm">No attendance data yet — set up Zoom OAuth to enable this</p>
+                <p className="text-luxury-gray-3 text-sm">No attendance data yet. Set up Zoom OAuth to enable this.</p>
               )}
             </div>
 

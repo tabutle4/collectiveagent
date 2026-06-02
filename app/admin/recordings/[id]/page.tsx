@@ -267,7 +267,7 @@ export default function RecordingDetailPage() {
               <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Scheduled Sessions This Day</p>
               {context.calendarEvents.map((e: any, i: number) => (
                 <p key={i} className="text-luxury-gray-3 text-xs">
-                  {e.start?.dateTime?.slice(11, 16)} UTC — {e.subject}
+                  {e.start?.dateTime?.slice(11, 16)} UTC - {e.subject}
                   {e.hasGuest && <span className="ml-1 text-luxury-accent">[Guest presenter]</span>}
                 </p>
               ))}

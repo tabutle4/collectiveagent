@@ -152,7 +152,7 @@ function buildSystemPrompt(
     ? calendarEvents.map(e => {
         const timeUTC = e.start.dateTime?.slice(11, 16) || ''
         const guest = e.hasGuest ? ` [Guest presenter scheduled for this session]` : ''
-        return `${timeUTC} UTC — ${e.subject}${guest}`
+        return `${timeUTC} UTC - ${e.subject}${guest}`
       }).join('\n')
     : 'No calendar events found for this date'
 
@@ -173,9 +173,9 @@ ${calendarText}
 
 CALENDAR RULES:
 - Times are UTC. CST = UTC-6, CDT = UTC-5.
-- "Guest for [date]" entries are NOT separate sessions — they are guest presenters for the program happening at the SAME time slot. Always associate them with that program.
+- "Guest for [date]" entries are NOT separate sessions - they are guest presenters for the program happening at the SAME time slot. Always associate them with that program.
 - Sessions typically run 1 hour each. Back-to-back sessions may be captured in one recording.
-- Recordings are now always single sessions — no splitting needed.
+- Recordings are now always single sessions - no splitting needed.
 
 FATHOM RECORDING DATA:
 ${fathomText}

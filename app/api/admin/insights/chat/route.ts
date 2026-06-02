@@ -60,22 +60,27 @@ When answering:
 - Keep responses focused and practical
 - Format lists clearly for easy reading`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system,
-      messages,
-    }),
-  })
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system,
+        messages,
+      }),
+    })
 
-  const responseData = await res.json()
-  const reply = responseData.content?.[0]?.text || 'Sorry, I could not generate a response.'
-  return NextResponse.json({ reply })
+    const responseData = await res.json()
+    const reply = responseData.content?.[0]?.text || 'Sorry, I could not generate a response.'
+    return NextResponse.json({ reply })
+  } catch (err: any) {
+    console.error('Insights chat error:', err)
+    return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 })
+  }
 }
