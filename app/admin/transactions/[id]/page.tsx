@@ -259,13 +259,13 @@ function EditableFieldRow({
 function CheckImageUpload({
   checkId,
   existingUrl,
-  transactionFolderPath,
+  transactionId,
   onUploaded,
   onExtracted,
 }: {
   checkId?: string
   existingUrl?: string | null
-  transactionFolderPath?: string | null
+  transactionId?: string | null
   onUploaded: (url: string) => void
   onExtracted?: (fields: {
     check_amount?: number | null
@@ -293,7 +293,7 @@ function CheckImageUpload({
       const fd = new FormData()
       fd.append('file', file)
       if (checkId) fd.append('check_id', checkId)
-      if (transactionFolderPath) fd.append('transaction_folder_path', transactionFolderPath)
+      if (transactionId) fd.append('transaction_id', transactionId)
       const res = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Upload failed')
@@ -2798,7 +2798,7 @@ export default function AdminTransactionDetailPage() {
                               <CheckImageUpload
                                 checkId={check.id}
                                 existingUrl={check.check_image_url}
-                                transactionFolderPath={txn.onedrive_folder_url}
+                                transactionId={id}
                                 onUploaded={url => updateCheck(check.id, { check_image_url: url })}
                                 onExtracted={fields => {
                                   // Merge extracted fields into the local edit state and save

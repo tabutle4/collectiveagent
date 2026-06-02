@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requirePermission(request, 'can_manage_checks')
+  const auth = await requirePermission(request, 'can_edit_transactions')
   if (auth.error) return auth.error
 
   if (!process.env.ANTHROPIC_API_KEY) {
