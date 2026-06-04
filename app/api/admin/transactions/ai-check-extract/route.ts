@@ -3,14 +3,7 @@ import { requirePermission } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
-// Date field meanings for CRC's process:
-//   received_date  — when the check arrived at the office (entered manually, not extracted from doc)
-//   deposited_date — when it was taken to the bank; for physical checks this is the date
-//                    written ON the check by CRC staff when depositing
-//   cleared_date   — same as deposited_date for physical checks (CRC writes the date on it
-//                    when they deposit, and treats that as the clear date)
-//   For Zelle/ACH/wire: all three dates = the transaction date shown (funds are instant)
-
+// Claude vision call - sends the file and returns extracted check fields
 async function extractCheckWithClaude(
   fileBase64: string,
   mediaType: string
@@ -18,47 +11,34 @@ async function extractCheckWithClaude(
   check_amount: number | null
   check_from: string | null
   check_number: string | null
-  check_date: string | null
-  cleared_date: string | null
+  received_date: string | null
   payment_method: string
-  funds_status: string | null
   notes: string | null
   confidence: 'high' | 'medium' | 'low'
 }> {
   const isImage = mediaType.startsWith('image/')
   const isPdf = mediaType === 'application/pdf'
 
-  const prompt = `You are reviewing a payment document for a real estate brokerage. Extract payment details and return ONLY valid JSON.
+  const prompt = `You are reviewing a payment document from a real estate transaction. This could be a physical check, an eCheck, a Zelle screenshot, a bank deposit screenshot, or a Payload/ACH confirmation PDF.
 
-CRITICAL DATE RULE for physical checks:
-The brokerage staff writes a date on the check by hand when they deposit it. That handwritten date is the CLEARED DATE.
-The payer's pre-printed date (e.g. "05/06/2026" printed on the check itself by the check-issuer) is NOT the cleared date — ignore it for date extraction.
-Look for a handwritten date that appears to have been added by someone different from the payer — it is often written in a different style/location from the printed date.
-
-Document types:
-- Physical check photo: extract handwritten date as cleared_date (ignore payer's printed date); for Zelle/ACH use transaction date
-- Bank deposit receipt: use the deposit date shown
-- Zelle screenshot: transaction date = cleared_date
-- Payload/ACH PDF: transaction date = cleared_date
-
-Return this exact JSON:
+Extract the following fields and return ONLY valid JSON with no extra text:
 {
-  "check_amount": <number or null>,
-  "check_from": <string or null - who sent the payment>,
-  "check_number": <string or null - check number or reference number>,
-  "check_date": <string or null - YYYY-MM-DD - the payer's pre-printed date on the check (the date the payer wrote the check); null for Zelle/ACH/wire>,
-  "cleared_date": <string or null - YYYY-MM-DD - the handwritten date on a physical check (added by brokerage staff); OR transaction/deposit date for Zelle/ACH/bank receipts>,
-  "payment_method": <"check" | "zelle" | "payload" | "ach" | "wire" | "ecommission">,
-  "funds_status": <string or null - e.g. "Completed", "Pending", "Processing", "Available", "Hold until [date]", "Failed" — only if clearly shown>,
-  "notes": <string or null - memo line, property address, bank name, or anything else relevant>,
-  "confidence": <"high" | "medium" | "low">
+  "check_amount": <number or null - the dollar amount paid>,
+  "check_from": <string or null - who sent/wrote the payment: person name, company name, or bank name>,
+  "check_number": <string or null - check number if present, or transaction/reference number for Zelle/ACH>,
+  "received_date": <string or null - date in YYYY-MM-DD format if visible>,
+  "payment_method": <"check" | "zelle" | "payload" | "ecommission" | "wire" - your best guess at what type of payment this is>,
+  "notes": <string or null - any other relevant info such as memo line, property address mentioned, or bank name>,
+  "confidence": <"high" | "medium" | "low" - how confident you are in the extracted data>
 }
 
 Rules:
-- check_amount must be a number, not a string
-- check_date: the payer's pre-printed date on the check (e.g. "05/06/2026" printed by the check-issuer); null for Zelle/ACH
-- cleared_date: for physical checks, ONLY the handwritten date added by brokerage staff (not the payer's printed date)
-- Return null for anything not clearly visible
+- check_amount must be a number (e.g. 4250.00), not a string
+- For Zelle screenshots: check_from is the sender name shown
+- For bank deposit screenshots: check_amount is the deposit total
+- For Payload PDFs: use "payload" as payment_method and the transaction ID as check_number
+- If a field is not visible or not applicable, use null
+- received_date should be the date shown on the document, not today's date
 - Return ONLY the JSON object, no markdown, no explanation`
 
   const messageContent: any[] = []
@@ -66,16 +46,27 @@ Rules:
   if (isImage) {
     messageContent.push({
       type: 'image',
-      source: { type: 'base64', media_type: mediaType, data: fileBase64 },
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: fileBase64,
+      },
     })
   } else if (isPdf) {
     messageContent.push({
       type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 },
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: fileBase64,
+      },
     })
   }
 
-  messageContent.push({ type: 'text', text: prompt })
+  messageContent.push({
+    type: 'text',
+    text: prompt,
+  })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -98,35 +89,17 @@ Rules:
 
   const data = await response.json()
   const text = data.content?.[0]?.text || '{}'
+
+  // Strip any markdown code fences just in case
   const clean = text.replace(/```json|```/g, '').trim()
   const parsed = JSON.parse(clean)
 
-  // Title-case helper: checks are often scanned and names come back ALL CAPS.
-  // Preserves known acronyms (LLC, DFW, CRC, HAR, MLS, HOA, INC, LLP, etc.)
-  const PRESERVE_UPPER = new Set([
-    'LLC', 'LLP', 'INC', 'PLLC', 'LP', 'PC',
-    'DFW', 'HOU', 'HAR', 'MLS', 'CRC', 'HOA',
-    'NA', 'N/A', 'ACH', 'USA', 'US',
-  ])
-  const toTitleCase = (str: string | null): string | null => {
-    if (!str) return null
-    return str
-      .toLowerCase()
-      .replace(/\b\w+/g, word => {
-        const upper = word.toUpperCase()
-        return PRESERVE_UPPER.has(upper) ? upper : word.charAt(0).toUpperCase() + word.slice(1)
-      })
-      .trim()
-  }
-
   return {
     check_amount: typeof parsed.check_amount === 'number' ? parsed.check_amount : null,
-    check_from: toTitleCase(parsed.check_from),
+    check_from: parsed.check_from || null,
     check_number: parsed.check_number ? String(parsed.check_number) : null,
-    check_date: parsed.check_date || null,
-    cleared_date: parsed.cleared_date || null,
+    received_date: parsed.received_date || null,
     payment_method: parsed.payment_method || 'check',
-    funds_status: parsed.funds_status || null,
     notes: parsed.notes || null,
     confidence: parsed.confidence || 'medium',
   }
@@ -144,10 +117,18 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
 
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    if (!file) {
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
 
+    // Accept images and PDFs
     const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'application/pdf',
     ]
 
     if (!allowedTypes.includes(file.type)) {
@@ -157,12 +138,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 10MB limit (same as upload route)
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: 'File must be under 10MB' }, { status: 400 })
     }
 
     const arrayBuffer = await file.arrayBuffer()
     const fileBase64 = Buffer.from(arrayBuffer).toString('base64')
+
     const extracted = await extractCheckWithClaude(fileBase64, file.type)
 
     return NextResponse.json({ extracted })
