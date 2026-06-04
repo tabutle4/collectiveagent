@@ -92,27 +92,28 @@ export async function GET(
       return NextResponse.json({ error: 'Statement not found' }, { status: 404 })
     }
 
-    // ----- Hybrid auth -----
-    // Path 1: Admin via requirePermission. Anyone with can_manage_pm can
-    // view any statement (matches the access pattern for all other PM
-    // admin routes). Try it but don't return its error - we'll fall
-    // through to the landlord portal auth path on failure.
+    // ----- Hybrid auth: three paths -----
+    // Path 1: Admin session
     const adminAuth = await requireAuth(request)
     const isPmAdmin =
       !adminAuth.error && adminAuth.permissions?.has('can_manage_pm')
 
     if (!isPmAdmin) {
-      // Path 2: Landlord via pm_session cookie. The session row tells us
-      // which landlord_id is logged in. Match against the statement's
-      // landlord_id for access.
-      const pmSession = await validatePMSession()
-      const isLandlordOwner =
-        pmSession &&
-        pmSession.user_type === 'landlord' &&
-        pmSession.user_id === statement.landlord_id
+      // Path 2: URL access token (for emailed statement links - no login required)
+      const urlToken = searchParams.get('token')
+      const tokenValid = urlToken && statement.access_token && urlToken === statement.access_token
 
-      if (!isLandlordOwner) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      if (!tokenValid) {
+        // Path 3: Landlord pm_session cookie
+        const pmSession = await validatePMSession()
+        const isLandlordOwner =
+          pmSession &&
+          pmSession.user_type === 'landlord' &&
+          pmSession.user_id === statement.landlord_id
+
+        if (!isLandlordOwner) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
       }
     }
 

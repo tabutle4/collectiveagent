@@ -68,9 +68,19 @@ export async function POST(
       ? `${property.property_address}${property.unit ? ` ${property.unit}` : ''}`
       : 'your property'
 
-    // Statement URL points to the landlord portal view
+    // Generate a permanent access token for this statement so the landlord
+    // can view it without needing an active portal session.
+    const crypto = await import('crypto')
+    const accessToken = crypto.randomBytes(32).toString('hex')
+
+    await supabaseAdmin
+      .from('pm_statements')
+      .update({ access_token: accessToken, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    // Statement URL includes token so landlord can view without login
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://agent.collectiverealtyco.com'
-    const statementUrl = `${baseUrl}/pm/landlord/dashboard/statements/${statement.id}`
+    const statementUrl = `${baseUrl}/pm/statement/${statement.id}?token=${accessToken}`
 
     const html = pmStatementReadyEmail(
       landlord.first_name || 'there',
