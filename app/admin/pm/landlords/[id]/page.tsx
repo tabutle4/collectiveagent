@@ -1864,133 +1864,10 @@ export default function LandlordDetailPage() {
           {/* Disbursements Tab */}
           {activeTab === 'disbursements' && (
             <div>
-              {/* Statements sub-section */}
-              <div className="mb-8">
-                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-                  Statements
-                </h3>
-                {loadingStatements ? (
-                  <p className="text-sm text-luxury-gray-3 text-center py-4">Loading statements...</p>
-                ) : statements.length === 0 ? (
-                  <p className="text-sm text-luxury-gray-3 text-center py-4">
-                    No statements yet. Use Create Statement on the Disbursements page.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {statements.map((s: any) => {
-                      const periodLabel = s.period_type === 'annual'
-                        ? `${s.period_year}`
-                        : `${new Date(2000, (s.period_month || 1) - 1).toLocaleString('default', { month: 'long' })} ${s.period_year}`
-                      const propertyAddr = s.managed_properties
-                        ? `${s.managed_properties.property_address}${s.managed_properties.unit ? ` ${s.managed_properties.unit}` : ''}`
-                        : ''
-                      return (
-                        <div key={s.id} className="inner-card">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-luxury-gray-1">{periodLabel}</p>
-                              {propertyAddr && (
-                                <p className="text-xs text-luxury-gray-2 truncate">{propertyAddr}</p>
-                              )}
-                              <p className="text-xs text-luxury-gray-3">
-                                Net disbursed: {formatCurrency(Number(s.total_net_disbursed || 0))}
-                                {s.sent_at && (
-                                  <> · Sent {new Date(s.sent_at).toLocaleDateString()}</>
-                                )}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Link
-                                href={`/admin/pm/statements/${s.id}`}
-                                className="btn btn-secondary text-xs py-1 px-3"
-                              >
-                                View
-                              </Link>
-                              {!s.sent_at && (
-                                <button
-                                  onClick={() => handleSendStatement(s.id)}
-                                  disabled={sendingStatementId === s.id}
-                                  className="btn btn-primary text-xs py-1 px-3"
-                                >
-                                  {sendingStatementId === s.id ? 'Sending...' : 'Send'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {disbursements.length === 0 ? (
-                <p className="text-sm text-luxury-gray-3 text-center py-8">No disbursements yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {disbursements.map(disb => (
-                    <div key={disb.id} className="inner-card">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-luxury-gray-1">
-                            {getMonthName(disb.period_month)} {disb.period_year}
-                          </p>
-                          {disb.managed_properties && (
-                            <p className="text-xs text-luxury-gray-2">
-                              {disb.managed_properties.property_address}
-                              {disb.managed_properties.unit ? ` ${disb.managed_properties.unit}` : ''}
-                            </p>
-                          )}
-                          <p className="text-xs text-luxury-gray-3">
-                            Gross: {formatCurrency(disb.gross_rent)} · 
-                            Fee: {formatCurrency(disb.management_fee)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-sm font-semibold text-green-700">{formatCurrency(disb.net_amount)}</p>
-                            {disb.payment_date && (
-                              <p className="text-xs text-luxury-gray-3">Paid {formatDate(disb.payment_date)}</p>
-                            )}
-                          </div>
-                          {disb.payment_status === 'pending' ? (
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleProcessDisbursement(disb.id)}
-                                className="btn btn-primary text-xs flex items-center gap-1"
-                                disabled={landlord.bank_status !== 'connected'}
-                                title={landlord.bank_status !== 'connected' ? 'Bank not connected' : 'Process via ACH'}
-                              >
-                                <Send size={12} /> Process
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setMarkPaidModal(disb)
-                                  setMarkPaidDate(new Date().toISOString().split('T')[0])
-                                  setMarkPaidMethod('ach')
-                                }}
-                                className="btn btn-secondary text-xs flex items-center gap-1"
-                                title="Mark as manually paid"
-                              >
-                                <CheckCircle size={12} /> Mark Paid
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-green-600 font-medium">
-                              {disb.payment_status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* Pending Deductions sub-section. Sits below the
                   disbursements list. Pending = disbursement_id IS NULL,
                   i.e. waiting to be attached to a future disbursement. */}
-              <div className="mt-8">
+              <div className="mb-8">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
                     Pending Deductions
@@ -2067,6 +1944,136 @@ export default function LandlordDetailPage() {
                   </div>
                 )}
               </div>
+
+              {/* Disbursements */}
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                  Disbursements
+                </h3>
+{disbursements.length === 0 ? (
+                <p className="text-sm text-luxury-gray-3 text-center py-8">No disbursements yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {disbursements.map(disb => (
+                    <div key={disb.id} className="inner-card">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-luxury-gray-1">
+                            {getMonthName(disb.period_month)} {disb.period_year}
+                          </p>
+                          {disb.managed_properties && (
+                            <p className="text-xs text-luxury-gray-2">
+                              {disb.managed_properties.property_address}
+                              {disb.managed_properties.unit ? ` ${disb.managed_properties.unit}` : ''}
+                            </p>
+                          )}
+                          <p className="text-xs text-luxury-gray-3">
+                            Gross: {formatCurrency(disb.gross_rent)} · 
+                            Fee: {formatCurrency(disb.management_fee)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-green-700">{formatCurrency(disb.net_amount)}</p>
+                            {disb.payment_date && (
+                              <p className="text-xs text-luxury-gray-3">Paid {formatDate(disb.payment_date)}</p>
+                            )}
+                          </div>
+                          {disb.payment_status === 'pending' ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleProcessDisbursement(disb.id)}
+                                className="btn btn-primary text-xs flex items-center gap-1"
+                                disabled={landlord.bank_status !== 'connected'}
+                                title={landlord.bank_status !== 'connected' ? 'Bank not connected' : 'Process via ACH'}
+                              >
+                                <Send size={12} /> Process
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setMarkPaidModal(disb)
+                                  setMarkPaidDate(new Date().toISOString().split('T')[0])
+                                  setMarkPaidMethod('ach')
+                                }}
+                                className="btn btn-secondary text-xs flex items-center gap-1"
+                                title="Mark as manually paid"
+                              >
+                                <CheckCircle size={12} /> Mark Paid
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-green-600 font-medium">
+                              {disb.payment_status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              </div>
+
+              {/* Statements sub-section */}
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                  Statements
+                </h3>
+                {loadingStatements ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">Loading statements...</p>
+                ) : statements.length === 0 ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">
+                    No statements yet. Use Create Statement on the Disbursements page.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {statements.map((s: any) => {
+                      const periodLabel = s.period_type === 'annual'
+                        ? `${s.period_year}`
+                        : `${new Date(2000, (s.period_month || 1) - 1).toLocaleString('default', { month: 'long' })} ${s.period_year}`
+                      const propertyAddr = s.managed_properties
+                        ? `${s.managed_properties.property_address}${s.managed_properties.unit ? ` ${s.managed_properties.unit}` : ''}`
+                        : ''
+                      return (
+                        <div key={s.id} className="inner-card">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-luxury-gray-1">{periodLabel}</p>
+                              {propertyAddr && (
+                                <p className="text-xs text-luxury-gray-2 truncate">{propertyAddr}</p>
+                              )}
+                              <p className="text-xs text-luxury-gray-3">
+                                Net disbursed: {formatCurrency(Number(s.total_net_disbursed || 0))}
+                                {s.sent_at && (
+                                  <> · Sent {new Date(s.sent_at).toLocaleDateString()}</>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Link
+                                href={`/admin/pm/statements/${s.id}`}
+                                className="btn btn-secondary text-xs py-1 px-3"
+                              >
+                                View
+                              </Link>
+                              {!s.sent_at && (
+                                <button
+                                  onClick={() => handleSendStatement(s.id)}
+                                  disabled={sendingStatementId === s.id}
+                                  className="btn btn-primary text-xs py-1 px-3"
+                                >
+                                  {sendingStatementId === s.id ? 'Sending...' : 'Send'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
         </div>

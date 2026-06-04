@@ -255,6 +255,7 @@ export async function POST(request: NextRequest) {
             payee_id: agreement.referring_agent_id,
             payee_name: agentName,
             amount: Math.round(agentAmount * 100) / 100,
+            amount_1099_reportable: Math.round(agentAmount * 100) / 100,
             payment_status: 'pending',
           })
           .select()

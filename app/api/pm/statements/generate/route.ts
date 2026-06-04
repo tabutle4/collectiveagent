@@ -139,14 +139,15 @@ export async function POST(request: NextRequest) {
       .from('landlord_disbursements')
       .select(`
         id,
+        gross_rent,
+        management_fee,
         other_deductions,
         deposit_amount,
         net_amount,
         payment_date,
         payment_status,
         period_month,
-        period_year,
-        landlord_disbursement_deductions(amount)
+        period_year
       `)
       .eq('landlord_id', landlordId)
       .eq('property_id', propertyId)
@@ -170,15 +171,16 @@ export async function POST(request: NextRequest) {
       (d: any) => ['pending', 'processing'].includes(d.payment_status)
     )
 
-    const totalLineItemDeductions = (disbursements || []).reduce(
-      (sum, d: any) => sum + ((d.landlord_disbursement_deductions || []).reduce(
-        (s: number, lid: any) => s + Number(lid.amount || 0), 0
-      )), 0
+    // Deductions: derive from the gap between gross_rent minus mgmt_fee and
+    // net_amount. This ensures the displayed deductions match exactly what
+    // produced the net — no double-counting with line-item deduction rows.
+    // Formula per disbursement: gross_rent - management_fee - net_amount
+    const totalDeductions = (disbursements || []).reduce(
+      (sum, d: any) => {
+        const implied = Number(d.gross_rent || 0) - Number(d.management_fee || 0) - Number(d.net_amount || 0)
+        return sum + Math.max(0, implied)
+      }, 0
     )
-    const totalOtherDeductions = (disbursements || []).reduce(
-      (sum, d: any) => sum + Number(d.other_deductions || 0), 0
-    )
-    const totalDeductions = totalLineItemDeductions + totalOtherDeductions
     const totalDepositsReturnedToLandlord = (paidDisbursements).reduce(
       (sum, d: any) => sum + Number(d.deposit_amount || 0), 0
     )
