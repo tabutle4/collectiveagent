@@ -17,7 +17,15 @@ export async function GET(req: NextRequest) {
       .single()
 
     if (error || !job) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ job })
+
+    // Fetch participants for this job
+    const { data: participants } = await supabaseAdmin
+      .from('zoom_meeting_participants')
+      .select('participant_name, participant_email, duration_minutes, join_time, leave_time')
+      .eq('zoom_recording_job_id', id)
+      .order('join_time', { ascending: true })
+
+    return NextResponse.json({ job: { ...job, participants: participants || [] } })
   }
 
   const { data: jobs, error } = await supabaseAdmin

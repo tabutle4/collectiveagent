@@ -340,10 +340,33 @@ export default function RecordingDetailPage() {
               <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Scheduled Programs This Day</p>
               {context.calendarEvents.map((e: any, i: number) => (
                 <p key={i} className="text-luxury-gray-3 text-xs">
-                  {e.start?.dateTime?.slice(11, 16)} UTC - {e.subject}
+                  {new Date(e.start?.dateTime + (e.start?.dateTime?.endsWith('Z') ? '' : 'Z')).toLocaleString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', hour12: true })} CT - {e.subject}
                   {e.hasGuest && <span className="ml-1 text-luxury-accent">[Guest]</span>}
                 </p>
               ))}
+            </div>
+          )}
+
+          {/* Zoom transcript */}
+          {job.transcript_text && (
+            <div className="pt-2 border-t border-luxury-dark-3">
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Zoom Transcript</p>
+              <p className="text-luxury-black text-xs leading-relaxed line-clamp-4">{job.transcript_text.slice(0, 400)}...</p>
+            </div>
+          )}
+
+          {/* Attendees */}
+          {job.participants?.length > 0 && (
+            <div className="pt-2 border-t border-luxury-dark-3">
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Attendees ({job.participants.length})</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {job.participants.slice(0, 10).map((p: any, i: number) => (
+                  <span key={i} className="text-luxury-black text-xs bg-luxury-gray-5 px-2 py-0.5 rounded">{p.participant_name || p.participant_email}</span>
+                ))}
+                {job.participants.length > 10 && (
+                  <span className="text-luxury-gray-3 text-xs">+{job.participants.length - 10} more</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -498,3 +521,4 @@ export default function RecordingDetailPage() {
     </div>
   )
 }
+
