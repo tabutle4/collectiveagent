@@ -134,7 +134,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
         { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
         { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
-        { href: '/admin/insights', label: 'Business Insights', icon: Sparkles },
+        { href: '/admin/insights', label: 'Coaching Insights', icon: Sparkles },
       ],
     },
   },
