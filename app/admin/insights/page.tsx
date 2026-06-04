@@ -19,13 +19,13 @@ const QUICK_QUESTIONS = [
 
 function SourceBadge({ source }: { source: string }) {
   const styles: Record<string, string> = {
-    zoom: 'bg-blue-900 text-blue-300',
-    fathom: 'bg-purple-900 text-purple-300',
-    sharepoint: 'bg-green-900 text-green-300',
-    transactions: 'bg-amber-900 text-amber-300',
+    zoom: 'text-blue-600',
+    fathom: 'text-purple-600',
+    sharepoint: 'text-green-700',
+    transactions: 'text-amber-700',
   }
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${styles[source] || 'bg-luxury-dark-3 text-luxury-gray-2'}`}>
+    <span className={`status-badge ${styles[source] || 'text-luxury-gray-3'}`}>
       {source}
     </span>
   )

@@ -111,8 +111,9 @@ async function suggestTopics(transcript: string, meetingTitle: string): Promise<
   }
 }
 
-async function fetchZoomParticipants(meetingId: string): Promise<any[]> {
+async function fetchZoomParticipants(meetingUuid: string): Promise<any[]> {
   try {
+    if (!meetingUuid) return []
     const tokenRes = await fetch(
       `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
       {
@@ -127,8 +128,14 @@ async function fetchZoomParticipants(meetingId: string): Promise<any[]> {
     const { access_token } = await tokenRes.json()
     if (!access_token) return []
 
+    // UUID must be double-encoded if it starts with '/' or contains '//'
+    const encoded = encodeURIComponent(meetingUuid)
+    const doubleEncoded = (meetingUuid.startsWith('/') || meetingUuid.includes('//'))
+      ? encodeURIComponent(encoded)
+      : encoded
+
     const partRes = await fetch(
-      `https://api.zoom.us/v2/report/meetings/${meetingId}/participants?page_size=300`,
+      `https://api.zoom.us/v2/report/meetings/${doubleEncoded}/participants?page_size=300`,
       { headers: { Authorization: `Bearer ${access_token}` } }
     )
     if (!partRes.ok) return []
@@ -291,7 +298,8 @@ export async function POST(req: NextRequest) {
 
   const recording = payload.payload.object
   const meetingTitle: string = recording.topic || 'Untitled Meeting'
-  const meetingId: string = String(recording.id || '')
+  const meetingId: string = String(recording.id || '')   // PMI - used for Zoom delete
+  const meetingUuid: string = recording.uuid || ''         // Unique per session - used for participant report
   const startTime: string = recording.start_time
   const zoomToken: string = payload.download_token || ''
   const zoomShareUrl: string = recording.share_url || ''
@@ -313,7 +321,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Fetch participants now while meeting data is fresh
-  const participants = meetingId ? await fetchZoomParticipants(meetingId) : []
+  const participants = meetingUuid ? await fetchZoomParticipants(meetingUuid) : []
 
   // Generate topic suggestions from transcript
   const suggestedTopics = await suggestTopics(transcript, meetingTitle)
@@ -329,7 +337,7 @@ export async function POST(req: NextRequest) {
     .from('zoom_recording_jobs')
     .insert({
       meeting_title: meetingTitle,
-      meeting_id: meetingId || null,
+      meeting_id: meetingUuid || null,
       start_time: startTime,
       mp4_download_url: mp4File.download_url,
       mp4_file_size: fileSize,
@@ -352,7 +360,7 @@ export async function POST(req: NextRequest) {
   if (participants.length > 0) {
     const rows = participants.map((p: any) => ({
       zoom_recording_job_id: job.id,
-      meeting_id: meetingId,
+      meeting_id: meetingUuid,
       participant_name: p.name || null,
       participant_email: p.user_email || null,
       duration_minutes: p.duration ? Math.round(p.duration / 60) : null,
@@ -437,3 +445,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, jobId: job.id })
 }
+
