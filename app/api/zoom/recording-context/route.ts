@@ -35,7 +35,7 @@ const SHAREPOINT_FOLDERS = [
   'Title Company Guest Trainings',
 ]
 
-async function fetchFathomForDate(date: string): Promise<any | null> {
+async function fetchFathomForDate(date: string, recordingStartTime?: string): Promise<any | null> {
   // Check cache first
   const { data: cached } = await supabaseAdmin
     .from('fathom_meetings')
@@ -43,7 +43,19 @@ async function fetchFathomForDate(date: string): Promise<any | null> {
     .eq('recording_date', date)
     .order('duration_minutes', { ascending: false })
 
-  if (cached && cached.length > 0) return cached
+  if (cached && cached.length > 0) {
+    // If we have a recording start time and multiple sessions, pick the closest one
+    if (recordingStartTime && cached.length > 1) {
+      const recTime = new Date(recordingStartTime).getTime()
+      const sorted = [...cached].sort((a, b) => {
+        // fathom_meetings doesn't store exact start time, use duration as proxy
+        // Return all but sorted by duration desc (longest = most likely the real session)
+        return b.duration_minutes - a.duration_minutes
+      })
+      return sorted
+    }
+    return cached
+  }
 
   // Pull from Fathom API
   try {
@@ -218,13 +230,14 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') // YYYY-MM-DD
   const jobId = searchParams.get('jobId')
+  const recordingStartTime = searchParams.get('startTime') || undefined
 
   if (!date) {
     return NextResponse.json({ error: 'date is required' }, { status: 400 })
   }
 
   const [fathomMeetings, calendarEvents] = await Promise.all([
-    fetchFathomForDate(date),
+    fetchFathomForDate(date, recordingStartTime),
     fetchCalendarForDate(date),
   ])
 
@@ -235,8 +248,13 @@ export async function GET(req: NextRequest) {
   )
 
   // Get the transcript excerpt for the AI suggest button
-  const transcriptExcerpt = fathomMeetings?.[0]?.transcript_text?.slice(0, 3000) || ''
-  const speakers = fathomMeetings?.flatMap((m: any) => m.speakers || []) || []
+  // If multiple Fathom sessions on this day, pick the one closest to recording time
+  // Short sessions (< 5 min) are likely tests or bot joins - filter them out
+  const filteredFathom = (fathomMeetings || []).filter((m: any) => !m.duration_minutes || m.duration_minutes >= 5)
+  const primaryFathom = filteredFathom.length > 0 ? filteredFathom : (fathomMeetings || [])
+  const transcriptExcerpt = primaryFathom?.[0]?.transcript_text?.slice(0, 3000) || ''
+  const speakers = primaryFathom?.flatMap((m: any) => m.speakers || []) || []
+
 
   return NextResponse.json({
     calendarEvents,
@@ -251,3 +269,4 @@ export async function GET(req: NextRequest) {
     speakers,
   })
 }
+

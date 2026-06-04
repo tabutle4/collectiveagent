@@ -332,6 +332,19 @@ export async function POST(req: NextRequest) {
   const fileName = `${suggestedTitle}.mp4`
   const fileSize = mp4File.file_size || 0
 
+  // Deduplication: check if job already exists for this recording instance
+  const { data: existing } = await supabaseAdmin
+    .from('zoom_recording_jobs')
+    .select('id, status')
+    .eq('meeting_id', meetingUuid)
+    .eq('start_time', startTime)
+    .maybeSingle()
+
+  if (existing) {
+    console.log(`Duplicate webhook ignored: job ${existing.id} already exists for meeting ${meetingUuid}`)
+    return NextResponse.json({ ok: true, duplicate: true, jobId: existing.id })
+  }
+
   // Save job record with all data we have
   const { data: job, error } = await supabaseAdmin
     .from('zoom_recording_jobs')
@@ -356,9 +369,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DB error' }, { status: 500 })
   }
 
-  // Store participants if we got any
+  // Store participants if we got any (excluding bots)
   if (participants.length > 0) {
-    const rows = participants.map((p: any) => ({
+    // Filter out Fathom Notetaker bots
+    const humanParticipants = participants.filter((p: any) =>
+      !p.name?.toLowerCase().includes('fathom') &&
+      !p.name?.toLowerCase().includes('notetaker') &&
+      !p.name?.toLowerCase().includes('otter') &&
+      !p.name?.toLowerCase().includes('fireflies')
+    )
+    const rows = humanParticipants.map((p: any) => ({
       zoom_recording_job_id: job.id,
       meeting_id: meetingUuid,
       participant_name: p.name || null,
@@ -445,4 +465,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, jobId: job.id })
 }
+
 

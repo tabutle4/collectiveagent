@@ -97,7 +97,7 @@ export default function RecordingDetailPage() {
           // Load recording context (Fathom + calendar)
           const recordingDate = d.job.start_time?.slice(0, 10)
           if (recordingDate) {
-            fetch(`/api/zoom/recording-context?date=${recordingDate}&jobId=${id}`)
+            fetch(`/api/zoom/recording-context?date=${recordingDate}&jobId=${id}&startTime=${encodeURIComponent(d.job.start_time || '')}`)
               .then(r => r.json())
               .then(ctx => {
                 setContext(ctx)
