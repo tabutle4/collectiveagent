@@ -174,15 +174,16 @@ export default function NewPropertyPage() {
 
           {/* PM Agreement Selection (filtered to selected landlord) */}
           <div>
-            <label className="field-label">Property Management Agreement</label>
+            <label className="field-label">Property Management Agreement *</label>
             <select
               name="pm_agreement_id"
               value={form.pm_agreement_id}
               onChange={handleChange}
               disabled={!form.landlord_id}
+              required
               className="select-luxury w-full"
             >
-              <option value="">None / Unassigned</option>
+              <option value="">Select agreement...</option>
               {landlordAgreements.map((ag) => {
                 const startStr = ag.commencement_date
                   ? new Date(`${ag.commencement_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -202,8 +203,16 @@ export default function NewPropertyPage() {
                 ? 'Select a landlord first to see available agreements.'
                 : landlordAgreements.length === 0
                   ? 'This landlord has no agreements yet. You can link one later from the property edit page.'
-                  : 'Selects which agreement governs disbursements for this property. Can be changed later.'}
-            </p>
+                  : 'Selects which agreement governs disbursements for this property. Can be changed later.'}</p>
+            {form.landlord_id && landlordAgreements.length === 0 && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex items-start gap-2">
+                <span className="flex-shrink-0 mt-0.5">&#9888;</span>
+                <div>
+                  This landlord has no agreement yet. An agreement is required before a property can generate invoices correctly.
+                  Go to the <a href={`/admin/pm/landlords/${form.landlord_id}`} className="underline font-medium">landlord page</a> and create one first, then come back to add this property.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Address Section */}
@@ -427,7 +436,7 @@ export default function NewPropertyPage() {
             <Link href="/admin/pm/properties" className="btn btn-secondary">
               Cancel
             </Link>
-            <button type="submit" disabled={loading} className="btn btn-primary flex items-center gap-2">
+            <button type="submit" disabled={loading || (!!form.landlord_id && landlordAgreements.length === 0)} className="btn btn-primary flex items-center gap-2">
               <Save size={16} />
               {loading ? 'Creating...' : 'Create Property'}
             </button>

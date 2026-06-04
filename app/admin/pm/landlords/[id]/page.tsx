@@ -1568,6 +1568,84 @@ export default function LandlordDetailPage() {
                   </div>
                 </div>
 
+                {/* Setup Checklist */}
+                <div className="md:col-span-2">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                    Setup Checklist
+                  </h3>
+                  <div className="inner-card space-y-2">
+                    {[
+                      {
+                        label: 'Agreement',
+                        done: agreements.length > 0,
+                        action: () => setActiveTab('agreement'),
+                        actionLabel: 'Create Agreement',
+                        note: 'Required before adding a property',
+                      },
+                      {
+                        label: 'Property',
+                        done: properties.length > 0,
+                        href: `/admin/pm/properties/new`,
+                        actionLabel: 'Add Property',
+                        note: agreements.length === 0 ? 'Create an agreement first' : undefined,
+                        disabled: agreements.length === 0,
+                      },
+                      {
+                        label: 'Tenant',
+                        done: leases.length > 0,
+                        href: `/admin/pm/tenants/new`,
+                        actionLabel: 'Add Tenant',
+                        note: undefined,
+                        disabled: false,
+                      },
+                      {
+                        label: 'Lease',
+                        done: leases.filter(l => l.status === 'active').length > 0,
+                        href: properties.length > 0 ? `/admin/pm/leases/new` : undefined,
+                        actionLabel: 'Create Lease',
+                        note: properties.length === 0 ? 'Add a property first' : agreements.length === 0 ? 'Create an agreement first' : undefined,
+                        disabled: properties.length === 0 || agreements.length === 0,
+                      },
+                    ].map((step) => (
+                      <div key={step.label} className="flex items-center justify-between py-1">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${step.done ? 'bg-green-100' : 'bg-luxury-gray-5'}`}>
+                            {step.done
+                              ? <CheckCircle size={14} className="text-green-600" />
+                              : <div className="w-2 h-2 rounded-full bg-luxury-gray-3" />
+                            }
+                          </div>
+                          <div>
+                            <span className={`text-sm ${step.done ? 'text-luxury-gray-3 line-through' : 'text-luxury-gray-1 font-medium'}`}>
+                              {step.label}
+                            </span>
+                            {step.note && !step.done && (
+                              <p className="text-xs text-amber-600">{step.note}</p>
+                            )}
+                          </div>
+                        </div>
+                        {!step.done && (
+                          step.action ? (
+                            <button
+                              onClick={step.action}
+                              disabled={step.disabled}
+                              className="text-xs text-luxury-accent hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+                            >
+                              {step.actionLabel}
+                            </button>
+                          ) : step.href && !step.disabled ? (
+                            <Link href={step.href} className="text-xs text-luxury-accent hover:underline">
+                              {step.actionLabel}
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-luxury-gray-4">{step.actionLabel}</span>
+                          )
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="md:col-span-2">
                   <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
                     Summary

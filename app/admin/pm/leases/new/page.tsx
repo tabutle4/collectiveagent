@@ -196,6 +196,7 @@ function NewLeaseContent() {
 
   const selectedProperty = properties.find(p => p.id === form.property_id)
   const lateFeeCapPct = selectedProperty && selectedProperty.unit_count > 4 ? 10 : 12
+  const propertyHasNoAgreement = !!form.property_id && selectedProperty && !selectedProperty.pm_agreement_id
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -272,6 +273,16 @@ function NewLeaseContent() {
                 </Link>
               </div>
             </div>
+
+            {propertyHasNoAgreement && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800 flex items-start gap-2">
+                <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
+                <div>
+                  This property has no agreement. Invoices cannot be generated correctly without one.
+                  Go to the <a href={`/admin/pm/properties/${form.property_id}`} className="underline font-medium">property page</a> and link an agreement before creating this lease.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Lease Term */}
@@ -487,7 +498,7 @@ function NewLeaseContent() {
             <Link href="/admin/pm/leases" className="btn btn-secondary">
               Cancel
             </Link>
-            <button type="submit" disabled={loading} className="btn btn-primary flex items-center gap-2">
+            <button type="submit" disabled={loading || !!propertyHasNoAgreement} className="btn btn-primary flex items-center gap-2">
               <Save size={16} />
               {loading ? 'Creating...' : 'Create Lease'}
             </button>
