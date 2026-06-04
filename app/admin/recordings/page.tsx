@@ -149,7 +149,7 @@ export default function RecordingsPage() {
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     {job.start_time && (
-                      <p className="text-luxury-gray-3 text-xs">{formatCT(job.start_time)}</p>
+                      <p className="text-luxury-gray-2 text-xs">{formatCT(job.start_time)}</p>
                     )}
                     {job.duration && (
                       <p className="text-luxury-gray-3 text-xs">{job.duration} min</p>
