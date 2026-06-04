@@ -6,11 +6,9 @@ import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-
+const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
-const VIDEOS_FOLDER = 'Videos'
 
-// Get SharePoint site drive ID (cached in memory per cold start)
 let cachedSiteId: string | null = null
 let cachedDriveId: string | null = null
 
@@ -25,7 +23,6 @@ async function getSiteDriveId(token: string): Promise<{ siteId: string; driveId:
   const site = await siteRes.json()
   cachedSiteId = site.id
 
-  // Get all drives and find the Videos library specifically
   const drivesRes = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${site.id}/drives`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -41,7 +38,6 @@ async function getSiteDriveId(token: string): Promise<{ siteId: string; driveId:
   if (videosDrive) {
     cachedDriveId = videosDrive.id
   } else {
-    // Fall back to default drive
     const driveRes = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${site.id}/drive`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -54,18 +50,27 @@ async function getSiteDriveId(token: string): Promise<{ siteId: string; driveId:
   return { siteId: site.id, driveId: cachedDriveId! }
 }
 
-// Upload large file to SharePoint via resumable upload session
-async function uploadToSharePoint(
+// Download from OneDrive and stream upload to SharePoint in chunks
+async function moveToSharePoint(
   token: string,
   driveId: string,
+  oneDriveItemId: string,
   folderPath: string,
-  fileName: string,
-  fileBuffer: Buffer
+  fileName: string
 ): Promise<string> {
-  // Videos library is the drive root - path is just folder/filename
-  const itemPath = `${folderPath}/${fileName}`
+  // Get OneDrive download URL
+  const itemRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${ONEDRIVE_USER}/drive/items/${oneDriveItemId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!itemRes.ok) throw new Error(`Failed to get OneDrive item: ${await itemRes.text()}`)
+  const item = await itemRes.json()
+  const fileSize = item.size || 0
+  const downloadUrl = item['@microsoft.graph.downloadUrl']
+  if (!downloadUrl) throw new Error('No download URL on OneDrive item')
 
-  // Create upload session
+  // Create SharePoint upload session
+  const itemPath = `${folderPath}/${fileName}`
   const sessionRes = await fetch(
     `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
     {
@@ -82,47 +87,76 @@ async function uploadToSharePoint(
       }),
     }
   )
-
-  if (!sessionRes.ok) {
-    throw new Error(`Failed to create upload session: ${await sessionRes.text()}`)
-  }
-
+  if (!sessionRes.ok) throw new Error(`Failed to create SharePoint upload session: ${await sessionRes.text()}`)
   const { uploadUrl } = await sessionRes.json()
 
-  // Upload in 5MB chunks
-  const chunkSize = 5 * 1024 * 1024
+  // Stream from OneDrive to SharePoint in 10MB chunks
+  const chunkSize = 10 * 1024 * 1024
   let offset = 0
   let webUrl = ''
 
-  while (offset < fileBuffer.length) {
-    const end = Math.min(offset + chunkSize, fileBuffer.length)
-    const chunk = fileBuffer.slice(offset, end)
+  while (offset < fileSize) {
+    const end = Math.min(offset + chunkSize - 1, fileSize - 1)
+    const chunkDownload = await fetch(downloadUrl, {
+      headers: { Range: `bytes=${offset}-${end}` },
+    })
+    if (!chunkDownload.ok && chunkDownload.status !== 206) {
+      throw new Error(`OneDrive chunk download failed: ${chunkDownload.status}`)
+    }
+    const chunk = Buffer.from(await chunkDownload.arrayBuffer())
 
-    const chunkRes = await fetch(uploadUrl, {
+    const chunkUpload = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
-        'Content-Range': `bytes ${offset}-${end - 1}/${fileBuffer.length}`,
+        'Content-Range': `bytes ${offset}-${end}/${fileSize}`,
         'Content-Length': String(chunk.length),
       },
       body: chunk,
     })
 
-    if (chunkRes.status === 200 || chunkRes.status === 201) {
-      const result = await chunkRes.json()
+    if (chunkUpload.status === 200 || chunkUpload.status === 201) {
+      const result = await chunkUpload.json()
       webUrl = result.webUrl || ''
-    } else if (chunkRes.status !== 202) {
-      throw new Error(`Upload chunk failed: ${chunkRes.status} ${await chunkRes.text()}`)
+    } else if (chunkUpload.status !== 202) {
+      throw new Error(`SharePoint chunk upload failed: ${chunkUpload.status} ${await chunkUpload.text()}`)
     }
 
-    offset = end
+    offset = end + 1
   }
 
   return webUrl
 }
 
+// Verify file exists in SharePoint by checking its webUrl path
+async function verifySharePointFile(token: string, driveId: string, folderPath: string, fileName: string): Promise<boolean> {
+  try {
+    const itemPath = `${folderPath}/${fileName}`
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${itemPath}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// Delete file from OneDrive
+async function deleteFromOneDrive(token: string, itemId: string): Promise<void> {
+  try {
+    await fetch(
+      `https://graph.microsoft.com/v1.0/users/${ONEDRIVE_USER}/drive/items/${itemId}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    )
+  } catch (e) {
+    console.error('Failed to delete OneDrive file:', e)
+  }
+}
+
 function toStreamUrl(webUrl: string): string {
-  // Graph webUrl: https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/Videos/Folder/file.mp4
-  // Stream URL:   https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/stream.aspx?id=/sites/agenttrainingcenter/Videos/Folder/file.mp4
   try {
     const url = new URL(webUrl)
     const decoded = decodeURIComponent(url.pathname)
@@ -143,7 +177,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'jobId, finalTitle, and folder are required' }, { status: 400 })
   }
 
-  // Get the job
   const { data: job, error: fetchError } = await supabaseAdmin
     .from('zoom_recording_jobs')
     .select('*')
@@ -165,21 +198,66 @@ export async function POST(req: NextRequest) {
     .eq('id', jobId)
 
   try {
-    // Download MP4 from Zoom
-    const zoomRes = await fetch(
-      `${job.mp4_download_url}?access_token=${job.zoom_token}`
-    )
-    if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
-
-    const arrayBuffer = await zoomRes.arrayBuffer()
-    const fileBuffer = Buffer.from(arrayBuffer)
-
-    const fileName = `${finalTitle}.mp4`
-
-    // Upload to SharePoint
     const token = await getGraphToken()
     const { driveId } = await getSiteDriveId(token)
-    const rawUrl = await uploadToSharePoint(token, driveId, folder, fileName, fileBuffer)
+    const fileName = `${finalTitle}.mp4`
+
+    let rawUrl = ''
+
+    if (job.onedrive_item_id) {
+      // Upload from OneDrive to SharePoint
+      rawUrl = await moveToSharePoint(token, driveId, job.onedrive_item_id, folder, fileName)
+
+      // Verify file is in SharePoint before deleting from OneDrive
+      const verified = await verifySharePointFile(token, driveId, folder, fileName)
+      if (!verified) throw new Error('SharePoint file verification failed after upload')
+
+      // Delete from OneDrive
+      await deleteFromOneDrive(token, job.onedrive_item_id)
+
+    } else {
+      // Fallback: download from Zoom directly (for older jobs without OneDrive)
+      const zoomRes = await fetch(`${job.mp4_download_url}?access_token=${job.zoom_token}`)
+      if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
+      const arrayBuffer = await zoomRes.arrayBuffer()
+      const fileBuffer = Buffer.from(arrayBuffer)
+
+      // Upload buffer to SharePoint in chunks
+      const itemPath = `${folder}/${fileName}`
+      const sessionRes = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'rename', name: fileName } }),
+        }
+      )
+      if (!sessionRes.ok) throw new Error(`Failed to create upload session: ${await sessionRes.text()}`)
+      const { uploadUrl } = await sessionRes.json()
+
+      const chunkSize = 5 * 1024 * 1024
+      let offset = 0
+      while (offset < fileBuffer.length) {
+        const end = Math.min(offset + chunkSize, fileBuffer.length)
+        const chunk = fileBuffer.slice(offset, end)
+        const chunkRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Range': `bytes ${offset}-${end - 1}/${fileBuffer.length}`,
+            'Content-Length': String(chunk.length),
+          },
+          body: chunk,
+        })
+        if (chunkRes.status === 200 || chunkRes.status === 201) {
+          const result = await chunkRes.json()
+          rawUrl = result.webUrl || ''
+        } else if (chunkRes.status !== 202) {
+          throw new Error(`Upload chunk failed: ${chunkRes.status}`)
+        }
+        offset = end
+      }
+    }
+
     const webUrl = toStreamUrl(rawUrl)
 
     // Mark as uploaded
@@ -189,21 +267,23 @@ export async function POST(req: NextRequest) {
         status: 'uploaded',
         sharepoint_url: webUrl,
         uploaded_at: new Date().toISOString(),
+        onedrive_url: null,
+        onedrive_item_id: null,
       })
       .eq('id', jobId)
 
-    // Send email to agents group
+    // Email agents
     const emailHtml = getEmailLayout(
       `<p class="email-greeting">Hi Team,</p>
       <p style="margin-bottom:16px;">A new training recording is now available in the Training Center.</p>
       <div class="email-section">
         <h3>Recording Details</h3>
         <p><strong>${finalTitle}</strong></p>
-        <p style="margin-top:8px;font-size:13px;color:#888;">SharePoint &mdash; ${folder}</p>
+        <p style="margin-top:8px;font-size:13px;color:#888;">SharePoint - ${folder}</p>
       </div>
       ${emailButton('Watch the Recording', webUrl || 'https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter')}
       <p style="font-size:13px;color:#888;text-align:center;margin-top:8px;">The transcript will be available in SharePoint shortly after you open the video.</p>
-      ${emailSignature('Collective Realty Co.', 'Training &amp; Coaching Team')}`,
+      ${emailSignature('Collective Realty Co.', 'Training and Coaching Team')}`,
       {
         title: 'New Training Recording Available',
         preheader: finalTitle,
@@ -218,6 +298,7 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({ ok: true, webUrl })
+
   } catch (err: any) {
     await supabaseAdmin
       .from('zoom_recording_jobs')

@@ -3,8 +3,11 @@ import { createHmac } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
+const ONEDRIVE_FOLDER = 'Zoom Recordings/Pending'
 
 // SharePoint folder names exactly as they exist in the Training Center site
 const SHAREPOINT_FOLDERS = [
@@ -28,7 +31,6 @@ const SHAREPOINT_FOLDERS = [
   'Title Company Guest Trainings',
 ]
 
-// Guess the best folder based on the Zoom meeting title
 function guessFolderFromTitle(title: string): string {
   const lower = title.toLowerCase()
   if (lower.includes('seasoned')) return 'Seasoned Agent Coaching Circle'
@@ -51,19 +53,16 @@ function guessFolderFromTitle(title: string): string {
   return 'Announcement Recordings'
 }
 
-// Format date as M-D-YY
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
   return `${d.getMonth() + 1}-${d.getDate()}-${String(d.getFullYear()).slice(2)}`
 }
 
-// Fetch .vtt transcript text from Zoom download URL
 async function fetchTranscript(downloadUrl: string, zoomToken: string): Promise<string> {
   try {
     const res = await fetch(`${downloadUrl}?access_token=${zoomToken}`)
     if (!res.ok) return ''
     const vtt = await res.text()
-    // Strip VTT formatting - extract just the spoken lines
     const lines = vtt.split('\n')
     const spoken: string[] = []
     for (const line of lines) {
@@ -78,13 +77,12 @@ async function fetchTranscript(downloadUrl: string, zoomToken: string): Promise<
         spoken.push(trimmed)
       }
     }
-    return spoken.join(' ').slice(0, 8000) // Cap at 8k chars for Claude
+    return spoken.join(' ').slice(0, 8000)
   } catch {
     return ''
   }
 }
 
-// Ask Claude to suggest topic tags
 async function suggestTopics(transcript: string, meetingTitle: string): Promise<string[]> {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -100,14 +98,7 @@ async function suggestTopics(transcript: string, meetingTitle: string): Promise<
         messages: [
           {
             role: 'user',
-            content: `You are helping name a real estate training session recording for Collective Realty Co.
-
-Meeting title: "${meetingTitle}"
-Transcript excerpt: "${transcript}"
-
-Generate exactly 3 to 4 short topic tags (3-6 words each, title case) that describe the main subjects covered. These will be used in the recording filename.
-
-Respond with ONLY the tags as a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling Techniques", "Follow Up Systems"]`,
+            content: `You are helping name a real estate training session recording for Collective Realty Co.\n\nMeeting title: "${meetingTitle}"\nTranscript excerpt: "${transcript}"\n\nGenerate exactly 3 to 4 short topic tags (3-6 words each, title case) that describe the main subjects covered. These will be used in the recording filename.\n\nRespond with ONLY the tags as a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling Techniques", "Follow Up Systems"]`,
           },
         ],
       }),
@@ -118,6 +109,127 @@ Respond with ONLY the tags as a JSON array of strings, nothing else. Example: ["
     return JSON.parse(clean)
   } catch {
     return []
+  }
+}
+
+// Upload to OneDrive via resumable upload session, streaming in chunks
+async function uploadToOneDrive(
+  token: string,
+  fileName: string,
+  fileSize: number,
+  fileStream: ReadableStream
+): Promise<{ itemId: string; webUrl: string }> {
+  const folderPath = ONEDRIVE_FOLDER.replace(/\//g, '/')
+  const itemPath = `${folderPath}/${fileName}`
+
+  // Create upload session
+  const sessionRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${ONEDRIVE_USER}/drive/root:/${itemPath}:/createUploadSession`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        item: {
+          '@microsoft.graph.conflictBehavior': 'rename',
+          name: fileName,
+        },
+      }),
+    }
+  )
+  if (!sessionRes.ok) throw new Error(`OneDrive upload session failed: ${await sessionRes.text()}`)
+  const { uploadUrl } = await sessionRes.json()
+
+  // Stream upload in 10MB chunks
+  const chunkSize = 10 * 1024 * 1024
+  const reader = fileStream.getReader()
+  let offset = 0
+  let buffer = new Uint8Array(0)
+  let itemId = ''
+  let webUrl = ''
+
+  while (true) {
+    // Fill buffer up to chunkSize
+    while (buffer.length < chunkSize) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const merged = new Uint8Array(buffer.length + value.length)
+      merged.set(buffer)
+      merged.set(value, buffer.length)
+      buffer = merged
+    }
+
+    if (buffer.length === 0) break
+
+    const isLast = offset + buffer.length >= fileSize
+    const chunk = buffer.slice(0, Math.min(chunkSize, buffer.length))
+    buffer = buffer.slice(chunk.length)
+
+    const end = offset + chunk.length - 1
+    const chunkRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Range': `bytes ${offset}-${end}/${fileSize}`,
+        'Content-Length': String(chunk.length),
+      },
+      body: chunk,
+    })
+
+    if (chunkRes.status === 200 || chunkRes.status === 201) {
+      const result = await chunkRes.json()
+      itemId = result.id || ''
+      webUrl = result.webUrl || ''
+    } else if (chunkRes.status !== 202) {
+      throw new Error(`OneDrive chunk upload failed: ${chunkRes.status} ${await chunkRes.text()}`)
+    }
+
+    offset += chunk.length
+    if (isLast) break
+  }
+
+  return { itemId, webUrl }
+}
+
+// Verify file exists in OneDrive
+async function verifyOneDriveFile(token: string, itemId: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${ONEDRIVE_USER}/drive/items/${itemId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// Delete recording from Zoom
+async function deleteZoomRecording(meetingId: string): Promise<void> {
+  try {
+    const tokenRes = await fetch(
+      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    )
+    if (!tokenRes.ok) return
+    const { access_token } = await tokenRes.json()
+
+    await fetch(
+      `https://api.zoom.us/v2/meetings/${meetingId}/recordings`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${access_token}` },
+      }
+    )
+  } catch (e) {
+    console.error('Failed to delete Zoom recording:', e)
   }
 }
 
@@ -135,7 +247,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Verify Zoom signature for all other events
+  // Verify Zoom signature
   const signature = req.headers.get('x-zm-signature') || ''
   const timestamp = req.headers.get('x-zm-request-timestamp') || ''
   const message = `v0:${timestamp}:${body}`
@@ -151,11 +263,11 @@ export async function POST(req: NextRequest) {
 
   const recording = payload.payload.object
   const meetingTitle: string = recording.topic || 'Untitled Meeting'
+  const meetingId: string = recording.id || ''
   const startTime: string = recording.start_time
   const zoomToken: string = payload.download_token || ''
   const zoomShareUrl: string = recording.share_url || ''
 
-  // Find the MP4 and VTT files
   const mp4File = recording.recording_files?.find(
     (f: any) => f.file_type === 'MP4' && f.recording_type === 'shared_screen_with_speaker_view'
   ) || recording.recording_files?.find((f: any) => f.file_type === 'MP4')
@@ -166,7 +278,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No MP4 found' }, { status: 400 })
   }
 
-  // Fetch transcript and get topic suggestions
+  // Fetch transcript and topic suggestions
   let transcript = ''
   if (vttFile?.download_url) {
     transcript = await fetchTranscript(vttFile.download_url, zoomToken)
@@ -175,19 +287,19 @@ export async function POST(req: NextRequest) {
   const suggestedTopics = await suggestTopics(transcript, meetingTitle)
   const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
-
-  // Build suggested title
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
   const suggestedTitle = `${meetingTitle} - ${dateStr}${topicStr}`
+  const fileName = `${suggestedTitle}.mp4`
+  const fileSize = mp4File.file_size || 0
 
-  // Save to Supabase
+  // Save initial job record
   const { data: job, error } = await supabaseAdmin
     .from('zoom_recording_jobs')
     .insert({
       meeting_title: meetingTitle,
       start_time: startTime,
       mp4_download_url: mp4File.download_url,
-      mp4_file_size: mp4File.file_size,
+      mp4_file_size: fileSize,
       zoom_token: zoomToken,
       suggested_title: suggestedTitle,
       suggested_folder: suggestedFolder,
@@ -202,7 +314,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DB error' }, { status: 500 })
   }
 
-  // Look up notification email from company_settings
+  // Download from Zoom and upload to OneDrive
+  try {
+    const graphToken = await getGraphToken()
+
+    // Stream download from Zoom
+    const zoomRes = await fetch(`${mp4File.download_url}?access_token=${zoomToken}`)
+    if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
+    if (!zoomRes.body) throw new Error('No response body from Zoom')
+
+    // Upload stream to OneDrive
+    const { itemId, webUrl: oneDriveUrl } = await uploadToOneDrive(
+      graphToken,
+      fileName,
+      fileSize,
+      zoomRes.body
+    )
+
+    // Verify file exists in OneDrive before deleting from Zoom
+    const verified = await verifyOneDriveFile(graphToken, itemId)
+    if (!verified) throw new Error('OneDrive file verification failed')
+
+    // Delete from Zoom now that it is safely in OneDrive
+    if (meetingId) await deleteZoomRecording(meetingId)
+
+    // Update job with OneDrive info
+    await supabaseAdmin
+      .from('zoom_recording_jobs')
+      .update({
+        onedrive_url: oneDriveUrl,
+        onedrive_item_id: itemId,
+      })
+      .eq('id', job.id)
+
+  } catch (err: any) {
+    console.error('OneDrive upload error:', err)
+    // Job stays in pending — Zoom download URL still valid for ~24h as fallback
+    await supabaseAdmin
+      .from('zoom_recording_jobs')
+      .update({ error_message: `OneDrive upload failed: ${err.message}` })
+      .eq('id', job.id)
+  }
+
+  // Send notification email regardless of OneDrive result
   const { data: settingsRow } = await supabaseAdmin
     .from('company_settings')
     .select('zoom_recording_notification_email')

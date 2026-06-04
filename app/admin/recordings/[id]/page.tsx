@@ -290,13 +290,22 @@ export default function RecordingDetailPage() {
             )}
           </div>
 
-          {/* Zoom recording link */}
-          {job.zoom_share_url && (
+          {/* Preview links */}
+          {(job.onedrive_url || job.zoom_share_url) && (
             <div className="pt-2 border-t border-luxury-dark-3">
-              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Zoom Recording</p>
-              <a href={job.zoom_share_url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent text-xs underline">
-                Preview in Zoom
-              </a>
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Preview Recording</p>
+              <div className="flex gap-4">
+                {job.onedrive_url && (
+                  <a href={job.onedrive_url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent text-xs underline">
+                    View in OneDrive
+                  </a>
+                )}
+                {job.zoom_share_url && (
+                  <a href={job.zoom_share_url} target="_blank" rel="noopener noreferrer" className="text-luxury-gray-3 text-xs underline">
+                    View in Zoom
+                  </a>
+                )}
+              </div>
             </div>
           )}
 
