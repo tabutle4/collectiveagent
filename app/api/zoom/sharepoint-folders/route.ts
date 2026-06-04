@@ -27,17 +27,23 @@ export async function GET(req: NextRequest) {
     if (!siteRes.ok) throw new Error('Failed to get SharePoint site')
     const site = await siteRes.json()
 
-    // Get drive
-    const driveRes = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${site.id}/drive`,
+    // Get all drives and find the Videos library specifically
+    const drivesRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${site.id}/drives`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
-    if (!driveRes.ok) throw new Error('Failed to get drive')
-    const drive = await driveRes.json()
+    if (!drivesRes.ok) throw new Error('Failed to get drives')
+    const drivesData = await drivesRes.json()
+    const drives = drivesData.value || []
 
-    // List folders inside Videos
+    const videosDrive = drives.find((d: any) =>
+      d.name === 'Videos' || d.webUrl?.toLowerCase().includes('/videos')
+    )
+    if (!videosDrive) throw new Error('Videos library not found')
+
+    // List folders at root of Videos library
     const foldersRes = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${drive.id}/root:/Videos:/children?$select=name,folder&$top=100`,
+      `https://graph.microsoft.com/v1.0/drives/${videosDrive.id}/root/children?$select=name,folder&$top=100`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     if (!foldersRes.ok) throw new Error('Failed to list folders')

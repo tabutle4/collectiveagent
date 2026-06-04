@@ -25,15 +25,33 @@ async function getSiteDriveId(token: string): Promise<{ siteId: string; driveId:
   const site = await siteRes.json()
   cachedSiteId = site.id
 
-  const driveRes = await fetch(
-    `https://graph.microsoft.com/v1.0/sites/${site.id}/drive`,
+  // Get all drives and find the Videos library specifically
+  const drivesRes = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${site.id}/drives`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
-  if (!driveRes.ok) throw new Error(`Failed to get SharePoint drive: ${await driveRes.text()}`)
-  const drive = await driveRes.json()
-  cachedDriveId = drive.id
+  if (!drivesRes.ok) throw new Error(`Failed to get SharePoint drives: ${await drivesRes.text()}`)
+  const drivesData = await drivesRes.json()
+  const drives = drivesData.value || []
 
-  return { siteId: site.id, driveId: drive.id }
+  const videosDrive = drives.find((d: any) =>
+    d.name === 'Videos' || d.webUrl?.toLowerCase().includes('/videos')
+  )
+
+  if (videosDrive) {
+    cachedDriveId = videosDrive.id
+  } else {
+    // Fall back to default drive
+    const driveRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${site.id}/drive`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!driveRes.ok) throw new Error(`Failed to get SharePoint drive: ${await driveRes.text()}`)
+    const drive = await driveRes.json()
+    cachedDriveId = drive.id
+  }
+
+  return { siteId: site.id, driveId: cachedDriveId! }
 }
 
 // Upload large file to SharePoint via resumable upload session
@@ -44,7 +62,8 @@ async function uploadToSharePoint(
   fileName: string,
   fileBuffer: Buffer
 ): Promise<string> {
-  const itemPath = `${VIDEOS_FOLDER}/${folderPath}/${fileName}`
+  // Videos library is the drive root - path is just folder/filename
+  const itemPath = `${folderPath}/${fileName}`
 
   // Create upload session
   const sessionRes = await fetch(
@@ -101,6 +120,19 @@ async function uploadToSharePoint(
   return webUrl
 }
 
+function toStreamUrl(webUrl: string): string {
+  // Graph webUrl: https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/Videos/Folder/file.mp4
+  // Stream URL:   https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/stream.aspx?id=/sites/agenttrainingcenter/Videos/Folder/file.mp4
+  try {
+    const url = new URL(webUrl)
+    const decoded = decodeURIComponent(url.pathname)
+    const streamId = encodeURIComponent(decoded)
+    return `https://collectiverealtyco.sharepoint.com/sites/agenttrainingcenter/_layouts/15/stream.aspx?id=${streamId}`
+  } catch {
+    return webUrl
+  }
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requirePermission(req, 'can_manage_recordings')
   if (auth.error) return auth.error
@@ -147,7 +179,8 @@ export async function POST(req: NextRequest) {
     // Upload to SharePoint
     const token = await getGraphToken()
     const { driveId } = await getSiteDriveId(token)
-    const webUrl = await uploadToSharePoint(token, driveId, folder, fileName, fileBuffer)
+    const rawUrl = await uploadToSharePoint(token, driveId, folder, fileName, fileBuffer)
+    const webUrl = toStreamUrl(rawUrl)
 
     // Mark as uploaded
     await supabaseAdmin

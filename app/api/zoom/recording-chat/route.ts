@@ -7,17 +7,10 @@ export async function POST(req: NextRequest) {
 
   const { messages, context } = await req.json()
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
-      system: `You are an assistant helping a real estate brokerage administrator name and categorize a Zoom training recording.
+  // Use the rich system prompt from recording-context if available
+  const system = context.systemPrompt || `You are an assistant helping a real estate brokerage administrator name and categorize a Zoom training recording for Collective Realty Co.
+
+HOST NOTE: "Courtney Alexander" in Zoom is Courtney Okanlomo, the Broker/Owner. Do NOT include her name in titles.
 
 Current recording info:
 - Meeting title: ${context.meetingTitle}
@@ -29,12 +22,34 @@ Current recording info:
 Available SharePoint folders: ${context.folders}
 Available programs: ${context.programs}
 
-Help the user refine the title, suggest topics, or recommend a folder. When suggesting a new title or topics, format them clearly. Keep responses concise and practical.`,
+Help the user refine the title, suggest topics, or recommend a folder. Keep responses concise and practical.`
+
+  // Check if this is a JSON request (AI Suggest All)
+  const lastMessage = messages[messages.length - 1]?.content || ''
+  const isJsonRequest = lastMessage.includes('Respond ONLY with a JSON object') || lastMessage.includes('"program":')
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: isJsonRequest ? 300 : 500,
+      system: isJsonRequest
+        ? system + '\n\nIMPORTANT: Your response must be ONLY valid JSON. No preamble, no explanation, no markdown code blocks. Just the raw JSON object.'
+        : system,
       messages,
     }),
   })
 
-  const data = await res.json()
-  const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response.'
-  return NextResponse.json({ reply })
+  try {
+    const data = await res.json()
+    const reply = data.content?.[0]?.text || 'Sorry, I could not generate a response.'
+    return NextResponse.json({ reply })
+  } catch (err: any) {
+    return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 })
+  }
 }

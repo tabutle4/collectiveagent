@@ -2,6 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Trash2 } from 'lucide-react'
+
+function formatCT(isoString: string) {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  return date.toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }) + ' CT'
+}
 
 export default function RecordingsPage() {
   const [jobs, setJobs] = useState<any[]>([])
@@ -10,16 +25,21 @@ export default function RecordingsPage() {
   const [emailSaving, setEmailSaving] = useState(false)
   const [emailSaved, setEmailSaved] = useState(false)
   const [emailError, setEmailError] = useState('')
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/zoom/recording-jobs')
-      .then(r => r.json())
-      .then(d => { setJobs(d.jobs || []); setLoading(false) })
-
+    loadJobs()
     fetch('/api/zoom/recording-settings')
       .then(r => r.json())
       .then(d => { if (d.notifyEmail) setNotifyEmail(d.notifyEmail) })
   }, [])
+
+  function loadJobs() {
+    setLoading(true)
+    fetch('/api/zoom/recording-jobs')
+      .then(r => r.json())
+      .then(d => { setJobs(d.jobs || []); setLoading(false) })
+  }
 
   async function saveEmail() {
     setEmailSaving(true)
@@ -42,6 +62,18 @@ export default function RecordingsPage() {
     }
   }
 
+  async function deleteJob(e: React.MouseEvent, jobId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm('Delete this recording job? This cannot be undone.')) return
+    setDeleting(jobId)
+    try {
+      await fetch(`/api/zoom/recording-jobs?id=${jobId}`, { method: 'DELETE' })
+      setJobs(prev => prev.filter(j => j.id !== jobId))
+    } catch { }
+    finally { setDeleting(null) }
+  }
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
@@ -49,7 +81,6 @@ export default function RecordingsPage() {
         <p className="text-luxury-gray-3 text-sm">Training session recordings captured automatically from Zoom.</p>
       </div>
 
-      {/* Notification email setting */}
       <div className="container-card p-5">
         <p className="text-luxury-gray-2 font-medium mb-1">Notification Email</p>
         <p className="text-luxury-gray-3 text-sm mb-4">
@@ -100,11 +131,6 @@ export default function RecordingsPage() {
               <span>The recording uploads automatically to the correct SharePoint folder. No manual downloading or renaming needed.</span>
             </li>
           </ol>
-          <div className="inner-card p-4 mt-2">
-            <p className="text-luxury-gray-3 text-xs">
-              <span className="text-luxury-gray-2 font-medium">Note:</span> If a recording shows a status of <span className="text-red-400">error</span>, contact your administrator.
-            </p>
-          </div>
         </div>
       )}
 
@@ -116,19 +142,41 @@ export default function RecordingsPage() {
               href={`/admin/recordings/${job.id}`}
               className="block bg-luxury-dark-1 border border-luxury-dark-3 rounded-lg p-4 hover:border-luxury-accent transition-colors"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-luxury-black font-medium">{job.meeting_title}</p>
-                  <p className="text-luxury-gray-3 text-sm mt-1">{job.suggested_title}</p>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-luxury-white font-medium truncate">
+                    {job.final_title || job.suggested_title || job.meeting_title}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {job.start_time && (
+                      <p className="text-luxury-gray-3 text-xs">{formatCT(job.start_time)}</p>
+                    )}
+                    {job.duration && (
+                      <p className="text-luxury-gray-3 text-xs">{job.duration} min</p>
+                    )}
+                    {job.final_folder && (
+                      <p className="text-luxury-gray-3 text-xs">{job.final_folder}</p>
+                    )}
+                  </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ml-4 ${
-                  job.status === 'uploaded' ? 'bg-green-900 text-green-300' :
-                  job.status === 'processing' ? 'bg-blue-900 text-blue-300' :
-                  job.status === 'error' ? 'bg-red-900 text-red-300' :
-                  'bg-luxury-dark-3 text-luxury-gray-2'
-                }`}>
-                  {job.status}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${ 
+                    job.status === 'uploaded' ? 'bg-green-900 text-green-300' :
+                    job.status === 'processing' ? 'bg-blue-900 text-blue-300' :
+                    job.status === 'error' ? 'bg-red-900 text-red-300' :
+                    'bg-luxury-dark-3 text-luxury-gray-2'
+                  }`}>
+                    {job.status}
+                  </span>
+                  <button
+                    onClick={e => deleteJob(e, job.id)}
+                    disabled={deleting === job.id}
+                    className="text-luxury-gray-3 hover:text-red-400 transition-colors p-1 disabled:opacity-50"
+                    title="Delete recording"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             </Link>
           ))}

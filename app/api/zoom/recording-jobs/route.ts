@@ -29,3 +29,20 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ jobs })
 }
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requirePermission(req, 'can_manage_recordings')
+  if (auth.error) return auth.error
+
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const { error } = await supabaseAdmin
+    .from('zoom_recording_jobs')
+    .delete()
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

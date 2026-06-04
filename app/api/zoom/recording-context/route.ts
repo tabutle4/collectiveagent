@@ -150,9 +150,14 @@ function buildSystemPrompt(
 ): string {
   const calendarText = calendarEvents.length > 0
     ? calendarEvents.map(e => {
-        const timeUTC = e.start.dateTime?.slice(11, 16) || ''
+        const dtStr = e.start.dateTime || ''
+        let timeCT = ''
+        if (dtStr) {
+          const d = new Date(dtStr.endsWith('Z') ? dtStr : dtStr + 'Z')
+          timeCT = d.toLocaleString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', hour12: true })
+        }
         const guest = e.hasGuest ? ` [Guest presenter scheduled for this session]` : ''
-        return `${timeUTC} UTC - ${e.subject}${guest}`
+        return `${timeCT} CT - ${e.subject}${guest}`
       }).join('\n')
     : 'No calendar events found for this date'
 
@@ -168,11 +173,11 @@ function buildSystemPrompt(
 
 RECORDING DATE: ${recordingDate}
 
-CALENDAR EVENTS FOR THIS DATE (UTC times):
+CALENDAR EVENTS FOR THIS DATE (Central Time - already converted from UTC):
 ${calendarText}
 
 CALENDAR RULES:
-- Times are UTC. CST = UTC-6, CDT = UTC-5.
+- All times above are Central Time (CT). Do not adjust them.
 - "Guest for [date]" entries are NOT separate sessions - they are guest presenters for the program happening at the SAME time slot. Always associate them with that program.
 - Sessions typically run 1 hour each. Back-to-back sessions may be captured in one recording.
 - Recordings are now always single sessions - no splitting needed.
@@ -180,11 +185,14 @@ CALENDAR RULES:
 FATHOM RECORDING DATA:
 ${fathomText}
 
+HOST NOTE:
+- \"Courtney Alexander\" in Zoom and Fathom is Courtney Okanlomo, the Broker/Owner of Collective Realty Co. She hosts most sessions. Do NOT include her name in recording titles.
+
 NAMING CONVENTION:
 Format: Program Name - M-D-YY - Topic 1 - Topic 2 - Topic 3
 - Use title case for all parts
 - 3-4 topic tags, each 3-6 words
-- NO "With Host" for Courtney Alexander sessions
+- NO "With Host" for Courtney Okanlomo sessions
 - ADD "With Host Name" only for: Terraneka Hill (Collective Access Dallas), Eric Roberts (Collective Access Houston), Briana Thomas (Monthly Lease Training), Maureen Eno (Monthly Apartment Locator Q&A)
 - Example: "Collective Access Coaching In Dallas With Terraneka Hill - 5-6-26 - Mortgage Calculator Walkthrough - FHA Loan Example - New Construction Midlothian"
 - Example: "Convert & Close Coaching - 5-7-26 - Out of State Buyer Strategy - Adding Value Before Showing"
