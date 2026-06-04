@@ -158,7 +158,183 @@ export async function POST(request: NextRequest) {
       .eq('payload_payee_id', invoice.customer_id)
       .single()
 
-    if (!user) return NextResponse.json({ received: true })
+    if (!user) {
+      // Not an agent/user payment. Check if this is a PM tenant rent payment
+      // by matching the Payload invoice id against tenant_invoices.
+      if (invoice.id) {
+        const { data: tenantInvoice } = await supabase
+          .from('tenant_invoices')
+          .select(`
+            id, tenant_id, landlord_id, property_id, lease_id,
+            rent_amount, deposit_amount, total_amount,
+            period_month, period_year, status,
+            managed_properties(id, pm_agreement_id)
+          `)
+          .eq('payload_invoice_id', invoice.id)
+          .maybeSingle()
+
+        if (tenantInvoice && tenantInvoice.status !== 'paid') {
+          const paidAt = invoice.paid_timestamp
+            ? String(invoice.paid_timestamp).split('T')[0]
+            : new Date().toISOString().split('T')[0]
+
+          // Mark invoice paid
+          await supabase
+            .from('tenant_invoices')
+            .update({
+              status: 'paid',
+              paid_at: new Date(paidAt + 'T12:00:00').toISOString(),
+              paid_amount: tenantInvoice.total_amount,
+              payment_method: 'payload',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', tenantInvoice.id)
+
+          console.log('PM tenant invoice marked paid:', tenantInvoice.id)
+
+          // Fetch agreement for mgmt fee calculation
+          let managementFeePct = 10
+          let managementFeeFlat: number | null = null
+          let referringAgentId: string | null = null
+          let agentFeePct = 0
+          const property = tenantInvoice.managed_properties as any
+          if (property?.pm_agreement_id) {
+            const { data: agreement } = await supabase
+              .from('pm_agreements')
+              .select(`
+                management_fee_pct, management_fee_flat,
+                referring_agent_id, agent_fee_pct
+              `)
+              .eq('id', property.pm_agreement_id)
+              .single()
+            if (agreement) {
+              managementFeePct = agreement.management_fee_pct
+              managementFeeFlat = agreement.management_fee_flat
+              referringAgentId = agreement.referring_agent_id
+              agentFeePct = agreement.agent_fee_pct || 0
+            }
+          }
+
+          const rentAmount = Number(tenantInvoice.rent_amount || 0)
+          const managementFee = managementFeeFlat != null
+            ? Number(managementFeeFlat)
+            : rentAmount * (managementFeePct / 100)
+
+          // Attach any pending deductions for this property
+          const { data: pendingDeductions } = await supabase
+            .from('landlord_disbursement_deductions')
+            .select('id, amount')
+            .eq('property_id', tenantInvoice.property_id)
+            .is('disbursement_id', null)
+
+          const pendingDeductionsTotal = (pendingDeductions || []).reduce(
+            (sum: number, d: any) => sum + Number(d.amount || 0), 0
+          )
+
+          const netAmount = rentAmount - managementFee - pendingDeductionsTotal
+
+          // Create pending disbursement
+          const { data: createdDisb } = await supabase
+            .from('landlord_disbursements')
+            .insert({
+              landlord_id: tenantInvoice.landlord_id,
+              tenant_invoice_id: tenantInvoice.id,
+              property_id: tenantInvoice.property_id,
+              lease_id: tenantInvoice.lease_id,
+              gross_rent: rentAmount,
+              management_fee: managementFee,
+              deposit_amount: 0,
+              net_amount: netAmount,
+              amount_1099_reportable: netAmount,
+              period_month: tenantInvoice.period_month,
+              period_year: tenantInvoice.period_year,
+              payment_status: 'pending',
+            })
+            .select('id')
+            .single()
+
+          if (createdDisb) {
+            console.log('PM disbursement created for landlord:', tenantInvoice.landlord_id)
+
+            // Attach pending deductions
+            if (pendingDeductions && pendingDeductions.length > 0) {
+              await supabase
+                .from('landlord_disbursement_deductions')
+                .update({
+                  disbursement_id: createdDisb.id,
+                  applied_at: new Date().toISOString(),
+                })
+                .in('id', pendingDeductions.map((d: any) => d.id))
+            }
+
+            // Mark the corresponding landlord invoice paid and create fee payouts
+            const { data: landlordInv } = await supabase
+              .from('pm_landlord_invoices')
+              .select('id')
+              .eq('landlord_id', tenantInvoice.landlord_id)
+              .eq('property_id', tenantInvoice.property_id)
+              .eq('period_month', tenantInvoice.period_month)
+              .eq('period_year', tenantInvoice.period_year)
+              .neq('status', 'paid')
+              .maybeSingle()
+
+            let landlordInvoiceId: string | null = null
+            if (landlordInv) {
+              landlordInvoiceId = landlordInv.id
+              await supabase
+                .from('pm_landlord_invoices')
+                .update({
+                  status: 'paid',
+                  paid_at: new Date().toISOString(),
+                  paid_amount: managementFee,
+                  payment_method: 'disbursement',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', landlordInv.id)
+            }
+
+            // Create pm_fee_payouts
+            if (managementFee > 0) {
+              const agentAmount = rentAmount * (agentFeePct / 100)
+              const brokerageAmount = managementFee - agentAmount
+
+              if (referringAgentId && agentAmount > 0) {
+                const { data: agentRow } = await supabase
+                  .from('users')
+                  .select('preferred_first_name, first_name, preferred_last_name, last_name')
+                  .eq('id', referringAgentId)
+                  .single()
+                const agentName = agentRow
+                  ? `${agentRow.preferred_first_name || agentRow.first_name} ${agentRow.preferred_last_name || agentRow.last_name}`.trim()
+                  : 'Unknown Agent'
+                await supabase.from('pm_fee_payouts').insert({
+                  disbursement_id: createdDisb.id,
+                  landlord_invoice_id: landlordInvoiceId,
+                  payee_type: 'agent',
+                  payee_id: referringAgentId,
+                  payee_name: agentName,
+                  amount: Math.round(agentAmount * 100) / 100,
+                  payment_status: 'pending',
+                })
+              }
+
+              if (brokerageAmount > 0) {
+                await supabase.from('pm_fee_payouts').insert({
+                  disbursement_id: createdDisb.id,
+                  landlord_invoice_id: landlordInvoiceId,
+                  payee_type: 'brokerage',
+                  payee_id: null,
+                  payee_name: 'Collective Realty Co.',
+                  amount: Math.round(brokerageAmount * 100) / 100,
+                  payment_status: 'pending',
+                })
+              }
+            }
+          }
+        }
+      }
+      return NextResponse.json({ received: true })
+    }
 
     const paidDate = invoice.paid_timestamp
       ? String(invoice.paid_timestamp).split('T')[0].split(' ')[0]

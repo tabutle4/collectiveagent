@@ -130,8 +130,12 @@ export async function POST(request: NextRequest) {
       0
     )
 
-    // 3. Deductions and disbursement totals: still from landlord_disbursements
-    const { data: disbursements } = await supabaseAdmin
+    // 3. Deductions and disbursement totals: from landlord_disbursements
+    // Include both paid/completed AND pending so the statement shows
+    // the full picture even before the disbursement is sent.
+    // Match by period_month/period_year for monthly (exact period match)
+    // and by payment_date range for annual (cash basis like rent).
+    let disbQuery = supabaseAdmin
       .from('landlord_disbursements')
       .select(`
         id,
@@ -139,33 +143,50 @@ export async function POST(request: NextRequest) {
         deposit_amount,
         net_amount,
         payment_date,
+        payment_status,
+        period_month,
+        period_year,
         landlord_disbursement_deductions(amount)
       `)
       .eq('landlord_id', landlordId)
       .eq('property_id', propertyId)
-      .in('payment_status', ['completed', 'paid'])
-      .gte('payment_date', periodStart)
-      .lt('payment_date', periodEnd)
+      .in('payment_status', ['completed', 'paid', 'pending', 'processing'])
+
+    if (periodType === 'monthly') {
+      disbQuery = disbQuery
+        .eq('period_month', periodMonth!)
+        .eq('period_year', periodYear)
+    } else {
+      // Annual: use payment_date range for paid, period_year for pending
+      disbQuery = disbQuery.eq('period_year', periodYear)
+    }
+
+    const { data: disbursements } = await disbQuery
+
+    const paidDisbursements = (disbursements || []).filter(
+      (d: any) => ['completed', 'paid'].includes(d.payment_status)
+    )
+    const pendingDisbursements = (disbursements || []).filter(
+      (d: any) => ['pending', 'processing'].includes(d.payment_status)
+    )
 
     const totalLineItemDeductions = (disbursements || []).reduce(
       (sum, d: any) => sum + ((d.landlord_disbursement_deductions || []).reduce(
-        (s: number, lid: any) => s + Number(lid.amount || 0),
-        0
-      )),
-      0
+        (s: number, lid: any) => s + Number(lid.amount || 0), 0
+      )), 0
     )
     const totalOtherDeductions = (disbursements || []).reduce(
-      (sum, d: any) => sum + Number(d.other_deductions || 0),
-      0
+      (sum, d: any) => sum + Number(d.other_deductions || 0), 0
     )
     const totalDeductions = totalLineItemDeductions + totalOtherDeductions
-    const totalDepositsReturnedToLandlord = (disbursements || []).reduce(
-      (sum, d: any) => sum + Number(d.deposit_amount || 0),
-      0
+    const totalDepositsReturnedToLandlord = (paidDisbursements).reduce(
+      (sum, d: any) => sum + Number(d.deposit_amount || 0), 0
     )
-    const totalNetDisbursed = (disbursements || []).reduce(
-      (sum, d: any) => sum + Number(d.net_amount || 0),
-      0
+    const totalNetDisbursed = (paidDisbursements).reduce(
+      (sum, d: any) => sum + Number(d.net_amount || 0), 0
+    )
+    const totalNetPending = (pendingDisbursements).reduce(
+      (sum, d: any) => sum + Number(d.net_amount || 0), 0
     )
 
     // 3. Tenant disbursements (deposit refunds to tenants) within period
@@ -207,6 +228,7 @@ export async function POST(request: NextRequest) {
         total_deposits_returned_to_landlord: Math.round(totalDepositsReturnedToLandlord * 100) / 100,
         total_deposits_refunded_to_tenant: Math.round(totalDepositsRefundedToTenant * 100) / 100,
         total_net_disbursed: Math.round(totalNetDisbursed * 100) / 100,
+        total_net_pending: Math.round(totalNetPending * 100) / 100,
         held_in_trust_at_statement_date: Math.round(heldInTrustResult.heldInTrust * 100) / 100,
         created_by: auth.user?.id || null,
       })

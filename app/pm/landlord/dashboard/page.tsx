@@ -129,6 +129,21 @@ interface LandlordInvoice {
   managed_properties?: { id: string; property_address: string; city: string }
 }
 
+interface Statement {
+  id: string
+  period_type: string
+  period_month: number | null
+  period_year: number
+  statement_date: string
+  total_rent_collected: number
+  total_management_fees: number
+  total_net_disbursed: number
+  total_net_pending: number | null
+  held_in_trust_at_statement_date: number
+  sent_at: string | null
+  managed_properties?: { id: string; property_address: string; city: string }
+}
+
 interface DashboardData {
   landlord: Landlord
   properties: Property[]
@@ -141,6 +156,7 @@ interface DashboardData {
     bankConnected: boolean
   }
   landlordInvoices: LandlordInvoice[]
+  statements: Statement[]
 }
 
 function LandlordDashboardContent() {
@@ -379,7 +395,7 @@ function LandlordDashboardContent() {
     )
   }
 
-  const { landlord, properties, agreements, pendingDisbursements, repairs, recentActivity, setupStatus, landlordInvoices = [] } = data
+  const { landlord, properties, agreements, pendingDisbursements, repairs, recentActivity, setupStatus, landlordInvoices = [], statements = [] } = data
 
   return (
     <div className="min-h-screen bg-luxury-light">
@@ -665,6 +681,63 @@ function LandlordDashboardContent() {
                             Paid {new Date(inv.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Statements */}
+            {statements.length > 0 && (
+              <div className="container-card">
+                <h2 className="field-label mb-4 flex items-center gap-2">
+                  <FileText size={16} />
+                  Statements
+                </h2>
+                <div className="space-y-3">
+                  {statements.map((s) => {
+                    const monthName = s.period_month
+                      ? new Date(2000, s.period_month - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+                      : ''
+                    const periodLabel = s.period_type === 'annual'
+                      ? String(s.period_year)
+                      : `${monthName} ${s.period_year}`
+                    const hasPending = Number(s.total_net_pending ?? 0) > 0
+                    return (
+                      <div key={s.id} className="inner-card">
+                        <div className="flex items-start justify-between mb-1">
+                          <div>
+                            <span className="text-sm font-medium text-luxury-gray-1">{periodLabel}</span>
+                            <p className="text-xs text-luxury-gray-3">{s.managed_properties?.property_address}</p>
+                          </div>
+                          <a
+                            href={`/pm/landlord/dashboard/statements/${s.id}`}
+                            className="text-xs text-luxury-accent hover:underline"
+                          >
+                            View
+                          </a>
+                        </div>
+                        <div className="mt-2 space-y-1">
+                          {Number(s.total_rent_collected) > 0 && (
+                            <div className="flex justify-between text-xs text-luxury-gray-3">
+                              <span>Rent Collected</span>
+                              <span>{formatMoney(Number(s.total_rent_collected))}</span>
+                            </div>
+                          )}
+                          {Number(s.total_net_disbursed) > 0 && (
+                            <div className="flex justify-between text-xs text-luxury-gray-1 font-medium">
+                              <span>Disbursed to You</span>
+                              <span className="text-green-600">{formatMoney(Number(s.total_net_disbursed))}</span>
+                            </div>
+                          )}
+                          {hasPending && (
+                            <div className="flex justify-between text-xs text-amber-700">
+                              <span>Pending Disbursement</span>
+                              <span>{formatMoney(Number(s.total_net_pending))}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )
                   })}

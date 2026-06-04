@@ -132,6 +132,27 @@ export async function GET(request: NextRequest) {
       .order('period_year', { ascending: false })
       .order('period_month', { ascending: false })
 
+    // Statements - only sent ones visible on portal
+    const { data: statements } = await supabase
+      .from('pm_statements')
+      .select(`
+        id,
+        period_type,
+        period_month,
+        period_year,
+        statement_date,
+        total_rent_collected,
+        total_management_fees,
+        total_net_disbursed,
+        total_net_pending,
+        held_in_trust_at_statement_date,
+        sent_at,
+        managed_properties(id, property_address, city)
+      `)
+      .eq('landlord_id', landlordId)
+      .order('period_year', { ascending: false })
+      .order('period_month', { ascending: false })
+
     const recentActivity = (recentDisbursements || []).map(d => {
       // Both 'completed' and 'paid' mean the disbursement settled. Anything
       // else (pending, processing, failed) renders as Pending to the landlord.
@@ -173,6 +194,7 @@ export async function GET(request: NextRequest) {
       recentActivity,
       setupStatus,
       landlordInvoices: landlordInvoices || [],
+      statements: statements || [],
     })
   } catch (error: any) {
     console.error('Error in PM landlord dashboard:', error)

@@ -217,21 +217,35 @@ function TenantInvoicesTab() {
   const loadInvoices = async () => {
     setLoading(true)
     try {
+      // Always fetch without status filter so stats are always accurate.
+      // Overdue is a client-side concept (due_date < today on non-paid invoice)
+      // and is not stored as a DB status value.
       const params = new URLSearchParams()
-      if (statusFilter !== 'all') params.set('status', statusFilter)
       if (search) params.set('search', search)
       const res = await fetch(`/api/pm/invoices?${params}`)
       if (res.ok) {
         const data = await res.json()
-        const list: TenantInvoice[] = data.invoices || []
-        setInvoices(list)
+        const all: TenantInvoice[] = data.invoices || []
+
+        // Compute stats from the full unfiltered list
         setStats({
-          pending: list.filter(i => i.status === 'pending').length,
-          sent: list.filter(i => i.status === 'sent').length,
-          overdue: list.filter(i => isOverdue(i.due_date, i.status)).length,
-          paid: list.filter(i => i.status === 'paid').length,
-          totalOutstanding: list.filter(i => !['paid','cancelled'].includes(i.status)).reduce((s, i) => s + i.total_amount, 0),
+          pending: all.filter(i => i.status === 'pending').length,
+          sent: all.filter(i => i.status === 'sent').length,
+          overdue: all.filter(i => isOverdue(i.due_date, i.status)).length,
+          paid: all.filter(i => i.status === 'paid').length,
+          totalOutstanding: all
+            .filter(i => !['paid', 'cancelled'].includes(i.status))
+            .reduce((s, i) => s + i.total_amount, 0),
         })
+
+        // Apply status filter client-side
+        let filtered = all
+        if (statusFilter === 'overdue') {
+          filtered = all.filter(i => isOverdue(i.due_date, i.status))
+        } else if (statusFilter !== 'all') {
+          filtered = all.filter(i => i.status === statusFilter)
+        }
+        setInvoices(filtered)
       }
     } catch (err) { console.error('Failed to load tenant invoices:', err) }
     finally { setLoading(false) }
@@ -387,7 +401,7 @@ function TenantInvoicesTab() {
                         {inv.late_fee > 0 && <div className="text-xs text-red-600">incl. {formatMoney(inv.late_fee)} late</div>}
                       </td>
                       <td className={`py-3 px-4 text-sm ${isOverdue(inv.due_date, inv.status) ? 'text-red-600 font-medium' : 'text-luxury-gray-1'}`}>{formatDate(inv.due_date)}</td>
-                      <td className="py-3 px-4"><StatusBadge status={inv.status} /></td>
+                      <td className="py-3 px-4">{isOverdue(inv.due_date, inv.status) ? <StatusBadge status="overdue" /> : <StatusBadge status={inv.status} />}</td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => openEdit(inv)} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Pencil size={11} />Edit</button>

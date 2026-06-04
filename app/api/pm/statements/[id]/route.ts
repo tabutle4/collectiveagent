@@ -130,6 +130,8 @@ export async function GET(
       ? `${property.city || ''}, ${property.state || ''} ${property.zip || ''}`.trim()
       : ''
 
+    const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/logo.png`
+
     const data = {
       landlord_name: `${landlord?.first_name || ''} ${landlord?.last_name || ''}`.trim(),
       landlord_email: landlord?.email || '',
@@ -144,10 +146,13 @@ export async function GET(
       total_deposits_returned_to_landlord: fmt$(statement.total_deposits_returned_to_landlord),
       total_deposits_refunded_to_tenant: fmt$(statement.total_deposits_refunded_to_tenant),
       total_net_disbursed: fmt$(statement.total_net_disbursed),
+      total_net_pending: fmt$(statement.total_net_pending ?? 0),
+      has_pending: Number(statement.total_net_pending ?? 0) > 0,
       held_in_trust: fmt$(statement.held_in_trust_at_statement_date),
       notes: statement.notes || '',
       sent_at: statement.sent_at ? fmtDate(statement.sent_at) : null,
       generated_date: fmtDate(statement.created_at?.split('T')[0] || statement.statement_date),
+      logo_url: logoUrl,
     }
 
     const html = generateStatementHTML(data)
@@ -218,7 +223,8 @@ function generateStatementHTML(data: Record<string, any>): string {
 
   <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C5A278;">
     <div style="display: flex; align-items: center; gap: 12px;">
-      <span style="font-size: 13px; font-weight: 500; letter-spacing: 1px; color: #333;">COLLECTIVE REALTY CO</span>
+      <img src="${data.logo_url}" alt="Collective Realty Co." style="height: 40px; width: auto;" />
+      <span style="font-size: 13px; font-weight: 500; letter-spacing: 1px; color: #333;">COLLECTIVE REALTY CO.</span>
     </div>
     <span style="font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #333;">PROPERTY MANAGEMENT STATEMENT</span>
   </div>
@@ -274,6 +280,11 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-weight: 600;">Net Disbursed to You</span>
         <span style="font-weight: 600; color: #C5A278;">${data.total_net_disbursed}</span>
       </div>
+      ${data.has_pending ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; background: #f9f7f4; border-radius: 4px; padding: 6px 8px; margin-top: 6px;">
+        <span style="color: #8a7a60; font-size: 10px;">Pending disbursement (in progress)</span>
+        <span style="font-weight: 600; color: #8a7a60;">${data.total_net_pending}</span>
+      </div>` : ''}
     </div>
   </div>
 

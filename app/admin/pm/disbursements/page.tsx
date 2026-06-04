@@ -1221,6 +1221,39 @@ export default function DisbursementsPage() {
 
                   {disbursementTarget === 'landlord' ? (
                     <>
+                      {/* Agreement info card - shows when property is selected */}
+                      {createForm.property_id && (() => {
+                        const ag = getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+                        if (!ag) return (
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                            This property has no agreement linked. Management fee cannot be auto-calculated.
+                          </div>
+                        )
+                        return (
+                          <div className="inner-card bg-luxury-light">
+                            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">Agreement Terms</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                              <span className="text-luxury-gray-3">Management Fee</span>
+                              <span className="text-luxury-gray-1 font-medium">
+                                {ag.management_fee_flat != null
+                                  ? `$${Number(ag.management_fee_flat).toFixed(2)} flat`
+                                  : `${ag.management_fee_pct}% of rent`}
+                              </span>
+                              {ag.reserve_per_unit != null && ag.reserve_per_unit > 0 && (
+                                <>
+                                  <span className="text-luxury-gray-3">Reserve Per Unit</span>
+                                  <span className="text-luxury-gray-1">${Number(ag.reserve_per_unit).toFixed(2)}</span>
+                                </>
+                              )}
+                              <span className="text-luxury-gray-3">Collects Rent</span>
+                              <span className={ag.crc_collects_rent !== false ? 'text-green-700' : 'text-amber-700'}>
+                                {ag.crc_collects_rent !== false ? 'Yes' : 'No (self-collect)'}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
                       {/* Gross Rent */}
                       <div>
                         <label className="field-label">Gross Rent Collected</label>
