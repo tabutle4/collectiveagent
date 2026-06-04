@@ -40,6 +40,37 @@ async function getTransactions(dateFrom: string, dateTo: string) {
   return { txns: txns || [], tiaRows: tiaRows || [] }
 }
 
+async function getPreviousPeriodTransactions(dateFrom: string, dateTo: string) {
+  const from = new Date(dateFrom)
+  const to = new Date(dateTo)
+  const daysDiff = Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24))
+  const prevTo = new Date(from)
+  prevTo.setDate(prevTo.getDate() - 1)
+  const prevFrom = new Date(prevTo)
+  prevFrom.setDate(prevFrom.getDate() - daysDiff)
+
+  const { data: txns } = await supabaseAdmin
+    .from('transactions')
+    .select('id, status')
+    .eq('status', 'closed')
+    .gte('closing_date', prevFrom.toISOString().slice(0, 10))
+    .lte('closing_date', prevTo.toISOString().slice(0, 10))
+    .limit(1000)
+
+  if (!txns || txns.length === 0) return []
+
+  const { data: tiaRows } = await supabaseAdmin
+    .from('transaction_internal_agents')
+    .select('agent_id, agent_role')
+    .in('transaction_id', txns.map((t: any) => t.id))
+
+  const agentsWithCloses = new Set<string>()
+  for (const ta of (tiaRows || [])) {
+    if (PRODUCTION_ROLES.includes(ta.agent_role)) agentsWithCloses.add(ta.agent_id)
+  }
+  return Array.from(agentsWithCloses)
+}
+
 async function getFathomMeetings(dateFrom: string, dateTo: string) {
   const { data } = await supabaseAdmin
     .from('fathom_meetings')
@@ -118,26 +149,10 @@ async function getSharePointVideos(token: string): Promise<any[]> {
 }
 
 function parseDateFromFilename(name: string): string | null {
-  // e.g. "Convert & Close Coaching - 6-4-26 - Topic.mp4"
   const match = name.match(/- (\d{1,2}-\d{1,2}-\d{2}) -/)
   if (!match) return null
   const [m, d, y] = match[1].split('-')
   return `20${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
-}
-
-async function getCalendarEvents(dateFrom: string, dateTo: string) {
-  try {
-    const token = await getGraphToken()
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${dateFrom}T00:00:00Z&endDateTime=${dateTo}T23:59:59Z&$select=subject,start,end&$top=100&$orderby=start/dateTime`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    if (!res.ok) return []
-    const data = await res.json()
-    return data.value || []
-  } catch {
-    return []
-  }
 }
 
 export async function GET(req: NextRequest) {
@@ -150,20 +165,19 @@ export async function GET(req: NextRequest) {
 
   const graphToken = await getGraphToken()
 
-  const [agents, transactions, fathomMeetings, zoomJobs, calendarEvents, sharePointVideos] = await Promise.all([
+  const [agents, transactions, prevAgentsWithCloses, fathomMeetings, zoomJobs, sharePointVideos] = await Promise.all([
     getAgents(),
     getTransactions(dateFrom, dateTo),
+    getPreviousPeriodTransactions(dateFrom, dateTo),
     getFathomMeetings(dateFrom, dateTo),
     getZoomRecordingJobs(dateFrom, dateTo),
-    getCalendarEvents(dateFrom, dateTo),
     getSharePointVideos(graphToken),
   ])
 
-  // Get stored participants for zoom jobs
   const jobIds = zoomJobs.map((j: any) => j.id)
   const storedParticipants = await getStoredParticipants(jobIds)
 
-  // Build attendance map from stored participants
+  // Build attendance map from stored Zoom participants
   const attendanceMap: Record<string, { sessions: number; names: string[] }> = {}
   for (const p of storedParticipants) {
     const key = p.participant_email?.toLowerCase() || p.participant_name?.toLowerCase()
@@ -174,6 +188,14 @@ export async function GET(req: NextRequest) {
     if (!attendanceMap[key].names.includes(sessionName)) {
       attendanceMap[key].sessions++
       attendanceMap[key].names.push(sessionName)
+    }
+  }
+
+  // Fathom speaker frequency as fallback for attendance
+  const speakerFrequency: Record<string, number> = {}
+  for (const m of fathomMeetings) {
+    for (const speaker of (m.speakers || [])) {
+      speakerFrequency[speaker] = (speakerFrequency[speaker] || 0) + 1
     }
   }
 
@@ -189,21 +211,17 @@ export async function GET(req: NextRequest) {
     agentProduction[ta.agent_id].volume += parseFloat(ta.sales_volume || 0)
   }
 
-  // Fathom speaker frequency (historical, for sessions not yet in zoom_recording_jobs)
-  const speakerFrequency: Record<string, number> = {}
-  for (const m of fathomMeetings) {
-    for (const speaker of (m.speakers || [])) {
-      speakerFrequency[speaker] = (speakerFrequency[speaker] || 0) + 1
-    }
-  }
-
-  // Build scorecards
+  // Build scorecards — use Zoom attendance if available, Fathom as fallback
+  const hasZoomAttendance = storedParticipants.length > 0
   const scorecards = agents.map((agent: any) => {
     const fullName = `${agent.first_name} ${agent.last_name}`
     const emailKey = agent.email?.toLowerCase()
     const production = agentProduction[agent.id] || { closes: 0, volume: 0, agentNet: 0 }
-    const attendance = attendanceMap[emailKey] || { sessions: 0, names: [] }
-    const speakerCount = speakerFrequency[fullName] || 0
+    const zoomAttendance = attendanceMap[emailKey] || { sessions: 0, names: [] }
+    const fathomCount = speakerFrequency[fullName] || 0
+    // Use Zoom if we have data, otherwise fall back to Fathom speaker count
+    const attendanceSessions = hasZoomAttendance ? zoomAttendance.sessions : fathomCount
+    const attendanceSource = hasZoomAttendance ? 'zoom' : (fathomCount > 0 ? 'fathom' : 'none')
 
     return {
       id: agent.id,
@@ -214,9 +232,10 @@ export async function GET(req: NextRequest) {
       joinedAt: agent.created_at,
       closes: production.closes,
       agentGross: Math.round(production.agentNet || 0),
-      attendanceSessions: attendance.sessions,
-      programsAttended: attendance.names,
-      speakerEngagement: speakerCount,
+      attendanceSessions,
+      attendanceSource,
+      programsAttended: zoomAttendance.names,
+      speakerEngagement: fathomCount,
     }
   })
 
@@ -225,67 +244,108 @@ export async function GET(req: NextRequest) {
     .sort((a: any, b: any) => b.closes - a.closes || b.agentGross - a.agentGross)
     .slice(0, 10)
 
-  const topAttendees = [...scorecards]
+  const highestAttendance = [...scorecards]
     .filter((a: any) => a.attendanceSessions > 0)
     .sort((a: any, b: any) => b.attendanceSessions - a.attendanceSessions)
-    .slice(0, 10)
+    .slice(0, 6)
 
   const notAttending = scorecards
     .filter((a: any) => a.attendanceSessions === 0)
     .sort((a: any, b: any) => b.closes - a.closes)
 
-  // Sessions by program from calendar
-  const sessionsByProgram: Record<string, number> = {}
-  for (const e of calendarEvents) {
-    if (!e.subject?.toLowerCase().startsWith('guest for')) {
-      sessionsByProgram[e.subject] = (sessionsByProgram[e.subject] || 0) + 1
-    }
-  }
+  // Top Fathom speakers (always Fathom, separate from attendance)
+  const topSpeakers = Object.entries(speakerFrequency)
+    .filter(([name]) => !name.toLowerCase().includes('courtney'))
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([name, count]) => ({ name, count }))
 
-  // SharePoint video library summary
+  // Best and worst attended sessions from stored Zoom participants
+  const sessionAttendance: Record<string, { title: string; count: number; date: string }> = {}
+  for (const p of storedParticipants) {
+    const job = zoomJobs.find((j: any) => j.id === p.zoom_recording_job_id)
+    if (!job) continue
+    const key = p.zoom_recording_job_id
+    if (!sessionAttendance[key]) {
+      sessionAttendance[key] = {
+        title: job.final_title || job.meeting_title || 'Unknown Session',
+        count: 0,
+        date: job.start_time ? new Date(job.start_time).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'numeric', day: 'numeric', year: '2-digit' }) : '',
+      }
+    }
+    sessionAttendance[key].count++
+  }
+  const sessionAttendanceArr = Object.values(sessionAttendance)
+  const bestAttended = [...sessionAttendanceArr].sort((a, b) => b.count - a.count).slice(0, 5)
+  const worstAttended = [...sessionAttendanceArr].sort((a, b) => a.count - b.count).slice(0, 5)
+
+  // Videos by folder from SharePoint
   const videosByFolder: Record<string, number> = {}
   for (const v of sharePointVideos) {
     videosByFolder[v.folder] = (videosByFolder[v.folder] || 0) + 1
   }
+  // Sort by count desc
+  const videosByFolderSorted = Object.entries(videosByFolder)
+    .sort(([, a], [, b]) => b - a)
+    .reduce((acc: Record<string, number>, [k, v]) => { acc[k] = v; return acc }, {})
 
-  // Build transcript context for AI chat - prefer zoom jobs, fall back to fathom
+  // Agents with closes count
+  const agentsWithClosesCount = Object.keys(agentProduction).filter(id => agentProduction[id].closes > 0).length
+
+  // Retention risk: had activity last period, silent this period
+  const prevAgentSet = new Set(prevAgentsWithCloses)
+  const retentionRisk = scorecards
+    .filter((a: any) => {
+      const hadPrevCloses = prevAgentSet.has(a.id)
+      const silentNow = a.closes === 0 && a.attendanceSessions === 0
+      return hadPrevCloses && silentNow
+    })
+    .map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      prevCloses: prevAgentSet.has(a.id) ? '1+' : '0',
+      currentCloses: a.closes,
+      currentSessions: a.attendanceSessions,
+    }))
+
+  // Transcripts for AI chat
   const zoomTranscripts = zoomJobs
     .filter((j: any) => j.transcript_text)
     .map((j: any) => `[${j.final_title || j.meeting_title}]: ${j.transcript_text}`)
     .join('\n\n')
     .slice(0, 10000)
-
   const fathomTranscripts = fathomMeetings
     .map((m: any) => m.transcript_text || '')
     .join('\n')
     .slice(0, 5000)
-
   const allTranscripts = zoomTranscripts || fathomTranscripts
 
   return NextResponse.json({
     dateFrom,
     dateTo,
+    attendanceSource: hasZoomAttendance ? 'zoom' : 'fathom',
     summary: {
       totalAgents: agents.length,
-      totalSessions: calendarEvents.filter((e: any) => !e.subject?.toLowerCase().startsWith('guest')).length,
+      agentsWithCloses: agentsWithClosesCount,
       totalTransactions: (transactions as any).txns?.length || 0,
-      fathomRecordings: fathomMeetings.length,
-      zoomJobsUploaded: zoomJobs.length,
       sharePointVideos: sharePointVideos.length,
     },
     scorecards,
     topProducers,
-    topAttendees,
+    highestAttendance,
     notAttending,
-    sessionsByProgram,
-    videosByFolder,
+    topSpeakers,
+    bestAttended,
+    worstAttended,
+    retentionRisk,
+    videosByFolder: videosByFolderSorted,
     transcriptSample: allTranscripts,
     rawData: {
       agents: agents.map((a: any) => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, email: a.email, office: a.mls_choice })),
-      calendarEvents: calendarEvents.map((e: any) => ({ subject: e.subject, start: e.start?.dateTime })),
       fathomSessions: fathomMeetings.map((m: any) => ({ date: m.recording_date, speakers: m.speakers, duration: m.duration_minutes })),
       zoomSessions: zoomJobs.map((j: any) => ({ title: j.final_title, folder: j.final_folder, date: j.start_time })),
       sharePointVideos: sharePointVideos.slice(0, 50).map((v: any) => ({ folder: v.folder, name: v.name, date: parseDateFromFilename(v.name) || v.createdAt?.slice(0, 10) })),
+      retentionRisk,
     },
   })
 }
