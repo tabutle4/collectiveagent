@@ -141,6 +141,7 @@ interface Statement {
   total_net_pending: number | null
   held_in_trust_at_statement_date: number
   sent_at: string | null
+  access_token: string | null
   managed_properties?: { id: string; property_address: string; city: string }
 }
 
@@ -712,7 +713,11 @@ function LandlordDashboardContent() {
                             <p className="text-xs text-luxury-gray-3">{s.managed_properties?.property_address}</p>
                           </div>
                           <a
-                            href={`/pm/landlord/dashboard/statements/${s.id}`}
+                            href={s.access_token
+                              ? `/api/pm/statements/${s.id}?token=${s.access_token}`
+                              : `/api/pm/statements/${s.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-xs text-luxury-accent hover:underline"
                           >
                             View

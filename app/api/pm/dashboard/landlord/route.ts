@@ -147,6 +147,7 @@ export async function GET(request: NextRequest) {
         total_net_pending,
         held_in_trust_at_statement_date,
         sent_at,
+        access_token,
         managed_properties(id, property_address, city)
       `)
       .eq('landlord_id', landlordId)
