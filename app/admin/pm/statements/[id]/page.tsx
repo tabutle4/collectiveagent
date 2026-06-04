@@ -14,7 +14,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Send, ExternalLink, Loader2, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Send, ExternalLink, Loader2, CheckCircle, RefreshCw } from 'lucide-react'
 
 interface Statement {
   id: string
@@ -43,6 +43,7 @@ export default function AdminStatementViewPage({
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [justSent, setJustSent] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
 
   useEffect(() => {
     load()
@@ -62,6 +63,51 @@ export default function AdminStatementViewPage({
       console.error('Failed to load statement:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRegenerate = async () => {
+    if (!statement) return
+    const wasSent = !!statement.sent_at
+    const msg = wasSent
+      ? `This statement was already sent to ${statement.sent_to_email}. Regenerate it with current data? You can resend it after.`
+      : `Regenerate this statement with current data?`
+    if (!confirm(msg)) return
+
+    setRegenerating(true)
+    setSendError(null)
+    try {
+      // Delete existing
+      const delRes = await fetch(`/api/pm/statements/${id}?force=true`, { method: 'DELETE' })
+      if (!delRes.ok) {
+        const d = await delRes.json()
+        setSendError(d.error || 'Failed to delete statement')
+        return
+      }
+      // Regenerate
+      const body: Record<string, any> = {
+        landlord_id: statement.landlord_id,
+        property_id: statement.property_id,
+        period_type: statement.period_type,
+        period_year: statement.period_year,
+      }
+      if (statement.period_month) body.period_month = statement.period_month
+      const genRes = await fetch('/api/pm/statements/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const genData = await genRes.json()
+      if (genRes.ok) {
+        // Redirect to new statement id
+        router.push(`/admin/pm/statements/${genData.statement.id}`)
+      } else {
+        setSendError(genData.error || 'Failed to regenerate statement')
+      }
+    } catch (err: any) {
+      setSendError(err.message || 'Regenerate failed')
+    } finally {
+      setRegenerating(false)
     }
   }
 
@@ -156,20 +202,22 @@ export default function AdminStatementViewPage({
           >
             <ExternalLink size={14} /> Open in new tab
           </a>
-          {statement.sent_at ? (
-            <span className="text-sm text-green-700 inline-flex items-center gap-1">
-              <CheckCircle size={14} /> Sent {new Date(statement.sent_at).toLocaleDateString()}
-            </span>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={sending}
-              className="btn btn-primary inline-flex items-center gap-2 text-sm"
-            >
-              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              {sending ? 'Sending...' : 'Send to Landlord'}
-            </button>
-          )}
+          <button
+            onClick={handleRegenerate}
+            disabled={regenerating || sending}
+            className="btn btn-secondary inline-flex items-center gap-2 text-sm"
+          >
+            {regenerating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {regenerating ? 'Regenerating...' : 'Regenerate'}
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sending || regenerating}
+            className="btn btn-primary inline-flex items-center gap-2 text-sm"
+          >
+            {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {sending ? 'Sending...' : statement.sent_at ? 'Resend' : 'Send to Landlord'}
+          </button>
         </div>
       </div>
 

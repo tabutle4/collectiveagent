@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api-auth'
+import { requireAuth, requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 
@@ -331,4 +331,51 @@ function generateStatementHTML(data: Record<string, any>): string {
   </div>
 </body>
 </html>`
+}
+
+// DELETE /api/pm/statements/[id]
+// Deletes a statement so it can be regenerated. Only allowed if the
+// statement has NOT been sent (sent_at is null). Regenerating a sent
+// statement requires explicit confirmation on the client side.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requirePermission(request, 'can_manage_pm')
+  if (auth.error) return auth.error
+
+  try {
+    const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const force = searchParams.get('force') === 'true'
+
+    const { data: statement, error: fetchErr } = await supabaseAdmin
+      .from('pm_statements')
+      .select('id, sent_at, landlord_id, property_id, period_type, period_month, period_year')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr || !statement) {
+      return NextResponse.json({ error: 'Statement not found' }, { status: 404 })
+    }
+
+    if (statement.sent_at && !force) {
+      return NextResponse.json(
+        { error: 'Statement has already been sent. Pass force=true to regenerate anyway.' },
+        { status: 409 }
+      )
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('pm_statements')
+      .delete()
+      .eq('id', id)
+
+    if (delErr) throw delErr
+
+    return NextResponse.json({ success: true })
+  } catch (err: any) {
+    console.error('Statement delete error:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
 }

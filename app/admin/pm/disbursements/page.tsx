@@ -398,7 +398,9 @@ export default function DisbursementsPage() {
 
   // Create Statement modal handler - posts to the new statement endpoint
   // and redirects to the statement view on success.
-  const createStatement = async () => {
+  // If a statement already exists for the period (409), offers to regenerate
+  // (delete + recreate) so the snapshot reflects current data.
+  const createStatement = async (forceRegenerate = false) => {
     if (!statementForm.landlord_id || !statementForm.property_id) {
       alert('Pick a landlord and property')
       return
@@ -422,8 +424,26 @@ export default function DisbursementsPage() {
       })
       const json = await res.json()
       if (res.ok) {
-        // Redirect to statement view (admin side)
         window.location.href = `/admin/pm/statements/${json.statement.id}`
+      } else if (res.status === 409 && json.existingId) {
+        // Statement already exists for this period
+        const wasSent = forceRegenerate === false
+        const msg = wasSent
+          ? `A statement already exists for this period. Regenerate it? This will replace the existing snapshot (including if it was already sent).`
+          : `Regenerating statement...`
+        if (!wasSent || confirm(msg)) {
+          // Delete existing then regenerate
+          const delRes = await fetch(`/api/pm/statements/${json.existingId}?force=true`, {
+            method: 'DELETE',
+          })
+          if (!delRes.ok) {
+            const delData = await delRes.json()
+            alert(delData.error || 'Failed to delete existing statement')
+            return
+          }
+          // Recurse once with forceRegenerate flag to avoid double-confirm
+          await createStatement(true)
+        }
       } else {
         alert(json.error || 'Failed to generate statement')
       }
@@ -2039,7 +2059,7 @@ export default function DisbursementsPage() {
                 Cancel
               </button>
               <button
-                onClick={createStatement}
+                onClick={() => createStatement()}
                 className="btn btn-primary"
                 disabled={statementCreating || !statementForm.landlord_id || !statementForm.property_id}
               >
