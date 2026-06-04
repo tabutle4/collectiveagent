@@ -62,6 +62,7 @@ export default function RecordingDetailPage() {
   const [topics, setTopics] = useState<string[]>([])
   const [newTopic, setNewTopic] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [sendAgentEmail, setSendAgentEmail] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [sharePointUrl, setSharePointUrl] = useState('')
@@ -216,7 +217,7 @@ export default function RecordingDetailPage() {
       const res = await fetch('/api/zoom/recording-confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobId: id, finalTitle: title, folder }),
+        body: JSON.stringify({ jobId: id, finalTitle: title, folder, sendAgentEmail }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Upload failed')
@@ -509,17 +510,29 @@ export default function RecordingDetailPage() {
         )}
 
         {job.status !== 'uploaded' && (
-          <button
-            onClick={handleConfirm}
-            disabled={uploading || !title.trim() || !folder}
-            className="w-full bg-luxury-accent text-luxury-black font-semibold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {uploading ? 'Uploading to SharePoint...' : 'Confirm & Upload to SharePoint'}
-          </button>
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sendAgentEmail}
+                onChange={e => setSendAgentEmail(e.target.checked)}
+                className="w-4 h-4 accent-luxury-accent"
+              />
+              <span className="text-luxury-gray-2 text-sm">Send email notification to agents</span>
+            </label>
+            <button
+              onClick={handleConfirm}
+              disabled={uploading || !title.trim() || !folder}
+              className="w-full bg-luxury-accent text-luxury-black font-semibold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploading ? 'Uploading to SharePoint...' : 'Confirm & Upload to SharePoint'}
+            </button>
+          </div>
         )}
       </div>
     </div>
   )
 }
+
 
 

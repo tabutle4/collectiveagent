@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
   const auth = await requirePermission(req, 'can_manage_recordings')
   if (auth.error) return auth.error
 
-  const { jobId, finalTitle, folder } = await req.json()
+  const { jobId, finalTitle, folder, sendAgentEmail = true } = await req.json()
 
   if (!jobId || !finalTitle || !folder) {
     return NextResponse.json({ error: 'jobId, finalTitle, and folder are required' }, { status: 400 })
@@ -290,7 +290,7 @@ export async function POST(req: NextRequest) {
       }
     )
 
-    await resend.emails.send({
+    if (sendAgentEmail) await resend.emails.send({
       from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
       to: 'agents@collectiverealtyco.com',
       subject: `New Recording: ${finalTitle}`,
@@ -308,3 +308,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
