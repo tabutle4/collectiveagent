@@ -102,13 +102,13 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
         <div>
           <h1 className="page-title mb-1">Coaching Insights</h1>
           <p className="text-luxury-gray-3 text-sm">Training, attendance, and agent performance analysis.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={dateFrom}
@@ -138,7 +138,7 @@ export default function InsightsPage() {
       ) : data ? (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div className="container-card p-4">
               <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Active Agents</p>
               <p className="text-2xl font-semibold text-luxury-black">{data.summary?.totalAgents}</p>
@@ -157,7 +157,7 @@ export default function InsightsPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
             {/* Top producers */}
             <div className="container-card p-5">
               <div className="flex items-center gap-2 mb-4">
@@ -241,7 +241,7 @@ export default function InsightsPage() {
                 <Users size={16} className="text-luxury-accent" />
                 <p className="text-luxury-gray-2 font-medium text-sm">Sessions by Program</p>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {Object.entries(data.sessionsByProgram).map(([program, count]: [string, any]) => (
                   <div key={program} className="inner-card p-3">
                     <p className="text-luxury-gray-3 text-xs mb-1 line-clamp-2">{program}</p>
@@ -267,7 +267,7 @@ export default function InsightsPage() {
                   key={q}
                   onClick={() => sendMessage(q)}
                   disabled={chatLoading || initializing}
-                  className="text-xs px-3 py-1.5 bg-luxury-dark-1 border border-luxury-dark-3 text-luxury-gray-2 rounded-full hover:border-luxury-accent hover:text-luxury-white transition-colors disabled:opacity-50"
+                  className="text-xs px-2 py-1 sm:px-3 sm:py-1.5 bg-luxury-dark-1 border border-luxury-dark-3 text-luxury-gray-2 rounded-full hover:border-luxury-accent hover:text-luxury-white transition-colors disabled:opacity-50"
                 >
                   {q}
                 </button>
@@ -278,7 +278,7 @@ export default function InsightsPage() {
             {(chatMessages.length > 0 || initializing) && (
               <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
                 {initializing && (
-                  <div className="bg-luxury-accent/10 text-luxury-gray-2 text-sm rounded-lg px-4 py-3 mr-8">
+                  <div className="bg-luxury-accent/10 text-luxury-gray-2 text-sm rounded-lg px-4 py-3 mr-6 sm:mr-8">
                     Analyzing your data...
                   </div>
                 )}
@@ -287,15 +287,15 @@ export default function InsightsPage() {
                     key={i}
                     className={`text-sm rounded-lg px-4 py-3 whitespace-pre-wrap ${
                       msg.role === 'user'
-                        ? 'bg-luxury-dark-3 text-luxury-white ml-12'
-                        : 'bg-luxury-accent/10 text-luxury-gray-2 mr-8'
+                        ? 'bg-luxury-dark-3 text-luxury-white ml-6 sm:ml-12'
+                        : 'bg-luxury-accent/10 text-luxury-gray-2 mr-6 sm:mr-8'
                     }`}
                   >
                     {msg.content}
                   </div>
                 ))}
                 {chatLoading && (
-                  <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-4 py-3 mr-8">
+                  <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-4 py-3 mr-6 sm:mr-8">
                     Thinking...
                   </div>
                 )}
@@ -327,3 +327,4 @@ export default function InsightsPage() {
     </div>
   )
 }
+

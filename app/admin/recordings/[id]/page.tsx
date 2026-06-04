@@ -229,12 +229,12 @@ export default function RecordingDetailPage() {
     }
   }
 
-  if (loading) return <div className="p-6 max-w-3xl mx-auto"><p className="text-luxury-gray-3">Loading...</p></div>
-  if (!job) return <div className="p-6 max-w-3xl mx-auto"><p className="text-luxury-gray-3">Recording not found.</p></div>
+  if (loading) return <div className="p-4 sm:p-6 max-w-3xl mx-auto"><p className="text-luxury-gray-3">Loading...</p></div>
+  if (!job) return <div className="p-4 sm:p-6 max-w-3xl mx-auto"><p className="text-luxury-gray-3">Recording not found.</p></div>
 
   if (success) return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="bg-green-900/30 border border-green-700 rounded-lg p-6 text-center">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+      <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 sm:p-6 text-center">
         <p className="text-green-300 text-lg font-medium mb-2">Uploading to SharePoint</p>
         <p className="text-luxury-gray-3 text-sm mb-4">This may take a few minutes. Agents will receive an email when ready.</p>
         {sharePointUrl && (
@@ -250,7 +250,7 @@ export default function RecordingDetailPage() {
   )
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <button onClick={() => router.push('/admin/recordings')} className="text-luxury-gray-3 text-sm mb-6 hover:text-luxury-white transition-colors">
         Back to Recordings
       </button>
@@ -294,7 +294,7 @@ export default function RecordingDetailPage() {
           {(job.onedrive_url || job.zoom_share_url) && (
             <div className="pt-2 border-t border-luxury-dark-3">
               <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Preview Recording</p>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-3">
                 {job.onedrive_url && (
                   <a href={job.onedrive_url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent text-xs underline">
                     View in OneDrive
@@ -454,12 +454,12 @@ export default function RecordingDetailPage() {
           {chatMessages.length > 0 && (
             <div className="space-y-3 mb-3 max-h-60 overflow-y-auto">
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`text-sm rounded-lg px-3 py-2 whitespace-pre-wrap ${msg.role === 'user' ? 'bg-luxury-dark-3 text-luxury-white ml-8' : 'bg-luxury-accent/10 text-luxury-gray-2 mr-8'}`}>
+                <div key={i} className={`text-sm rounded-lg px-3 py-2 whitespace-pre-wrap ${msg.role === 'user' ? 'bg-luxury-dark-3 text-luxury-white ml-4 sm:ml-8' : 'bg-luxury-accent/10 text-luxury-gray-2 mr-4 sm:mr-8'}`}>
                   {msg.content}
                 </div>
               ))}
               {chatLoading && (
-                <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-3 py-2 mr-8">Thinking...</div>
+                <div className="bg-luxury-accent/10 text-luxury-gray-3 text-sm rounded-lg px-3 py-2 mr-4 sm:mr-8">Thinking...</div>
               )}
               <div ref={chatEndRef} />
             </div>
@@ -521,4 +521,5 @@ export default function RecordingDetailPage() {
     </div>
   )
 }
+
 

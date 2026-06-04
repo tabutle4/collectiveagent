@@ -75,7 +75,7 @@ export default function RecordingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="page-title mb-2">Zoom Recordings</h1>
         <p className="text-luxury-gray-3 text-sm">Training session recordings captured automatically from Zoom.</p>
@@ -86,7 +86,7 @@ export default function RecordingsPage() {
         <p className="text-luxury-gray-3 text-sm mb-4">
           When a Zoom recording is ready, a notification email is sent to this address with a link to review and upload.
         </p>
-        <div className="flex gap-3 items-start">
+        <div className="flex flex-col sm:flex-row gap-3 items-start">
           <input
             type="email"
             value={notifyEmail}
@@ -97,7 +97,7 @@ export default function RecordingsPage() {
           <button
             onClick={saveEmail}
             disabled={emailSaving || !notifyEmail.trim()}
-            className="btn-primary px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed sm:shrink-0 w-full sm:w-auto"
           >
             {emailSaving ? 'Saving...' : emailSaved ? 'Saved' : 'Save'}
           </button>
@@ -185,3 +185,4 @@ export default function RecordingsPage() {
     </div>
   )
 }
+
