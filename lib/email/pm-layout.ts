@@ -415,8 +415,11 @@ export function pmStatementReadyEmail(
   propertyAddress: string,
   periodLabel: string,
   netDisbursed: number,
-  statementUrl: string
+  statementUrl: string,
+  netPending?: number
 ): string {
+  const hasPending = netPending != null && netPending > 0
+  const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   return getPMEmailLayout(
     `${pmEmailGreeting(landlordName)}
      ${pmEmailText(`Your ${periodLabel} statement for ${propertyAddress} is ready to view.`)}
@@ -424,10 +427,21 @@ export function pmStatementReadyEmail(
        ${pmEmailDetail('Property', propertyAddress)}
        ${pmEmailDetail('Period', periodLabel)}
        <hr style="border: none; border-top: 1px solid ${PM_EMAIL_COLORS.border}; margin: 12px 0;">
+       ${netDisbursed > 0 ? `
        <p style="margin: 8px 0; font-size: 14px;">
          <strong style="color: ${PM_EMAIL_COLORS.headingText};">Net Disbursed:</strong>
-         <span style="color: ${PM_EMAIL_COLORS.accent}; font-weight: 600;">$${netDisbursed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-       </p>
+         <span style="color: ${PM_EMAIL_COLORS.accent}; font-weight: 600;">$${fmt(netDisbursed)}</span>
+       </p>` : ''}
+       ${hasPending ? `
+       <p style="margin: 8px 0; font-size: 14px;">
+         <strong style="color: ${PM_EMAIL_COLORS.headingText};">Pending Disbursement:</strong>
+         <span style="color: #854F0B; font-weight: 600;">$${fmt(netPending!)}</span>
+         <span style="font-size: 12px; color: ${PM_EMAIL_COLORS.lightText};"> (in progress)</span>
+       </p>` : ''}
+       ${!netDisbursed && !hasPending ? `
+       <p style="margin: 8px 0; font-size: 14px; color: ${PM_EMAIL_COLORS.lightText};">
+         No disbursement this period.
+       </p>` : ''}
      </div>
      ${pmEmailText('Click below to view your full statement. You can save it as a PDF directly from the statement view.')}
      ${pmEmailButton('View Statement', statementUrl)}

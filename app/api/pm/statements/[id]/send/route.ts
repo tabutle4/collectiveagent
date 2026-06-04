@@ -87,7 +87,8 @@ export async function POST(
       propertyAddr,
       period,
       Number(statement.total_net_disbursed || 0),
-      statementUrl
+      statementUrl,
+      Number(statement.total_net_pending || 0)
     )
 
     const result = await sendEmail({
