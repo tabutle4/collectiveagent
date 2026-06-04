@@ -153,6 +153,7 @@ export async function POST(req: NextRequest) {
   const meetingTitle: string = recording.topic || 'Untitled Meeting'
   const startTime: string = recording.start_time
   const zoomToken: string = payload.download_token || ''
+  const zoomShareUrl: string = recording.share_url || ''
 
   // Find the MP4 and VTT files
   const mp4File = recording.recording_files?.find(
@@ -190,6 +191,7 @@ export async function POST(req: NextRequest) {
       zoom_token: zoomToken,
       suggested_title: suggestedTitle,
       suggested_folder: suggestedFolder,
+      zoom_share_url: zoomShareUrl || null,
       status: 'pending',
     })
     .select()

@@ -290,6 +290,16 @@ export default function RecordingDetailPage() {
             )}
           </div>
 
+          {/* Zoom recording link */}
+          {job.zoom_share_url && (
+            <div className="pt-2 border-t border-luxury-dark-3">
+              <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Zoom Recording</p>
+              <a href={job.zoom_share_url} target="_blank" rel="noopener noreferrer" className="text-luxury-accent text-xs underline">
+                Preview in Zoom
+              </a>
+            </div>
+          )}
+
           {/* Fathom transcript status */}
           <div className="pt-2 border-t border-luxury-dark-3">
             <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-1">Fathom Transcript</p>
