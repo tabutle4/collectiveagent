@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
     }
 
-    // Fetch active lease with property info
+    // Fetch active lease with property info and agreement flags
     const { data: leases } = await supabase
       .from('pm_leases')
       .select(`
@@ -52,7 +52,12 @@ export async function GET(request: NextRequest) {
           unit,
           city,
           state,
-          zip
+          zip,
+          pm_agreement_id,
+          pm_agreements (
+            crc_collects_rent,
+            crc_holds_deposit
+          )
         )
       `)
       .eq('tenant_id', tenantId)
@@ -78,6 +83,8 @@ export async function GET(request: NextRequest) {
       lease_end: activeLease.lease_end,
       security_deposit: activeLease.security_deposit || 0,
       lease_pdf_url: activeLease.lease_pdf_url || null,
+      landlord_payment_instructions: activeLease.landlord_payment_instructions || null,
+      crc_collects_rent: (activeLease.managed_properties as any)?.pm_agreements?.crc_collects_rent ?? true,
     } : null
 
     // Fetch named lease documents (amendments, addenda, etc.) for the active

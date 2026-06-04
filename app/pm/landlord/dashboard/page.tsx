@@ -21,7 +21,8 @@ import {
   ArrowLeft,
   Eye,
   Wrench,
-  Loader2
+  Loader2,
+  Receipt
 } from 'lucide-react'
 
 interface Property {
@@ -115,6 +116,19 @@ interface Landlord {
   bank_status: string
 }
 
+interface LandlordInvoice {
+  id: string
+  period_month: number
+  period_year: number
+  amount: number
+  description: string | null
+  due_date: string
+  status: string
+  paid_at: string | null
+  payload_payment_link_url: string | null
+  managed_properties?: { id: string; property_address: string; city: string }
+}
+
 interface DashboardData {
   landlord: Landlord
   properties: Property[]
@@ -126,6 +140,7 @@ interface DashboardData {
     w9Complete: boolean
     bankConnected: boolean
   }
+  landlordInvoices: LandlordInvoice[]
 }
 
 function LandlordDashboardContent() {
@@ -364,7 +379,7 @@ function LandlordDashboardContent() {
     )
   }
 
-  const { landlord, properties, agreements, pendingDisbursements, repairs, recentActivity, setupStatus } = data
+  const { landlord, properties, agreements, pendingDisbursements, repairs, recentActivity, setupStatus, landlordInvoices = [] } = data
 
   return (
     <div className="min-h-screen bg-luxury-light">
@@ -604,6 +619,55 @@ function LandlordDashboardContent() {
                       </p>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Management Fee Invoices */}
+            {landlordInvoices.length > 0 && (
+              <div className="container-card">
+                <h2 className="field-label mb-4 flex items-center gap-2">
+                  <Receipt size={16} />
+                  Management Fee Invoices
+                </h2>
+                <div className="space-y-3">
+                  {landlordInvoices.map((inv) => {
+                    const isPaid = inv.status === 'paid'
+                    const monthName = new Date(2000, (inv.period_month || 1) - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+                    return (
+                      <div key={inv.id} className="inner-card">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-luxury-gray-1">
+                            {monthName} {inv.period_year}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-semibold ${isPaid ? 'text-green-600' : 'text-luxury-accent'}`}>
+                              {formatMoney(inv.amount)}
+                            </span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${isPaid ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+                              {isPaid ? 'Paid' : 'Due'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-luxury-gray-3">{inv.managed_properties?.property_address}</p>
+                        {!isPaid && inv.payload_payment_link_url && (
+                          <a
+                            href={inv.payload_payment_link_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2 inline-block text-xs text-luxury-accent hover:underline"
+                          >
+                            Pay Online
+                          </a>
+                        )}
+                        {isPaid && inv.paid_at && (
+                          <p className="text-xs text-green-600 mt-1">
+                            Paid {new Date(inv.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

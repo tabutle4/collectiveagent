@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Verify property exists and get unit_count for late fee cap
     const { data: property } = await supabase
       .from('managed_properties')
-      .select('id, landlord_id, unit_count')
+      .select('id, landlord_id, unit_count, pm_agreement_id')
       .eq('id', property_id)
       .single()
 
@@ -93,6 +93,19 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Fetch agreement for collection toggles and fee calculation
+    let agreement: any = null
+    if (property.pm_agreement_id) {
+      const { data: agmt } = await supabase
+        .from('pm_agreements')
+        .select('id, crc_collects_rent, crc_holds_deposit, management_fee_pct, management_fee_flat')
+        .eq('id', property.pm_agreement_id)
+        .single()
+      agreement = agmt
+    }
+
+    const crcCollectsRent = agreement?.crc_collects_rent ?? true
 
     // Verify tenant exists
     const { data: tenant } = await supabase
@@ -152,46 +165,85 @@ export async function POST(request: NextRequest) {
     // line; subsequent invoices are rent only.
     let isFirstInvoice = true
 
-    while (current <= endDate) {
-      const periodMonth = current.getMonth() + 1
-      const periodYear = current.getFullYear()
+    // Landlord invoices: generated for ALL landlords regardless of toggles
+    const landlordInvoices: any[] = []
+    const mgmtFeeAmount = agreement?.management_fee_flat != null
+      ? Number(agreement.management_fee_flat)
+      : Math.round(Number(monthly_rent) * ((agreement?.management_fee_pct ?? 10) / 100) * 100) / 100
 
-      // Due date is the rent_due_day of this month
-      const dueDate = new Date(periodYear, periodMonth - 1, dueDayNum)
+    const monthCursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+    while (monthCursor <= endDate) {
+      const periodMonth = monthCursor.getMonth() + 1
+      const periodYear = monthCursor.getFullYear()
+      const dueDayCapped = Math.min(dueDayNum, 28)
+      const dueDate = new Date(periodYear, periodMonth - 1, dueDayCapped)
 
-      const depositOnThisInvoice = isFirstInvoice ? Number(security_deposit || 0) : 0
-
-      invoices.push({
-        property_id,
-        tenant_id,
+      landlordInvoices.push({
         landlord_id,
-        lease_id: lease.id,
+        property_id,
         period_month: periodMonth,
         period_year: periodYear,
-        rent_amount: monthly_rent,
-        late_fee: 0,
-        other_charges: 0,
-        deposit_amount: depositOnThisInvoice,
-        deposit_description: depositOnThisInvoice > 0 ? 'Security deposit' : null,
-        total_amount: monthly_rent + depositOnThisInvoice,
+        amount: mgmtFeeAmount,
+        description: 'Management Fee',
         due_date: dueDate.toISOString().split('T')[0],
         status: 'pending',
       })
-
-      isFirstInvoice = false
-      // Move to next month
-      current.setMonth(current.getMonth() + 1)
+      monthCursor.setMonth(monthCursor.getMonth() + 1)
     }
 
-    // Insert all invoices
-    if (invoices.length > 0) {
-      const { error: invoiceError } = await supabase
-        .from('tenant_invoices')
-        .insert(invoices)
+    if (landlordInvoices.length > 0) {
+      const { error: liErr } = await supabase
+        .from('pm_landlord_invoices')
+        .insert(landlordInvoices)
+      if (liErr) {
+        console.error('Error creating landlord invoices:', liErr)
+      }
+    }
 
-      if (invoiceError) {
-        console.error('Error creating invoices:', invoiceError)
-        // Don't fail the whole request, but log it
+    // Tenant invoices: only if CRC collects rent
+    if (crcCollectsRent) {
+      while (current <= endDate) {
+        const periodMonth = current.getMonth() + 1
+        const periodYear = current.getFullYear()
+
+        // Due date is the rent_due_day of this month
+        const dueDate = new Date(periodYear, periodMonth - 1, dueDayNum)
+
+        // Deposit always driven by the entered deposit amount, not the toggle
+        const depositOnThisInvoice = isFirstInvoice ? Number(security_deposit || 0) : 0
+
+        invoices.push({
+          property_id,
+          tenant_id,
+          landlord_id,
+          lease_id: lease.id,
+          period_month: periodMonth,
+          period_year: periodYear,
+          rent_amount: monthly_rent,
+          late_fee: 0,
+          other_charges: 0,
+          deposit_amount: depositOnThisInvoice,
+          deposit_description: depositOnThisInvoice > 0 ? 'Security deposit' : null,
+          total_amount: monthly_rent + depositOnThisInvoice,
+          due_date: dueDate.toISOString().split('T')[0],
+          status: 'pending',
+        })
+
+        isFirstInvoice = false
+        // Move to next month
+        current.setMonth(current.getMonth() + 1)
+      }
+
+      // Insert all tenant invoices
+      if (invoices.length > 0) {
+        const { error: invoiceError } = await supabase
+          .from('tenant_invoices')
+          .insert(invoices)
+
+        if (invoiceError) {
+          console.error('Error creating tenant invoices:', invoiceError)
+          // Don't fail the whole request, but log it
+        }
       }
     }
 
@@ -199,6 +251,8 @@ export async function POST(request: NextRequest) {
       success: true,
       lease,
       invoices_created: invoices.length,
+      landlord_invoices_created: landlordInvoices.length,
+      crc_collects_rent: crcCollectsRent,
     })
   } catch (error: any) {
     console.error('Error creating lease:', error)

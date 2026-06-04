@@ -111,6 +111,27 @@ export async function GET(request: NextRequest) {
       .eq('landlord_id', landlordId)
       .order('created_at', { ascending: false })
 
+    // Fetch landlord invoices - only sent or paid (pending not shown on portal)
+    const { data: landlordInvoices } = await supabase
+      .from('pm_landlord_invoices')
+      .select(`
+        id,
+        period_month,
+        period_year,
+        amount,
+        description,
+        due_date,
+        status,
+        paid_at,
+        paid_amount,
+        payload_payment_link_url,
+        managed_properties(id, property_address, city)
+      `)
+      .eq('landlord_id', landlordId)
+      .in('status', ['sent', 'paid'])
+      .order('period_year', { ascending: false })
+      .order('period_month', { ascending: false })
+
     const recentActivity = (recentDisbursements || []).map(d => {
       // Both 'completed' and 'paid' mean the disbursement settled. Anything
       // else (pending, processing, failed) renders as Pending to the landlord.
@@ -150,7 +171,8 @@ export async function GET(request: NextRequest) {
       pendingDisbursements: pendingDisbursements || [],
       repairs: repairs || [],
       recentActivity,
-      setupStatus
+      setupStatus,
+      landlordInvoices: landlordInvoices || [],
     })
   } catch (error: any) {
     console.error('Error in PM landlord dashboard:', error)

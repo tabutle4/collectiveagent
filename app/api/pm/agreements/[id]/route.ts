@@ -63,6 +63,7 @@ export async function PATCH(
       'coop_broker_fee_pct', 'agreement_pdf_url',
       'status', 'notes',
       'referring_agent_id', 'agent_fee_pct',
+      'crc_collects_rent', 'crc_holds_deposit', 'crc_invoices_mgmt_fee',
     ]
 
     const filteredUpdates: Record<string, any> = { updated_at: new Date().toISOString() }

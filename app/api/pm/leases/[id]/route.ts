@@ -61,7 +61,7 @@ export async function PATCH(
       'late_fee_grace_days', 'late_fee_initial', 'late_fee_daily', 
       'late_fee_max_days', 'late_fee_cap_pct',
       'returned_payment_fee', 'lease_pdf_url',
-      'status', 'notes',
+      'status', 'notes', 'landlord_payment_instructions',
     ]
 
     const filteredUpdates: Record<string, any> = { updated_at: new Date().toISOString() }

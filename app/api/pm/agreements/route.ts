@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       repair_limit_without_approval, reserve_per_unit,
       lease_term_min_months, lease_term_max_months,
       coop_broker_fee_pct, agreement_pdf_url, notes,
+      crc_collects_rent, crc_holds_deposit, crc_invoices_mgmt_fee,
     } = body
 
     if (!landlord_id || !commencement_date) {
@@ -103,6 +104,9 @@ export async function POST(request: NextRequest) {
         agreement_pdf_url: agreement_pdf_url || null,
         notes: notes?.trim() || null,
         status: 'active',
+        crc_collects_rent: crc_collects_rent ?? true,
+        crc_holds_deposit: crc_holds_deposit ?? true,
+        crc_invoices_mgmt_fee: crc_invoices_mgmt_fee ?? true,
       })
       .select()
       .single()

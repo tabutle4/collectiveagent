@@ -200,8 +200,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create pm_fee_payouts records if there's a management fee
+    // Create pm_fee_payouts records if there's a management fee.
+    // Also mark the corresponding pm_landlord_invoice as paid (the invoice
+    // is the canonical source for all mgmt fee tracking).
     const feePayouts: any[] = []
+
+    // Find the landlord invoice for this period/property and mark it paid
+    let landlordInvoiceId: string | null = null
+    if (mgmtFee > 0) {
+      const { data: matchingInvoice } = await supabase
+        .from('pm_landlord_invoices')
+        .select('id')
+        .eq('landlord_id', landlord_id)
+        .eq('property_id', property_id)
+        .eq('period_month', period_month)
+        .eq('period_year', period_year)
+        .neq('status', 'paid')
+        .maybeSingle()
+
+      if (matchingInvoice) {
+        landlordInvoiceId = matchingInvoice.id
+        await supabase
+          .from('pm_landlord_invoices')
+          .update({
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+            paid_amount: mgmtFee,
+            payment_method: 'disbursement',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', matchingInvoice.id)
+      }
+    }
+
     if (mgmtFee > 0) {
       const agentFeePct = agreement?.agent_fee_pct || 0
       // Agent fee is % of gross rent (rent only), not % of management fee
@@ -219,6 +250,7 @@ export async function POST(request: NextRequest) {
           .from('pm_fee_payouts')
           .insert({
             disbursement_id: disbursement.id,
+            landlord_invoice_id: landlordInvoiceId,
             payee_type: 'agent',
             payee_id: agreement.referring_agent_id,
             payee_name: agentName,
@@ -237,6 +269,7 @@ export async function POST(request: NextRequest) {
           .from('pm_fee_payouts')
           .insert({
             disbursement_id: disbursement.id,
+            landlord_invoice_id: landlordInvoiceId,
             payee_type: 'brokerage',
             payee_id: null,
             payee_name: 'Collective Realty Co.',

@@ -28,6 +28,7 @@ interface Lease {
   late_fee_cap_pct: number | null
   returned_payment_fee: number | null
   lease_pdf_url: string | null
+  landlord_payment_instructions: string | null
   status: string
   notes: string | null
   property_id: string
@@ -100,6 +101,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
     returned_payment_fee: '',
     status: 'active',
     notes: '',
+    landlord_payment_instructions: '',
   })
 
   useEffect(() => {
@@ -145,6 +147,7 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
         returned_payment_fee: l.returned_payment_fee?.toString() || '',
         status: l.status || 'active',
         notes: l.notes || '',
+        landlord_payment_instructions: l.landlord_payment_instructions || '',
       })
     } catch (err) {
       console.error('Failed to load lease:', err)
@@ -538,6 +541,18 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
                 rows={2}
                 className="textarea-luxury w-full"
               />
+            </div>
+            <div className="mt-4 pt-4 border-t border-luxury-gray-5">
+              <label className="field-label">Landlord Payment Instructions</label>
+              <textarea
+                name="landlord_payment_instructions"
+                value={form.landlord_payment_instructions}
+                onChange={handleChange}
+                rows={3}
+                className="textarea-luxury w-full"
+                placeholder="Shown to tenant on portal when landlord self-collects rent..."
+              />
+              <p className="text-xs text-luxury-gray-3 mt-1">Only displayed on the tenant portal for self-collect properties.</p>
             </div>
           </div>
 

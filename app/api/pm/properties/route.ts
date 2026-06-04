@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       .select(`
         *,
         landlords(id, first_name, last_name, email),
-        pm_agreements(id, management_fee_pct, status),
+        pm_agreements(id, management_fee_pct, status, crc_collects_rent, crc_holds_deposit, reserve_per_unit),
         pm_leases(
           id, tenant_id, lease_start, lease_end, monthly_rent, status,
           tenants(id, first_name, last_name, email)

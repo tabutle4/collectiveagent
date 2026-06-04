@@ -113,13 +113,28 @@ export async function POST(request: NextRequest) {
       0
     )
 
-    // 2. Mgmt fees + deductions: from landlord_disbursements where
-    //    payment_date falls in period
+    // 2. Mgmt fees: from paid pm_landlord_invoices within the period
+    // (invoices are the canonical source for all landlords - full-service
+    // invoices are auto-marked paid at disbursement creation)
+    const { data: paidLandlordInvoices } = await supabaseAdmin
+      .from('pm_landlord_invoices')
+      .select('amount, paid_at')
+      .eq('landlord_id', landlordId)
+      .eq('property_id', propertyId)
+      .eq('status', 'paid')
+      .gte('paid_at', periodStart)
+      .lt('paid_at', periodEnd)
+
+    const totalMgmtFees = (paidLandlordInvoices || []).reduce(
+      (sum, inv: any) => sum + Number(inv.amount || 0),
+      0
+    )
+
+    // 3. Deductions and disbursement totals: still from landlord_disbursements
     const { data: disbursements } = await supabaseAdmin
       .from('landlord_disbursements')
       .select(`
         id,
-        management_fee,
         other_deductions,
         deposit_amount,
         net_amount,
@@ -132,10 +147,6 @@ export async function POST(request: NextRequest) {
       .gte('payment_date', periodStart)
       .lt('payment_date', periodEnd)
 
-    const totalMgmtFees = (disbursements || []).reduce(
-      (sum, d: any) => sum + Number(d.management_fee || 0),
-      0
-    )
     const totalLineItemDeductions = (disbursements || []).reduce(
       (sum, d: any) => sum + ((d.landlord_disbursement_deductions || []).reduce(
         (s: number, lid: any) => s + Number(lid.amount || 0),

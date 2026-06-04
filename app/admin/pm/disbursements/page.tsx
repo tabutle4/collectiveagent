@@ -61,6 +61,9 @@ interface Landlord {
     status: string
     management_fee_pct: number
     management_fee_flat: number | null
+    reserve_per_unit: number | null
+    crc_collects_rent: boolean
+    crc_holds_deposit: boolean
   }[]
 }
 
@@ -107,6 +110,8 @@ export default function DisbursementsPage() {
   // Disbursement target: landlord (default) or tenant. Tenant mode uses a
   // simpler form because tenant disbursements have no fee splits.
   const [disbursementTarget, setDisbursementTarget] = useState<'landlord' | 'tenant'>('landlord')
+  // Disbursement type (landlord path only): rent, deposit, or reserve
+  const [disbursementType, setDisbursementType] = useState<'rent' | 'deposit' | 'reserve'>('rent')
   const [tenantForm, setTenantForm] = useState({
     tenant_id: '',
     amount: '',
@@ -773,7 +778,15 @@ export default function DisbursementsPage() {
   }
 
   const selectedLandlord = landlords.find(l => l.id === createForm.landlord_id)
-  const availableProperties = selectedLandlord?.managed_properties?.filter(p => p.status === 'active') || []
+  const availableProperties = (selectedLandlord?.managed_properties || []).filter((p: any) => {
+    if (p.status !== 'active') return false
+    const ag = selectedLandlord?.pm_agreements?.find((a: any) => a.id === p.pm_agreement_id)
+    if (disbursementTarget === 'tenant') return true // tenant disbursements not filtered by type
+    if (disbursementType === 'rent') return ag?.crc_collects_rent !== false
+    if (disbursementType === 'deposit') return ag?.crc_holds_deposit !== false
+    if (disbursementType === 'reserve') return !!ag?.reserve_per_unit
+    return true
+  })
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -1085,6 +1098,43 @@ export default function DisbursementsPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Disbursement type (landlord path only) */}
+                  {disbursementTarget === 'landlord' && (
+                    <div>
+                      <label className="field-label">Disbursement Type</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          { key: 'rent', label: 'Rent' },
+                          { key: 'deposit', label: 'Deposit' },
+                          { key: 'reserve', label: 'Reserve' },
+                        ] as const).map(({ key, label }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              setDisbursementType(key)
+                              setCreateForm(prev => ({ ...prev, property_id: '' }))
+                              setPendingDeductions([])
+                              setSelectedDeductionIds([])
+                            }}
+                            className={`px-3 py-2 rounded border text-sm ${
+                              disbursementType === key
+                                ? 'bg-luxury-accent text-white border-luxury-accent'
+                                : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-luxury-gray-3 mt-1">
+                        {disbursementType === 'rent' && 'Properties where CRC collects rent.'}
+                        {disbursementType === 'deposit' && 'Properties where CRC holds the security deposit.'}
+                        {disbursementType === 'reserve' && 'Properties with a reserve balance.'}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Landlord */}
                   <div>

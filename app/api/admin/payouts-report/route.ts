@@ -214,10 +214,18 @@ export async function GET(request: NextRequest) {
     // Pending PM agent referral fees (payee_type = 'agent', status = 'pending').
     // Brokerage-payee rows are intentionally excluded: that portion stays in
     // the CRC bank and would double-count the reconciliation.
+    // Join to both landlord_disbursements (full-service) and pm_landlord_invoices
+    // (self-collect and all new leases) since either may be the source. Use left
+    // joins so rows with only an invoice (no disbursement) are not dropped.
     const pmAgentFeePayouts = await fetchAllRows(
       'pm_fee_payouts',
       `id, payee_id, payee_name, amount, payment_status, payment_date, payment_method,
-       landlord_disbursements!inner(
+       landlord_invoice_id,
+       landlord_disbursements(
+         period_month, period_year,
+         managed_properties(property_address)
+       ),
+       pm_landlord_invoices(
          period_month, period_year,
          managed_properties(property_address)
        ),
@@ -247,11 +255,13 @@ export async function GET(request: NextRequest) {
     )
 
     const pmFees = pmAgentFeePayouts.map(p => {
+      // Use disbursement for period/property if present, fall back to landlord invoice
       const disb = (p as any).landlord_disbursements
-      const property = disb?.managed_properties
+      const inv  = (p as any).pm_landlord_invoices
+      const property = disb?.managed_properties || inv?.managed_properties
       const u = (p as any).payee
-      const periodM: number | null = disb?.period_month ?? null
-      const periodY: number | null = disb?.period_year ?? null
+      const periodM: number | null = disb?.period_month ?? inv?.period_month ?? null
+      const periodY: number | null = disb?.period_year  ?? inv?.period_year  ?? null
       let payeeName = ''
       if (u) {
         const first = u.preferred_first_name || u.first_name || ''

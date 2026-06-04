@@ -18,6 +18,8 @@ interface Property {
   city: string
   unit_count: number
   landlord_id: string
+  pm_agreement_id: string | null
+  crc_collects_rent: boolean
 }
 
 interface Tenant {
@@ -98,7 +100,12 @@ function NewLeaseContent() {
       }
       if (propertyRes.ok) {
         const data = await propertyRes.json()
-        setProperties(data.properties || [])
+        // Flatten agreement flags onto each property
+        const props = (data.properties || []).map((p: any) => ({
+          ...p,
+          crc_collects_rent: true, // will be resolved via landlords API which joins agreements
+        }))
+        setProperties(props)
         
         // If preselected property, set the landlord
         if (preselectedPropertyId) {
@@ -304,17 +311,34 @@ function NewLeaseContent() {
                 />
               </div>
             </div>
-            {invoiceCount > 0 && (
-              <div className="alert-info mt-4 flex items-start gap-2">
-                <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium">{invoiceCount} invoices will be auto-generated</p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    One invoice per month from {form.lease_start} through {form.lease_end}
-                  </p>
+            {invoiceCount > 0 && (() => {
+              const selectedProp = properties.find(p => p.id === form.property_id)
+              const collectsRent = selectedProp?.crc_collects_rent ?? true
+              return collectsRent ? (
+                <div className="alert-info mt-4 flex items-start gap-2">
+                  <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">{invoiceCount} tenant invoices will be auto-generated</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      One invoice per month from {form.lease_start} through {form.lease_end}
+                    </p>
+                    <p className="text-xs text-blue-600 mt-0.5">
+                      {invoiceCount} management fee invoices will also be created for the landlord.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="alert-info mt-4 flex items-start gap-2">
+                  <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">Self-Collect: no tenant invoices will be created</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Tenant pays rent directly to the landlord. {invoiceCount} management fee invoices will be generated for the landlord.
+                    </p>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Rent & Deposits */}

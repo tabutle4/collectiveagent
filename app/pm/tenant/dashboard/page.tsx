@@ -61,6 +61,8 @@ interface Lease {
   lease_end: string
   security_deposit: number
   lease_pdf_url: string | null
+  crc_collects_rent: boolean
+  landlord_payment_instructions: string | null
 }
 
 interface LeaseDocument {
@@ -564,7 +566,7 @@ function TenantDashboardContent() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-luxury-gray-3">Lease Dates</span>
-                  <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} – {formatDate(lease.lease_end)}</span>
+                  <span className="text-luxury-gray-1">{formatDate(lease.lease_start)} to {formatDate(lease.lease_end)}</span>
                 </div>
               </div>
             </div>
@@ -622,8 +624,27 @@ function TenantDashboardContent() {
           </div>
         )}
 
+        {/* Self-Collect: payment instructions instead of invoice section */}
+        {lease && lease.crc_collects_rent === false && (
+          <div className="container-card mb-6">
+            <h2 className="field-label flex items-center gap-2 mb-3">
+              <DollarSign size={16} />
+              Rent Payment
+            </h2>
+            <p className="text-sm text-luxury-gray-2">
+              Your rent is paid directly to your landlord, not through Collective Realty Co.
+            </p>
+            {lease.landlord_payment_instructions && (
+              <div className="mt-3 p-3 bg-luxury-cream rounded border-l-4 border-luxury-accent">
+                <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">Payment Instructions</p>
+                <p className="text-sm text-luxury-gray-1 whitespace-pre-line">{lease.landlord_payment_instructions}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Unpaid Invoices */}
-        {unpaidInvoices.length > 0 && (
+        {lease && lease.crc_collects_rent !== false && unpaidInvoices.length > 0 && (
           <div className="container-card mb-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="field-label flex items-center gap-2">
@@ -767,7 +788,7 @@ function TenantDashboardContent() {
         )}
 
         {/* Payment History */}
-        {paidInvoices.length > 0 && (
+        {lease && lease.crc_collects_rent !== false && paidInvoices.length > 0 && (
           <div className="container-card">
             <h2 className="field-label mb-4 flex items-center gap-2">
               <Calendar size={16} />

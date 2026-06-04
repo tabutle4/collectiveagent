@@ -20,6 +20,13 @@ interface Landlord {
   w9_status: string
   bank_status: string
   created_at: string
+  pm_agreements?: {
+    id: string
+    status: string
+    crc_collects_rent: boolean
+    crc_holds_deposit: boolean
+    crc_invoices_mgmt_fee: boolean
+  }[]
 }
 
 interface Property {
@@ -75,6 +82,9 @@ interface Agreement {
   management_fee_flat: number | null
   management_fee_minimum: number | null
   mgmt_fee_basis: 'collected' | 'charged' | null
+  crc_collects_rent: boolean
+  crc_holds_deposit: boolean
+  crc_invoices_mgmt_fee: boolean
   leasing_fee_pct: number | null
   leasing_fee_flat: number | null
   maintenance_coord_fee_pct: number | null
@@ -131,6 +141,9 @@ function AgreementEditor({
     management_fee_pct: agreement.management_fee_pct || 10,
     management_fee_flat: agreement.management_fee_flat ?? '',
     mgmt_fee_basis: agreement.mgmt_fee_basis || 'charged',
+    crc_collects_rent: agreement.crc_collects_rent ?? true,
+    crc_holds_deposit: agreement.crc_holds_deposit ?? true,
+    crc_invoices_mgmt_fee: agreement.crc_invoices_mgmt_fee ?? true,
     leasing_fee_pct: agreement.leasing_fee_pct ?? '',
     leasing_fee_flat: agreement.leasing_fee_flat ?? '',
     maintenance_coord_fee_pct: agreement.maintenance_coord_fee_pct || '',
@@ -173,6 +186,9 @@ function AgreementEditor({
         ? parseFloat(String(form.management_fee_flat))
         : null,
       mgmt_fee_basis: form.mgmt_fee_basis || 'charged',
+      crc_collects_rent: form.crc_collects_rent,
+      crc_holds_deposit: form.crc_holds_deposit,
+      crc_invoices_mgmt_fee: form.crc_invoices_mgmt_fee,
       leasing_fee_pct: form.leasing_fee_pct !== '' && form.leasing_fee_pct !== null
         ? parseFloat(String(form.leasing_fee_pct))
         : null,
@@ -264,6 +280,51 @@ function AgreementEditor({
           Automatically renews on a month-to-month basis after expiration
         </span>
       </label>
+
+      {/* Collection Model Toggles */}
+      <div>
+        <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+          Collection Model
+        </h3>
+        <div className="inner-card space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.crc_collects_rent}
+              onChange={e => updateField('crc_collects_rent', e.target.checked)}
+              className="mt-0.5 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+            />
+            <div>
+              <span className="text-sm font-medium text-luxury-gray-1">CRC Collects Rent</span>
+              <p className="text-xs text-luxury-gray-3 mt-0.5">Tenant invoices are created and rent flows through CRC. Uncheck if landlord collects rent directly from tenant.</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.crc_holds_deposit}
+              onChange={e => updateField('crc_holds_deposit', e.target.checked)}
+              className="mt-0.5 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+            />
+            <div>
+              <span className="text-sm font-medium text-luxury-gray-1">CRC Holds Deposit</span>
+              <p className="text-xs text-luxury-gray-3 mt-0.5">Security deposit is collected and held in CRC trust account. Uncheck if landlord holds the deposit directly.</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.crc_invoices_mgmt_fee}
+              onChange={e => updateField('crc_invoices_mgmt_fee', e.target.checked)}
+              className="mt-0.5 rounded border-luxury-gray-4 text-luxury-accent focus:ring-luxury-accent"
+            />
+            <div>
+              <span className="text-sm font-medium text-luxury-gray-1">CRC Invoices Mgmt Fee</span>
+              <p className="text-xs text-luxury-gray-3 mt-0.5">Management fee is invoiced to landlord via Payload. When CRC collects rent this is deducted automatically. Uncheck only if fee is collected another way.</p>
+            </div>
+          </label>
+        </div>
+      </div>
 
       {/* Row 2: Fees */}
       <div>
@@ -1620,9 +1681,17 @@ export default function LandlordDetailPage() {
                     <div key={property.id} className="inner-card">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-luxury-gray-1">
-                            {property.property_address}{property.unit && ` ${property.unit}`}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-luxury-gray-1">
+                              {property.property_address}{property.unit && ` ${property.unit}`}
+                            </p>
+                            {(() => {
+                              const ag = landlord.pm_agreements?.find((a: any) => a.id === property.pm_agreement_id)
+                              return ag && ag.crc_collects_rent === false ? (
+                                <span className="text-xs bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Self-Collect</span>
+                              ) : null
+                            })()}
+                          </div>
                           <p className="text-xs text-luxury-gray-3">
                             {property.city}, {property.state} {property.zip}
                           </p>

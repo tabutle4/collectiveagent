@@ -108,6 +108,7 @@ export default function RepairDetailPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [crcCollectsRent, setCrcCollectsRent] = useState(true)
   
   const [form, setForm] = useState({
     category: '',
@@ -154,6 +155,25 @@ export default function RepairDetailPage() {
           payment_status: data.repair.payment_status || '',
           admin_notes: data.repair.admin_notes || ''
         })
+        // Fetch agreement flag to determine if deducted_from_rent is valid
+        if (data.repair.property_id) {
+          try {
+            const propRes = await fetch(`/api/pm/properties/${data.repair.property_id}`)
+            if (propRes.ok) {
+              const propData = await propRes.json()
+              const agmtId = propData.property?.pm_agreement_id
+              if (agmtId) {
+                const agmtRes = await fetch(`/api/pm/agreements/${agmtId}`)
+                if (agmtRes.ok) {
+                  const agmtData = await agmtRes.json()
+                  setCrcCollectsRent(agmtData.agreement?.crc_collects_rent ?? true)
+                }
+              }
+            }
+          } catch {
+            // Non-critical - default to true (show all options)
+          }
+        }
       } else {
         setError('Repair request not found')
       }
@@ -483,7 +503,9 @@ export default function RepairDetailPage() {
                   onChange={(e) => setForm({ ...form, payment_status: e.target.value })}
                   className="select-luxury w-full"
                 >
-                  {PAYMENT_STATUSES.map(ps => (
+                  {PAYMENT_STATUSES.filter(ps =>
+                    crcCollectsRent || ps.value !== 'deducted_from_rent'
+                  ).map(ps => (
                     <option key={ps.value} value={ps.value}>{ps.label}</option>
                   ))}
                 </select>

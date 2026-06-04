@@ -95,11 +95,13 @@ export async function GET(request: NextRequest) {
     )
 
     // PM fee payouts (agent and brokerage portions of the management fee)
+    // Join through pm_landlord_invoices as the canonical source for property/period
     const pmFeePayouts = await fetchAllRows(
       'pm_fee_payouts',
       `id, payee_type, payee_id, payee_name, amount,
        payment_status, payment_date, payment_method,
-       landlord_disbursements!inner(
+       landlord_invoice_id,
+       pm_landlord_invoices(
          period_month, period_year,
          managed_properties(property_address)
        ),
@@ -192,10 +194,10 @@ export async function GET(request: NextRequest) {
     })
 
     const pmFeeRows: PayoutRow[] = pmFeePayouts.map(p => {
-      const disb = (p as any).landlord_disbursements
-      const property = disb?.managed_properties
-      const periodM: number | null = disb?.period_month ?? null
-      const periodY: number | null = disb?.period_year ?? null
+      const inv = (p as any).pm_landlord_invoices
+      const property = inv?.managed_properties
+      const periodM: number | null = inv?.period_month ?? null
+      const periodY: number | null = inv?.period_year ?? null
       const propAddr: string = property?.property_address || ''
       const address = joinAddressAndPeriod(propAddr, periodLabel(periodM, periodY))
 
