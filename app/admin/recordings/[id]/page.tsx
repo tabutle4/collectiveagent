@@ -270,8 +270,8 @@ export default function RecordingDetailPage() {
           <div className="flex flex-wrap gap-4 pt-2 border-t border-luxury-dark-3">
             {job.start_time && (
               <div>
-                <p className="text-luxury-gray-2 text-xs uppercase tracking-wide mb-0.5">Started</p>
-                <p className="text-luxury-white text-sm font-medium">
+                <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">Started</p>
+                <p className="text-luxury-black text-sm font-medium">
                   {new Date(job.start_time).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} CT
                 </p>
               </div>
@@ -279,13 +279,13 @@ export default function RecordingDetailPage() {
             {job.duration && (
               <div>
                 <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">Duration</p>
-                <p className="text-luxury-white text-sm font-medium">{job.duration} min</p>
+                <p className="text-luxury-black text-sm font-medium">{job.duration} min</p>
               </div>
             )}
             {job.file_size && (
               <div>
                 <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-0.5">File Size</p>
-                <p className="text-luxury-white text-sm font-medium">{(job.file_size / 1024 / 1024).toFixed(0)} MB</p>
+                <p className="text-luxury-black text-sm font-medium">{(job.file_size / 1024 / 1024).toFixed(0)} MB</p>
               </div>
             )}
           </div>
