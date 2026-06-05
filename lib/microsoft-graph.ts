@@ -548,3 +548,201 @@ export async function uploadAgentDocument(
 ): Promise<{ fileUrl: string; downloadUrl: string }> {
   return graphClient.uploadFileToFolder(folderPath, fileName, fileBuffer)
 }
+// ---------------------------------------------------------------------------
+// Create an M365 user account for a newly activated agent.
+// Requires User.ReadWrite.All and UserAuthenticationMethod.ReadWrite.All application permissions in Entra.
+// ---------------------------------------------------------------------------
+export async function createM365User({
+  firstName,
+  lastName,
+  tempPassword,
+  personalPhone,
+  officeLocation,
+}: {
+  firstName: string
+  lastName: string
+  tempPassword: string
+  personalPhone?: string | null
+  officeLocation?: string | null
+}): Promise<{ officeEmail: string; stepErrors: string[] }> {
+  const token = await getGraphToken()
+  const domain = 'collectiverealtyco.com'
+  const stepErrors: string[] = []
+
+  // Build username: first name + last initial, stripped of non-ascii and spaces
+  const sanitize = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // strip diacritics
+      .replace(/[^a-zA-Z]/g, '')       // strip everything non-alpha
+      .toLowerCase()
+
+  const first = sanitize(firstName)
+  const lastInitial = sanitize(lastName).charAt(0)
+  const baseUsername = `${first}${lastInitial}`
+  const officeEmail = `${baseUsername}@${domain}`
+  const displayName = `${firstName} ${lastName}`
+
+  // Step 1: Create the user account
+  // usageLocation must be set at creation -- assignLicense will fail without it
+  const userBody = {
+    accountEnabled: true,
+    displayName,
+    givenName: firstName,
+    surname: lastName,
+    mailNickname: baseUsername,
+    userPrincipalName: officeEmail,
+    jobTitle: 'Real Estate Agent',
+    usageLocation: 'US',
+    passwordProfile: {
+      forceChangePasswordNextSignIn: true,
+      password: tempPassword,
+    },
+  }
+
+  const createRes = await fetch('https://graph.microsoft.com/v1.0/users', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(userBody),
+  })
+
+  if (!createRes.ok) {
+    const err = await createRes.json().catch(() => null)
+    throw new Error(
+      `M365 user creation failed for ${officeEmail}: ${err?.error?.message || createRes.status}`
+    )
+  }
+
+  const createdUser = await createRes.json()
+  const userId = createdUser.id as string
+
+  // Brief delay -- user object must replicate before license/group/phone calls
+  await new Promise(resolve => setTimeout(resolve, 3000))
+
+  // Step 2: Look up the M365 Business Basic SKU from this tenant's subscriptions
+  // Requires Organization.Read.All application permission
+  let skuId: string | null = null
+  try {
+    const skuRes = await fetch('https://graph.microsoft.com/v1.0/subscribedSkus', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (skuRes.ok) {
+      const skuData = await skuRes.json()
+      const sku = (skuData.value || []).find(
+        (s: any) =>
+          s.skuPartNumber === 'O365_BUSINESS_ESSENTIALS' ||
+          s.skuPartNumber === 'SMB_BUSINESS_ESSENTIALS'
+      )
+      skuId = sku?.skuId ?? null
+      if (!skuId) stepErrors.push('License: M365 Business Basic SKU not found in tenant -- assign manually')
+    } else {
+      stepErrors.push('License: could not query tenant SKUs -- assign manually')
+    }
+  } catch {
+    stepErrors.push('License: SKU lookup error -- assign manually')
+  }
+
+  // Step 3: Assign license -- requires LicenseAssignment.ReadWrite.All application permission
+  if (skuId) {
+    try {
+      const licenseRes = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${userId}/assignLicense`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            addLicenses: [{ skuId, disabledPlans: [] }],
+            removeLicenses: [],
+          }),
+        }
+      )
+      if (!licenseRes.ok) {
+        const err = await licenseRes.json().catch(() => null)
+        const msg = err?.error?.message || licenseRes.status
+        console.error('M365 license assignment failed:', msg)
+        stepErrors.push(`License: assignment failed (${msg}) -- assign manually`)
+      }
+    } catch (err: any) {
+      console.error('M365 license assignment error:', err)
+      stepErrors.push('License: assignment error -- assign manually')
+    }
+  }
+
+  // Step 4: Register MFA phone number -- requires UserAuthenticationMethod.ReadWrite.All
+  // Format: strip non-digits, prepend +1 for 10-digit US numbers
+  if (personalPhone) {
+    try {
+      const digits = String(personalPhone).replace(/\D/g, '')
+      const formatted = digits.length === 10 ? `+1 ${digits}` : `+${digits}`
+      const phoneRes = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${userId}/authentication/phoneMethods`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ phoneNumber: formatted, phoneType: 'mobile' }),
+        }
+      )
+      if (!phoneRes.ok) {
+        const err = await phoneRes.json().catch(() => null)
+        const msg = err?.error?.message || phoneRes.status
+        console.error('MFA phone registration failed:', msg)
+        stepErrors.push(`MFA phone: registration failed (${msg}) -- add manually in Entra`)
+      }
+    } catch (err: any) {
+      console.error('MFA phone registration error:', err)
+      stepErrors.push('MFA phone: registration error -- add manually in Entra')
+    }
+  }
+
+  // Step 5: Add to Microsoft 365 groups -- requires GroupMember.ReadWrite.All
+  // Always: Agents + Onboarding. Conditionally: Houston or DFW based on office
+  const GROUP_AGENTS    = '48f1de3f-74e7-4c5d-b890-bc4147fe3012'
+  const GROUP_HOUSTON   = '995bce20-1771-4f91-a3b8-6d9218aa03d2'
+  const GROUP_DFW       = '3474e9f3-c7c5-4c1e-be1a-fa3bfabc24d8'
+  const GROUP_ONBOARDING = 'ab1f8649-51cf-4236-9f3b-70089f374a63'
+
+  const groupsToJoin: Array<{ id: string; name: string }> = [
+    { id: GROUP_AGENTS, name: 'Agents' },
+    { id: GROUP_ONBOARDING, name: 'Onboarding' },
+  ]
+  if (officeLocation === 'Houston') groupsToJoin.push({ id: GROUP_HOUSTON, name: 'Houston Agents' })
+  if (officeLocation === 'DFW') groupsToJoin.push({ id: GROUP_DFW, name: 'DFW Agents' })
+
+  for (const group of groupsToJoin) {
+    try {
+      const memberRes = await fetch(
+        `https://graph.microsoft.com/v1.0/groups/${group.id}/members/$ref`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${userId}`,
+          }),
+        }
+      )
+      if (!memberRes.ok) {
+        const err = await memberRes.json().catch(() => null)
+        const msg = err?.error?.message || memberRes.status
+        console.error(`Group membership failed for ${group.name}:`, msg)
+        stepErrors.push(`Groups: failed to add to ${group.name} (${msg}) -- add manually`)
+      }
+    } catch (err: any) {
+      console.error(`Group membership error for ${group.name}:`, err)
+      stepErrors.push(`Groups: error adding to ${group.name} -- add manually`)
+    }
+  }
+
+  return { officeEmail, stepErrors }
+}

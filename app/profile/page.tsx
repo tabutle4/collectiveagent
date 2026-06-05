@@ -2045,12 +2045,12 @@ export default function ProfilePage({
           {user.policy_ack_document_url && (
             <div className="mt-3 pt-3 border-t border-luxury-gray-5/30">
               <a
-                href={user.policy_ack_document_url}
+                href="/BrokerPolicyManual.pdf"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-luxury-accent hover:underline"
               >
-                View Policy Manual Acknowledgment
+                View Policy Manual
               </a>
             </div>
           )}

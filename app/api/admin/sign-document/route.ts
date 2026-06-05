@@ -7,9 +7,10 @@ import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
 import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
-import { uploadAgentDocument } from '@/lib/microsoft-graph'
+import { uploadAgentDocument, createM365User } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout } from '@/lib/email/layout'
+import { sendW9TrecReadyEmail } from '@/lib/email'
 import fs from 'fs'
 import path from 'path'
 
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     const { data: agent, error } = await supabaseAdmin
       .from('users')
       .select(
-        'id, first_name, last_name, email, commission_plan, mls_choice, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status, payload_payee_id, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override'
+        'id, first_name, last_name, email, commission_plan, mls_choice, location, license_number, personal_phone, onedrive_folder_url, shipping_address_line1, shipping_address_line2, shipping_city, shipping_state, shipping_zip, ica_signed_at, commission_plan_agreement_signed_at, status, payload_payee_id, qualifying_transaction_target, waive_coaching_fee, cap_amount_override, post_cap_split_override'
       )
       .eq('id', userId)
       .single()
@@ -253,27 +254,93 @@ export async function POST(request: NextRequest) {
       
       // Get referral settings for dynamic fee in checklist email
       const referralFee = isReferralAgent ? (await getReferralSettings()).referral_annual_fee : 0
-      
-      await supabaseAdmin.from('users').update({
+
+      // Derive office from location/mls_choice
+      const officeValue =
+        agent.location === 'Houston' || agent.mls_choice === 'HAR'
+          ? 'Houston'
+          : agent.location === 'DFW' ||
+              (agent.mls_choice && agent.mls_choice.includes('NTREIS'))
+            ? 'DFW'
+            : agent.location || 'DFW'
+
+      // Generate a temporary password meeting M365 complexity requirements:
+      // must contain uppercase, lowercase, digit, and special character (min 8 chars)
+      const randChar = (chars: string) => chars[Math.floor(Math.random() * chars.length)]
+      const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+      const lower = 'abcdefghjkmnpqrstuvwxyz'
+      const digits = '23456789'
+      const special = '!@#$'
+      const pool = upper + lower + digits + special
+      const middle = Array.from({ length: 4 }, () => randChar(pool)).join('')
+      const tempPassword = randChar(upper) + randChar(lower) + randChar(digits) + randChar(special) + middle
+
+      // Create M365 user account and capture office email
+      let officeEmail = ''
+      let m365Error = ''
+      try {
+        const m365 = await createM365User({
+          firstName: agent.first_name,
+          lastName: agent.last_name,
+          tempPassword,
+          personalPhone: (agent as any).personal_phone || null,
+          officeLocation: officeValue,
+        })
+        officeEmail = m365.officeEmail
+        if (m365.stepErrors.length > 0) {
+          m365Error = m365.stepErrors.join(' | ')
+        }
+      } catch (err: any) {
+        // Non-fatal: log the error, continue activation, note in email
+        m365Error = err.message || 'Unknown error'
+        console.error('M365 user creation failed:', m365Error)
+      }
+
+      const activationUpdate: Record<string, any> = {
         status: 'active',
         is_active: true,
         is_licensed_agent: true,
         role: agentType,
         join_date: today.toISOString().split('T')[0],
+        office: officeValue,
+        ...(officeEmail && {
+          office_email: officeEmail,
+          personal_email: agent.email,
+        }),
         // Referral agents don't pay monthly fees
-        ...(isReferralAgent && { 
+        ...(isReferralAgent && {
           monthly_fee_waived: true,
-          // Clear commission plan fields - referral agents have fixed splits
           commission_plan: null,
           commission_plan_agreement_signed: false,
           commission_plan_agreement_signed_at: null,
           commission_plan_agreement_url: null,
         }),
-      }).eq('id', agent.id)
+      }
+
+      await supabaseAdmin.from('users').update(activationUpdate).eq('id', agent.id)
+
+      // Send agent the W-9 / TREC lookout email (standard agents only)
+      if (!isReferralAgent) {
+        try {
+          await sendW9TrecReadyEmail({
+            preferred_first_name: agent.first_name,
+            first_name: agent.first_name,
+            email: agent.email,
+          })
+        } catch (err) {
+          console.error('Failed to send W-9/TREC ready email:', err)
+        }
+      }
 
       // Different checklist for referral vs standard agents
+
       const checklistHtml = isReferralAgent
         ? `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed the Referral Agent ICA for <strong style="color:#1a1a1a;">${agentName}</strong>. Please complete the following.</p>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Agent Info</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Personal email: <strong style="color:#1a1a1a;">${agent.email}</strong></p>
+          </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Verify First</p>
@@ -288,34 +355,46 @@ export async function POST(request: NextRequest) {
             <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Add to Referral Collective distribution group</p>
           </div>
 
-          <p style="margin:0 0 14px;font-size:14px;color:#555;">This is a <strong style="color:#C5A278;">Referral Agent</strong> - they do not need Dotloop, transactions platform, or full MLS access.</p>
-          <p style="margin:0;font-size:12px;color:#888;">Agent personal email: ${agent.email}</p>`
-        : `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentName}</strong>. Please complete the following before sending onboarding emails.</p>
+          <p style="margin:0 0 14px;font-size:14px;color:#555;">This is a <strong style="color:#C5A278;">Referral Agent</strong> - they do not need Dotloop, transactions platform, or full MLS access.</p>`
+        : `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentName}</strong>. Please complete the following.</p>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Verify First</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship invitation has been accepted</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Onboarding payment received</p>
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Agent Info</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Personal email: <strong style="color:#1a1a1a;">${agent.email}</strong></p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">License number: <strong style="color:#1a1a1a;">${agent.license_number || 'not on file'}</strong></p>
+            <p style="margin:0;font-size:14px;color:#555;">Office: <strong style="color:#1a1a1a;">${officeValue}</strong></p>
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Create Accounts</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Outlook - create mailbox, add to groups, set permissions, enable MFA</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Dotloop - create account</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Transactions platform - create account</p>
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">M365 Account</p>
+            ${m365Error
+              ? `<p style="margin:0 0 6px;font-size:13px;color:#A32D2D;">Account creation failed -- create manually. Error: ${m365Error}</p>`
+              : `<p style="margin:0 0 6px;font-size:14px;color:#555;">Account created: <strong style="color:#1a1a1a;">${officeEmail}</strong></p>
+                 <p style="margin:0 0 6px;font-size:14px;color:#555;">Temp password: <code style="background:#f0f0f0;padding:2px 6px;font-size:12px;">${tempPassword}</code></p>
+                 <p style="margin:0 0 6px;font-size:13px;color:#888;">Force change password on first sign-in is enabled. Send temp password to agent separately.</p>`
+            }
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Update Agent Profile in the App</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Set office email (new Outlook address)</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Set division</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration date, NRDS ID, and MLS ID</p>
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Do Manually</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Grant Tara full access to agent mailbox (Exchange admin &gt; Mailboxes &gt; ${officeEmail || agentName} &gt; Manage mailbox delegation)</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Dotloop - create account</p>
+          </div>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Pending - Wait for Agent</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship accepted (license: ${agent.license_number || 'not on file'})</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099 (email: ${agent.email})</p>
+          </div>
+
+          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">After TREC and W-9 Are Done</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Transactions platform - create account</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration, NRDS ID, and MLS ID in the app</p>
             <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Configure team and revenue share settings if applicable</p>
           </div>
 
-          <p style="margin:0 0 14px;font-size:14px;color:#555;">Once all of the above is done, run the <strong style="color:#1a1a1a;">New Agent Automated Onboarding Emails</strong> flow in Power Automate.</p>
-          <p style="margin:0;font-size:12px;color:#888;">Agent personal email: ${agent.email}</p>`
+          <p style="margin:0 0 14px;font-size:14px;color:#555;">Once all of the above is done, run the <strong style="color:#1a1a1a;">New Agent Automated Onboarding Emails</strong> flow in Power Automate.</p>`
 
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',

@@ -772,3 +772,53 @@ export async function sendCalendarReminderEmail({
     html,
   })
 }
+
+// ─── W-9 AND TREC READY (agent-facing, sent after broker co-signs) ────────────
+
+export async function sendW9TrecReadyEmail(agent: {
+  preferred_first_name: string
+  first_name: string
+  email: string
+}) {
+  const firstName = agent.preferred_first_name || agent.first_name
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hi ${firstName}!`,
+    content: `
+      <p class="intro-text">You are almost there! Two more steps are coming your way.</p>
+
+      <div class="section-box">
+        <h2 class="section-title">Step 1 - Complete Your W-9</h2>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Please look for an email from Track1099/Avalara with a secure link to complete your W-9 electronically. This is required for tax reporting purposes. Please complete it promptly.</p>
+      </div>
+
+      <div class="section-box">
+        <h2 class="section-title">Step 2 - Accept Your TREC Invitation</h2>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Please look for an email from TREC to accept your sponsorship invitation. This officially transfers your license to Collective Realty Co. Please accept it as soon as you receive it.</p>
+      </div>
+
+      <p class="intro-text" style="margin-top:24px;">Shortly after completing these two steps, the fun begins! You will receive your structured onboarding emails, a checklist to follow, and calendar invites for training and biweekly onboarding meetings for systems and compliance.</p>
+      <p class="intro-text">Let us know if you have any questions as you proceed!</p>
+    `,
+    darkSection: `
+      <h2 class="dark-section-title">Questions? We Are Here.</h2>
+      <div class="option-box">
+        <h3 class="option-title">Contact the Office</h3>
+        <p class="option-description">Reach out any time and we will help you through it.</p>
+        <div style="text-align: center; display: flex; gap: 12px; justify-content: center;">
+          <a href="mailto:office@collectiverealtyco.com" class="btn btn-white">Email Office</a>
+          <a href="tel:2816389407" class="btn btn-white">Call Office</a>
+        </div>
+      </div>
+    `,
+    closing: ``,
+  })
+
+  return resend.emails.send({
+    from: FROM_EMAILS.onboarding,
+    to: agent.email,
+    replyTo: 'office@collectiverealtyco.com',
+    subject: 'Two More Steps Before the Fun Begins',
+    html,
+  })
+}

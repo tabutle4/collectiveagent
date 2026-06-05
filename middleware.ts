@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   '/api/prospects',
   '/api/forms',
   '/api/payload/webhook',
+  '/api/payload/confirm-transaction',
   '/api/settings',
   '/forms',
   '/roster',

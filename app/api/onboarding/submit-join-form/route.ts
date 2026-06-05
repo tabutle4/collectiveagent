@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
         shipping_state: formData.shipping_state,
         shipping_zip: formData.shipping_zip ? parseInt(formData.shipping_zip) : null,
         license_number: formData.license_number ? parseFloat(formData.license_number) : null,
+        license_expiration: formData.license_expiration || null,
         mls_id: formData.mls_id,
         nrds_id: formData.nrds_id || null,
         association: formData.association,

@@ -1,23 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api-auth'
+import { supabaseAdmin } from '@/lib/supabase'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 // After the embedded checkout fires its success event, the client sends
-// pl_transaction_id here. We confirm it by updating status to 'processed'.
-// Any authenticated agent can confirm their own payment.
-export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request)
-  if (auth.error) return auth.error
+// the campaign_token (for onboarding, unauthenticated) and transaction_id.
+// We confirm the transaction with Payload and write onboarding_fee_paid directly
+// so the broker co-sign page reflects it immediately without waiting for the webhook.
+export const dynamic = 'force-dynamic'
 
+export async function POST(request: NextRequest) {
   try {
-    const { transaction_id }: { transaction_id: string } = await request.json()
+    const body = await request.json()
+    const { transaction_id, token } = body as { transaction_id: string; token?: string }
 
     if (!transaction_id) {
       return NextResponse.json({ error: 'transaction_id is required' }, { status: 400 })
     }
 
+    // Confirm with Payload
     const res = await fetch(`https://api.payload.com/transactions/${transaction_id}`, {
       method: 'PUT',
       headers: {
@@ -34,6 +36,25 @@ export async function POST(request: NextRequest) {
         { error: data.message || 'Failed to confirm transaction' },
         { status: 500 }
       )
+    }
+
+    // If a campaign_token was passed (onboarding flow), mark onboarding_fee_paid now.
+    // The Payload webhook will also fire and is idempotent -- no harm in both running.
+    if (token) {
+      const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('id, onboarding_fee_paid')
+        .eq('campaign_token', token)
+        .single()
+
+      if (user && !user.onboarding_fee_paid) {
+        const paidDate = new Date().toISOString().split('T')[0]
+        await supabaseAdmin
+          .from('users')
+          .update({ onboarding_fee_paid: true, onboarding_fee_paid_date: paidDate })
+          .eq('id', user.id)
+        console.log('Onboarding fee marked paid via confirm-transaction for user:', user.id)
+      }
     }
 
     return NextResponse.json({ success: true })

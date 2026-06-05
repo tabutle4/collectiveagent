@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     // Authenticate by campaign_token
     const { data: prospect, error } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, mls_choice')
+      .select('id, first_name, last_name, email, mls_choice, license_number')
       .eq('campaign_token', token)
       .single()
 
@@ -55,7 +55,11 @@ export async function POST(request: NextRequest) {
         html: getEmailLayout(
           `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong> (${agentType} Agent) has completed all onboarding steps and is ready for TREC sponsorship.</p>
           <p style="margin:0 0 12px;font-size:14px;color:#555;">Please submit their TREC sponsorship invitation now.</p>
-          <p style="margin:0;font-size:12px;color:#888;">Agent email: ${prospect.email}</p>`,
+          <div style="margin:0 0 12px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #C5A278;">
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Name: <strong style="color:#1a1a1a;">${agentName}</strong></p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Email: <strong style="color:#1a1a1a;">${prospect.email}</strong></p>
+            <p style="margin:0;font-size:14px;color:#555;">License number: <strong style="color:#1a1a1a;">${(prospect as any).license_number || 'not on file'}</strong></p>
+          </div>`,
           { title: 'TREC Sponsorship Needed', preheader: `Submit TREC invite for ${agentName}` }
         ),
       }).catch((e: unknown) => console.error('Failed to send TREC notification:', e))

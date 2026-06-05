@@ -519,6 +519,7 @@ export default function OnboardingPage() {
     shipping_zip: '',
     date_of_birth: '',
     license_number: '',
+    license_expiration: '',
     mls_id: '',
     nrds_id: '',
     association: '',
@@ -603,6 +604,7 @@ export default function OnboardingPage() {
         shipping_state: p.shipping_state || 'TX',
         shipping_zip: p.shipping_zip || '',
         license_number: p.license_number || '',
+        license_expiration: p.license_expiration || '',
         mls_id: p.mls_id || '',
         nrds_id: p.nrds_id || '',
         association: p.association || '',
@@ -720,7 +722,7 @@ const checkout = new window.Payload.Checkout({
         await fetch('/api/payload/confirm-transaction', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transaction_id: evt.transaction_id }),
+          body: JSON.stringify({ transaction_id: evt.transaction_id, token }),
         })
         // Advance to step 3
         await fetch('/api/onboarding/acknowledge-step', {
@@ -1028,6 +1030,19 @@ const checkout = new window.Payload.Checkout({
                       required
                       className="input-luxury"
                       placeholder="e.g. 0123456"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">
+                      License Expiration Date *
+                    </label>
+                    <input
+                      type="date"
+                      name="license_expiration"
+                      value={joinForm.license_expiration}
+                      onChange={handleChange}
+                      required
+                      className="input-luxury"
                     />
                   </div>
                   <div>
