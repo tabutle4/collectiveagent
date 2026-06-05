@@ -64,7 +64,7 @@ export default function RecordingDetailPage() {
   const [transcript, setTranscript] = useState('')
   const [transcriptSource, setTranscriptSource] = useState<string[]>([])
   const [summaryFetched, setSummaryFetched] = useState(false)
-  const [activeTab, setActiveTab] = useState<'transcript' | 'chat'>('transcript')
+  const [activeTab, setActiveTab] = useState<'transcript' | 'chat' | 'summary'>('transcript')
   const [chatTranscript, setChatTranscript] = useState('')
   const [descriptionEdited, setDescriptionEdited] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -128,6 +128,35 @@ export default function RecordingDetailPage() {
           if (j.suggested_title) {
             const sugg = extractTopics(j.suggested_title)
             setSuggestedTopics(sugg)
+          }
+
+          // If we already have transcript in DB, re-suggest topics immediately
+          // (suggested_title was set at webhook time before transcript was available)
+          if (j.transcript_text) {
+            fetch('/api/zoom/recording-chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: [{ role: 'user', content: `Based on this transcript, suggest exactly 3 to 4 short topic tags (3-6 words each, title case) for this recording. Respond with ONLY a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling", "Follow Up Systems"]` }],
+                context: {
+                  meetingTitle: j.meeting_title || '',
+                  title: j.final_title || j.suggested_title || '',
+                  transcript: j.transcript_text.slice(0, 3000),
+                  summary: j.zoom_summary || '',
+                  folders: '',
+                  programs: PROGRAM_NAMES.join(', '),
+                  systemPrompt: '',
+                },
+              }),
+            })
+              .then(r => r.json())
+              .then(aiData => {
+                try {
+                  const tags = JSON.parse((aiData.reply || '[]').replace(/```json|```/g, '').trim())
+                  if (Array.isArray(tags) && tags.length > 0) setSuggestedTopics(tags)
+                } catch { }
+              })
+              .catch(() => { })
           }
 
           // Load calendar context
@@ -352,7 +381,7 @@ export default function RecordingDetailPage() {
 
   const statusLabel = job.status === 'uploaded' ? 'Uploaded' : job.status === 'error' ? 'Error' : job.status === 'processing' ? 'Processing' : 'Pending'
   const statusClass = job.status === 'uploaded' ? 'text-green-700' : job.status === 'error' ? 'text-red-700' : job.status === 'processing' ? 'text-blue-700' : 'text-amber-700'
-  const displayTranscript = activeTab === 'chat' ? chatTranscript : transcript
+  const displayTranscript = activeTab === 'chat' ? chatTranscript : activeTab === 'summary' ? zoomSummary : transcript
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
@@ -407,13 +436,14 @@ export default function RecordingDetailPage() {
       )}
 
       {/* 3. Transcript */}
-      {(transcript || chatTranscript) && (
+      {(transcript || chatTranscript || zoomSummary) && (
         <div className="container-card p-5">
           <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-3">Transcript</p>
-          {transcript && chatTranscript && (
+          {(transcript || chatTranscript || zoomSummary) && (
             <div className="flex gap-1 mb-0">
-              <button onClick={() => setActiveTab('transcript')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'transcript' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Transcript</button>
-              <button onClick={() => setActiveTab('chat')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'chat' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Chat</button>
+              {transcript && <button onClick={() => setActiveTab('transcript')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'transcript' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Transcript</button>}
+              {chatTranscript && <button onClick={() => setActiveTab('chat')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'chat' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Chat</button>}
+              {zoomSummary && <button onClick={() => setActiveTab('summary')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'summary' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Summary</button>}
             </div>
           )}
           <div className="bg-luxury-gray-5 rounded-lg p-3 max-h-80 overflow-y-auto">
@@ -536,7 +566,11 @@ export default function RecordingDetailPage() {
 
       {/* 6. Description */}
       <div className="container-card p-5">
-        <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-3">Description <span className="normal-case font-normal text-luxury-gray-3">(optional override)</span></p>
+        <div className="flex items-center gap-3 mb-3">
+          <p className="text-luxury-gray-3 text-xs uppercase tracking-wide">Description</p>
+          {descriptionEdited && <span className="status-badge text-amber-700">Edited - auto-update off</span>}
+          {!descriptionEdited && zoomSummary && <span className="status-badge text-green-700">Auto-updating from title + summary</span>}
+        </div>
         <textarea
           value={description}
           onChange={e => { setDescription(e.target.value); setDescriptionEdited(true) }}

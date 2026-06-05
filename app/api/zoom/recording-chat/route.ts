@@ -7,24 +7,31 @@ export async function POST(req: NextRequest) {
 
   const { messages, context } = await req.json()
 
-  // Use the rich system prompt from recording-context if available
-  const system = context.systemPrompt || `You are an assistant helping a real estate brokerage administrator name and categorize a Zoom training recording for Collective Realty Co.
+  // Always include Zoom transcript/summary regardless of which system prompt branch is used
+  const transcriptAppendix = `
+
+ZOOM TRANSCRIPT FOR THIS RECORDING:
+${context.transcript || 'not available'}
+
+ZOOM SMART SUMMARY:
+${context.summary || 'not available'}
+
+FATHOM TRANSCRIPT:
+${context.fathomTranscript || 'not available'}
+
+Current title: ${context.title}
+Current folder: ${context.folder}
+Current topics: ${context.topics}
+Available folders: ${context.folders}
+Available programs: ${context.programs}`
+
+  const baseSystem = context.systemPrompt || `You are an assistant helping a real estate brokerage administrator name and categorize a Zoom training recording for Collective Realty Co.
 
 HOST NOTE: "Courtney Alexander" in Zoom is Courtney Okanlomo, the Broker/Owner. Do NOT include her name in titles.
 
-Current recording info:
-- Meeting title: ${context.meetingTitle}
-- Current recording title: ${context.title}
-- Current folder: ${context.folder}
-- Current topics: ${context.topics}
-- Zoom transcript: ${context.transcript || 'not available'}
-- Zoom smart summary: ${context.summary || 'not available'}
-- Fathom transcript: ${context.fathomTranscript || 'not available'}
-
-Available SharePoint folders: ${context.folders}
-Available programs: ${context.programs}
-
 Help the user refine the title, suggest topics, or recommend a folder. Keep responses concise and practical.`
+
+  const system = baseSystem + transcriptAppendix
 
   // Check if this is a JSON request (AI Suggest All)
   const lastMessage = messages[messages.length - 1]?.content || ''
