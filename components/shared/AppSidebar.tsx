@@ -134,13 +134,22 @@ const adminNavEntries: NavEntry[] = [
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
         { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
-        { href: '/admin/coaching-access', label: 'Coaching Access', icon: KeyRound },
-        { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
         { href: '/admin/insights', label: 'Coaching Insights', icon: Sparkles },
       ],
     },
   },
-  { type: 'item', item: { href: '/admin/settings', label: 'Settings', icon: Settings } },
+  {
+    type: 'group',
+    group: {
+      key: 'settings',
+      label: 'Settings',
+      items: [
+        { href: '/admin/settings', label: 'Settings', icon: Settings },
+        { href: '/admin/coaching-access', label: 'Coaching Access', icon: KeyRound },
+        { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
+      ],
+    },
+  },
 ]
 
 const tcNavEntries: NavEntry[] = [
@@ -760,4 +769,5 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     </div>
   )
 }
+
 
