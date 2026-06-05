@@ -17,7 +17,9 @@ Current recording info:
 - Current recording title: ${context.title}
 - Current folder: ${context.folder}
 - Current topics: ${context.topics}
-- Transcript excerpt: ${context.transcript}
+- Zoom transcript excerpt: ${context.transcript}
+- Zoom smart summary: ${context.summary || 'not available'}
+- Fathom transcript excerpt: ${context.fathomTranscript || 'not available'}
 
 Available SharePoint folders: ${context.folders}
 Available programs: ${context.programs}

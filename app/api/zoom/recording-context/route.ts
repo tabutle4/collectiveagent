@@ -97,7 +97,7 @@ async function fetchFathomForDate(date: string, recordingStartTime?: string): Pr
           recording_date: date,
           share_url: m.share_url,
           transcript_text: transcriptText,
-          summary: m.default_summary || null,
+          summary: m.default_summary?.markdown_formatted || null,
           speakers,
           duration_minutes: durationMinutes,
         }, { onConflict: 'fathom_recording_id' })
@@ -269,4 +269,5 @@ export async function GET(req: NextRequest) {
     speakers,
   })
 }
+
 

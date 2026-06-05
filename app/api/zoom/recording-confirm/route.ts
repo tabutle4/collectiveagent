@@ -9,6 +9,35 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
 
+async function getZoomAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    )
+    if (!res.ok) return null
+    const { access_token } = await res.json()
+    return access_token || null
+  } catch { return null }
+}
+
+async function deleteZoomRecording(meetingId: string, zoomToken: string): Promise<void> {
+  try {
+    await fetch(`https://api.zoom.us/v2/meetings/${meetingId}/recordings`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${zoomToken}` },
+    })
+  } catch (e) {
+    console.error('Failed to delete Zoom recording:', e)
+  }
+}
+
 let cachedSiteId: string | null = null
 let cachedDriveId: string | null = null
 
@@ -171,7 +200,7 @@ export async function POST(req: NextRequest) {
   const auth = await requirePermission(req, 'can_manage_recordings')
   if (auth.error) return auth.error
 
-  const { jobId, finalTitle, folder, sendAgentEmail = true } = await req.json()
+  const { jobId, finalTitle, folder, description = '', sendAgentEmail = true } = await req.json()
 
   if (!jobId || !finalTitle || !folder) {
     return NextResponse.json({ error: 'jobId, finalTitle, and folder are required' }, { status: 400 })
@@ -260,6 +289,62 @@ export async function POST(req: NextRequest) {
 
     const webUrl = toStreamUrl(rawUrl)
 
+    // Read fresh zoom_summary from DB (stored by recording-summary route on page load)
+    const { data: freshJob } = await supabaseAdmin
+      .from('zoom_recording_jobs')
+      .select('zoom_summary')
+      .eq('id', jobId)
+      .single()
+
+    // Build description: use what user sent, or build from title + summary
+    let finalDescription = description?.trim() || ''
+    if (!finalDescription) {
+      const storedSummary = freshJob?.zoom_summary?.trim() || ''
+      finalDescription = storedSummary ? `${finalTitle}\n\n${storedSummary}` : finalTitle
+    }
+
+    // Delete from Zoom now that transcript/summary are safely stored in DB
+    if (job.meeting_id) {
+      const zoomToken = await getZoomAccessToken()
+      if (zoomToken) await deleteZoomRecording(job.meeting_id, zoomToken)
+    }
+
+    // Set description on the SharePoint file if provided
+    if (finalDescription && rawUrl) {
+      try {
+        const graphToken2 = await getGraphToken()
+        // Get site and Videos drive
+        const site2Res = await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${SHAREPOINT_SITE}`,
+          { headers: { Authorization: `Bearer ${graphToken2}` } }
+        )
+        if (site2Res.ok) {
+          const site2 = await site2Res.json()
+          const drives2Res = await fetch(
+            `https://graph.microsoft.com/v1.0/sites/${site2.id}/drives`,
+            { headers: { Authorization: `Bearer ${graphToken2}` } }
+          )
+          if (drives2Res.ok) {
+            const drives2Data = await drives2Res.json()
+            const videosDrive2 = (drives2Data.value || []).find((d: any) => d.name === 'Videos')
+            if (videosDrive2) {
+              const encodedPath = encodeURIComponent(folder) + '/' + encodeURIComponent(finalTitle + '.mp4')
+              await fetch(
+                `https://graph.microsoft.com/v1.0/drives/${videosDrive2.id}/root:/${encodedPath}`,
+                {
+                  method: 'PATCH',
+                  headers: { Authorization: `Bearer ${graphToken2}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ description: finalDescription }),
+                }
+              )
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to set SharePoint description:', e)
+      }
+    }
+
     // Mark as uploaded
     await supabaseAdmin
       .from('zoom_recording_jobs')
@@ -308,4 +393,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
 

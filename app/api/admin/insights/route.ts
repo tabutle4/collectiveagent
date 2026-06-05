@@ -74,7 +74,7 @@ async function getPreviousPeriodTransactions(dateFrom: string, dateTo: string) {
 async function getFathomMeetings(dateFrom: string, dateTo: string) {
   const { data } = await supabaseAdmin
     .from('fathom_meetings')
-    .select('recording_date, speakers, duration_minutes, transcript_text, share_url')
+    .select('recording_date, speakers, duration_minutes, transcript_text, summary, share_url')
     .gte('recording_date', dateFrom)
     .lte('recording_date', dateTo)
     .order('recording_date', { ascending: false })
@@ -84,7 +84,7 @@ async function getFathomMeetings(dateFrom: string, dateTo: string) {
 async function getZoomRecordingJobs(dateFrom: string, dateTo: string) {
   const { data } = await supabaseAdmin
     .from('zoom_recording_jobs')
-    .select('id, meeting_id, meeting_title, final_title, final_folder, start_time, status, transcript_text')
+    .select('id, meeting_id, meeting_title, final_title, final_folder, start_time, status, transcript_text, chat_text, zoom_summary')
     .eq('status', 'uploaded')
     .gte('start_time', `${dateFrom}T00:00:00Z`)
     .lte('start_time', `${dateTo}T23:59:59Z`)
@@ -310,15 +310,28 @@ export async function GET(req: NextRequest) {
 
   // Transcripts for AI chat
   const zoomTranscripts = zoomJobs
-    .filter((j: any) => j.transcript_text)
-    .map((j: any) => `[${j.final_title || j.meeting_title}]: ${j.transcript_text}`)
+    .filter((j: any) => j.transcript_text || j.zoom_summary)
+    .map((j: any) => {
+      const parts = []
+      if (j.zoom_summary) parts.push(`Summary: ${j.zoom_summary}`)
+      if (j.transcript_text) parts.push(`Transcript: ${j.transcript_text.slice(0, 2000)}`)
+      if (j.chat_text) parts.push(`Chat: ${j.chat_text.slice(0, 500)}`)
+      return `[${j.final_title || j.meeting_title}]\n${parts.join('\n')}`
+    })
     .join('\n\n')
     .slice(0, 10000)
   const fathomTranscripts = fathomMeetings
-    .map((m: any) => m.transcript_text || '')
-    .join('\n')
+    .filter((m: any) => m.transcript_text || m.summary)
+    .map((m: any) => {
+      const parts = []
+      if (m.summary) parts.push(`Fathom Summary: ${m.summary}`)
+      if (m.transcript_text) parts.push(`Fathom Transcript: ${m.transcript_text.slice(0, 2000)}`)
+      return `[Fathom - ${m.recording_date}]\n${parts.join('\n')}`
+    })
+    .join('\n\n')
     .slice(0, 5000)
-  const allTranscripts = zoomTranscripts || fathomTranscripts
+  // Include both Zoom and Fathom transcripts — labeled by source
+  const allTranscripts = [zoomTranscripts, fathomTranscripts].filter(Boolean).join('\n\n---\n\n').slice(0, 12000)
 
   return NextResponse.json({
     dateFrom,
@@ -343,9 +356,17 @@ export async function GET(req: NextRequest) {
     rawData: {
       agents: agents.map((a: any) => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, email: a.email, office: a.mls_choice })),
       fathomSessions: fathomMeetings.map((m: any) => ({ date: m.recording_date, speakers: m.speakers, duration: m.duration_minutes })),
-      zoomSessions: zoomJobs.map((j: any) => ({ title: j.final_title, folder: j.final_folder, date: j.start_time })),
+      zoomSessions: zoomJobs.map((j: any) => ({
+        title: j.final_title || j.meeting_title,
+        folder: j.final_folder,
+        date: j.start_time,
+        hasTranscript: !!j.transcript_text,
+        hasChat: !!j.chat_text,
+        hasSummary: !!j.zoom_summary,
+      })),
       sharePointVideos: sharePointVideos.slice(0, 50).map((v: any) => ({ folder: v.folder, name: v.name, date: parseDateFromFilename(v.name) || v.createdAt?.slice(0, 10) })),
       retentionRisk,
     },
   })
 }
+

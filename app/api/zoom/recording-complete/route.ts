@@ -53,7 +53,8 @@ function guessFolderFromTitle(title: string): string {
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr)
+  // Convert to CT before formatting to avoid UTC "next day" issue
+  const d = new Date(new Date(dateStr).toLocaleString('en-US', { timeZone: 'America/Chicago' }))
   return `${d.getMonth() + 1}-${d.getDate()}-${String(d.getFullYear()).slice(2)}`
 }
 
@@ -238,29 +239,6 @@ async function verifyOneDriveFile(token: string, itemId: string): Promise<boolea
   }
 }
 
-async function deleteZoomRecording(meetingId: string): Promise<void> {
-  try {
-    const tokenRes = await fetch(
-      `https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${process.env.ZOOM_ACCOUNT_ID}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      }
-    )
-    if (!tokenRes.ok) return
-    const { access_token } = await tokenRes.json()
-    await fetch(`https://api.zoom.us/v2/meetings/${meetingId}/recordings`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${access_token}` },
-    })
-  } catch (e) {
-    console.error('Failed to delete Zoom recording:', e)
-  }
-}
-
 async function sendErrorNotification(notifyEmail: string, meetingTitle: string, confirmUrl: string, errorMsg: string): Promise<void> {
   try {
     const html = getEmailLayout(
@@ -323,6 +301,7 @@ export async function POST(req: NextRequest) {
 
   const vttFile = recording.recording_files?.find((f: any) => f.file_type === 'TRANSCRIPT')
   const chatFile = recording.recording_files?.find((f: any) => f.file_type === 'CHAT')
+  const summaryFile = recording.recording_files?.find((f: any) => f.file_type === 'SUMMARY')
 
   if (!mp4File) {
     return NextResponse.json({ error: 'No MP4 found' }, { status: 400 })
@@ -339,17 +318,32 @@ export async function POST(req: NextRequest) {
     chatText = await fetchChat(chatFile.download_url, zoomToken)
   }
 
-  // Combine transcript and chat into one field
-  const fullTranscript = [
-    transcript ? `[TRANSCRIPT]\n${transcript}` : '',
-    chatText ? `[CHAT]\n${chatText}` : '',
-  ].filter(Boolean).join('\n\n').slice(0, 15000) || null
+  // Fetch summary if available in webhook payload
+  let summaryText = ''
+  if (summaryFile?.download_url) {
+    try {
+      const sumRes = await fetch(`${summaryFile.download_url}?access_token=${zoomToken}`)
+      if (sumRes.ok) {
+        try {
+          const sumData = await sumRes.json()
+          summaryText = sumData.summary_overview || sumData.summary || ''
+        } catch {
+          summaryText = (await sumRes.text()).slice(0, 2000)
+        }
+      }
+    } catch { }
+  }
+
+  // Keep transcript, chat, and summary separate
+  const fullTranscript = transcript || null
+  const fullChat = chatText || null
+  const fullSummary = summaryText || null
 
   // Fetch participants now while meeting data is fresh
   const participants = meetingUuid ? await fetchZoomParticipants(meetingUuid) : []
 
   // Generate topic suggestions from transcript
-  const suggestedTopics = await suggestTopics(fullTranscript || transcript, meetingTitle)
+  const suggestedTopics = await suggestTopics(transcript, meetingTitle)
   const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
@@ -357,12 +351,13 @@ export async function POST(req: NextRequest) {
   const fileName = `${suggestedTitle}.mp4`
   const fileSize = mp4File.file_size || 0
 
-  // Deduplication: check if job already exists for this recording instance
+  // Deduplication: check if job already exists for this session
+  // Use PMI (recording.id) + start_time since UUID differs per file type webhook
   const { data: existing } = await supabaseAdmin
     .from('zoom_recording_jobs')
     .select('id, status')
-    .eq('meeting_id', meetingUuid)
     .eq('start_time', startTime)
+    .eq('meeting_title', meetingTitle)
     .maybeSingle()
 
   if (existing) {
@@ -384,6 +379,8 @@ export async function POST(req: NextRequest) {
       suggested_folder: suggestedFolder,
       zoom_share_url: zoomShareUrl || null,
       transcript_text: fullTranscript,
+      chat_text: fullChat,
+      zoom_summary: fullSummary,
       status: 'pending',
     })
     .select()
@@ -440,8 +437,7 @@ export async function POST(req: NextRequest) {
     const verified = await verifyOneDriveFile(graphToken, itemId)
     if (!verified) throw new Error('OneDrive file verification failed after upload')
 
-    // Safe to delete from Zoom now
-    if (meetingId) await deleteZoomRecording(meetingId)
+    // Zoom recording is kept until confirm time so we can fetch transcript + summary
 
     await supabaseAdmin
       .from('zoom_recording_jobs')
@@ -462,7 +458,7 @@ export async function POST(req: NextRequest) {
 
   // Send standard notification email
   const oneDriveNote = oneDriveSuccess
-    ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom cloud recording has been deleted.</p>`
+    ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom recording will be deleted after you confirm upload to SharePoint.</p>`
     : `<p style="font-size:13px;color:#c0392b;">OneDrive upload failed. Zoom recording still available for ~24 hours.</p>`
 
   const notifyHtml = getEmailLayout(
@@ -490,6 +486,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, jobId: job.id })
 }
+
 
 
 
