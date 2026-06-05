@@ -121,6 +121,73 @@ export async function GET(
       return NextResponse.json({ statement })
     }
 
+    // ----- Fetch disbursement detail for HTML render -----
+    // Get all disbursements for this landlord/property/period so we can
+    // show deduction line items by name and separate pending deposit returns.
+    const disbPeriodFilter = statement.period_type === 'monthly'
+      ? { month: statement.period_month, year: statement.period_year }
+      : { year: statement.period_year }
+
+    let disbDetailQuery = supabaseAdmin
+      .from('landlord_disbursements')
+      .select(`
+        id,
+        gross_rent,
+        management_fee,
+        other_deductions,
+        other_deductions_description,
+        deposit_amount,
+        net_amount,
+        payment_status,
+        period_month,
+        period_year,
+        landlord_disbursement_deductions(id, label, description, amount, sort_order)
+      `)
+      .eq('landlord_id', statement.landlord_id)
+      .eq('property_id', statement.property_id)
+      .in('payment_status', ['completed', 'paid', 'pending', 'processing'])
+
+    if (statement.period_type === 'monthly') {
+      disbDetailQuery = disbDetailQuery
+        .eq('period_month', statement.period_month)
+        .eq('period_year', statement.period_year)
+    } else {
+      disbDetailQuery = disbDetailQuery.eq('period_year', statement.period_year)
+    }
+
+    const { data: disbDetail } = await disbDetailQuery
+
+    // Build deduction line items list for display
+    const deductionLines: { label: string; amount: number }[] = []
+    for (const d of (disbDetail || [])) {
+      if (d.gross_rent === 0) continue // skip deposit-type disbursements
+      // Named line-item deductions
+      for (const ded of ((d.landlord_disbursement_deductions as any[]) || []).sort(
+        (a: any, b: any) => a.sort_order - b.sort_order
+      )) {
+        deductionLines.push({ label: ded.label, amount: Number(ded.amount) })
+      }
+      // Legacy other_deductions single-field
+      if (Number(d.other_deductions) > 0) {
+        deductionLines.push({
+          label: d.other_deductions_description || 'Other deductions',
+          amount: Number(d.other_deductions),
+        })
+      }
+    }
+
+    // Pending deposit returns: deposit disbursements that are pending/processing
+    const pendingDepositReturn = (disbDetail || [])
+      .filter((d: any) => d.deposit_amount > 0 && ['pending', 'processing'].includes(d.payment_status))
+      .reduce((sum: number, d: any) => sum + Number(d.deposit_amount), 0)
+
+    // Held in trust: subtract pending deposit returns so the displayed
+    // balance reflects what's actually committed as in-trust cash,
+    // not money that's already queued for payout.
+    const displayedHeldInTrust = Math.max(0,
+      Number(statement.held_in_trust_at_statement_date) - pendingDepositReturn
+    )
+
     // ----- Render HTML -----
     const landlord = statement.landlords
     const property = statement.managed_properties
@@ -143,13 +210,15 @@ export async function GET(
       total_rent_collected: fmt$(statement.total_rent_collected),
       total_management_fees: fmt$(statement.total_management_fees),
       total_deductions: fmt$(statement.total_deductions),
+      deduction_lines: deductionLines,
       total_deposits_in: fmt$(statement.total_deposits_in),
       total_deposits_returned_to_landlord: fmt$(statement.total_deposits_returned_to_landlord),
       total_deposits_refunded_to_tenant: fmt$(statement.total_deposits_refunded_to_tenant),
+      pending_deposit_return: pendingDepositReturn,
       total_net_disbursed: fmt$(statement.total_net_disbursed),
       total_net_pending: fmt$(statement.total_net_pending ?? 0),
       has_pending: Number(statement.total_net_pending ?? 0) > 0,
-      held_in_trust: fmt$(statement.held_in_trust_at_statement_date),
+      held_in_trust: fmt$(displayedHeldInTrust),
       notes: statement.notes || '',
       sent_at: statement.sent_at ? fmtDate(statement.sent_at) : null,
       generated_date: fmtDate(statement.created_at?.split('T')[0] || statement.statement_date),
@@ -277,6 +346,11 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Deductions <span style="color: #999; font-size: 9px; margin-left: 6px;">repairs, HOA, etc.</span></span>
         <span style="font-weight: 500;">- ${data.total_deductions}</span>
       </div>
+      ${(data.deduction_lines as any[]).length > 0 ? (data.deduction_lines as any[]).map((d: any) => `
+      <div style="display: flex; justify-content: space-between; padding: 2px 0 2px 16px; border-bottom: 1px dotted #eee; color: #666;">
+        <span style="font-size: 10px;">${d.label}</span>
+        <span style="font-size: 10px;">- ${fmt$(d.amount)}</span>
+      </div>`).join('') : ''}
       <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
         <span style="font-weight: 600;">Net Disbursed to You</span>
         <span style="font-weight: 600; color: #C5A278;">${data.total_net_disbursed}</span>
@@ -298,9 +372,14 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-weight: 500;">${data.total_deposits_in}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Returned to Landlord</span>
+        <span>Returned to Landlord <span style="color: #999; font-size: 9px; margin-left: 6px;">paid</span></span>
         <span style="font-weight: 500;">- ${data.total_deposits_returned_to_landlord}</span>
       </div>
+      ${data.pending_deposit_return > 0 ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd; background: #f9f7f4; border-radius: 4px; padding: 6px 8px; margin: 2px 0;">
+        <span style="color: #8a7a60;">Pending Return to Landlord <span style="font-size: 9px; margin-left: 6px;">in progress</span></span>
+        <span style="font-weight: 600; color: #8a7a60;">- ${fmt$(data.pending_deposit_return)}</span>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0;">
         <span>Refunded to Tenant <span style="color: #999; font-size: 9px; margin-left: 6px;">move-out refunds</span></span>
         <span style="font-weight: 500;">- ${data.total_deposits_refunded_to_tenant}</span>
