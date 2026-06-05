@@ -106,6 +106,13 @@ export async function GET(request: NextRequest) {
       referral_conversion_discount: 0,
       // Apartment Locating
       apartment_invoice_fee: 100,
+      // Coaching
+      coaching_zoom_link: 'visit.collectiverealtyco.com/training',
+      coaching_client_zoom_link: 'convert.coachingbrokerage.com/zoom',
+      coaching_brokerage_name: 'The Coaching Brokerage',
+      coaching_brokerage_email: 'info@coachingbrokerage.com',
+      coaching_brokerage_address: '2300 Valley View Ln, Ste 518, Irving, TX 75062',
+      coaching_brokerage_website: 'coachingbrokerage.com',
     }
 
     return NextResponse.json({
@@ -179,3 +186,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message || 'Failed to save settings' }, { status: 500 })
   }
 }
+

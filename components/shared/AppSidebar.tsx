@@ -32,6 +32,7 @@ import {
   Mail,
   Video,
   Sparkles,
+  KeyRound,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -133,6 +134,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
         { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
+        { href: '/admin/coaching-access', label: 'Coaching Access', icon: KeyRound },
         { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
         { href: '/admin/insights', label: 'Coaching Insights', icon: Sparkles },
       ],
@@ -758,3 +760,4 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     </div>
   )
 }
+
