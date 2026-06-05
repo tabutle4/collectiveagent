@@ -65,9 +65,11 @@ export async function GET(req: NextRequest) {
       `https://api.zoom.us/v2/meetings/${doubleEncoded}/recordings`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+    console.log('Zoom recordings response status:', filesRes.status)
     if (filesRes.ok) {
       const filesData = await filesRes.json()
       const files = filesData.recording_files || []
+      console.log('Zoom file types available:', files.map((f: any) => f.file_type).join(', '))
 
       // VTT transcript (file_type: 'TRANSCRIPT')
       const vttFile = files.find((f: any) => f.file_type === 'TRANSCRIPT')
@@ -111,14 +113,18 @@ export async function GET(req: NextRequest) {
   }
 
   // Fallback: try meeting_summary endpoint if SUMMARY file not available yet
+  // meeting_summary always requires double-encoding regardless of UUID content
   if (!summary) {
     try {
+      const alwaysDoubleEncoded = encodeURIComponent(encodeURIComponent(job.meeting_id))
       const summaryRes = await fetch(
-        `https://api.zoom.us/v2/meetings/${doubleEncoded}/meeting_summary`,
+        `https://api.zoom.us/v2/meetings/${alwaysDoubleEncoded}/meeting_summary`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
+      console.log('meeting_summary response status:', summaryRes.status)
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json()
+        console.log('meeting_summary data:', JSON.stringify(summaryData).slice(0, 300))
         summary = summaryData.summary_overview || summaryData.meeting_summary || ''
       }
     } catch (e) {
