@@ -13,7 +13,7 @@ type JoinFormData = {
   email: string; personal_phone: string; business_phone: string
   shipping_address_line1: string; shipping_address_line2: string
   shipping_city: string; shipping_state: string; shipping_zip: string
-  date_of_birth: string; license_number: string; mls_id: string; nrds_id: string
+  date_of_birth: string; license_number: string; license_expiration: string; mls_id: string; nrds_id: string
   association: string; association_status_on_join: string
   commission_plan: string; custom_split: string; custom_plan_type: string
   instagram_handle: string; tiktok_handle: string; threads_handle: string
