@@ -218,6 +218,8 @@ export async function GET(
       total_net_disbursed: fmt$(statement.total_net_disbursed),
       total_net_pending: fmt$(statement.total_net_pending ?? 0),
       has_pending: Number(statement.total_net_pending ?? 0) > 0,
+      has_net_disbursed: Number(statement.total_net_disbursed) > 0,
+      total_net_disbursed_raw: Number(statement.total_net_disbursed),
       held_in_trust: fmt$(displayedHeldInTrust),
       notes: statement.notes || '',
       sent_at: statement.sent_at ? fmtDate(statement.sent_at) : null,
@@ -352,10 +354,10 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-size: 10px;">- ${fmt$(d.amount)}</span>
       </div>`).join('') : ''}
       <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
-        <span style="font-weight: 600;">Net Disbursed to You</span>
-        <span style="font-weight: 600; color: #C5A278;">${data.total_net_disbursed}</span>
+        <span style="font-weight: 600;">${data.has_net_disbursed ? 'Net Disbursed to You' : 'Pending Disbursement to You'}</span>
+        <span style="font-weight: 600; color: #C5A278;">${data.has_net_disbursed ? data.total_net_disbursed : data.total_net_pending}</span>
       </div>
-      ${data.has_pending ? `
+      ${data.has_pending && data.has_net_disbursed ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; background: #f9f7f4; border-radius: 4px; padding: 6px 8px; margin-top: 6px;">
         <span style="color: #8a7a60; font-size: 10px;">Pending disbursement (in progress)</span>
         <span style="font-weight: 600; color: #8a7a60;">${data.total_net_pending}</span>
