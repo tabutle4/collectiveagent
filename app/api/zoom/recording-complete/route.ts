@@ -82,6 +82,19 @@ async function fetchTranscript(downloadUrl: string, zoomToken: string): Promise<
   }
 }
 
+async function fetchChat(downloadUrl: string, zoomToken: string): Promise<string> {
+  try {
+    const res = await fetch(`${downloadUrl}?access_token=${zoomToken}`)
+    if (!res.ok) return ''
+    const text = await res.text()
+    if (!text.trim()) return ''
+    // Chat format is already readable: "HH:MM:SS From Name: message"
+    return text.trim().slice(0, 3000)
+  } catch {
+    return ''
+  }
+}
+
 async function suggestTopics(transcript: string, meetingTitle: string): Promise<string[]> {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -309,22 +322,38 @@ export async function POST(req: NextRequest) {
   ) || recording.recording_files?.find((f: any) => f.file_type === 'MP4')
 
   const vttFile = recording.recording_files?.find((f: any) => f.file_type === 'TRANSCRIPT')
+  const chatFile = recording.recording_files?.find((f: any) => f.file_type === 'CHAT')
 
   if (!mp4File) {
     return NextResponse.json({ error: 'No MP4 found' }, { status: 400 })
   }
 
-  // Fetch transcript (non-blocking - empty string if unavailable)
+  // Fetch transcript and chat (non-blocking - empty string if unavailable)
   let transcript = ''
   if (vttFile?.download_url) {
     transcript = await fetchTranscript(vttFile.download_url, zoomToken)
   }
 
+  let chatText = ''
+  if (chatFile?.download_url) {
+    chatText = await fetchChat(chatFile.download_url, zoomToken)
+  }
+
+  // Combine transcript and chat into one field
+  const fullTranscript = [
+    transcript ? `[TRANSCRIPT]
+${transcript}` : '',
+    chatText ? `[CHAT]
+${chatText}` : '',
+  ].filter(Boolean).join('
+
+').slice(0, 15000) || null
+
   // Fetch participants now while meeting data is fresh
   const participants = meetingUuid ? await fetchZoomParticipants(meetingUuid) : []
 
   // Generate topic suggestions from transcript
-  const suggestedTopics = await suggestTopics(transcript, meetingTitle)
+  const suggestedTopics = await suggestTopics(fullTranscript || transcript, meetingTitle)
   const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
@@ -358,7 +387,7 @@ export async function POST(req: NextRequest) {
       suggested_title: suggestedTitle,
       suggested_folder: suggestedFolder,
       zoom_share_url: zoomShareUrl || null,
-      transcript_text: transcript || null,
+      transcript_text: fullTranscript,
       status: 'pending',
     })
     .select()
@@ -465,5 +494,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, jobId: job.id })
 }
+
 
 
