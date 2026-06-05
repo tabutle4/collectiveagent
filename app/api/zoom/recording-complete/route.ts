@@ -341,13 +341,9 @@ export async function POST(req: NextRequest) {
 
   // Combine transcript and chat into one field
   const fullTranscript = [
-    transcript ? `[TRANSCRIPT]
-${transcript}` : '',
-    chatText ? `[CHAT]
-${chatText}` : '',
-  ].filter(Boolean).join('
-
-').slice(0, 15000) || null
+    transcript ? `[TRANSCRIPT]\n${transcript}` : '',
+    chatText ? `[CHAT]\n${chatText}` : '',
+  ].filter(Boolean).join('\n\n').slice(0, 15000) || null
 
   // Fetch participants now while meeting data is fresh
   const participants = meetingUuid ? await fetchZoomParticipants(meetingUuid) : []
