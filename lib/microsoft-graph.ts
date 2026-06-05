@@ -578,46 +578,90 @@ export async function createM365User({
       .toLowerCase()
 
   const first = sanitize(firstName)
-  const lastInitial = sanitize(lastName).charAt(0)
-  const baseUsername = `${first}${lastInitial}`
-  const officeEmail = `${baseUsername}@${domain}`
+  const last = sanitize(lastName)
+  const lastInitial = last.charAt(0)
+
+  // Username candidates in priority order:
+  // 1. firstnamelastinitial (latiaw)
+  // 2. firstnamelastname (lwilliams -- first initial + last name)
+  // 3. firstname.lastname (latia.williams)
+  const usernameCandidates = [
+    `${first}${lastInitial}`,
+    `${first.charAt(0)}${last}`,
+    `${first}.${last}`,
+  ]
+
+  let baseUsername = usernameCandidates[0]
+  let officeEmail = `${baseUsername}@${domain}`
+  let userId = ''
+  let createdNew = false
+
   const displayName = `${firstName} ${lastName}`
 
-  // Step 1: Create the user account
-  // usageLocation must be set at creation -- assignLicense will fail without it
-  const userBody = {
-    accountEnabled: true,
-    displayName,
-    givenName: firstName,
-    surname: lastName,
-    mailNickname: baseUsername,
-    userPrincipalName: officeEmail,
-    jobTitle: 'Real Estate Agent',
-    usageLocation: 'US',
-    passwordProfile: {
-      forceChangePasswordNextSignIn: true,
-      password: tempPassword,
-    },
+  for (const candidate of usernameCandidates) {
+    const candidateEmail = `${candidate}@${domain}`
+    const userBody = {
+      accountEnabled: true,
+      displayName,
+      givenName: firstName,
+      surname: lastName,
+      mailNickname: candidate,
+      userPrincipalName: candidateEmail,
+      jobTitle: 'Real Estate Agent',
+      usageLocation: 'US',
+      passwordProfile: {
+        forceChangePasswordNextSignIn: true,
+        password: tempPassword,
+      },
+    }
+
+    const createRes = await fetch('https://graph.microsoft.com/v1.0/users', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userBody),
+    })
+
+    if (createRes.status === 201) {
+      const created = await createRes.json()
+      userId = created.id as string
+      baseUsername = candidate
+      officeEmail = candidateEmail
+      createdNew = true
+      break
+    } else if (createRes.status === 409) {
+      // This username is taken -- try next candidate
+      console.log(`M365 username ${candidateEmail} already exists, trying next...`)
+      continue
+    } else {
+      const err = await createRes.json().catch(() => null)
+      throw new Error(
+        `M365 user creation failed for ${candidateEmail}: ${err?.error?.message || createRes.status}`
+      )
+    }
   }
 
-  const createRes = await fetch('https://graph.microsoft.com/v1.0/users', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(userBody),
-  })
-
-  if (!createRes.ok) {
-    const err = await createRes.json().catch(() => null)
-    throw new Error(
-      `M365 user creation failed for ${officeEmail}: ${err?.error?.message || createRes.status}`
+  // All candidates taken -- look up the first candidate's existing account
+  if (!createdNew) {
+    const fallbackEmail = `${usernameCandidates[0]}@${domain}`
+    console.log(`All username candidates taken, using existing account ${fallbackEmail}`)
+    const lookupRes = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${fallbackEmail}?$select=id`,
+      { headers: { Authorization: `Bearer ${token}` } }
     )
+    if (!lookupRes.ok) {
+      const err = await lookupRes.json().catch(() => null)
+      throw new Error(
+        `All username candidates taken and lookup failed: ${err?.error?.message || lookupRes.status}`
+      )
+    }
+    const existing = await lookupRes.json()
+    userId = existing.id as string
+    officeEmail = fallbackEmail
+    baseUsername = usernameCandidates[0]
   }
-
-  const createdUser = await createRes.json()
-  const userId = createdUser.id as string
 
   // Brief delay -- user object must replicate before license/group/phone calls
   await new Promise(resolve => setTimeout(resolve, 3000))
@@ -701,6 +745,31 @@ export async function createM365User({
       console.error('MFA phone registration error:', err)
       stepErrors.push('MFA phone: registration error -- add manually in Entra')
     }
+  }
+
+  // Step 4b: Enforce MFA per-user -- beta endpoint, stable in practice
+  // Setting enabled auto-transitions to enforced once a method is registered
+  try {
+    const mfaEnforceRes = await fetch(
+      `https://graph.microsoft.com/beta/users/${userId}/authentication/requirements`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ perUserMfaState: 'enabled' }),
+      }
+    )
+    if (!mfaEnforceRes.ok) {
+      const err = await mfaEnforceRes.json().catch(() => null)
+      const msg = err?.error?.message || mfaEnforceRes.status
+      console.error('MFA enforce failed:', msg)
+      stepErrors.push(`MFA enforce: failed (${msg}) -- enable manually in Entra`)
+    }
+  } catch (err: any) {
+    console.error('MFA enforce error:', err)
+    stepErrors.push('MFA enforce: error -- enable manually in Entra')
   }
 
   // Step 5: Add to Microsoft 365 groups -- requires GroupMember.ReadWrite.All

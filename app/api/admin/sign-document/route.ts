@@ -304,6 +304,7 @@ export async function POST(request: NextRequest) {
         join_date: today.toISOString().split('T')[0],
         office: officeValue,
         ...(officeEmail && {
+          email: officeEmail,
           office_email: officeEmail,
           personal_email: agent.email,
         }),
@@ -377,6 +378,7 @@ export async function POST(request: NextRequest) {
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Do Manually</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Assign M365 Business Basic license (M365 admin &gt; Users &gt; ${officeEmail || agentName} &gt; Licenses and apps)</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Grant Tara full access to agent mailbox (Exchange admin &gt; Mailboxes &gt; ${officeEmail || agentName} &gt; Manage mailbox delegation)</p>
             <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Dotloop - create account</p>
           </div>
