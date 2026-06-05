@@ -66,6 +66,7 @@ interface Disbursement {
   gross_rent: number
   management_fee: number
   net_amount: number
+  deposit_amount: number
   period_month: number
   period_year: number
   payment_status: string
@@ -1968,8 +1969,11 @@ export default function LandlordDetailPage() {
                             </p>
                           )}
                           <p className="text-xs text-luxury-gray-3">
-                            Gross: {formatCurrency(disb.gross_rent)} · 
-                            Fee: {formatCurrency(disb.management_fee)}
+                            {disb.gross_rent > 0
+                              ? `Gross: ${formatCurrency(disb.gross_rent)} · Fee: ${formatCurrency(disb.management_fee)}`
+                              : disb.deposit_amount > 0
+                                ? `Deposit: ${formatCurrency(disb.deposit_amount)}`
+                                : `Net: ${formatCurrency(disb.net_amount)}`}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">

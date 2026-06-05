@@ -28,18 +28,32 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validate required fields
-    if (!landlord_id || !property_id || gross_rent == null || !period_month || !period_year) {
+    const disbursementType = body.disbursement_type || 'rent'
+    const isDeposit = disbursementType === 'deposit'
+    const isReserve = disbursementType === 'reserve'
+
+    if (!landlord_id || !property_id || !period_month || !period_year) {
       return NextResponse.json(
-        { error: 'Landlord, property, gross rent, and period are required' },
+        { error: 'Landlord, property, and period are required' },
         { status: 400 }
       )
     }
 
-    // Block $0 gross rent. Without rent there is nothing to disburse;
-    // pending deductions stay pending until the next month with rent.
-    if (Number(gross_rent) <= 0) {
+    // Rent disbursements require gross rent > 0.
+    // Deposit disbursements require deposit_amount > 0.
+    // Reserve disbursements require deposit_amount > 0 (reserve release).
+    if (!isDeposit && !isReserve) {
+      if (gross_rent == null || Number(gross_rent) <= 0) {
+        return NextResponse.json(
+          { error: 'Cannot disburse on $0 gross rent. Add the next month with rent received, and these deductions will carry over.' },
+          { status: 400 }
+        )
+      }
+    }
+
+    if ((isDeposit || isReserve) && (!deposit_amount || Number(deposit_amount) <= 0)) {
       return NextResponse.json(
-        { error: 'Cannot disburse on $0 gross rent. Add the next month with rent received, and these deductions will carry over.' },
+        { error: 'Deposit amount is required and must be greater than zero.' },
         { status: 400 }
       )
     }
@@ -75,7 +89,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const netAmount = Number(gross_rent) - mgmtFee - otherDed - lineItemTotal
+    const netAmount = (isDeposit || isReserve)
+      ? depositAmt
+      : Number(gross_rent) - mgmtFee - otherDed - lineItemTotal
 
     if (netAmount < 0) {
       return NextResponse.json(
@@ -84,18 +100,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check for duplicate disbursement for same property/period
-    const { data: existing } = await supabase
+    // Check for duplicate disbursement of the same type for this property/period.
+    // Rent and deposit disbursements are distinct records and can coexist
+    // in the same period (e.g., first month: rent disbursement + deposit release).
+    // We distinguish by whether gross_rent > 0 (rent) or deposit_amount > 0 (deposit/reserve).
+    let dupQuery = supabase
       .from('landlord_disbursements')
       .select('id')
       .eq('property_id', property_id)
       .eq('period_month', period_month)
       .eq('period_year', period_year)
-      .maybeSingle()
+
+    if (isDeposit || isReserve) {
+      dupQuery = dupQuery.gt('deposit_amount', 0)
+    } else {
+      dupQuery = dupQuery.gt('gross_rent', 0)
+    }
+
+    const { data: existing } = await dupQuery.maybeSingle()
 
     if (existing) {
+      const typeLabel = isDeposit ? 'deposit' : isReserve ? 'reserve' : 'rent'
       return NextResponse.json(
-        { error: `A disbursement already exists for this property in ${period_month}/${period_year}` },
+        { error: `A ${typeLabel} disbursement already exists for this property in ${period_month}/${period_year}` },
         { status: 409 }
       )
     }
@@ -133,13 +160,13 @@ export async function POST(request: NextRequest) {
         property_id,
         lease_id: lease_id || null,
         tenant_invoice_id: tenant_invoice_id || null,
-        gross_rent,
-        management_fee: mgmtFee,
+        gross_rent: isDeposit || isReserve ? 0 : Number(gross_rent),
+        management_fee: isDeposit || isReserve ? 0 : mgmtFee,
         deposit_amount: depositAmt,
-        other_deductions: otherDed,
-        other_deductions_description: other_deductions_description || null,
+        other_deductions: isDeposit || isReserve ? 0 : otherDed,
+        other_deductions_description: isDeposit || isReserve ? null : (other_deductions_description || null),
         net_amount: netAmount,
-        amount_1099_reportable: netAmount,
+        amount_1099_reportable: isDeposit || isReserve ? 0 : netAmount,
         period_month,
         period_year,
         payment_status: 'pending',
