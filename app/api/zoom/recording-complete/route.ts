@@ -245,7 +245,7 @@ async function sendErrorNotification(notifyEmail: string, meetingTitle: string, 
       `<p class="email-greeting">A Zoom recording could not be saved to OneDrive.</p>
       <div class="email-section">
         <h3>Recording Details</h3>
-        <p><strong>Meeting:</strong> ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}</p>
+        <p><strong>Meeting:</strong> ${meetingTitle}</p>
         <p><strong>Error:</strong> ${errorMsg}</p>
         <p style="font-size:13px;color:#888;">The recording is still available in Zoom cloud for approximately 24 hours. You can attempt to upload manually from the recordings page.</p>
       </div>
