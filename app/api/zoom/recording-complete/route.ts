@@ -337,35 +337,6 @@ export async function POST(req: NextRequest) {
   // Process each segment separately — creates one job per segment
   const results: any[] = []
 
-
-
-  // Fetch transcript and chat (non-blocking - empty string if unavailable)
-  let transcript = ''
-  if (vttFile?.download_url) {
-    transcript = await fetchTranscript(vttFile.download_url, zoomToken)
-  }
-
-  let chatText = ''
-  if (chatFile?.download_url) {
-    chatText = await fetchChat(chatFile.download_url, zoomToken)
-  }
-
-  // Fetch summary if available in webhook payload
-  let summaryText = ''
-  if (summaryFile?.download_url) {
-    try {
-      const sumRes = await fetch(`${summaryFile.download_url}?access_token=${zoomToken}`)
-      if (sumRes.ok) {
-        try {
-          const sumData = await sumRes.json()
-          summaryText = sumData.summary_overview || sumData.summary || ''
-        } catch {
-          summaryText = (await sumRes.text()).slice(0, 2000)
-        }
-      }
-    } catch { }
-  }
-
   // Transcript/chat/summary are shared across all segments (fetched once)
   let transcript = ''
   if (vttFile?.download_url) {
