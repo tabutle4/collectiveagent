@@ -82,6 +82,22 @@ export async function POST(request: NextRequest) {
             .from('users')
             .update({ referring_agent_id: referrer.id })
             .eq('id', prospect.id)
+
+          // Add new agent's ID to referrer's referred_agents array
+          const { data: referrerRecord } = await supabase
+            .from('users')
+            .select('referred_agents')
+            .eq('id', referrer.id)
+            .single()
+          const existing: string[] = Array.isArray(referrerRecord?.referred_agents)
+            ? referrerRecord.referred_agents
+            : []
+          if (!existing.includes(prospect.id)) {
+            await supabase
+              .from('users')
+              .update({ referred_agents: [...existing, prospect.id] })
+              .eq('id', referrer.id)
+          }
         }
       }
     }
