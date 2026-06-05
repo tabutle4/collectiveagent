@@ -100,6 +100,7 @@ export default function DisbursementsPage() {
     property_id: '',
     gross_rent: '',
     management_fee: '',
+    reserve_amount: '',
     deposit_amount: '',
     other_deductions: '',
     other_deductions_description: '',
@@ -128,6 +129,7 @@ export default function DisbursementsPage() {
   // current landlord. Loaded on property change so tenant disbursement
   // mode can warn when the refund amount exceeds available funds.
   const [heldInTrust, setHeldInTrust] = useState<number | null>(null)
+  const [reserveBalance, setReserveBalance] = useState<number | null>(null)
   // Counter ref to ignore stale fetches when admin switches property
   // rapidly. Each property change bumps the counter; only fetches whose
   // counter still matches the latest get applied to state.
@@ -539,6 +541,7 @@ export default function DisbursementsPage() {
       property_id: '',
       gross_rent: '',
       management_fee: '',
+      reserve_amount: '',
       deposit_amount: '',
       other_deductions: '',
       other_deductions_description: '',
@@ -664,6 +667,7 @@ export default function DisbursementsPage() {
       if (res.ok && myFetch === propertyFetchCounter.current) {
         const data = await res.json()
         setHeldInTrust(Number(data.heldInTrust ?? 0))
+        setReserveBalance(Number(data.reserveBalance ?? 0))
       }
     } catch (err) {
       console.error('Failed to load held-in-trust balance:', err)
@@ -702,8 +706,9 @@ export default function DisbursementsPage() {
     }
     const gross = parseFloat(createForm.gross_rent) || 0
     const mgmtFee = parseFloat(createForm.management_fee) || 0
+    const reserve = parseFloat(createForm.reserve_amount) || 0
     const other = parseFloat(createForm.other_deductions) || 0
-    return gross - mgmtFee - other - selectedDeductionsTotal
+    return gross - mgmtFee - reserve - other - selectedDeductionsTotal
   }
 
   const handleCreateDisbursement = async () => {
@@ -780,6 +785,7 @@ export default function DisbursementsPage() {
           property_id: createForm.property_id,
           gross_rent: disbursementType === 'deposit' || disbursementType === 'reserve' ? 0 : parseFloat(createForm.gross_rent) || 0,
           management_fee: disbursementType === 'deposit' || disbursementType === 'reserve' ? 0 : parseFloat(createForm.management_fee) || 0,
+          reserve_amount: disbursementType === 'rent' ? parseFloat(createForm.reserve_amount) || 0 : 0,
           deposit_amount: parseFloat(createForm.deposit_amount) || 0,
           other_deductions: disbursementType === 'deposit' || disbursementType === 'reserve' ? 0 : parseFloat(createForm.other_deductions) || 0,
           other_deductions_description: createForm.other_deductions_description || null,
@@ -1281,6 +1287,14 @@ export default function DisbursementsPage() {
                               <span className={ag.crc_collects_rent !== false ? 'text-green-700' : 'text-amber-700'}>
                                 {ag.crc_collects_rent !== false ? 'Yes' : 'No (self-collect)'}
                               </span>
+                              {ag.reserve_per_unit != null && ag.reserve_per_unit > 0 && reserveBalance !== null && (
+                                <>
+                                  <span className="text-luxury-gray-3">Reserve Balance</span>
+                                  <span className={reserveBalance >= Number(ag.reserve_per_unit) ? 'text-green-700' : 'text-amber-700'}>
+                                    {formatMoney(reserveBalance)} / {formatMoney(Number(ag.reserve_per_unit))}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         )
@@ -1335,6 +1349,41 @@ export default function DisbursementsPage() {
                                     placeholder="0.00"
                                   />
                                 </div>
+                              </div>
+                            )
+                          })()}
+
+                          {(() => {
+                            const ag = createForm.property_id
+                              ? getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+                              : null
+                            if (!ag?.reserve_per_unit || Number(ag.reserve_per_unit) <= 0) return null
+                            const target = Number(ag.reserve_per_unit)
+                            const current = reserveBalance ?? 0
+                            const shortfall = Math.max(0, target - current)
+                            if (current >= target) return null
+                            return (
+                              <div>
+                                <label className="field-label">
+                                  Reserve Replenishment
+                                  <span className="text-luxury-gray-3 font-normal ml-1">
+                                    ({formatMoney(current)} held / {formatMoney(target)} target)
+                                  </span>
+                                </label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={createForm.reserve_amount}
+                                    onChange={(e) => setCreateForm(prev => ({ ...prev, reserve_amount: e.target.value }))}
+                                    className="input-luxury w-full pl-7"
+                                    placeholder={shortfall.toFixed(2)}
+                                  />
+                                </div>
+                                <p className="text-xs text-luxury-gray-3 mt-1">
+                                  Shortfall to reach target: {formatMoney(shortfall)}
+                                </p>
                               </div>
                             )
                           })()}

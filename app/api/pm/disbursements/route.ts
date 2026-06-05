@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       gross_rent,
       management_fee,
       deposit_amount,
+      reserve_amount,
       other_deductions,
       other_deductions_description,
       deduction_ids,
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
 
     const mgmtFee = Number(management_fee) || 0
     const depositAmt = Number(deposit_amount) || 0
+    const reserveAmt = (!isDeposit && !isReserve) ? Number(reserve_amount) || 0 : 0
     const otherDed = Number(other_deductions) || 0
 
     // Sum line-item deductions being attached at create time, if any.
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     const netAmount = (isDeposit || isReserve)
       ? depositAmt
-      : Number(gross_rent) - mgmtFee - otherDed - lineItemTotal
+      : Number(gross_rent) - mgmtFee - otherDed - lineItemTotal - reserveAmt
 
     if (netAmount < 0) {
       return NextResponse.json(
@@ -110,12 +112,7 @@ export async function POST(request: NextRequest) {
       .eq('property_id', property_id)
       .eq('period_month', period_month)
       .eq('period_year', period_year)
-
-    if (isDeposit || isReserve) {
-      dupQuery = dupQuery.gt('deposit_amount', 0)
-    } else {
-      dupQuery = dupQuery.gt('gross_rent', 0)
-    }
+      .eq('disbursement_type', disbursementType)
 
     const { data: existing } = await dupQuery.maybeSingle()
 
@@ -163,6 +160,8 @@ export async function POST(request: NextRequest) {
         gross_rent: isDeposit || isReserve ? 0 : Number(gross_rent),
         management_fee: isDeposit || isReserve ? 0 : mgmtFee,
         deposit_amount: depositAmt,
+        reserve_amount: reserveAmt,
+        disbursement_type: disbursementType,
         other_deductions: isDeposit || isReserve ? 0 : otherDed,
         other_deductions_description: isDeposit || isReserve ? null : (other_deductions_description || null),
         net_amount: netAmount,

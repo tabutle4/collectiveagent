@@ -5,98 +5,99 @@
  * so disbursement code, statement code, and dashboard widgets all read
  * from the same source of truth.
  *
- * Held-in-trust formula (post pm_ledger deprecation):
+ * Held-in-trust formula:
  *   sum(tenant_invoices.deposit_amount) where status = 'paid'
- *   - sum(landlord_disbursements.deposit_amount)
- *   - sum(tenant_disbursements.amount)
+ *   - sum(landlord_disbursements.deposit_amount) where type='deposit' and paid
+ *   - sum(tenant_disbursements.amount) where paid
+ *   + sum(landlord_disbursements.reserve_amount) where type='rent' (any status)
+ *   - sum(landlord_disbursements.deposit_amount) where type='reserve' and paid
  *
- * Both sides are computed live from the canonical tables; nothing is
- * cached. If you change a deposit on an invoice or post a new tenant
- * disbursement, the held-in-trust number updates immediately on next read.
+ * Both sides are computed live from the canonical tables; nothing is cached.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface HeldInTrustOptions {
   landlordId: string
-  propertyId?: string // optional - omit to compute landlord-wide total
+  propertyId?: string
 }
 
 export interface HeldInTrustResult {
   depositsPaidIn: number
   returnedToLandlord: number
   returnedToTenant: number
+  reserveHeld: number
+  reserveReleased: number
+  depositBalance: number
+  reserveBalance: number
   heldInTrust: number
 }
 
-/**
- * Compute the deposits-held-in-trust balance for a landlord (and
- * optionally narrowed to one property). Reads only from canonical
- * tables; no pm_ledger access.
- *
- * IMPORTANT: only counts disbursements with payment_status in
- * ('completed', 'paid'). Pending refunds (still queued, money hasn't
- * left the trust account yet) do NOT reduce the held-in-trust balance.
- * This matches TREC-style trust accounting: balance reflects actual
- * cash in the trust bank account, not future commitments.
- */
 const COMPLETED_DISB_STATUSES = ['completed', 'paid']
 
 export async function computeHeldInTrust(
   supabase: SupabaseClient,
   opts: HeldInTrustOptions
 ): Promise<HeldInTrustResult> {
-  // 1. Deposits paid in via tenant invoices
+  // 1. Security deposits paid in via tenant invoices
   let depositsQuery = supabase
     .from('tenant_invoices')
-    .select('deposit_amount, property_id, landlord_id')
+    .select('deposit_amount')
     .eq('status', 'paid')
     .eq('landlord_id', opts.landlordId)
-  if (opts.propertyId) {
-    depositsQuery = depositsQuery.eq('property_id', opts.propertyId)
-  }
+  if (opts.propertyId) depositsQuery = depositsQuery.eq('property_id', opts.propertyId)
   const { data: paidInvoices } = await depositsQuery
   const depositsPaidIn = (paidInvoices || []).reduce(
-    (sum, inv: any) => sum + Number(inv.deposit_amount || 0),
-    0
+    (sum, inv: any) => sum + Number(inv.deposit_amount || 0), 0
   )
 
-  // 2. Deposits returned to landlord via disbursements - completed only
-  let landlordReturnsQuery = supabase
+  // 2. All landlord_disbursements for this landlord/property
+  let disbQuery = supabase
     .from('landlord_disbursements')
-    .select('deposit_amount, property_id, landlord_id, payment_status')
+    .select('deposit_amount, reserve_amount, disbursement_type, payment_status')
     .eq('landlord_id', opts.landlordId)
-    .in('payment_status', COMPLETED_DISB_STATUSES)
-  if (opts.propertyId) {
-    landlordReturnsQuery = landlordReturnsQuery.eq('property_id', opts.propertyId)
-  }
-  const { data: landlordReturns } = await landlordReturnsQuery
-  const returnedToLandlord = (landlordReturns || []).reduce(
-    (sum, d: any) => sum + Number(d.deposit_amount || 0),
-    0
-  )
+  if (opts.propertyId) disbQuery = disbQuery.eq('property_id', opts.propertyId)
+  const { data: allDisbs } = await disbQuery
 
-  // 3. Deposits returned to tenant directly - completed only
+  // Security deposits returned to landlord (paid deposit-type disbursements)
+  const returnedToLandlord = (allDisbs || [])
+    .filter((d: any) => d.disbursement_type === 'deposit' && COMPLETED_DISB_STATUSES.includes(d.payment_status))
+    .reduce((sum: number, d: any) => sum + Number(d.deposit_amount || 0), 0)
+
+  // Reserve withheld from rent (all rent disbursements regardless of status)
+  const reserveHeld = (allDisbs || [])
+    .filter((d: any) => d.disbursement_type === 'rent')
+    .reduce((sum: number, d: any) => sum + Number(d.reserve_amount || 0), 0)
+
+  // Reserve released back to landlord (paid reserve-type disbursements)
+  const reserveReleased = (allDisbs || [])
+    .filter((d: any) => d.disbursement_type === 'reserve' && COMPLETED_DISB_STATUSES.includes(d.payment_status))
+    .reduce((sum: number, d: any) => sum + Number(d.deposit_amount || 0), 0)
+
+  // 3. Deposits refunded to tenant
   let tenantReturnsQuery = supabase
     .from('tenant_disbursements')
-    .select('amount, property_id, landlord_id, payment_status')
+    .select('amount')
     .eq('landlord_id', opts.landlordId)
     .in('payment_status', COMPLETED_DISB_STATUSES)
-  if (opts.propertyId) {
-    tenantReturnsQuery = tenantReturnsQuery.eq('property_id', opts.propertyId)
-  }
+  if (opts.propertyId) tenantReturnsQuery = tenantReturnsQuery.eq('property_id', opts.propertyId)
   const { data: tenantReturns } = await tenantReturnsQuery
   const returnedToTenant = (tenantReturns || []).reduce(
-    (sum, d: any) => sum + Number(d.amount || 0),
-    0
+    (sum: number, d: any) => sum + Number(d.amount || 0), 0
   )
 
-  const heldInTrust = depositsPaidIn - returnedToLandlord - returnedToTenant
+  const depositBalance = depositsPaidIn - returnedToLandlord - returnedToTenant
+  const reserveBalance = reserveHeld - reserveReleased
+  const heldInTrust = depositBalance + reserveBalance
 
   return {
     depositsPaidIn: round2(depositsPaidIn),
     returnedToLandlord: round2(returnedToLandlord),
     returnedToTenant: round2(returnedToTenant),
+    reserveHeld: round2(reserveHeld),
+    reserveReleased: round2(reserveReleased),
+    depositBalance: round2(depositBalance),
+    reserveBalance: round2(reserveBalance),
     heldInTrust: round2(heldInTrust),
   }
 }
