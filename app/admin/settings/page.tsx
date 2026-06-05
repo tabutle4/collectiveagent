@@ -922,8 +922,8 @@ export default function SettingsPage() {
                         <label className="field-label">Agent Coaching Link</label>
                         <input
                           type="text"
-                          value={settings.coaching_zoom_link || ''}
-                          onChange={e => setSettings({ ...settings, coaching_zoom_link: e.target.value })}
+                          value={settings?.coaching_zoom_link || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_zoom_link: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="visit.collectiverealtyco.com/training"
                         />
@@ -932,8 +932,8 @@ export default function SettingsPage() {
                         <label className="field-label">Coaching Client Link</label>
                         <input
                           type="text"
-                          value={settings.coaching_client_zoom_link || ''}
-                          onChange={e => setSettings({ ...settings, coaching_client_zoom_link: e.target.value })}
+                          value={settings?.coaching_client_zoom_link || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_client_zoom_link: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="convert.coachingbrokerage.com/zoom"
                         />
@@ -945,8 +945,8 @@ export default function SettingsPage() {
                         <label className="field-label">Brand Name</label>
                         <input
                           type="text"
-                          value={settings.coaching_brokerage_name || ''}
-                          onChange={e => setSettings({ ...settings, coaching_brokerage_name: e.target.value })}
+                          value={settings?.coaching_brokerage_name || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_brokerage_name: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="The Coaching Brokerage"
                         />
@@ -955,8 +955,8 @@ export default function SettingsPage() {
                         <label className="field-label">Email</label>
                         <input
                           type="email"
-                          value={settings.coaching_brokerage_email || ''}
-                          onChange={e => setSettings({ ...settings, coaching_brokerage_email: e.target.value })}
+                          value={settings?.coaching_brokerage_email || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_brokerage_email: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="info@coachingbrokerage.com"
                         />
@@ -965,8 +965,8 @@ export default function SettingsPage() {
                         <label className="field-label">Address</label>
                         <input
                           type="text"
-                          value={settings.coaching_brokerage_address || ''}
-                          onChange={e => setSettings({ ...settings, coaching_brokerage_address: e.target.value })}
+                          value={settings?.coaching_brokerage_address || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_brokerage_address: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="2300 Valley View Ln, Ste 518, Irving, TX 75062"
                         />
@@ -975,8 +975,8 @@ export default function SettingsPage() {
                         <label className="field-label">Website</label>
                         <input
                           type="text"
-                          value={settings.coaching_brokerage_website || ''}
-                          onChange={e => setSettings({ ...settings, coaching_brokerage_website: e.target.value })}
+                          value={settings?.coaching_brokerage_website || ''}
+                          onChange={e => setSettings({ ...settings!, coaching_brokerage_website: e.target.value })}
                           className="input-luxury w-full"
                           placeholder="coachingbrokerage.com"
                         />
@@ -1577,4 +1577,5 @@ export default function SettingsPage() {
     </div>
   )
 }
+
 
