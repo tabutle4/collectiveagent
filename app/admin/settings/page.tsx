@@ -79,6 +79,13 @@ interface CompanySettings {
   referral_conversion_discount: number
   // Apartment locating
   apartment_invoice_fee: number
+  // Coaching
+  coaching_zoom_link?: string
+  coaching_client_zoom_link?: string
+  coaching_brokerage_name?: string
+  coaching_brokerage_email?: string
+  coaching_brokerage_address?: string
+  coaching_brokerage_website?: string
 }
 
 interface CommissionPlan {
@@ -1577,5 +1584,6 @@ export default function SettingsPage() {
     </div>
   )
 }
+
 
 

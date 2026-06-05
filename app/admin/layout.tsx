@@ -30,6 +30,9 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/reports/all-payouts': 'can_manage_checks',
   '/admin/email-signature-status': 'can_view_all_agents',
   '/admin/settings/required-documents': 'can_manage_required_documents',
+  '/admin/recordings': 'can_manage_recordings',
+  '/admin/insights': 'can_view_insights',
+  '/admin/coaching-access': 'can_manage_agents',
 }
 
 function AccessDenied() {
