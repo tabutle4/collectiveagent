@@ -181,6 +181,12 @@ export async function GET(
       .filter((d: any) => d.deposit_amount > 0 && ['pending', 'processing'].includes(d.payment_status))
       .reduce((sum: number, d: any) => sum + Number(d.deposit_amount), 0)
 
+    // Rent-side pending net only — excludes deposit disbursements so the
+    // Income & Expenses section doesn't mix trust movements with rent income.
+    const pendingRentNet = (disbDetail || [])
+      .filter((d: any) => d.gross_rent > 0 && ['pending', 'processing'].includes(d.payment_status))
+      .reduce((sum: number, d: any) => sum + Number(d.net_amount || 0), 0)
+
     // Held in trust: subtract pending deposit returns so the displayed
     // balance reflects what's actually committed as in-trust cash,
     // not money that's already queued for payout.
@@ -200,6 +206,15 @@ export async function GET(
 
     const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/logo.png`
 
+    // Format disbursements for display section
+    const disbursementRows = (disbDetail || []).map((d: any) => ({
+      type: d.gross_rent > 0 ? 'Rent' : 'Deposit',
+      period: d.period_month ? `${monthName(d.period_month)} ${d.period_year}` : `${d.period_year}`,
+      amount: fmt$(d.net_amount),
+      status: ['paid', 'completed'].includes(d.payment_status) ? 'Paid' : 'Pending',
+      is_pending: ['pending', 'processing'].includes(d.payment_status),
+    }))
+
     const data = {
       landlord_name: `${landlord?.first_name || ''} ${landlord?.last_name || ''}`.trim(),
       landlord_email: landlord?.email || '',
@@ -217,10 +232,13 @@ export async function GET(
       pending_deposit_return: pendingDepositReturn,
       total_net_disbursed: fmt$(statement.total_net_disbursed),
       total_net_pending: fmt$(statement.total_net_pending ?? 0),
+      pending_rent_net: fmt$(pendingRentNet),
       has_pending: Number(statement.total_net_pending ?? 0) > 0,
+      has_pending_rent: pendingRentNet > 0,
       has_net_disbursed: Number(statement.total_net_disbursed) > 0,
       total_net_disbursed_raw: Number(statement.total_net_disbursed),
       held_in_trust: fmt$(displayedHeldInTrust),
+      disbursement_rows: disbursementRows,
       notes: statement.notes || '',
       sent_at: statement.sent_at ? fmtDate(statement.sent_at) : null,
       generated_date: fmtDate(statement.created_at?.split('T')[0] || statement.statement_date),
@@ -345,23 +363,19 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-weight: 500;">- ${data.total_management_fees}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Deductions <span style="color: #999; font-size: 9px; margin-left: 6px;">repairs, HOA, etc.</span></span>
+        <div>
+          <span>Deductions</span>
+          ${(data.deduction_lines as any[]).length > 0 ? `
+          <div style="color: #999; font-size: 9px; margin-top: 2px;">
+            ${(data.deduction_lines as any[]).map((d: any) => `${d.label} (${fmt$(d.amount)})`).join(' · ')}
+          </div>` : `<span style="color: #999; font-size: 9px; margin-left: 6px;">repairs, HOA, etc.</span>`}
+        </div>
         <span style="font-weight: 500;">- ${data.total_deductions}</span>
       </div>
-      ${(data.deduction_lines as any[]).length > 0 ? (data.deduction_lines as any[]).map((d: any) => `
-      <div style="display: flex; justify-content: space-between; padding: 2px 0 2px 16px; border-bottom: 1px dotted #eee; color: #666;">
-        <span style="font-size: 10px;">${d.label}</span>
-        <span style="font-size: 10px;">- ${fmt$(d.amount)}</span>
-      </div>`).join('') : ''}
       <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
-        <span style="font-weight: 600;">${data.has_net_disbursed ? 'Net Disbursed to You' : 'Pending Disbursement to You'}</span>
-        <span style="font-weight: 600; color: #C5A278;">${data.has_net_disbursed ? data.total_net_disbursed : data.total_net_pending}</span>
+        <span style="font-weight: 600;">Net Remaining</span>
+        <span style="font-weight: 600; color: #C5A278;">${data.has_net_disbursed ? data.total_net_disbursed : data.pending_rent_net}</span>
       </div>
-      ${data.has_pending && data.has_net_disbursed ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; background: #f9f7f4; border-radius: 4px; padding: 6px 8px; margin-top: 6px;">
-        <span style="color: #8a7a60; font-size: 10px;">Pending disbursement (in progress)</span>
-        <span style="font-weight: 600; color: #8a7a60;">${data.total_net_pending}</span>
-      </div>` : ''}
     </div>
   </div>
 
@@ -377,26 +391,34 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Returned to Landlord <span style="color: #999; font-size: 9px; margin-left: 6px;">paid</span></span>
         <span style="font-weight: 500;">- ${data.total_deposits_returned_to_landlord}</span>
       </div>
-      ${data.pending_deposit_return > 0 ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd; background: #f9f7f4; border-radius: 4px; padding: 6px 8px; margin: 2px 0;">
-        <span style="color: #8a7a60;">Pending Return to Landlord <span style="font-size: 9px; margin-left: 6px;">in progress</span></span>
-        <span style="font-weight: 600; color: #8a7a60;">- ${fmt$(data.pending_deposit_return)}</span>
-      </div>` : ''}
-      <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
         <span>Refunded to Tenant <span style="color: #999; font-size: 9px; margin-left: 6px;">move-out refunds</span></span>
         <span style="font-weight: 500;">- ${data.total_deposits_refunded_to_tenant}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
+        <span style="font-weight: 600;">Held in Trust</span>
+        <span style="font-weight: 600; color: #C5A278;">${data.held_in_trust}</span>
       </div>
     </div>
   </div>
 
-  <!-- Held in Trust callout -->
-  <div style="background: #f9f7f4; border: 2px solid #C5A278; border-radius: 6px; padding: 14px; margin-bottom: 20px;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a7a60; margin-bottom: 4px;">Held in Trust</div>
-        <div style="font-size: 9px; color: #888;">As of ${data.statement_date}</div>
-      </div>
-      <div style="font-size: 22px; font-weight: 600; color: #333;">${data.held_in_trust}</div>
+  <!-- Disbursements section -->
+  <div style="margin-bottom: 20px;">
+    <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Disbursements</div>
+    <div style="font-size: 11px; color: #333;">
+      ${(data.disbursement_rows as any[]).length === 0 ? `
+      <div style="padding: 8px 0; color: #999;">No disbursements this period.</div>` :
+      (data.disbursement_rows as any[]).map((d: any) => `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dotted #ddd;">
+        <div>
+          <span style="font-weight: 500;">${d.type}</span>
+          <span style="color: #999; font-size: 9px; margin-left: 8px;">${d.period}</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="${d.is_pending ? 'color: #8a7a60;' : ''} font-weight: 500;">${d.amount}</span>
+          <span style="font-size: 9px; padding: 2px 6px; border-radius: 3px; ${d.is_pending ? 'background: #f9f7f4; color: #8a7a60;' : 'background: #f0faf5; color: #0F6E56;'}">${d.status}</span>
+        </div>
+      </div>`).join('')}
     </div>
   </div>
 
