@@ -245,7 +245,7 @@ async function sendErrorNotification(notifyEmail: string, meetingTitle: string, 
       `<p class="email-greeting">A Zoom recording could not be saved to OneDrive.</p>
       <div class="email-section">
         <h3>Recording Details</h3>
-        <p><strong>Meeting:</strong> ${meetingTitle}</p>
+        <p><strong>Meeting:</strong> ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}</p>
         <p><strong>Error:</strong> ${errorMsg}</p>
         <p style="font-size:13px;color:#888;">The recording is still available in Zoom cloud for approximately 24 hours. You can attempt to upload manually from the recordings page.</p>
       </div>
@@ -295,17 +295,49 @@ export async function POST(req: NextRequest) {
   const zoomToken: string = payload.download_token || ''
   const zoomShareUrl: string = recording.share_url || ''
 
-  const mp4File = recording.recording_files?.find(
+  // Fetch full recording file list from Zoom API — webhook payload may only include
+  // the first segment when recording was stopped/started mid-meeting (known Zoom issue)
+  let allFiles = recording.recording_files || []
+  try {
+    const encoded = encodeURIComponent(meetingUuid)
+    const doubleEncoded = (meetingUuid.startsWith('/') || meetingUuid.includes('//'))
+      ? encodeURIComponent(encoded) : encoded
+    const filesRes = await fetch(
+      `https://api.zoom.us/v2/meetings/${doubleEncoded}/recordings`,
+      { headers: { Authorization: `Bearer ${zoomToken}` } }
+    )
+    if (filesRes.ok) {
+      const filesData = await filesRes.json()
+      if (filesData.recording_files?.length > 0) {
+        allFiles = filesData.recording_files
+        console.log(`Fetched ${allFiles.length} files from Zoom API (webhook had ${recording.recording_files?.length || 0})`)
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch full recording list from Zoom, using webhook payload:', e)
+  }
+
+  // Get all MP4 segments — each stop/start creates a separate segment
+  const preferredMp4s = allFiles.filter(
     (f: any) => f.file_type === 'MP4' && f.recording_type === 'shared_screen_with_speaker_view'
-  ) || recording.recording_files?.find((f: any) => f.file_type === 'MP4')
+  )
+  const mp4Segments = preferredMp4s.length > 0
+    ? preferredMp4s
+    : allFiles.filter((f: any) => f.file_type === 'MP4')
 
-  const vttFile = recording.recording_files?.find((f: any) => f.file_type === 'TRANSCRIPT')
-  const chatFile = recording.recording_files?.find((f: any) => f.file_type === 'CHAT')
-  const summaryFile = recording.recording_files?.find((f: any) => f.file_type === 'SUMMARY')
+  // Non-MP4 files are shared across all segments
+  const vttFile = allFiles.find((f: any) => f.file_type === 'TRANSCRIPT')
+  const chatFile = allFiles.find((f: any) => f.file_type === 'CHAT')
+  const summaryFile = allFiles.find((f: any) => f.file_type === 'SUMMARY')
 
-  if (!mp4File) {
+  if (mp4Segments.length === 0) {
     return NextResponse.json({ error: 'No MP4 found' }, { status: 400 })
   }
+
+  // Process each segment separately — creates one job per segment
+  const results: any[] = []
+
+
 
   // Fetch transcript and chat (non-blocking - empty string if unavailable)
   let transcript = ''
@@ -334,140 +366,160 @@ export async function POST(req: NextRequest) {
     } catch { }
   }
 
-  // Keep transcript, chat, and summary separate
+  // Transcript/chat/summary are shared across all segments (fetched once)
+  let transcript = ''
+  if (vttFile?.download_url) {
+    transcript = await fetchTranscript(vttFile.download_url, zoomToken)
+  }
+  let chatText = ''
+  if (chatFile?.download_url) {
+    chatText = await fetchChat(chatFile.download_url, zoomToken)
+  }
+  let summaryText = ''
+  if (summaryFile?.download_url) {
+    try {
+      const sumRes = await fetch(`${summaryFile.download_url}?access_token=${zoomToken}`)
+      if (sumRes.ok) {
+        try {
+          const sumData = await sumRes.json()
+          summaryText = sumData.summary_overview || sumData.summary || ''
+        } catch {
+          summaryText = (await sumRes.text()).slice(0, 2000)
+        }
+      }
+    } catch { }
+  }
   const fullTranscript = transcript || null
   const fullChat = chatText || null
   const fullSummary = summaryText || null
 
-  // Fetch participants now while meeting data is fresh
+  // Participants fetched once for the whole meeting
   const participants = meetingUuid ? await fetchZoomParticipants(meetingUuid) : []
 
-  // Generate topic suggestions from transcript
+  // Topic suggestions based on transcript (shared across segments)
   const suggestedTopics = await suggestTopics(transcript, meetingTitle)
   const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
-  const suggestedTitle = `${meetingTitle} - ${dateStr}${topicStr}`
-  const fileName = `${suggestedTitle}.mp4`
-  const fileSize = mp4File.file_size || 0
 
-  // Deduplication: check if job already exists for this session
-  // Use PMI (recording.id) + start_time since UUID differs per file type webhook
-  const { data: existing } = await supabaseAdmin
-    .from('zoom_recording_jobs')
-    .select('id, status')
-    .eq('start_time', startTime)
-    .eq('meeting_title', meetingTitle)
-    .maybeSingle()
+  // Per-segment: dedup, insert, upload
+  for (const mp4File of mp4Segments) {
+    const segmentStartTime: string = mp4File.recording_start || startTime
+    const segmentLabel = mp4Segments.length > 1
+      ? ` Part ${mp4Segments.indexOf(mp4File) + 1}`
+      : ''
+    const segmentTitle = `${meetingTitle}${segmentLabel} - ${dateStr}${topicStr}`
+    const fileSize = mp4File.file_size || 0
 
-  if (existing) {
-    console.log(`Duplicate webhook ignored: job ${existing.id} already exists for meeting ${meetingUuid}`)
-    return NextResponse.json({ ok: true, duplicate: true, jobId: existing.id })
-  }
-
-  // Save job record with all data we have
-  const { data: job, error } = await supabaseAdmin
-    .from('zoom_recording_jobs')
-    .insert({
-      meeting_title: meetingTitle,
-      meeting_id: meetingUuid || null,
-      start_time: startTime,
-      mp4_download_url: mp4File.download_url,
-      mp4_file_size: fileSize,
-      zoom_token: zoomToken,
-      suggested_title: suggestedTitle,
-      suggested_folder: suggestedFolder,
-      zoom_share_url: zoomShareUrl || null,
-      transcript_text: fullTranscript,
-      chat_text: fullChat,
-      zoom_summary: fullSummary,
-      status: 'pending',
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Supabase insert error:', error)
-    return NextResponse.json({ error: 'DB error' }, { status: 500 })
-  }
-
-  // Store participants if we got any (excluding bots)
-  if (participants.length > 0) {
-    // Filter out Fathom Notetaker bots
-    const humanParticipants = participants.filter((p: any) =>
-      !p.name?.toLowerCase().includes('fathom') &&
-      !p.name?.toLowerCase().includes('notetaker') &&
-      !p.name?.toLowerCase().includes('otter') &&
-      !p.name?.toLowerCase().includes('fireflies')
-    )
-    const rows = humanParticipants.map((p: any) => ({
-      zoom_recording_job_id: job.id,
-      meeting_id: meetingUuid,
-      participant_name: p.name || null,
-      participant_email: p.user_email || null,
-      duration_minutes: p.duration ? Math.round(p.duration / 60) : null,
-      join_time: p.join_time || null,
-      leave_time: p.leave_time || null,
-    }))
-    const { error: partError } = await supabaseAdmin
-      .from('zoom_meeting_participants')
-      .insert(rows)
-    if (partError) console.error('Failed to store participants:', partError)
-  }
-
-  // Look up notification email
-  const { data: settingsRow } = await supabaseAdmin
-    .from('company_settings')
-    .select('zoom_recording_notification_email')
-    .single()
-  const notifyEmail = settingsRow?.zoom_recording_notification_email || 'info@collectiverealtyco.com'
-  const confirmUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/recordings/${job.id}`
-
-  // Upload to OneDrive
-  let oneDriveSuccess = false
-  try {
-    const graphToken = await getGraphToken()
-
-    const zoomRes = await fetch(`${mp4File.download_url}?access_token=${zoomToken}`)
-    if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
-    if (!zoomRes.body) throw new Error('No response body from Zoom')
-
-    const { itemId, webUrl: oneDriveUrl } = await uploadToOneDrive(graphToken, fileName, fileSize, zoomRes.body)
-
-    const verified = await verifyOneDriveFile(graphToken, itemId)
-    if (!verified) throw new Error('OneDrive file verification failed after upload')
-
-    // Zoom recording is kept until confirm time so we can fetch transcript + summary
-
-    await supabaseAdmin
+    // Dedup per segment using its own start_time
+    const { data: existing } = await supabaseAdmin
       .from('zoom_recording_jobs')
-      .update({ onedrive_url: oneDriveUrl, onedrive_item_id: itemId })
-      .eq('id', job.id)
+      .select('id, status')
+      .eq('start_time', segmentStartTime)
+      .eq('meeting_title', meetingTitle)
+      .maybeSingle()
 
-    oneDriveSuccess = true
+    if (existing) {
+      console.log(`Segment already exists: job ${existing.id} for ${segmentTitle}`)
+      results.push({ duplicate: true, jobId: existing.id })
+      continue
+    }
 
-  } catch (err: any) {
-    console.error('OneDrive upload error:', err.message)
-    await supabaseAdmin
+    // Save job record for this segment
+    const { data: job, error } = await supabaseAdmin
       .from('zoom_recording_jobs')
-      .update({ error_message: `OneDrive upload failed: ${err.message}` })
-      .eq('id', job.id)
-    // Send error notification to admin
-    await sendErrorNotification(notifyEmail, meetingTitle, confirmUrl, err.message)
-  }
+      .insert({
+        meeting_title: meetingTitle,
+        meeting_id: meetingUuid || null,
+        start_time: segmentStartTime,
+        mp4_download_url: mp4File.download_url,
+        mp4_file_size: fileSize,
+        zoom_token: zoomToken,
+        suggested_title: segmentTitle,
+        suggested_folder: suggestedFolder,
+        zoom_share_url: zoomShareUrl || null,
+        transcript_text: fullTranscript,
+        chat_text: fullChat,
+        zoom_summary: fullSummary,
+        status: 'pending',
+      })
+      .select()
+      .single()
 
-  // Send standard notification email
-  const oneDriveNote = oneDriveSuccess
+    if (error) {
+      console.error('Supabase insert error for segment:', error)
+      results.push({ error: true })
+      continue
+    }
+
+    // Store participants on first segment only (participants are per-meeting, not per-segment)
+    if (participants.length > 0 && results.length === 0) {
+      const humanParticipants = participants.filter((p: any) =>
+        !p.name?.toLowerCase().includes('fathom') &&
+        !p.name?.toLowerCase().includes('notetaker') &&
+        !p.name?.toLowerCase().includes('otter') &&
+        !p.name?.toLowerCase().includes('fireflies')
+      )
+      const rows = humanParticipants.map((p: any) => ({
+        zoom_recording_job_id: job.id,
+        meeting_id: meetingUuid,
+        participant_name: p.name || null,
+        participant_email: p.user_email || null,
+        duration_minutes: p.duration ? Math.round(p.duration / 60) : null,
+        join_time: p.join_time || null,
+        leave_time: p.leave_time || null,
+      }))
+      const { error: partError } = await supabaseAdmin
+        .from('zoom_meeting_participants')
+        .insert(rows)
+      if (partError) console.error('Failed to store participants:', partError)
+    }
+
+    // Look up notification email
+    const { data: settingsRow } = await supabaseAdmin
+      .from('company_settings')
+      .select('zoom_recording_notification_email')
+      .single()
+    const notifyEmail = settingsRow?.zoom_recording_notification_email || 'info@collectiverealtyco.com'
+    const confirmUrl = `${process.env.NEXT_PUBLIC_APP_URL}/admin/recordings/${job.id}`
+
+    // Upload to OneDrive
+    let oneDriveSuccess = false
+    try {
+      const graphToken = await getGraphToken()
+      const zoomRes = await fetch(`${mp4File.download_url}?access_token=${zoomToken}`)
+      if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
+      if (!zoomRes.body) throw new Error('No response body from Zoom')
+      const { itemId, webUrl: oneDriveUrl } = await uploadToOneDrive(graphToken, `${segmentTitle}.mp4`, fileSize, zoomRes.body)
+      const verified = await verifyOneDriveFile(graphToken, itemId)
+      if (!verified) throw new Error('OneDrive file verification failed after upload')
+      // Zoom recording is kept until confirm time so we can fetch transcript + summary
+      await supabaseAdmin
+        .from('zoom_recording_jobs')
+        .update({ onedrive_url: oneDriveUrl, onedrive_item_id: itemId })
+        .eq('id', job.id)
+      oneDriveSuccess = true
+    } catch (err: any) {
+      console.error('OneDrive upload error:', err.message)
+      await supabaseAdmin
+        .from('zoom_recording_jobs')
+        .update({ error_message: `OneDrive upload failed: ${err.message}` })
+        .eq('id', job.id)
+      await sendErrorNotification(notifyEmail, meetingTitle, confirmUrl, err.message)
+    }
+
+    // Send standard notification email per segment
+    const oneDriveNote = oneDriveSuccess
     ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom recording will be deleted after you confirm upload to SharePoint.</p>`
     : `<p style="font-size:13px;color:#c0392b;">OneDrive upload failed. Zoom recording still available for ~24 hours.</p>`
 
-  const notifyHtml = getEmailLayout(
+    const notifyHtml = getEmailLayout(
     `<p class="email-greeting">New Zoom recording ready for review.</p>
     <div class="email-section">
       <h3>Recording Details</h3>
-      <p><strong>Meeting:</strong> ${meetingTitle}</p>
+      <p><strong>Meeting:</strong> ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}</p>
       <p><strong>Date:</strong> ${dateStr}</p>
-      <p><strong>Suggested Title:</strong> ${suggestedTitle}</p>
+      <p><strong>Suggested Title:</strong> ${segmentTitle}</p>
       <p><strong>Suggested Folder:</strong> ${suggestedFolder}</p>
       <p><strong>Attendees captured:</strong> ${participants.length}</p>
       ${oneDriveNote}
@@ -477,14 +529,17 @@ export async function POST(req: NextRequest) {
     { title: 'New Recording Ready', preheader: `New recording: ${meetingTitle}` }
   )
 
-  await resend.emails.send({
-    from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
-    to: notifyEmail,
-    subject: `New Recording Ready: ${meetingTitle}`,
-    html: notifyHtml,
-  })
+    await resend.emails.send({
+      from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
+      to: notifyEmail,
+      subject: `New Recording Ready: ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}`,
+      html: notifyHtml,
+    })
 
-  return NextResponse.json({ ok: true, jobId: job.id })
+    results.push({ ok: true, jobId: job.id })
+  } // end segment loop
+
+  return NextResponse.json({ ok: true, segments: results.length, results })
 }
 
 

@@ -158,6 +158,33 @@ export default function RecordingDetailPage() {
                 if (s.transcript && !hasTranscript) {
                   setTranscript(s.transcript)
                   setTranscriptSource(prev => [...new Set([...prev, 'Transcript'])])
+                  // Fresh transcript arrived — re-suggest topics from actual content
+                  // rather than relying on suggested_title set at webhook time (before transcript was ready)
+                  setSuggestedTopics([])
+                  fetch('/api/zoom/recording-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      messages: [{ role: 'user', content: `Based on this transcript, suggest exactly 3 to 4 short topic tags (3-6 words each, title case) for this recording. Respond with ONLY a JSON array of strings, nothing else. Example: ["Buyer Consultation Scripts", "Objection Handling", "Follow Up Systems"]` }],
+                      context: {
+                        meetingTitle: j.meeting_title || '',
+                        title: j.final_title || j.suggested_title || '',
+                        transcript: s.transcript.slice(0, 3000),
+                        summary: s.summary || '',
+                        folders: '',
+                        programs: PROGRAM_NAMES.join(', '),
+                        systemPrompt: '',
+                      },
+                    }),
+                  })
+                    .then(r => r.json())
+                    .then(aiData => {
+                      try {
+                        const tags = JSON.parse((aiData.reply || '[]').replace(/```json|```/g, '').trim())
+                        if (Array.isArray(tags) && tags.length > 0) setSuggestedTopics(tags)
+                      } catch { }
+                    })
+                    .catch(() => { })
                 }
                 if (s.chat && !hasChat) {
                   setChatTranscript(s.chat)
@@ -232,7 +259,7 @@ export default function RecordingDetailPage() {
             meetingTitle: job?.meeting_title || '',
             title, folder,
             topics: topics.join(', '),
-            transcript: transcript.slice(0, 3000),
+            transcript: transcript,
             summary: zoomSummary,
             fathomTranscript: context?.fathomMeetings?.map((m: any) => m.transcriptExcerpt).filter(Boolean).join('\n') || '',
             folders: folders.join(', '),
@@ -260,7 +287,7 @@ export default function RecordingDetailPage() {
             meetingTitle: job?.meeting_title || '',
             title, folder,
             topics: topics.join(', '),
-            transcript: transcript.slice(0, 3000),
+            transcript: transcript,
             summary: zoomSummary,
             fathomTranscript: context?.fathomMeetings?.map((m: any) => m.transcriptExcerpt).filter(Boolean).join('\n') || '',
             folders: folders.join(', '),
@@ -389,9 +416,8 @@ export default function RecordingDetailPage() {
               <button onClick={() => setActiveTab('chat')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'chat' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Chat</button>
             </div>
           )}
-          <div className="bg-luxury-gray-5 rounded-lg p-3 max-h-28 overflow-hidden relative">
-            <p className="text-luxury-gray-2 text-xs leading-relaxed">{displayTranscript?.slice(0, 600)}</p>
-            <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-luxury-gray-5 to-transparent rounded-b-lg" />
+          <div className="bg-luxury-gray-5 rounded-lg p-3 max-h-80 overflow-y-auto">
+            <p className="text-luxury-gray-2 text-xs leading-relaxed whitespace-pre-wrap">{displayTranscript}</p>
           </div>
           <p className="text-luxury-gray-3 text-xs mt-2">{(transcript?.length || 0).toLocaleString()} characters</p>
         </div>
