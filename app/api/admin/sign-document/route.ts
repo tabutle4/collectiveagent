@@ -357,46 +357,35 @@ export async function POST(request: NextRequest) {
           </div>
 
           <p style="margin:0 0 14px;font-size:14px;color:#555;">This is a <strong style="color:#C5A278;">Referral Agent</strong> - they do not need Dotloop, transactions platform, or full MLS access.</p>`
-        : `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentName}</strong>. Please complete the following.</p>
+        : `<p style="margin:0 0 16px;font-size:14px;color:#555;">Courtney has co-signed all agreements for <strong style="color:#1a1a1a;">${agentName}</strong>. Complete these steps in order.</p>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Agent Info</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Name: <strong style="color:#1a1a1a;">${agentName}</strong></p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">Personal email: <strong style="color:#1a1a1a;">${agent.email}</strong></p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">License number: <strong style="color:#1a1a1a;">${agent.license_number || 'not on file'}</strong></p>
-            <p style="margin:0;font-size:14px;color:#555;">Office: <strong style="color:#1a1a1a;">${officeValue}</strong></p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Office email: <strong style="color:#1a1a1a;">${officeEmail || 'see M365 note below'}</strong></p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">License: <strong style="color:#1a1a1a;">${agent.license_number || 'not on file'}</strong></p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">Temp password: <code style="background:#f0f0f0;padding:2px 6px;font-size:12px;">${tempPassword}</code></p>
+            ${m365Error ? `<p style="margin:0;font-size:13px;color:#A32D2D;">M365 issue: ${m365Error}</p>` : ''}
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">M365 Account</p>
-            ${m365Error
-              ? `<p style="margin:0 0 6px;font-size:13px;color:#A32D2D;">Account creation failed -- create manually. Error: ${m365Error}</p>`
-              : `<p style="margin:0 0 6px;font-size:14px;color:#555;">Account created: <strong style="color:#1a1a1a;">${officeEmail}</strong></p>
-                 <p style="margin:0 0 6px;font-size:14px;color:#555;">Temp password: <code style="background:#f0f0f0;padding:2px 6px;font-size:12px;">${tempPassword}</code></p>
-                 <p style="margin:0 0 6px;font-size:13px;color:#888;">Force change password on first sign-in is enabled. Send temp password to agent separately.</p>`
-            }
-          </div>
-
-          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Do Manually</p>
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Step 1 &mdash; Do Right Now</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Assign M365 Business Basic license (M365 admin &gt; Users &gt; ${officeEmail || agentName} &gt; Licenses and apps)</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Grant Tara full access to agent mailbox (Exchange admin &gt; Mailboxes &gt; ${officeEmail || agentName} &gt; Manage mailbox delegation)</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Dotloop - create account</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Grant Tara full mailbox access (Exchange admin &gt; Mailboxes &gt; ${officeEmail || agentName} &gt; Manage mailbox delegation)</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Send temp password to agent</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Create Dotloop account</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Submit TREC sponsorship invitation (license: ${agent.license_number || 'not on file'})</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Send W-9 request via Track1099 (email: ${agent.email})</p>
           </div>
 
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Pending - Wait for Agent</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship accepted (license: ${agent.license_number || 'not on file'})</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099 (email: ${agent.email})</p>
-          </div>
-
-          <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
-            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">After TREC and W-9 Are Done</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Transactions platform - create account</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration, NRDS ID, and MLS ID in the app</p>
-            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Configure team and revenue share settings if applicable</p>
-          </div>
-
-          <p style="margin:0 0 14px;font-size:14px;color:#555;">Once all of the above is done, run the <strong style="color:#1a1a1a;">New Agent Automated Onboarding Emails</strong> flow in Power Automate.</p>`
+            <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Step 2 &mdash; After TREC and W-9 Are Confirmed</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration in the app</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Create transactions platform account</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Configure team and revenue share settings if applicable</p>
+            <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Run New Agent Automated Onboarding Emails in Power Automate</p>
+          </div>`
 
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',

@@ -1046,14 +1046,18 @@ const checkout = new window.Payload.Checkout({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS ID *</label>
-                    <input
-                      name="mls_id"
-                      value={joinForm.mls_id}
-                      onChange={handleChange}
-                      required
-                      className="input-luxury"
-                    />
+                    <label className="block text-xs text-luxury-gray-3 mb-1.5">MLS ID {joinForm.association_status_on_join === 'previous_member' ? '*' : ''}</label>
+                    {joinForm.association_status_on_join === 'previous_member' ? (
+                      <input
+                        name="mls_id"
+                        value={joinForm.mls_id}
+                        onChange={handleChange}
+                        required
+                        className="input-luxury"
+                      />
+                    ) : (
+                      <p className="text-xs text-luxury-gray-3 py-2">Not applicable yet for new agents -- will be assigned after MLS setup</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-luxury-gray-3 mb-1.5">
