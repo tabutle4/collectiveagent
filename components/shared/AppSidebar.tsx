@@ -780,7 +780,8 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           <button
             onClick={() => {
               if (navigator.share) {
-                navigator.share({ url: window.location.href })
+                const url = window.location.origin + window.location.pathname + window.location.search
+                navigator.share({ url })
               }
             }}
             className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors active:bg-luxury-gray-5/40"
