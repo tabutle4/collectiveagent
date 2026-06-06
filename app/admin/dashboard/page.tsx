@@ -653,7 +653,7 @@ export default function AdminDashboard() {
             <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
               Overview
             </h2>
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
               <div className="inner-card">
                 <p className="text-xs font-semibold text-luxury-gray-3 mb-1">New Prospects</p>
                 <p className="text-2xl font-semibold text-luxury-accent">{stats.new}</p>

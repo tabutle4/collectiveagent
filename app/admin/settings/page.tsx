@@ -1150,7 +1150,7 @@ export default function SettingsPage() {
                         </div>
 
                         {editingPlan.has_cap && (
-                          <div className="grid grid-cols-3 gap-4 pl-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pl-6">
                             <div>
                               <label className="field-label">Cap Amount</label>
                               <div className="relative">

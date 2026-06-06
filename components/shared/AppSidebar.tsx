@@ -17,7 +17,9 @@ import {
   Settings,
   Menu,
   X,
+  ChevronLeft,
   ChevronRight,
+  RefreshCw,
   Users,
   UserPlus,
   FileText,
@@ -761,9 +763,35 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           </p>
         </div>
 
-        <div className="px-4 md:px-6 pt-6 pb-6">{children}</div>
+        <div className="px-4 md:px-6 pt-6 pb-20 md:pb-6">{children}</div>
       </div>
 
+      {/* Mobile bottom nav bar - Back / Menu / Reload */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-luxury-light border-t border-luxury-gray-5/50 flex items-center justify-around px-2 py-2" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
+          <button
+            onClick={() => window.history.back()}
+            className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors active:bg-luxury-gray-5/40"
+          >
+            <ChevronLeft size={20} strokeWidth={1.5} />
+            <span className="text-[10px] font-medium tracking-wide">Back</span>
+          </button>
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors active:bg-luxury-gray-5/40"
+          >
+            <Menu size={20} strokeWidth={1.5} />
+            <span className="text-[10px] font-medium tracking-wide">Menu</span>
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors active:bg-luxury-gray-5/40"
+          >
+            <RefreshCw size={20} strokeWidth={1.5} />
+            <span className="text-[10px] font-medium tracking-wide">Reload</span>
+          </button>
+        </div>
+      )}
       <ContactDrawer open={contactOpen} onClose={() => setContactOpen(false)} />
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} isStaff={isStaff} />
     </div>

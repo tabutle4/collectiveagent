@@ -1089,44 +1089,46 @@ export default function AdminBillingPage() {
                                           </p>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-2 ml-4">
+                                      <div className="flex flex-col items-end gap-1.5 ml-2 flex-shrink-0">
                                         <p className="text-sm font-semibold text-orange-600">
                                           {formatCurrency(
                                             record.amount_remaining ?? record.amount_owed
                                           )}
                                         </p>
-                                        <button
-                                          onClick={() => {
-                                            setEditingRecord(record.id)
-                                            setEditDesc(record.description || '')
-                                            setEditAmount(String(record.amount_owed))
-                                            setEditDueDate(
-                                              record.due_date ||
-                                                new Date().toISOString().split('T')[0]
-                                            )
-                                          }}
-                                          className="text-xs text-luxury-gray-3 hover:text-luxury-accent"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => deleteRecord(agent.id, record.id)}
-                                          className="text-xs text-red-400 hover:text-red-600"
-                                        >
-                                          Delete
-                                        </button>
-                                        {agent.payload_payee_id && !isInvoiced && (
+                                        <div className="flex flex-wrap justify-end gap-1.5">
                                           <button
-                                            onClick={() => sendDebtInvoice(agent.id, record)}
-                                            disabled={sending === `debt-${record.id}`}
-                                            className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                                            onClick={() => {
+                                              setEditingRecord(record.id)
+                                              setEditDesc(record.description || '')
+                                              setEditAmount(String(record.amount_owed))
+                                              setEditDueDate(
+                                                record.due_date ||
+                                                  new Date().toISOString().split('T')[0]
+                                              )
+                                            }}
+                                            className="text-xs text-luxury-gray-3 hover:text-luxury-accent"
                                           >
-                                            <Send size={11} />
-                                            {sending === `debt-${record.id}`
-                                              ? 'Sending...'
-                                              : 'Invoice'}
+                                            Edit
                                           </button>
-                                        )}
+                                          <button
+                                            onClick={() => deleteRecord(agent.id, record.id)}
+                                            className="text-xs text-red-400 hover:text-red-600"
+                                          >
+                                            Delete
+                                          </button>
+                                          {agent.payload_payee_id && !isInvoiced && (
+                                            <button
+                                              onClick={() => sendDebtInvoice(agent.id, record)}
+                                              disabled={sending === `debt-${record.id}`}
+                                              className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                                            >
+                                              <Send size={11} />
+                                              {sending === `debt-${record.id}`
+                                                ? 'Sending...'
+                                                : 'Invoice'}
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   )}
@@ -1282,35 +1284,37 @@ export default function AdminBillingPage() {
                                           </div>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-2 ml-4">
+                                      <div className="flex flex-col items-end gap-1.5 ml-2 flex-shrink-0">
                                         <p className="text-sm font-semibold text-luxury-gray-1">
                                           {formatCurrency(inv.amount_due ?? inv.amount)}
                                         </p>
-                                        <button
-                                          onClick={() => sendInvoice(agent.id, inv.id)}
-                                          disabled={sending === `invoice-${inv.id}`}
-                                          className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
-                                        >
-                                          <Send size={11} />
-                                          {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
-                                        </button>
-                                        <button
-                                          onClick={() =>
-                                            setShowMarkPaidForm(
-                                              showMarkPaidForm === inv.id ? null : inv.id
-                                            )
-                                          }
-                                          className="btn btn-secondary text-xs flex items-center gap-1"
-                                        >
-                                          <CheckCircle size={11} />
-                                          {showMarkPaidForm === inv.id ? 'Cancel' : 'Mark Paid'}
-                                        </button>
-                                        <span
-                                          title="To void this invoice, delete it manually in the Payload dashboard."
-                                          className="text-xs text-luxury-gray-3 cursor-help"
-                                        >
-                                          Void in Payload ⓘ
-                                        </span>
+                                        <div className="flex flex-wrap justify-end gap-1.5">
+                                          <button
+                                            onClick={() => sendInvoice(agent.id, inv.id)}
+                                            disabled={sending === `invoice-${inv.id}`}
+                                            className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                                          >
+                                            <Send size={11} />
+                                            {sending === `invoice-${inv.id}` ? 'Sending...' : 'Send'}
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              setShowMarkPaidForm(
+                                                showMarkPaidForm === inv.id ? null : inv.id
+                                              )
+                                            }
+                                            className="btn btn-secondary text-xs flex items-center gap-1"
+                                          >
+                                            <CheckCircle size={11} />
+                                            {showMarkPaidForm === inv.id ? 'Cancel' : 'Mark Paid'}
+                                          </button>
+                                          <span
+                                            title="To void this invoice, delete it manually in the Payload dashboard."
+                                            className="text-xs text-luxury-gray-3 cursor-help"
+                                          >
+                                            Void in Payload ⓘ
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                     {showMarkPaidForm === inv.id && (
