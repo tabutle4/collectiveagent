@@ -307,6 +307,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [isPwa, setIsPwa] = useState(false)
   // Which accordion group is currently expanded. null means all collapsed.
   const [openGroup, setOpenGroup] = useState<string | null>(null)
 
@@ -434,6 +435,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       const checkMobile = () => setIsMobile(window.innerWidth < 768)
       checkMobile()
       window.addEventListener('resize', checkMobile)
+      setIsPwa(window.matchMedia('(display-mode: standalone)').matches)
       return () => window.removeEventListener('resize', checkMobile)
     }
   }, [])
@@ -768,7 +770,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       </div>
 
       {/* Mobile bottom nav bar - Back / Menu / Reload */}
-      {isMobile && (
+      {isMobile && isPwa && (
         <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-luxury-light border-t border-luxury-gray-5/50 flex items-center justify-around px-2 py-2" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
           <button
             onClick={() => window.history.back()}
