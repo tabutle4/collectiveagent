@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 
 const authHeader = () =>
@@ -14,10 +14,10 @@ export async function POST(
 
   try {
     const { id } = await params
-    const supabase = await createClient()
+    // using supabaseAdmin directly
 
     // Get landlord
-    const { data: landlord, error: fetchError } = await supabase
+    const { data: landlord, error: fetchError } = await supabaseAdmin
       .from('landlords')
       .select('id, first_name, last_name, email, payload_activation_id, bank_status')
       .eq('id', id)
@@ -66,7 +66,7 @@ export async function POST(
     }
 
     // Update landlord with activation ID and status
-    await supabase
+    await supabaseAdmin
       .from('landlords')
       .update({
         payload_activation_id: activationId,

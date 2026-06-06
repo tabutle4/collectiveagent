@@ -1,35 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
-// POST - Handle landlord bank activation webhook from Payload
+export const dynamic = 'force-dynamic'
+
+// POST - Handle payment_activation:status webhook from Payload
+// Trigger format: { trigger: 'payment_activation:status', triggered_on: { id, object, value } }
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, data } = body
+    const { trigger, triggered_on } = body
 
-    console.log('PM landlord activation webhook received:', type, data?.id)
+    console.log('PM landlord activation webhook received:', trigger, triggered_on?.id, triggered_on?.value)
 
-    const supabase = createClient()
+    if (trigger !== 'payment_activation:status' || !triggered_on?.id) {
+      return NextResponse.json({ received: true })
+    }
 
-    // Bank account activation accepted
-    if (type === 'payment_activation.accepted' && data?.id) {
-      // Find landlord by activation ID
-      const { data: landlord } = await supabase
-        .from('landlords')
-        .select('id, email')
-        .eq('payload_activation_id', data.id)
-        .single()
+    const activationId = triggered_on.id
+    const status = triggered_on.value // 'requested', 'submitted', 'accepted', 'declined'
 
-      if (!landlord) {
-        console.log('No landlord found for activation:', data.id)
-        return NextResponse.json({ received: true })
-      }
+    // Find landlord by activation ID
+    const { data: landlord } = await supabaseAdmin
+      .from('landlords')
+      .select('id, email, w9_status, status')
+      .eq('payload_activation_id', activationId)
+      .single()
 
-      // Update landlord with payment method and connected status
-      await supabase
+    if (!landlord) {
+      console.log('No landlord found for activation:', activationId)
+      return NextResponse.json({ received: true })
+    }
+
+    if (status === 'accepted') {
+      // Fetch the full activation to get payment_method_id
+      const res = await fetch(`https://api.payload.com/payment_activations/${activationId}`, {
+        headers: {
+          Authorization: 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64'),
+        },
+      })
+      const activation = res.ok ? await res.json() : null
+      const paymentMethodId = activation?.payment_method_id || null
+
+      await supabaseAdmin
         .from('landlords')
         .update({
-          payload_payment_method_id: data.payment_method_id,
+          payload_payment_method_id: paymentMethodId,
           bank_status: 'connected',
           bank_connected_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -38,51 +53,22 @@ export async function POST(request: NextRequest) {
 
       console.log('Landlord bank connected:', landlord.email)
 
-      // Check if landlord can be activated (W9 + bank both complete)
-      const { data: updatedLandlord } = await supabase
-        .from('landlords')
-        .select('w9_status, bank_status, status')
-        .eq('id', landlord.id)
-        .single()
-
-      if (
-        updatedLandlord &&
-        updatedLandlord.w9_status === 'completed' &&
-        updatedLandlord.bank_status === 'connected' &&
-        updatedLandlord.status === 'onboarding'
-      ) {
-        // Activate landlord
-        await supabase
+      // Activate landlord if W-9 also complete
+      if (landlord.w9_status === 'completed' && landlord.status === 'onboarding') {
+        await supabaseAdmin
           .from('landlords')
-          .update({
-            status: 'active',
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'active', updated_at: new Date().toISOString() })
           .eq('id', landlord.id)
-
         console.log('Landlord activated:', landlord.email)
       }
     }
 
-    // Bank account activation failed/declined
-    if (type === 'payment_activation.declined' && data?.id) {
-      const { data: landlord } = await supabase
+    if (status === 'declined') {
+      await supabaseAdmin
         .from('landlords')
-        .select('id, email')
-        .eq('payload_activation_id', data.id)
-        .single()
-
-      if (landlord) {
-        await supabase
-          .from('landlords')
-          .update({
-            bank_status: 'failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', landlord.id)
-
-        console.log('Landlord bank activation failed:', landlord.email)
-      }
+        .update({ bank_status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', landlord.id)
+      console.log('Landlord bank activation declined:', landlord.email)
     }
 
     return NextResponse.json({ received: true })

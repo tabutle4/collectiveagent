@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 
 const authHeader = () =>
@@ -17,10 +17,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const supabase = await createClient()
+    // using supabaseAdmin directly
 
     // Verify session
-    const { data: session } = await supabase
+    const { data: session } = await supabaseAdmin
       .from('pm_sessions')
       .select('user_id, user_type, expires_at')
       .eq('session_token', sessionToken)
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const landlordId = session.user_id
 
     // Get landlord
-    const { data: landlord, error: fetchError } = await supabase
+    const { data: landlord, error: fetchError } = await supabaseAdmin
       .from('landlords')
       .select('id, first_name, last_name, email, bank_status, payload_activation_id')
       .eq('id', landlordId)
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update landlord with activation ID and status
-    await supabase
+    await supabaseAdmin
       .from('landlords')
       .update({
         payload_activation_id: activationId,
