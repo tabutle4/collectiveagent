@@ -233,7 +233,7 @@ export default function AdminOnboardingPage() {
       <h1 className="page-title mb-6">ONBOARDING</h1>
 
       {/* Stage summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         {(['setup', 'onboarding', 'complete'] as StageFilter[]).map(stage => {
           if (stage === 'all') return null
           const s = STAGE_LABELS[stage]

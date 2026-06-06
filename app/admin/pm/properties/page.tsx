@@ -93,7 +93,7 @@ export default function PropertiesPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
           <ArrowLeft size={20} />
@@ -143,71 +143,115 @@ export default function PropertiesPage() {
             </Link>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="th-luxury">
-                <th className="text-left py-3 px-4">Property</th>
-                <th className="text-left py-3 px-4">Landlord</th>
-                <th className="text-left py-3 px-4">Current Tenant</th>
-                <th className="text-left py-3 px-4">Units</th>
-                <th className="text-left py-3 px-4">Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
               {properties.map((property) => {
                 const activeLease = getActiveLease(property)
                 return (
-                  <tr
+                  <div
                     key={property.id}
-                    className="tr-luxury-clickable"
+                    className="inner-card cursor-pointer"
                     onClick={() => router.push(`/admin/pm/properties/${property.id}`)}
                   >
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-luxury-gray-1">
-                        {property.property_address}
-                        {property.unit && ` ${property.unit}`}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                          {property.property_address}
+                          {property.unit && ` ${property.unit}`}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3">{property.city}, {property.state} {property.zip}</p>
                       </div>
-                      <div className="text-xs text-luxury-gray-3">
-                        {property.city}, {property.state} {property.zip}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {property.landlords ? (
-                        <Link
-                          href={`/admin/pm/landlords/${property.landlord_id}`}
-                          className="text-luxury-accent hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {property.landlords.first_name} {property.landlords.last_name}
-                        </Link>
-                      ) : (
-                        <span className="text-luxury-gray-3">-</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {activeLease?.tenants ? (
-                        <Link
-                          href={`/admin/pm/tenants/${activeLease.id}`}
-                          className="text-luxury-accent hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {activeLease.tenants.first_name} {activeLease.tenants.last_name}
-                        </Link>
-                      ) : (
-                        <span className="text-luxury-gray-3">Vacant</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
-                      {property.unit_count}
-                    </td>
-                    <td className="py-3 px-4">
                       {getStatusBadge(property.status)}
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <div>
+                        {property.landlords && (
+                          <p className="text-luxury-gray-2">
+                            Landlord: <span className="text-luxury-accent">{property.landlords.first_name} {property.landlords.last_name}</span>
+                          </p>
+                        )}
+                        <p className="text-luxury-gray-3 mt-0.5">
+                          {activeLease?.tenants
+                            ? `Tenant: ${activeLease.tenants.first_name} ${activeLease.tenants.last_name}`
+                            : 'Vacant'}
+                        </p>
+                      </div>
+                      <p className="text-luxury-gray-3">{property.unit_count} unit{property.unit_count !== 1 ? 's' : ''}</p>
+                    </div>
+                  </div>
                 )
               })}
-            </tbody>
-          </table>
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <table className="w-full">
+                <thead>
+                  <tr className="th-luxury">
+                    <th className="text-left py-3 px-4">Property</th>
+                    <th className="text-left py-3 px-4">Landlord</th>
+                    <th className="text-left py-3 px-4">Current Tenant</th>
+                    <th className="text-left py-3 px-4">Units</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {properties.map((property) => {
+                    const activeLease = getActiveLease(property)
+                    return (
+                      <tr
+                        key={property.id}
+                        className="tr-luxury-clickable"
+                        onClick={() => router.push(`/admin/pm/properties/${property.id}`)}
+                      >
+                        <td className="py-3 px-4">
+                          <div className="font-medium text-luxury-gray-1">
+                            {property.property_address}
+                            {property.unit && ` ${property.unit}`}
+                          </div>
+                          <div className="text-xs text-luxury-gray-3">
+                            {property.city}, {property.state} {property.zip}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {property.landlords ? (
+                            <Link
+                              href={`/admin/pm/landlords/${property.landlord_id}`}
+                              className="text-luxury-accent hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {property.landlords.first_name} {property.landlords.last_name}
+                            </Link>
+                          ) : (
+                            <span className="text-luxury-gray-3">-</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {activeLease?.tenants ? (
+                            <Link
+                              href={`/admin/pm/tenants/${activeLease.id}`}
+                              className="text-luxury-accent hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {activeLease.tenants.first_name} {activeLease.tenants.last_name}
+                            </Link>
+                          ) : (
+                            <span className="text-luxury-gray-3">Vacant</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-sm">
+                          {property.unit_count}
+                        </td>
+                        <td className="py-3 px-4">
+                          {getStatusBadge(property.status)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -331,42 +331,74 @@ export default function AllPayoutsPage() {
           ) : rows.length === 0 ? (
             <p className="text-center py-12 text-luxury-gray-3">No payouts found</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-luxury-gray-5">
-                  <th className="th-luxury text-left">Type</th>
-                  <th className="th-luxury text-left">Payee</th>
-                  <th className="th-luxury text-left">Property</th>
-                  <th className="th-luxury text-left">Transaction</th>
-                  <th className="th-luxury text-right">Amount</th>
-                  <th className="th-luxury text-center">Status</th>
-                  <th className="th-luxury text-left">Date</th>
-                  <th className="th-luxury text-left">Method</th>
-                  <th className="th-luxury"></th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-2">
                 {rows.map((row) => (
-                  <tr key={`${row.type}-${row.id}`} className="tr-luxury">
-                    <td className="py-3 px-4">{getTypeBadge(row.type)}</td>
-                    <td className="py-3 px-4 font-medium text-luxury-gray-1">{row.payee}</td>
-                    <td className="py-3 px-4 text-luxury-gray-2 max-w-[200px] truncate">{row.address}</td>
-                    <td className="py-3 px-4 text-luxury-gray-3">{row.transaction_type}</td>
-                    <td className="py-3 px-4 text-right font-medium text-luxury-gray-1">{formatCurrency(row.amount)}</td>
-                    <td className="py-3 px-4 text-center">{getStatusBadge(row.payment_status, row)}</td>
-                    <td className="py-3 px-4 text-luxury-gray-3">{formatDate(row.payment_date)}</td>
-                    <td className="py-3 px-4 text-luxury-gray-3 uppercase text-xs">{row.payment_method || '-'}</td>
-                    <td className="py-3 px-4">
+                  <div key={`${row.type}-${row.id}`} className="inner-card">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate">{row.payee}</p>
+                        {row.address && (
+                          <p className="text-xs text-luxury-gray-3 truncate">{row.address}</p>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-luxury-gray-1 flex-shrink-0">{formatCurrency(row.amount)}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      {getTypeBadge(row.type)}
+                      {getStatusBadge(row.payment_status, row)}
+                      {row.payment_date && <span className="text-luxury-gray-3">{formatDate(row.payment_date)}</span>}
+                      {row.payment_method && <span className="text-luxury-gray-3 uppercase">{row.payment_method}</span>}
                       {row.transaction_id && (
-                        <Link href={`/admin/transactions/${row.transaction_id}`} className="text-luxury-accent hover:underline">
-                          <ExternalLink size={14} />
+                        <Link href={`/admin/transactions/${row.transaction_id}`} className="text-luxury-accent hover:underline flex items-center gap-0.5">
+                          <ExternalLink size={11} /> View
                         </Link>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-luxury-gray-5">
+                      <th className="th-luxury text-left">Type</th>
+                      <th className="th-luxury text-left">Payee</th>
+                      <th className="th-luxury text-left">Property</th>
+                      <th className="th-luxury text-left">Transaction</th>
+                      <th className="th-luxury text-right">Amount</th>
+                      <th className="th-luxury text-center">Status</th>
+                      <th className="th-luxury text-left">Date</th>
+                      <th className="th-luxury text-left">Method</th>
+                      <th className="th-luxury"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={`${row.type}-${row.id}`} className="tr-luxury">
+                        <td className="py-3 px-4">{getTypeBadge(row.type)}</td>
+                        <td className="py-3 px-4 font-medium text-luxury-gray-1">{row.payee}</td>
+                        <td className="py-3 px-4 text-luxury-gray-2 max-w-[200px] truncate">{row.address}</td>
+                        <td className="py-3 px-4 text-luxury-gray-3">{row.transaction_type}</td>
+                        <td className="py-3 px-4 text-right font-medium text-luxury-gray-1">{formatCurrency(row.amount)}</td>
+                        <td className="py-3 px-4 text-center">{getStatusBadge(row.payment_status, row)}</td>
+                        <td className="py-3 px-4 text-luxury-gray-3">{formatDate(row.payment_date)}</td>
+                        <td className="py-3 px-4 text-luxury-gray-3 uppercase text-xs">{row.payment_method || '-'}</td>
+                        <td className="py-3 px-4">
+                          {row.transaction_id && (
+                            <Link href={`/admin/transactions/${row.transaction_id}`} className="text-luxury-accent hover:underline">
+                              <ExternalLink size={14} />
+                            </Link>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </div>

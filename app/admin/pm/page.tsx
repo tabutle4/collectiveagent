@@ -172,7 +172,7 @@ export default function PMDashboardPage() {
             </h2>
             
             {/* Stat Cards */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <div className="inner-card">
                 <p className="text-xs font-semibold text-luxury-gray-3 mb-1">Landlords</p>
                 <p className="text-2xl font-semibold text-luxury-accent">{stats.activeLandlords}</p>

@@ -685,7 +685,21 @@ export default function ProfilePage({
             ) : Object.entries(grouped).map(([planType, planSplits]: any) => (
               <div key={planType}>
                 <p className="text-xs font-semibold text-luxury-gray-2 mb-2">{PLAN_TYPE_LABELS[planType] || planType}</p>
-                <table className="w-full text-xs">
+                {/* Mobile: stacked rows */}
+                <div className="md:hidden space-y-2">
+                  {planSplits.map((s: any) => (
+                    <div key={s.id} className="flex items-center justify-between text-xs py-1.5 border-t border-luxury-gray-5/30">
+                      <span className="text-luxury-gray-2">{LEAD_SOURCE_LABELS[s.lead_source] || s.lead_source}</span>
+                      <div className="flex items-center gap-3 text-right">
+                        <span className="font-medium">{s.agent_pct}%</span>
+                        {s.team_lead_pct > 0 && <span className="text-luxury-gray-3">TL {s.team_lead_pct}%</span>}
+                        <span className="text-luxury-gray-3">Firm {s.firm_pct}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop: full table */}
+                <table className="hidden md:table w-full text-xs">
                   <thead>
                     <tr className="text-left text-luxury-gray-3">
                       <th className="pb-2 font-medium">Lead Source</th>

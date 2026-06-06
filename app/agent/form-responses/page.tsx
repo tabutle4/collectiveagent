@@ -216,220 +216,200 @@ export default function AgentFormResponsesPage() {
           <div className="container-card">
             {/* Active Listings */}
             {activeTab === 'active' && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Date
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Property Address
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Client Name
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Type
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeListings.map(listing => (
-                      <tr
-                        key={listing.id}
-                        onClick={() => handleRowClick(listing)}
-                        className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
-                      >
-                        <td className="py-3 px-4 text-sm">{formatDate(listing.created_at)}</td>
-                        <td className="py-3 px-4 text-sm">{listing.property_address}</td>
-                        <td className="py-3 px-4 text-sm">{listing.client_names}</td>
-                        <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
-                        <td className="py-3 px-4 text-sm">
-                          <span
-                            className={`px-2 py-1 text-xs rounded capitalize ${
-                              listing.status === 'active'
-                                ? 'bg-green-100 text-green-800'
-                                : listing.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : listing.status === 'sold'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : listing.status === 'cancelled'
-                                      ? 'bg-red-100 text-red-800'
-                                      : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {listing.status}
-                          </span>
-                        </td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {activeListings.map(listing => (
+                    <div key={listing.id} className="inner-card cursor-pointer" onClick={() => handleRowClick(listing)}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate flex-1">{listing.property_address}</p>
+                      <span className={`px-2 py-0.5 text-xs rounded capitalize ${listing.status === 'active' ? 'bg-green-100 text-green-800' : listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : listing.status === 'sold' ? 'bg-blue-100 text-blue-800' : listing.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{listing.status}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-luxury-gray-3">
+                        <span>{formatDate(listing.created_at)}</span>
+                        <div className="flex gap-2">
+                          {listing.client_names && <span>{listing.client_names}</span>}
+                          <span className="capitalize">{listing.transaction_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {activeListings.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No active listings</p></div>}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-luxury-gray-5">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {activeListings.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-luxury-gray-2">No active listings</p>
-                  </div>
-                )}
-              </div>
+                    </thead>
+                    <tbody>
+                      {activeListings.map(listing => (
+                        <tr key={listing.id} onClick={() => handleRowClick(listing)} className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors">
+                          <td className="py-3 px-4 text-sm">{formatDate(listing.created_at)}</td>
+                          <td className="py-3 px-4 text-sm">{listing.property_address}</td>
+                          <td className="py-3 px-4 text-sm">{listing.client_names}</td>
+                          <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+                          <td className="py-3 px-4 text-sm"><span className={`px-2 py-1 text-xs rounded capitalize ${listing.status === 'active' ? 'bg-green-100 text-green-800' : listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : listing.status === 'sold' ? 'bg-blue-100 text-blue-800' : listing.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{listing.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {activeListings.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No active listings</p></div>}
+                </div>
+              </>
             )}
 
             {/* Pending Transactions */}
             {activeTab === 'pending' && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Date
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Property Address
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Client Name
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Type
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingTransactions.map(listing => (
-                      <tr
-                        key={listing.id}
-                        onClick={() => handleRowClick(listing)}
-                        className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
-                      >
-                        <td className="py-3 px-4 text-sm">{formatDate(listing.created_at)}</td>
-                        <td className="py-3 px-4 text-sm">{listing.property_address}</td>
-                        <td className="py-3 px-4 text-sm">{listing.client_names}</td>
-                        <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
-                        <td className="py-3 px-4 text-sm">
-                          <span
-                            className={`px-2 py-1 text-xs rounded capitalize ${
-                              listing.status === 'active'
-                                ? 'bg-green-100 text-green-800'
-                                : listing.status === 'pending'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : listing.status === 'sold'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : listing.status === 'cancelled'
-                                      ? 'bg-red-100 text-red-800'
-                                      : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {listing.status}
-                          </span>
-                        </td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {pendingTransactions.map(listing => (
+                    <div key={listing.id} className="inner-card cursor-pointer" onClick={() => handleRowClick(listing)}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate flex-1">{listing.property_address}</p>
+                      <span className={`px-2 py-0.5 text-xs rounded capitalize ${listing.status === 'active' ? 'bg-green-100 text-green-800' : listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : listing.status === 'sold' ? 'bg-blue-100 text-blue-800' : listing.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{listing.status}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-luxury-gray-3">
+                        <span>{formatDate(listing.created_at)}</span>
+                        <div className="flex gap-2">
+                          {listing.client_names && <span>{listing.client_names}</span>}
+                          <span className="capitalize">{listing.transaction_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {pendingTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No pending transactions</p></div>}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-luxury-gray-5">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {pendingTransactions.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-luxury-gray-2">No pending transactions</p>
-                  </div>
-                )}
-              </div>
+                    </thead>
+                    <tbody>
+                      {pendingTransactions.map(listing => (
+                        <tr key={listing.id} onClick={() => handleRowClick(listing)} className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors">
+                          <td className="py-3 px-4 text-sm">{formatDate(listing.created_at)}</td>
+                          <td className="py-3 px-4 text-sm">{listing.property_address}</td>
+                          <td className="py-3 px-4 text-sm">{listing.client_names}</td>
+                          <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+                          <td className="py-3 px-4 text-sm"><span className={`px-2 py-1 text-xs rounded capitalize ${listing.status === 'active' ? 'bg-green-100 text-green-800' : listing.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : listing.status === 'sold' ? 'bg-blue-100 text-blue-800' : listing.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{listing.status}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {pendingTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No pending transactions</p></div>}
+                </div>
+              </>
             )}
 
             {/* Closed Transactions */}
             {activeTab === 'closed' && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Closed Date
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Property Address
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Client Name
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Type
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {closedTransactions.map(listing => (
-                      <tr
-                        key={listing.id}
-                        onClick={() => handleRowClick(listing)}
-                        className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
-                      >
-                        <td className="py-3 px-4 text-sm">
-                          {formatDate(
-                            listing.closed_date || listing.updated_at || listing.created_at
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-sm">{listing.property_address}</td>
-                        <td className="py-3 px-4 text-sm">{listing.client_names}</td>
-                        <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {closedTransactions.map(listing => (
+                    <div key={listing.id} className="inner-card cursor-pointer" onClick={() => handleRowClick(listing)}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate flex-1">{listing.property_address}</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-luxury-gray-3">
+                        <span>{formatDate(listing.closed_date || listing.updated_at || listing.created_at)}</span>
+                        <div className="flex gap-2">
+                          {listing.client_names && <span>{listing.client_names}</span>}
+                          <span className="capitalize">{listing.transaction_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {closedTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No closed transactions</p></div>}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-luxury-gray-5">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Closed Date</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {closedTransactions.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-luxury-gray-2">No closed transactions</p>
-                  </div>
-                )}
-              </div>
+                    </thead>
+                    <tbody>
+                      {closedTransactions.map(listing => (
+                        <tr key={listing.id} onClick={() => handleRowClick(listing)} className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors">
+                          <td className="py-3 px-4 text-sm">{formatDate(listing.closed_date || listing.updated_at || listing.created_at)}</td>
+                          <td className="py-3 px-4 text-sm">{listing.property_address}</td>
+                          <td className="py-3 px-4 text-sm">{listing.client_names}</td>
+                          <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {closedTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No closed transactions</p></div>}
+                </div>
+              </>
             )}
 
             {/* Cancelled Transactions */}
             {activeTab === 'cancelled' && (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-luxury-gray-5">
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Date
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Property Address
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Client Name
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        Type
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cancelledTransactions.map(listing => (
-                      <tr
-                        key={listing.id}
-                        onClick={() => handleRowClick(listing)}
-                        className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors"
-                      >
-                        <td className="py-3 px-4 text-sm">
-                          {formatDate(listing.updated_at || listing.created_at)}
-                        </td>
-                        <td className="py-3 px-4 text-sm">{listing.property_address}</td>
-                        <td className="py-3 px-4 text-sm">{listing.client_names}</td>
-                        <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {cancelledTransactions.map(listing => (
+                    <div key={listing.id} className="inner-card cursor-pointer" onClick={() => handleRowClick(listing)}>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate flex-1">{listing.property_address}</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs text-luxury-gray-3">
+                        <span>{formatDate(listing.updated_at || listing.created_at)}</span>
+                        <div className="flex gap-2">
+                          {listing.client_names && <span>{listing.client_names}</span>}
+                          <span className="capitalize">{listing.transaction_type}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {cancelledTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No cancelled transactions</p></div>}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-luxury-gray-5">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Date</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Property Address</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Client Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">Type</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {cancelledTransactions.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-luxury-gray-2">No cancelled transactions</p>
-                  </div>
-                )}
-              </div>
+                    </thead>
+                    <tbody>
+                      {cancelledTransactions.map(listing => (
+                        <tr key={listing.id} onClick={() => handleRowClick(listing)} className="border-b border-luxury-gray-5 hover:bg-luxury-light cursor-pointer transition-colors">
+                          <td className="py-3 px-4 text-sm">{formatDate(listing.updated_at || listing.created_at)}</td>
+                          <td className="py-3 px-4 text-sm">{listing.property_address}</td>
+                          <td className="py-3 px-4 text-sm">{listing.client_names}</td>
+                          <td className="py-3 px-4 text-sm capitalize">{listing.transaction_type}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {cancelledTransactions.length === 0 && <div className="text-center py-12"><p className="text-luxury-gray-2">No cancelled transactions</p></div>}
+                </div>
+              </>
             )}
           </div>
         )}

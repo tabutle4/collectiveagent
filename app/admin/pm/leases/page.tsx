@@ -117,7 +117,7 @@ export default function LeasesPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <Link href="/admin/pm" className="text-luxury-gray-3 hover:text-luxury-gray-1">
           <ArrowLeft size={20} />
@@ -168,66 +168,113 @@ export default function LeasesPage() {
             </Link>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="th-luxury">
-                <th className="text-left py-3 px-4">Property</th>
-                <th className="text-left py-3 px-4">Tenant</th>
-                <th className="text-left py-3 px-4">Lease Term</th>
-                <th className="text-right py-3 px-4">Rent</th>
-                <th className="text-left py-3 px-4">Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
               {leases.map((lease) => (
-                <tr
+                <div
                   key={lease.id}
-                  className="tr-luxury-clickable"
+                  className="inner-card cursor-pointer"
                   onClick={() => router.push(`/admin/pm/leases/${lease.id}`)}
                 >
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-luxury-gray-1">
-                      {lease.managed_properties?.property_address}
-                      {lease.managed_properties?.unit && ` ${lease.managed_properties.unit}`}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                        {lease.managed_properties?.property_address}
+                        {lease.managed_properties?.unit && ` ${lease.managed_properties.unit}`}
+                      </p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {lease.managed_properties?.city}, {lease.managed_properties?.state}
+                      </p>
                     </div>
-                    <div className="text-xs text-luxury-gray-3">
-                      {lease.managed_properties?.city}, {lease.managed_properties?.state}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    {lease.tenants ? (
-                      <div>
-                        <div className="font-medium text-luxury-gray-1">
-                          {lease.tenants.first_name} {lease.tenants.last_name}
-                        </div>
-                        <div className="text-xs text-luxury-gray-3">{lease.tenants.email}</div>
-                      </div>
-                    ) : (
-                      <span className="text-luxury-gray-3">-</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm text-luxury-gray-1">
-                      {formatDate(lease.lease_start)} - {formatDate(lease.lease_end)}
-                    </div>
-                    {isExpiringSoon(lease) && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Calendar size={12} className="text-amber-600" />
-                        <span className="text-xs text-amber-600">Expiring soon</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <span className="font-medium text-luxury-gray-1">{formatMoney(lease.monthly_rent)}</span>
-                    <span className="text-xs text-luxury-gray-3">/mo</span>
-                  </td>
-                  <td className="py-3 px-4">
                     {getStatusBadge(lease.status)}
-                  </td>
-                </tr>
+                  </div>
+                  {lease.tenants && (
+                    <p className="text-xs text-luxury-gray-2 mb-2">
+                      {lease.tenants.first_name} {lease.tenants.last_name}
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-luxury-gray-3">{formatDate(lease.lease_start)} - {formatDate(lease.lease_end)}</p>
+                      {isExpiringSoon(lease) && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Calendar size={11} className="text-amber-600" />
+                          <span className="text-xs text-amber-600">Expiring soon</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-luxury-gray-1">
+                      {formatMoney(lease.monthly_rent)}<span className="text-xs font-normal text-luxury-gray-3">/mo</span>
+                    </p>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <table className="w-full">
+                <thead>
+                  <tr className="th-luxury">
+                    <th className="text-left py-3 px-4">Property</th>
+                    <th className="text-left py-3 px-4">Tenant</th>
+                    <th className="text-left py-3 px-4">Lease Term</th>
+                    <th className="text-right py-3 px-4">Rent</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leases.map((lease) => (
+                    <tr
+                      key={lease.id}
+                      className="tr-luxury-clickable"
+                      onClick={() => router.push(`/admin/pm/leases/${lease.id}`)}
+                    >
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-luxury-gray-1">
+                          {lease.managed_properties?.property_address}
+                          {lease.managed_properties?.unit && ` ${lease.managed_properties.unit}`}
+                        </div>
+                        <div className="text-xs text-luxury-gray-3">
+                          {lease.managed_properties?.city}, {lease.managed_properties?.state}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {lease.tenants ? (
+                          <div>
+                            <div className="font-medium text-luxury-gray-1">
+                              {lease.tenants.first_name} {lease.tenants.last_name}
+                            </div>
+                            <div className="text-xs text-luxury-gray-3">{lease.tenants.email}</div>
+                          </div>
+                        ) : (
+                          <span className="text-luxury-gray-3">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-luxury-gray-1">
+                          {formatDate(lease.lease_start)} - {formatDate(lease.lease_end)}
+                        </div>
+                        {isExpiringSoon(lease) && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Calendar size={12} className="text-amber-600" />
+                            <span className="text-xs text-amber-600">Expiring soon</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="font-medium text-luxury-gray-1">{formatMoney(lease.monthly_rent)}</span>
+                        <span className="text-xs text-luxury-gray-3">/mo</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {getStatusBadge(lease.status)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -272,11 +272,13 @@ export default function AgentRosterPage() {
         </div>
       </div>
 
-      <div
-        className="agent-roster-container"
-        style={{ margin: 0, padding: 0, width: '100%', overflowX: 'hidden' }}
-        dangerouslySetInnerHTML={{ __html: htmlContent }}
-      />
+      <div className="overflow-x-auto -mx-4 md:mx-0">
+        <div
+          className="agent-roster-container"
+          style={{ margin: 0, padding: 0, minWidth: 'max-content', overflowX: 'visible' }}
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      </div>
     </div>
   )
 }

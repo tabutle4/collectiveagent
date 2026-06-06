@@ -363,103 +363,112 @@ export default function AdminCoordinationDashboard() {
           </div>
         ) : (
           /* Emails Tab */
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-luxury-gray-5/50">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Property
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Seller
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Agent
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Last Sent
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Welcome
-                  </th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="py-3 px-4"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {coordinations
-                  .filter(c => c.last_email_sent_at)
-                  .sort(
-                    (a, b) =>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {coordinations
+                .filter(c => c.last_email_sent_at)
+                .sort((a, b) =>
+                  new Date(b.last_email_sent_at || 0).getTime() -
+                  new Date(a.last_email_sent_at || 0).getTime()
+                )
+                .map(coordination => (
+                  <div
+                    key={coordination.id}
+                    className="inner-card cursor-pointer"
+                    onClick={() => router.push(`/admin/coordination/${coordination.id}`)}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <p className="text-sm font-semibold text-luxury-gray-1 truncate flex-1">
+                        {coordination.listing?.property_address || 'N/A'}
+                      </p>
+                      <span className={`badge ${coordination.is_active ? 'badge-success' : 'badge-neutral'}`}>
+                        {coordination.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-luxury-gray-3 mb-2">
+                      {coordination.seller_name} · {coordination.agent_name || 'Unknown'}
+                    </p>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="text-luxury-gray-3">{coordination.total_emails_sent || 0} sent</span>
+                        <span className={coordination.welcome_email_sent ? 'text-green-700' : 'text-luxury-gray-3'}>
+                          {coordination.welcome_email_sent ? 'Welcome sent' : 'No welcome'}
+                        </span>
+                      </div>
+                      <span className="text-luxury-gray-3">
+                        {coordination.last_email_sent_at
+                          ? new Date(coordination.last_email_sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'Never'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              {coordinations.filter(c => c.last_email_sent_at).length === 0 && (
+                <p className="text-center py-12 text-sm text-luxury-gray-3">No emails sent yet</p>
+              )}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-luxury-gray-5/50">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Property</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Seller</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Agent</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Last Sent</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Total</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Welcome</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Status</th>
+                    <th className="py-3 px-4"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coordinations
+                    .filter(c => c.last_email_sent_at)
+                    .sort((a, b) =>
                       new Date(b.last_email_sent_at || 0).getTime() -
                       new Date(a.last_email_sent_at || 0).getTime()
-                  )
-                  .map(coordination => (
-                    <tr
-                      key={coordination.id}
-                      className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/admin/coordination/${coordination.id}`)}
-                    >
-                      <td className="py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                        {coordination.listing?.property_address || 'N/A'}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-luxury-gray-2">
-                        {coordination.seller_name}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-luxury-gray-2">
-                        {coordination.agent_name || 'Unknown'}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-luxury-gray-3">
-                        {coordination.last_email_sent_at
-                          ? new Date(coordination.last_email_sent_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : 'Never'}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-luxury-gray-2">
-                        {coordination.total_emails_sent || 0}
-                      </td>
-                      <td className="py-3 px-4 text-xs">
-                        {coordination.welcome_email_sent ? (
-                          <span className="text-green-700">Sent</span>
-                        ) : (
-                          <span className="text-luxury-gray-3">No</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`badge ${coordination.is_active ? 'badge-success' : 'badge-neutral'}`}
-                        >
-                          {coordination.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => handleDeleteCoordination(coordination.id)}
-                          className="text-red-600 hover:text-red-800 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
+                    )
+                    .map(coordination => (
+                      <tr
+                        key={coordination.id}
+                        className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/admin/coordination/${coordination.id}`)}
+                      >
+                        <td className="py-3 px-4 text-sm font-medium text-luxury-gray-1">{coordination.listing?.property_address || 'N/A'}</td>
+                        <td className="py-3 px-4 text-sm text-luxury-gray-2">{coordination.seller_name}</td>
+                        <td className="py-3 px-4 text-sm text-luxury-gray-2">{coordination.agent_name || 'Unknown'}</td>
+                        <td className="py-3 px-4 text-xs text-luxury-gray-3">
+                          {coordination.last_email_sent_at
+                            ? new Date(coordination.last_email_sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : 'Never'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-luxury-gray-2">{coordination.total_emails_sent || 0}</td>
+                        <td className="py-3 px-4 text-xs">
+                          {coordination.welcome_email_sent ? <span className="text-green-700">Sent</span> : <span className="text-luxury-gray-3">No</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`badge ${coordination.is_active ? 'badge-success' : 'badge-neutral'}`}>
+                            {coordination.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => handleDeleteCoordination(coordination.id)} className="text-red-600 hover:text-red-800 transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  {coordinations.filter(c => c.last_email_sent_at).length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-sm text-luxury-gray-3">No emails sent yet</td>
                     </tr>
-                  ))}
-                {coordinations.filter(c => c.last_email_sent_at).length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-sm text-luxury-gray-3">
-                      No emails sent yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

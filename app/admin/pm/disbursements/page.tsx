@@ -932,26 +932,117 @@ export default function DisbursementsPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="th-luxury">
-                  <th className="text-left py-3 px-4">Period</th>
-                  <th className="text-left py-3 px-4">Landlord</th>
-                  <th className="text-left py-3 px-4">Property</th>
-                  <th className="text-right py-3 px-4">Gross Rent</th>
-                  <th className="text-right py-3 px-4">Mgmt Fee</th>
-                  <th className="text-right py-3 px-4">Net Amount</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-right py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {disbursements.map((disbursement) => (
-                  <tr
-                    key={disbursement.id}
-                    className="tr-luxury border-b border-luxury-gray-5 hover:bg-luxury-light/50"
-                  >
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {disbursements.map((disbursement) => (
+                <div key={disbursement.id} className="inner-card">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-luxury-gray-1">
+                        {getMonthName(disbursement.period_month)} {disbursement.period_year}
+                      </p>
+                      {disbursement.managed_properties && (
+                        <p className="text-xs text-luxury-gray-3 truncate">
+                          {disbursement.managed_properties.property_address}
+                          {disbursement.managed_properties.unit && ` ${disbursement.managed_properties.unit}`}
+                        </p>
+                      )}
+                    </div>
+                    {getStatusBadge(disbursement.payment_status)}
+                  </div>
+                  {disbursement.landlords && (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <p className="text-xs text-luxury-gray-2">
+                        {disbursement.landlords.first_name} {disbursement.landlords.last_name}
+                      </p>
+                      {disbursement.landlords.bank_status === 'connected' ? (
+                        <span className="text-xs text-green-600 flex items-center gap-0.5">
+                          <CheckCircle size={11} /> Bank connected
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-600 flex items-center gap-0.5">
+                          <AlertCircle size={11} /> No bank
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2 mb-2 text-xs">
+                    <div className="space-y-0.5">
+                      {disbursement.gross_rent > 0 && (
+                        <p className="text-luxury-gray-3">Rent: {formatMoney(disbursement.gross_rent)}</p>
+                      )}
+                      {disbursement.gross_rent > 0 && (
+                        <p className="text-luxury-gray-3">Fee: -{formatMoney(disbursement.management_fee)}</p>
+                      )}
+                    </div>
+                    <p className="font-semibold text-luxury-gray-1 text-sm">{formatMoney(disbursement.net_amount)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => openEditDisbursement(disbursement)}
+                      className="btn btn-secondary text-xs py-1 px-3 inline-flex items-center gap-1"
+                    >
+                      <Pencil size={12} /> Edit
+                    </button>
+                    {disbursement.payment_status === 'pending' && (
+                      canProcess(disbursement) ? (
+                        <button
+                          onClick={() => processDisbursement(disbursement.id)}
+                          disabled={processingId === disbursement.id}
+                          className="btn btn-primary text-xs py-1 px-3 inline-flex items-center gap-1"
+                        >
+                          <Send size={12} />
+                          {processingId === disbursement.id ? 'Processing...' : 'Process ACH'}
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/admin/pm/landlords/${disbursement.landlord_id}`}
+                          className="text-xs text-luxury-accent hover:underline"
+                        >
+                          Setup Bank First
+                        </Link>
+                      )
+                    )}
+                    {(disbursement.payment_status === 'completed' || disbursement.payment_status === 'paid') && (
+                      <span className="text-xs text-green-600">
+                        {disbursement.payment_status === 'completed' ? 'ACH Complete' : 'Paid'}
+                      </span>
+                    )}
+                    {disbursement.payment_status === 'failed' && (
+                      <button
+                        onClick={() => processDisbursement(disbursement.id)}
+                        disabled={processingId === disbursement.id}
+                        className="btn btn-secondary text-xs py-1 px-3"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="th-luxury">
+                    <th className="text-left py-3 px-4">Period</th>
+                    <th className="text-left py-3 px-4">Landlord</th>
+                    <th className="text-left py-3 px-4">Property</th>
+                    <th className="text-right py-3 px-4">Gross Rent</th>
+                    <th className="text-right py-3 px-4">Mgmt Fee</th>
+                    <th className="text-right py-3 px-4">Net Amount</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-right py-3 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {disbursements.map((disbursement) => (
+                    <tr
+                      key={disbursement.id}
+                      className="tr-luxury border-b border-luxury-gray-5 hover:bg-luxury-light/50"
+                    >
                     <td className="py-3 px-4">
                       <div className="font-medium text-luxury-gray-1">
                         {getMonthName(disbursement.period_month)} {disbursement.period_year}
@@ -1064,11 +1155,12 @@ export default function DisbursementsPage() {
                         )}
                       </div>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

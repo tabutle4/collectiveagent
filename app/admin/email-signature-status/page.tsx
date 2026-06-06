@@ -219,56 +219,101 @@ export default function EmailSignatureStatusPage() {
         ) : visibleUsers.length === 0 ? (
           <p className="text-center py-12 text-sm text-luxury-gray-3">No agents match these filters.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-luxury-gray-5 text-left text-xs text-luxury-gray-3 uppercase tracking-wider">
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Office</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium">Completion Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleUsers.map(u => {
-                  const isDone = !!u.new_signature_completed_at
-                  return (
-                    <tr
-                      key={u.id}
-                      className={`border-b border-luxury-gray-5 hover:bg-luxury-light transition-colors ${
-                        isDone ? '' : 'bg-luxury-light/40'
-                      }`}
-                    >
-                      <td className="px-4 py-3">
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-2">
+              {visibleUsers.map(u => {
+                const isDone = !!u.new_signature_completed_at
+                return (
+                  <div
+                    key={u.id}
+                    className={`inner-card ${isDone ? '' : 'bg-luxury-light/40'}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                          {u.preferred_first_name} {u.preferred_last_name}
+                        </p>
+                        <p className="text-xs text-luxury-gray-3 truncate">{u.email}</p>
+                        <p className="text-xs text-luxury-gray-3 mt-0.5">
+                          {u.office || '-'} · <span className="capitalize">{u.role || '-'}</span>
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
                         {isDone ? (
-                          <div className="flex items-center gap-1.5 text-luxury-accent">
-                            <CheckCircle2 size={16} />
+                          <div className="flex items-center gap-1 text-luxury-accent">
+                            <CheckCircle2 size={14} />
                             <span className="text-xs font-medium">Done</span>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 text-luxury-gray-3">
-                            <Circle size={16} />
+                          <div className="flex items-center gap-1 text-luxury-gray-3">
+                            <Circle size={14} />
                             <span className="text-xs">Not Yet</span>
                           </div>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-luxury-gray-1">
-                        {u.preferred_first_name} {u.preferred_last_name}
-                      </td>
-                      <td className="px-4 py-3 text-luxury-gray-2">{u.email}</td>
-                      <td className="px-4 py-3 text-luxury-gray-2">{u.office || '-'}</td>
-                      <td className="px-4 py-3 text-luxury-gray-2 capitalize">{u.role || '-'}</td>
-                      <td className="px-4 py-3 text-luxury-gray-2">
-                        {formatCompletionDate(u.new_signature_completed_at)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {isDone && (
+                          <p className="text-xs text-luxury-gray-3 mt-0.5">
+                            {formatCompletionDate(u.new_signature_completed_at)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-luxury-gray-5 text-left text-xs text-luxury-gray-3 uppercase tracking-wider">
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Office</th>
+                    <th className="px-4 py-3 font-medium">Role</th>
+                    <th className="px-4 py-3 font-medium">Completion Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleUsers.map(u => {
+                    const isDone = !!u.new_signature_completed_at
+                    return (
+                      <tr
+                        key={u.id}
+                        className={`border-b border-luxury-gray-5 hover:bg-luxury-light transition-colors ${
+                          isDone ? '' : 'bg-luxury-light/40'
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          {isDone ? (
+                            <div className="flex items-center gap-1.5 text-luxury-accent">
+                              <CheckCircle2 size={16} />
+                              <span className="text-xs font-medium">Done</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-luxury-gray-3">
+                              <Circle size={16} />
+                              <span className="text-xs">Not Yet</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-luxury-gray-1">
+                          {u.preferred_first_name} {u.preferred_last_name}
+                        </td>
+                        <td className="px-4 py-3 text-luxury-gray-2">{u.email}</td>
+                        <td className="px-4 py-3 text-luxury-gray-2">{u.office || '-'}</td>
+                        <td className="px-4 py-3 text-luxury-gray-2 capitalize">{u.role || '-'}</td>
+                        <td className="px-4 py-3 text-luxury-gray-2">
+                          {formatCompletionDate(u.new_signature_completed_at)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

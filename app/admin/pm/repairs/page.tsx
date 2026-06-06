@@ -297,77 +297,121 @@ export default function RepairsPage() {
             </Link>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-luxury-gray-5/50">
-                  <th className="th-luxury">Request</th>
-                  <th className="th-luxury">Property</th>
-                  <th className="th-luxury">Category</th>
-                  <th className="th-luxury">Urgency</th>
-                  <th className="th-luxury">Cost</th>
-                  <th className="th-luxury">Payment</th>
-                  <th className="th-luxury">Status</th>
-                  <th className="th-luxury">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repairs.map((repair) => (
-                  <tr
-                    key={repair.id}
-                    onClick={() => router.push(`/admin/pm/repairs/${repair.id}`)}
-                    className="tr-luxury-clickable"
-                  >
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-luxury-gray-1">{repair.title}</div>
-                      {repair.vendor_name && (
-                        <div className="text-xs text-luxury-gray-3">Vendor: {repair.vendor_name}</div>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {repairs.map((repair) => (
+                <div
+                  key={repair.id}
+                  className="inner-card cursor-pointer"
+                  onClick={() => router.push(`/admin/pm/repairs/${repair.id}`)}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-luxury-gray-1 truncate">{repair.title}</p>
+                      {repair.managed_properties && (
+                        <p className="text-xs text-luxury-gray-3 truncate">
+                          {repair.managed_properties.property_address}
+                          {repair.managed_properties.unit && ` ${repair.managed_properties.unit}`}
+                        </p>
                       )}
-                    </td>
-                    <td className="py-3 px-4">
-                      {repair.managed_properties ? (
-                        <div>
-                          <div className="text-sm text-luxury-gray-1">
-                            {repair.managed_properties.property_address}
-                            {repair.managed_properties.unit && ` ${repair.managed_properties.unit}`}
-                          </div>
-                          <div className="text-xs text-luxury-gray-3">
-                            {repair.managed_properties.city}, {repair.managed_properties.state}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-luxury-gray-3">-</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-sm text-luxury-gray-1">{getCategoryLabel(repair.category)}</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {getUrgencyBadge(repair.urgency)}
-                    </td>
-                    <td className="py-3 px-4">
+                    </div>
+                    {getStatusBadge(repair.status)}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    {getUrgencyBadge(repair.urgency)}
+                    <span className="text-xs text-luxury-gray-3">{getCategoryLabel(repair.category)}</span>
+                    {repair.vendor_name && (
+                      <span className="text-xs text-luxury-gray-3">Vendor: {repair.vendor_name}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div>
                       {repair.actual_cost ? (
-                        <span className="text-xs font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</span>
+                        <span className="font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</span>
                       ) : repair.estimated_cost ? (
-                        <span className="text-xs text-luxury-gray-3">~{formatMoney(repair.estimated_cost)}</span>
-                      ) : (
-                        <span className="text-xs text-luxury-gray-3">-</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      {getPaymentStatusBadge(repair.payment_status)}
-                    </td>
-                    <td className="py-3 px-4">
-                      {getStatusBadge(repair.status)}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="text-sm text-luxury-gray-1">{formatDate(repair.created_at)}</div>
-                    </td>
+                        <span className="text-luxury-gray-3">~{formatMoney(repair.estimated_cost)}</span>
+                      ) : null}
+                      {' '}{getPaymentStatusBadge(repair.payment_status)}
+                    </div>
+                    <span className="text-luxury-gray-3">{formatDate(repair.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-luxury-gray-5/50">
+                    <th className="th-luxury">Request</th>
+                    <th className="th-luxury">Property</th>
+                    <th className="th-luxury">Category</th>
+                    <th className="th-luxury">Urgency</th>
+                    <th className="th-luxury">Cost</th>
+                    <th className="th-luxury">Payment</th>
+                    <th className="th-luxury">Status</th>
+                    <th className="th-luxury">Created</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {repairs.map((repair) => (
+                    <tr
+                      key={repair.id}
+                      onClick={() => router.push(`/admin/pm/repairs/${repair.id}`)}
+                      className="tr-luxury-clickable"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-luxury-gray-1">{repair.title}</div>
+                        {repair.vendor_name && (
+                          <div className="text-xs text-luxury-gray-3">Vendor: {repair.vendor_name}</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {repair.managed_properties ? (
+                          <div>
+                            <div className="text-sm text-luxury-gray-1">
+                              {repair.managed_properties.property_address}
+                              {repair.managed_properties.unit && ` ${repair.managed_properties.unit}`}
+                            </div>
+                            <div className="text-xs text-luxury-gray-3">
+                              {repair.managed_properties.city}, {repair.managed_properties.state}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-luxury-gray-3">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-sm text-luxury-gray-1">{getCategoryLabel(repair.category)}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {getUrgencyBadge(repair.urgency)}
+                      </td>
+                      <td className="py-3 px-4">
+                        {repair.actual_cost ? (
+                          <span className="text-xs font-medium text-luxury-gray-1">{formatMoney(repair.actual_cost)}</span>
+                        ) : repair.estimated_cost ? (
+                          <span className="text-xs text-luxury-gray-3">~{formatMoney(repair.estimated_cost)}</span>
+                        ) : (
+                          <span className="text-xs text-luxury-gray-3">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {getPaymentStatusBadge(repair.payment_status)}
+                      </td>
+                      <td className="py-3 px-4">
+                        {getStatusBadge(repair.status)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-sm text-luxury-gray-1">{formatDate(repair.created_at)}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

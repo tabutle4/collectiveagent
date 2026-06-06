@@ -892,17 +892,51 @@ export default function AdminBillingPage() {
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => toggleAgent(agent.id)}
               >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-luxury-gray-1">{name}</p>
-                    <p className="text-xs text-luxury-gray-3">{agent.email}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-luxury-gray-1 truncate">{name}</p>
+                  <p className="text-xs text-luxury-gray-3 truncate">{agent.email}</p>
+                  {/* Status badges - wrap onto next line on mobile */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     {monthlyStatus.missingCurrent && (
-                      <span className="inline-block mt-1 text-xs font-medium text-orange-600">
+                      <span className="text-xs font-medium text-orange-600">
                         No {currentMonthName} invoice
                       </span>
                     )}
-                  </div>
-                  <div className="flex items-center gap-4 flex-shrink-0">
+                    <span className="text-xs text-luxury-gray-3">
+                      Onboarding:{' '}
+                      {agent.onboarding_fee_paid ? (
+                        <span className="text-green-600 font-medium">Paid</span>
+                      ) : (
+                        <span className="text-red-500 font-medium">Unpaid</span>
+                      )}
+                    </span>
+                    <span className="text-xs text-luxury-gray-3">
+                      Monthly:{' '}
+                      {monthlyStatus.state === 'current' && (
+                        <span className="text-green-600 font-medium">
+                          Current
+                          {monthlyStatus.upcomingCount > 0 && (
+                            <span className="text-luxury-gray-3 font-normal">
+                              {' '}· {formatCurrency(monthlyStatus.upcomingTotal)} due soon
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {monthlyStatus.state === 'behind' && (
+                        <span className="text-red-500 font-medium">
+                          {monthlyStatus.monthsBehind} mo behind · {formatCurrency(monthlyStatus.amountOwed)}
+                        </span>
+                      )}
+                      {monthlyStatus.state === 'waived' && (
+                        <span className="text-luxury-gray-3 font-medium">Waived</span>
+                      )}
+                      {monthlyStatus.state === 'no_account' && (
+                        <span className="text-luxury-gray-3 font-medium">No account</span>
+                      )}
+                      {monthlyStatus.state === 'unknown' && (
+                        <span className="text-luxury-gray-3 font-medium">...</span>
+                      )}
+                    </span>
                     {monthlyStatus.missingCurrent && (
                       <button
                         onClick={e => {
@@ -916,42 +950,6 @@ export default function AdminBillingPage() {
                         {creatingMissing === agent.id ? 'Creating...' : 'Create Invoice'}
                       </button>
                     )}
-                    <div className="text-center">
-                      <p className="text-xs text-luxury-gray-3 mb-0.5">Onboarding</p>
-                      {agent.onboarding_fee_paid ? (
-                        <span className="text-xs text-green-600 font-medium">Paid</span>
-                      ) : (
-                        <span className="text-xs text-red-500 font-medium">Unpaid</span>
-                      )}
-                    </div>
-                    <div className="text-center min-w-[5rem]">
-                      <p className="text-xs text-luxury-gray-3 mb-0.5">Monthly</p>
-                      {monthlyStatus.state === 'current' && (
-                        <span className="text-xs text-green-600 font-medium">
-                          Current
-                          {monthlyStatus.upcomingCount > 0 && (
-                            <span className="text-luxury-gray-3 font-normal">
-                              {' '}· {formatCurrency(monthlyStatus.upcomingTotal)} due soon
-                            </span>
-                          )}
-                        </span>
-                      )}
-                      {monthlyStatus.state === 'behind' && (
-                        <span className="text-xs text-red-500 font-medium">
-                          {monthlyStatus.monthsBehind} mo behind ·{' '}
-                          {formatCurrency(monthlyStatus.amountOwed)}
-                        </span>
-                      )}
-                      {monthlyStatus.state === 'waived' && (
-                        <span className="text-xs text-luxury-gray-3 font-medium">Waived</span>
-                      )}
-                      {monthlyStatus.state === 'no_account' && (
-                        <span className="text-xs text-luxury-gray-3 font-medium">No account</span>
-                      )}
-                      {monthlyStatus.state === 'unknown' && (
-                        <span className="text-xs text-luxury-gray-3 font-medium">...</span>
-                      )}
-                    </div>
                   </div>
                 </div>
                 <div className="ml-4">

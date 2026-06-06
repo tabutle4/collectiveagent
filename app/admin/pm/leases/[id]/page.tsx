@@ -692,48 +692,84 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
             {invoices.length === 0 ? (
               <p className="text-sm text-luxury-gray-3 py-4">No invoices for this lease</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="th-luxury">
-                      <th className="text-left py-2 px-3">Period</th>
-                      <th className="text-right py-2 px-3">Rent</th>
-                      <th className="text-right py-2 px-3">Late Fee</th>
-                      <th className="text-right py-2 px-3">Total</th>
-                      <th className="text-left py-2 px-3">Due</th>
-                      <th className="text-left py-2 px-3">Status</th>
-                      <th className="text-right py-2 px-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoices.map((inv) => (
-                      <tr key={inv.id} className="tr-luxury">
-                        <td className="py-2 px-3 font-medium">
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-2">
+                  {invoices.map((inv) => (
+                    <div key={inv.id} className="inner-card">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold text-luxury-gray-1">
                           {getMonthName(inv.period_month)} {inv.period_year}
-                        </td>
-                        <td className="py-2 px-3 text-right">{formatMoney(inv.rent_amount)}</td>
-                        <td className="py-2 px-3 text-right">
-                          {inv.late_fee > 0 ? formatMoney(inv.late_fee) : '-'}
-                        </td>
-                        <td className="py-2 px-3 text-right font-medium">{formatMoney(inv.total_amount)}</td>
-                        <td className="py-2 px-3 text-luxury-gray-3">{formatDate(inv.due_date)}</td>
-                        <td className="py-2 px-3">{getStatusBadge(inv.status)}</td>
-                        <td className="py-2 px-3 text-right">
+                        </p>
+                        {getStatusBadge(inv.status)}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <div>
+                          <span className="text-luxury-gray-3">Due {formatDate(inv.due_date)}</span>
+                          {inv.late_fee > 0 && (
+                            <span className="text-red-500 ml-2">+{formatMoney(inv.late_fee)} late fee</span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-luxury-gray-1">{formatMoney(inv.total_amount)}</p>
                           {inv.status === 'pending' && (
                             <button
                               onClick={() => handleSendInvoice(inv.id)}
-                              className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                              className="text-luxury-accent hover:underline flex items-center gap-1 mt-0.5 ml-auto"
                             >
-                              <Send size={12} />
+                              <Send size={11} />
                               Send
                             </button>
                           )}
-                        </td>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="th-luxury">
+                        <th className="text-left py-2 px-3">Period</th>
+                        <th className="text-right py-2 px-3">Rent</th>
+                        <th className="text-right py-2 px-3">Late Fee</th>
+                        <th className="text-right py-2 px-3">Total</th>
+                        <th className="text-left py-2 px-3">Due</th>
+                        <th className="text-left py-2 px-3">Status</th>
+                        <th className="text-right py-2 px-3"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {invoices.map((inv) => (
+                        <tr key={inv.id} className="tr-luxury">
+                          <td className="py-2 px-3 font-medium">
+                            {getMonthName(inv.period_month)} {inv.period_year}
+                          </td>
+                          <td className="py-2 px-3 text-right">{formatMoney(inv.rent_amount)}</td>
+                          <td className="py-2 px-3 text-right">
+                            {inv.late_fee > 0 ? formatMoney(inv.late_fee) : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-medium">{formatMoney(inv.total_amount)}</td>
+                          <td className="py-2 px-3 text-luxury-gray-3">{formatDate(inv.due_date)}</td>
+                          <td className="py-2 px-3">{getStatusBadge(inv.status)}</td>
+                          <td className="py-2 px-3 text-right">
+                            {inv.status === 'pending' && (
+                              <button
+                                onClick={() => handleSendInvoice(inv.id)}
+                                className="text-xs text-luxury-accent hover:underline flex items-center gap-1"
+                              >
+                                <Send size={12} />
+                                Send
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </div>
