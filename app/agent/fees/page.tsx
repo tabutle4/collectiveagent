@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react'
+import { CheckCircle2, AlertCircle, ExternalLink, CreditCard, Loader2 } from 'lucide-react'
 
 declare global {
   interface Window {
@@ -20,6 +20,7 @@ export default function AgentFeesPage() {
   const [credits, setCredits] = useState<any[]>([])
   const [paying, setPaying] = useState<string | null>(null)
   const [monthlyFee, setMonthlyFee] = useState(50)
+  const [connectingBank, setConnectingBank] = useState(false)
   const payloadScriptLoaded = useRef(false)
 
   useEffect(() => {
@@ -189,6 +190,25 @@ export default function AgentFeesPage() {
     }
   }
 
+  const connectBank = async () => {
+    setConnectingBank(true)
+    try {
+      const res = await fetch('/api/agent/connect-bank', { method: 'POST' })
+      const result = await res.json()
+      if (res.ok && result.success) {
+        alert('Bank activation email sent to your email address. Follow the link to connect your bank account.')
+      } else if (result.fallback) {
+        alert('Please contact office@collectiverealtyco.com to connect your bank account.')
+      } else {
+        alert(result.error || 'Failed to send bank activation. Please contact office@collectiverealtyco.com.')
+      }
+    } catch {
+      alert('Failed to send bank activation. Please contact office@collectiverealtyco.com.')
+    } finally {
+      setConnectingBank(false)
+    }
+  }
+
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
@@ -219,6 +239,37 @@ export default function AgentFeesPage() {
                 <AlertCircle size={18} className="text-red-500" />
                 <span className="text-xs font-medium text-red-500">Unpaid</span>
               </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bank Account */}
+      <div className="container-card mb-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-1">
+              Commission Disbursements
+            </p>
+            <p className="text-xs text-luxury-gray-3 mt-1">
+              Connect your bank account to receive commission payouts via ACH
+            </p>
+          </div>
+          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+            {user?.bank_connected ? (
+              <>
+                <CheckCircle2 size={18} className="text-green-600" />
+                <span className="text-xs font-medium text-green-600">Connected</span>
+              </>
+            ) : (
+              <button
+                onClick={connectBank}
+                disabled={connectingBank}
+                className="btn btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {connectingBank ? <Loader2 size={12} className="animate-spin" /> : <CreditCard size={12} />}
+                {connectingBank ? 'Sending...' : 'Connect Bank'}
+              </button>
             )}
           </div>
         </div>

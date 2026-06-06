@@ -126,6 +126,41 @@ export async function POST(request: NextRequest) {
     const triggeredOn = body?.triggered_on
     const isPaymentTrigger = trigger === 'payment' || trigger === 'automatic_payment' || trigger === 'processed'
 
+    // Handle agent bank activation status changes
+    if (trigger === 'payment_activation:status' && triggeredOn?.id) {
+      const activationStatus = triggeredOn.value
+      if (activationStatus === 'accepted') {
+        const activationRes = await fetch(`https://api.payload.com/payment_activations/${triggeredOn.id}`, {
+          headers: { Authorization: authHeader() },
+        })
+        const activation = activationRes.ok ? await activationRes.json() : null
+        const paymentMethodId = activation?.payment_method_id || null
+
+        // Match agent by payload_activation_id
+        const { data: agent } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('payload_activation_id', triggeredOn.id)
+          .maybeSingle()
+
+        if (agent) {
+          await supabase
+            .from('users')
+            .update({
+              bank_connected: true,
+              bank_connected_at: new Date().toISOString(),
+              payload_payment_method_id: paymentMethodId,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', agent.id)
+          console.log('Agent bank connected:', agent.email, 'payment_method_id:', paymentMethodId)
+        } else {
+          console.log('No agent found for activation:', triggeredOn.id)
+        }
+      }
+      return NextResponse.json({ received: true })
+    }
+
     if (!isPaymentTrigger || triggeredOn?.object !== 'transaction' || !triggeredOn?.id) {
       return NextResponse.json({ received: true })
     }
