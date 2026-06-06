@@ -1590,7 +1590,7 @@ const checkout = new window.Payload.Checkout({
                         })
                         const result = await res.json()
                         if (!res.ok || !result.form_request) {
-                          alert(result.error || 'Failed to load W-9 form. Please try again.')
+                          alert('Failed to load the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
                           return
                         }
                         if (typeof window !== 'undefined' && window.Avalara1099) {
@@ -1611,15 +1611,15 @@ const checkout = new window.Payload.Checkout({
                             },
                             onError: (errors: any) => {
                               console.error('W-9 errors:', errors)
-                              alert('There was an error with the W-9 form. Please try again.')
+                              alert('There was an error with the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
                             },
                           })
                         } else {
-                          alert('W-9 form is still loading. Please wait a moment and try again.')
+                          alert('The W-9 form is still loading. Please wait a moment and try again. If this continues, email office@collectiverealtyco.com.')
                         }
                       } catch (err) {
                         console.error('W-9 request error:', err)
-                        alert('Failed to load W-9 form. Please contact office@collectiverealtyco.com')
+                        alert('Failed to load the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
                       }
                     }}
                     className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"

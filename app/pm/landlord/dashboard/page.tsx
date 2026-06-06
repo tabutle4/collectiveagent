@@ -289,21 +289,21 @@ function LandlordDashboardContent() {
             onError: (errors: any) => {
               console.error('W-9 errors:', errors)
               if (errors !== 'cancel') {
-                alert('There was an error with the W-9 form. Please try again.')
+                alert('There was an error with the W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link to complete it.')
               }
             },
           })
         } else {
-          alert('W-9 form is loading. Please try again in a moment.')
+          alert('W-9 form is loading. Please try again in a moment. If this continues, email pm@collectiverealtyco.com.')
         }
       } else if (result.fallback) {
-        alert('Please contact pm@collectiverealtyco.com to complete your W-9.')
+        alert('Please email pm@collectiverealtyco.com and we will send you a direct link to complete your W-9.')
       } else {
-        alert(result.error || 'Failed to create W-9 request')
+        alert('Failed to load W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link.')
       }
     } catch (err) {
       console.error('W-9 request error:', err)
-      alert('Failed to load W-9 form. Please contact pm@collectiverealtyco.com')
+      alert('Failed to load W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link.')
     } finally {
       setRequestingW9(false)
     }
