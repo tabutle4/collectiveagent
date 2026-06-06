@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Share2,
   Users,
   UserPlus,
   FileText,
@@ -777,11 +778,15 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             <span className="text-[10px] font-medium tracking-wide">Back</span>
           </button>
           <button
-            onClick={() => setMobileMenuOpen(true)}
+            onClick={() => {
+              if (navigator.share) {
+                navigator.share({ url: window.location.href })
+              }
+            }}
             className="flex flex-col items-center gap-0.5 px-5 py-1.5 rounded-lg text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors active:bg-luxury-gray-5/40"
           >
-            <Menu size={20} strokeWidth={1.5} />
-            <span className="text-[10px] font-medium tracking-wide">Menu</span>
+            <Share2 size={20} strokeWidth={1.5} />
+            <span className="text-[10px] font-medium tracking-wide">Share</span>
           </button>
           <button
             onClick={() => window.location.reload()}
