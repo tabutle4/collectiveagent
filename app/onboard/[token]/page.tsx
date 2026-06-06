@@ -24,6 +24,7 @@ type JoinFormData = {
 declare global {
   interface Window {
     Payload: any
+    Avalara1099: any
   }
 }
 
@@ -570,6 +571,17 @@ export default function OnboardingPage() {
     script.async = true
     document.head.appendChild(script)
     payloadScriptLoaded.current = true
+  }, [])
+
+  // Load Track1099/Avalara W-9 SDK for W-9 step
+  useEffect(() => {
+    const existing = document.querySelector('script[src*="track1099.com/api/request_form"]')
+    if (existing) return
+    const script = document.createElement('script')
+    script.src = 'https://www.track1099.com/api/request_form.js'
+    script.type = 'module'
+    script.async = true
+    document.head.appendChild(script)
   }, [])
 
   useEffect(() => {
@@ -1547,7 +1559,7 @@ const checkout = new window.Payload.Checkout({
               <>
                 <div className="container-card flex items-center gap-3">
                   <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-                  <p className="text-sm text-luxury-gray-2">W-9 acknowledged.</p>
+                  <p className="text-sm text-luxury-gray-2">W-9 completed. Thank you.</p>
                 </div>
                 <button
                   onClick={() => { 
@@ -1564,34 +1576,60 @@ const checkout = new window.Payload.Checkout({
                 <div className="text-center mb-8">
                   <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Form</h1>
                   <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
-                    Your W-9 will be sent to your email shortly for completion. Once you receive it, complete and return it to us.
+                    Please complete your W-9 below. This is required for tax reporting purposes.
                   </p>
                 </div>
                 <div className="container-card text-center space-y-4">
-                  <p className="text-sm text-luxury-gray-2">
-                    We use Track1099 to collect your W-9 securely. You will receive an email with a link to complete your form electronically.
-                  </p>
-                  <p className="text-sm text-luxury-gray-3">
-                    If you have not received it within 24 hours, contact{' '}
-                    <a href="mailto:office@collectiverealtyco.com" className="text-luxury-accent hover:underline">
-                      office@collectiverealtyco.com
-                    </a>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/onboarding/create-w9-request', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ token }),
+                        })
+                        const result = await res.json()
+                        if (!res.ok || !result.form_request) {
+                          alert(result.error || 'Failed to load W-9 form. Please try again.')
+                          return
+                        }
+                        if (typeof window !== 'undefined' && window.Avalara1099) {
+                          window.Avalara1099.requestW9(result.form_request, {
+                            onComplete: async (completedRequest: any) => {
+                              const attrs = completedRequest?.data?.attributes
+                              await fetch('/api/onboarding/complete-w9', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  token,
+                                  tin_status: attrs?.tin_match_status || null,
+                                  signed_at: attrs?.signed_at || null,
+                                }),
+                              })
+                              setCurrentStep(isReferralAgent ? 6 : 7)
+                              window.scrollTo({ top: 0, behavior: 'smooth' })
+                            },
+                            onError: (errors: any) => {
+                              console.error('W-9 errors:', errors)
+                              alert('There was an error with the W-9 form. Please try again.')
+                            },
+                          })
+                        } else {
+                          alert('W-9 form is still loading. Please wait a moment and try again.')
+                        }
+                      } catch (err) {
+                        console.error('W-9 request error:', err)
+                        alert('Failed to load W-9 form. Please contact office@collectiverealtyco.com')
+                      }
+                    }}
+                    className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
+                  >
+                    Complete W-9 Now
+                  </button>
+                  <p className="text-xs text-luxury-gray-3">
+                    Powered by Avalara Track1099. Your information is encrypted and stored securely.
                   </p>
                 </div>
-                <button
-                  onClick={async () => {
-                    await fetch('/api/onboarding/acknowledge-step', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ token, step: isReferralAgent ? 5 : 6 }),
-                    })
-                    setCurrentStep(isReferralAgent ? 6 : 7)
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                  className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
-                >
-                  I Understand, Continue &rarr;
-                </button>
               </>
             )}
           </div>

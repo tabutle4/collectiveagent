@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
           <div style="margin:0 0 16px;padding:14px 18px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 10px;font-size:14px;color:#1a1a1a;font-weight:600;">Verify First</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;TREC sponsorship invitation has been accepted</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;W-9 completed via Track1099</p>
+            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;W-9 completed (agent completes in onboarding portal)</p>
             <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Annual membership payment received ($${referralFee})</p>
           </div>
 
@@ -376,7 +376,6 @@ export async function POST(request: NextRequest) {
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Send temp password to agent</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Create Dotloop account</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Submit TREC sponsorship invitation (license: ${agent.license_number || 'not on file'})</p>
-            <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Send W-9 request via Track1099 (email: ${agent.email})</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Create transactions platform account</p>
             <p style="margin:0 0 6px;font-size:14px;color:#555;">☐ &nbsp;Verify license expiration in the app</p>
             <p style="margin:0;font-size:14px;color:#555;">☐ &nbsp;Configure team and revenue share settings if applicable</p>

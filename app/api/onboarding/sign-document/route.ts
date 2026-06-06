@@ -240,15 +240,15 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({
         from: 'Collective Agent <onboarding@coachingbrokeragetools.com>',
         to: 'office@collectiverealtyco.com',
-        subject: `Action Required: Send W-9 Request for ${agentName}${isReferralAgent ? ' (Referral)' : ''}`,
+        subject: `FYI: ${agentName}${isReferralAgent ? ' (Referral)' : ''} is on W-9 Step`,
         html: getEmailLayout(
-          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong>${isReferralAgent ? ' (Referral Agent)' : ''} has signed and acknowledged the Policy Manual and is now on Step ${w9StepNumber} (W-9).</p>
-          <p style="margin:0 0 12px;font-size:14px;color:#555;">Please send their W-9 request via Track1099 now.</p>
+          `<p style="margin:0 0 12px;font-size:14px;color:#555;"><strong style="color:#1a1a1a;">${agentName}</strong>${isReferralAgent ? ' (Referral Agent)' : ''} has acknowledged the Policy Manual and is now on Step ${w9StepNumber} (W-9).</p>
+          <p style="margin:0 0 12px;font-size:14px;color:#555;">The agent will complete their W-9 directly in the onboarding portal. No action needed from you at this time.</p>
           <div style="margin:0 0 12px;padding:12px 16px;background:#f9f9f9;border-left:3px solid #C5A278;">
             <p style="margin:0 0 6px;font-size:14px;color:#555;">Name: <strong style="color:#1a1a1a;">${agentName}</strong></p>
             <p style="margin:0;font-size:14px;color:#555;">Email: <strong style="color:#1a1a1a;">${prospect.email}</strong></p>
           </div>`,
-          { title: 'Send W-9 Request', preheader: `Send Track1099 W-9 request for ${agentName}` }
+          { title: 'Agent on W-9 Step', preheader: `${agentName} is completing W-9 in portal` }
         ),
       }).catch((e: unknown) => console.error('Failed to send policy manual notification:', e))
     }

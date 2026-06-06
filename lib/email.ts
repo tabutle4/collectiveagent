@@ -416,7 +416,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
       <div class="section-box">
         <h2 class="section-title">Step 5 - W-9</h2>
         <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Complete Your W-9</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">You will receive a separate email from Track1099 with a secure link to complete your W-9 electronically.</p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p>
       </div>
       <div class="section-box">
         <h2 class="section-title">Step 6 - TREC Sponsorship</h2>
@@ -449,7 +449,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
       <div class="section-box">
         <h2 class="section-title">Step 6 - W-9</h2>
         <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Complete Your W-9</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">You will receive a separate email from Track1099 with a secure link to complete your W-9 electronically. Please complete it promptly for tax reporting purposes.</p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p>
       </div>
       <div class="section-box">
         <h2 class="section-title">Step 7 - TREC Sponsorship</h2>
@@ -671,7 +671,7 @@ const STEP_DESCRIPTIONS: Record<number, { label: string; description: string }> 
   },
   6: {
     label: 'Step 6 - W-9',
-    description: 'Please complete your W-9. You will receive a new Track1099 invitation email.',
+    description: 'Please complete your W-9 in the onboarding portal.',
   },
 }
 
@@ -789,7 +789,7 @@ export async function sendW9TrecReadyEmail(agent: {
 
       <div class="section-box">
         <h2 class="section-title">Step 1 - Complete Your W-9</h2>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Please look for an email from Track1099/Avalara with a secure link to complete your W-9 electronically. This is required for tax reporting purposes. Please complete it promptly.</p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Head back to your onboarding portal and complete your W-9 on the W-9 step. It only takes a few minutes. This is required for tax reporting purposes -- please complete it promptly.</p>
       </div>
 
       <div class="section-box">

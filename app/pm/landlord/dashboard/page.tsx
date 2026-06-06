@@ -113,6 +113,7 @@ interface Landlord {
   mailing_zip: string | null
   status: string
   w9_status: string
+  w9_tin_match_status: string | null
   bank_status: string
 }
 
@@ -265,55 +266,44 @@ function LandlordDashboardContent() {
         headers: { 'Content-Type': 'application/json' }
       })
       const result = await res.json()
-      
+
       if (res.ok && result.success && result.form_request) {
-        // Check if Avalara1099 SDK is loaded
         if (typeof window !== 'undefined' && (window as any).Avalara1099) {
-          // Use embedded SDK to open W9 form modal (Promise-based)
-          (window as any).Avalara1099.requestW9(result.form_request, {
+          ;(window as any).Avalara1099.requestW9(result.form_request, {
             prefill: {
               name: `${data.landlord.first_name} ${data.landlord.last_name}`,
-              email: data.landlord.email
-            }
-          })
-          .then(async (newRequest: any) => {
-            console.log('W9 completed:', newRequest)
-            // Update status via API
-            const attributes = (newRequest.data || newRequest).attributes
-            await fetch('/api/pm/portal/w9-complete', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tin_match_status: attributes?.tin_match_status,
-                signed_at: attributes?.signed_at,
-                signed_pdf: newRequest.links?.signed_pdf
+              email: data.landlord.email,
+            },
+            onComplete: async (completedRequest: any) => {
+              const attributes = (completedRequest?.data || completedRequest).attributes
+              await fetch('/api/pm/portal/w9-complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tin_match_status: attributes?.tin_match_status || null,
+                  signed_at: attributes?.signed_at || null,
+                }),
               })
-            })
-            alert('W9 completed successfully!')
-            window.location.reload()
-          })
-          .catch((errors: any) => {
-            console.log('W9 errors:', errors)
-            if (errors === 'cancel') {
-              // User closed without completing - that's ok
-            } else if (errors?.errors?.[0]?.status === '404') {
-              alert('Session timed out. Please reload and try again.')
-            } else {
-              alert('There was an error with the W9 form. Please try again.')
-            }
+              window.location.reload()
+            },
+            onError: (errors: any) => {
+              console.error('W-9 errors:', errors)
+              if (errors !== 'cancel') {
+                alert('There was an error with the W-9 form. Please try again.')
+              }
+            },
           })
         } else {
-          console.error('Avalara1099 SDK not loaded')
-          alert('W9 form is loading. Please try again in a moment.')
+          alert('W-9 form is loading. Please try again in a moment.')
         }
       } else if (result.fallback) {
-        alert('Please contact pm@collectiverealtyco.com to complete your W9.')
+        alert('Please contact pm@collectiverealtyco.com to complete your W-9.')
       } else {
-        alert(result.error || 'Failed to create W9 request')
+        alert(result.error || 'Failed to create W-9 request')
       }
     } catch (err) {
-      console.error('W9 request error:', err)
-      alert('Failed to request W9 form. Please contact pm@collectiverealtyco.com')
+      console.error('W-9 request error:', err)
+      alert('Failed to load W-9 form. Please contact pm@collectiverealtyco.com')
     } finally {
       setRequestingW9(false)
     }
@@ -571,10 +561,23 @@ function LandlordDashboardContent() {
                     W9 Form
                   </span>
                   {setupStatus.w9Complete ? (
-                    <span className="flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle size={16} />
-                      Complete
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="flex items-center gap-1 text-green-600 text-sm">
+                        <CheckCircle size={16} />
+                        Complete
+                      </span>
+                      {landlord.w9_tin_match_status && (
+                        <span className={`text-xs ${
+                          landlord.w9_tin_match_status === 'matched'
+                            ? 'text-green-600'
+                            : landlord.w9_tin_match_status === 'rejected'
+                            ? 'text-red-600'
+                            : 'text-amber-600'
+                        }`}>
+                          TIN {landlord.w9_tin_match_status}
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <button
                       onClick={requestW9Form}

@@ -186,6 +186,7 @@ export async function GET(request: NextRequest) {
         mailing_zip: landlord.mailing_zip,
         status: landlord.status,
         w9_status: landlord.w9_status,
+        w9_tin_match_status: landlord.w9_tin_match_status || null,
         bank_status: landlord.bank_status
       },
       properties: properties || [],
