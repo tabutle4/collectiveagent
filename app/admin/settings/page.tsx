@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 import { 
@@ -129,7 +130,14 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
 
 export default function SettingsPage() {
   const { hasPermission } = useAuth()
-  const [activeTab, setActiveTab] = useState<Tab>('brokerage')
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const activeTab = (searchParams.get('tab') as Tab) || 'brokerage'
+  const setActiveTab = (newTab: Tab) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', newTab)
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -1584,6 +1592,7 @@ export default function SettingsPage() {
     </div>
   )
 }
+
 
 
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -1435,7 +1435,13 @@ export default function AdminTransactionDetailPage() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<NavTab>('overview')
+  const searchParams = useSearchParams()
+  const activeTab = (searchParams.get('tab') as NavTab) || 'overview'
+  const setActiveTab = (newTab: NavTab) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', newTab)
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
 
   // Check & Payouts state
   const [editChecksData, setEditChecksData] = useState<Record<string, any>>({}) // checkId -> edit state
@@ -5194,3 +5200,4 @@ export default function AdminTransactionDetailPage() {
     </div>
   )
 }
+

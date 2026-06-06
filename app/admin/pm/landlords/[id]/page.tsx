@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, Send, DollarSign, Home, FileText, Users, X, Mail, Loader2, ClipboardCheck, ExternalLink, Edit2, CheckCircle, Upload } from 'lucide-react'
 import Link from 'next/link'
 import HeldInTrustWidget from '@/components/pm/HeldInTrustWidget'
@@ -706,7 +706,13 @@ export default function LandlordDetailPage() {
   const router = useRouter()
   const landlordId = params.id as string
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const searchParams = useSearchParams()
+  const activeTab = (searchParams.get('tab') as TabType) || 'overview'
+  const setActiveTab = (newTab: TabType) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', newTab)
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
   const [loading, setLoading] = useState(true)
   const [landlord, setLandlord] = useState<Landlord | null>(null)
   const [properties, setProperties] = useState<Property[]>([])

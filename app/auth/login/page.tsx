@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import AuthFooter from '@/components/shared/AuthFooter'
 import LuxuryHeader from '@/components/shared/LuxuryHeader'
@@ -9,7 +9,6 @@ import CornerLines from '@/components/shared/CornerLines'
 import { useAuth } from '@/lib/context/AuthContext'
 
 function LoginForm() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect')
   const authError = searchParams.get('error')
@@ -45,10 +44,13 @@ function LoginForm() {
     }
 
     // Navigate to redirect or default path
+    // Use window.location.href (full browser nav) instead of router.push so the
+    // ca_session cookie is guaranteed committed before the middleware runs.
+    // router.push fires an RSC fetch immediately and can race the Set-Cookie.
     if (redirectTo && redirectTo.startsWith('/')) {
-      router.push(redirectTo)
+      window.location.href = redirectTo
     } else {
-      router.push(result.redirectTo || '/agent/profile')
+      window.location.href = result.redirectTo || '/agent/profile'
     }
   }
 

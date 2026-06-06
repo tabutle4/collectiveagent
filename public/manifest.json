@@ -3,7 +3,7 @@
   "short_name": "Collective Agent",
   "description": "Collective Realty Co. Agent Platform",
   "start_url": "/admin/dashboard",
-  "display": "standalone",
+  "display": "minimal-ui",
   "background_color": "#000000",
   "theme_color": "#C5A278",
   "orientation": "portrait",

@@ -60,7 +60,7 @@ function isReferralAllowedPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, search } = request.nextUrl
 
   // Allow public paths through
   if (isPublicPath(pathname)) {
@@ -72,7 +72,9 @@ export async function middleware(request: NextRequest) {
 
   if (!sessionToken) {
     const loginUrl = new URL('/auth/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
+    // Pass full path + search so deep links (e.g. ?tab=checks) survive login
+    const fullPath = search ? `${pathname}${search}` : pathname
+    loginUrl.searchParams.set('redirect', fullPath)
     return NextResponse.redirect(loginUrl)
   }
 
@@ -81,7 +83,8 @@ export async function middleware(request: NextRequest) {
 
   if (!session) {
     const loginUrl = new URL('/auth/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
+    const fullPath = search ? `${pathname}${search}` : pathname
+    loginUrl.searchParams.set('redirect', fullPath)
     const response = NextResponse.redirect(loginUrl)
     response.cookies.delete('ca_session')
     return response
