@@ -27,6 +27,11 @@ export async function POST(
       return NextResponse.json({ error: 'Landlord not found' }, { status: 404 })
     }
 
+    // Check if bank already connected
+    if (landlord.bank_status === 'connected') {
+      return NextResponse.json({ error: 'Bank account already connected' }, { status: 400 })
+    }
+
     // Create Payload payout activation
     const res = await fetch('https://api.payload.com/payment_activations/', {
       method: 'POST',

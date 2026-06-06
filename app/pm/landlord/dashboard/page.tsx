@@ -578,6 +578,8 @@ function LandlordDashboardContent() {
                         </span>
                       )}
                     </div>
+                  ) : isAdminPreview ? (
+                    <span className="text-xs text-luxury-gray-3">Pending</span>
                   ) : (
                     <button
                       onClick={requestW9Form}
@@ -599,6 +601,8 @@ function LandlordDashboardContent() {
                       <CheckCircle size={16} />
                       Connected
                     </span>
+                  ) : isAdminPreview ? (
+                    <span className="text-xs text-luxury-gray-3">Pending</span>
                   ) : (
                     <button
                       onClick={requestBankActivation}
