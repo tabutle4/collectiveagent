@@ -1582,6 +1582,18 @@ const checkout = new window.Payload.Checkout({
                 <div className="container-card text-center space-y-4">
                   <button
                     onClick={async () => {
+                      const notifyW9Error = async (errorDetail: string) => {
+                        await fetch('/api/onboarding/w9-error-notify', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            name: joinForm.first_name ? `${joinForm.first_name} ${joinForm.last_name}` : (prospect?.first_name ? `${prospect.first_name} ${prospect.last_name}` : 'Unknown'),
+                            email: joinForm.email || prospect?.email || 'Unknown',
+                            type: 'Agent Onboarding',
+                            error_detail: errorDetail,
+                          }),
+                        })
+                      }
                       try {
                         const res = await fetch('/api/onboarding/create-w9-request', {
                           method: 'POST',
@@ -1590,7 +1602,8 @@ const checkout = new window.Payload.Checkout({
                         })
                         const result = await res.json()
                         if (!res.ok || !result.form_request) {
-                          alert('Failed to load the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
+                          await notifyW9Error('API response not ok or missing form_request')
+                          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
                           return
                         }
                         if (typeof window !== 'undefined' && window.Avalara1099) {
@@ -1611,15 +1624,18 @@ const checkout = new window.Payload.Checkout({
                             },
                             onError: (errors: any) => {
                               console.error('W-9 errors:', errors)
-                              alert('There was an error with the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
+                              notifyW9Error('Avalara onError: ' + JSON.stringify(errors))
+                              alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
                             },
                           })
                         } else {
-                          alert('The W-9 form is still loading. Please wait a moment and try again. If this continues, email office@collectiverealtyco.com.')
+                          await notifyW9Error('Avalara1099 SDK not loaded on page')
+                          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
                         }
                       } catch (err) {
                         console.error('W-9 request error:', err)
-                        alert('Failed to load the W-9 form. Please email office@collectiverealtyco.com and we will send you a direct link to complete it.')
+                        await notifyW9Error('Exception: ' + (err instanceof Error ? err.message : String(err)))
+                        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
                       }
                     }}
                     className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"

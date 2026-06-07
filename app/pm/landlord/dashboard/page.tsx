@@ -257,6 +257,20 @@ function LandlordDashboardContent() {
     }
   }
 
+  const notifyW9Error = async (errorDetail: string) => {
+    if (!data?.landlord) return
+    await fetch('/api/onboarding/w9-error-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `${data.landlord.first_name} ${data.landlord.last_name}`,
+        email: data.landlord.email,
+        type: 'Landlord',
+        error_detail: errorDetail,
+      }),
+    })
+  }
+
   const requestW9Form = async () => {
     if (!data?.landlord.id) return
     setRequestingW9(true)
@@ -289,21 +303,26 @@ function LandlordDashboardContent() {
             onError: (errors: any) => {
               console.error('W-9 errors:', errors)
               if (errors !== 'cancel') {
-                alert('There was an error with the W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link to complete it.')
+                notifyW9Error('Avalara onError: ' + JSON.stringify(errors))
+                alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
               }
             },
           })
         } else {
-          alert('W-9 form is loading. Please try again in a moment. If this continues, email pm@collectiverealtyco.com.')
+          notifyW9Error('Avalara1099 SDK not loaded on page')
+          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
         }
       } else if (result.fallback) {
-        alert('Please email pm@collectiverealtyco.com and we will send you a direct link to complete your W-9.')
+        notifyW9Error('API returned fallback=true')
+        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
       } else {
-        alert('Failed to load W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link.')
+        notifyW9Error('API response not ok or missing form_request')
+        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
       }
     } catch (err) {
       console.error('W-9 request error:', err)
-      alert('Failed to load W-9 form. Please email pm@collectiverealtyco.com and we will send you a direct link.')
+      notifyW9Error('API response not ok or missing form_request')
+        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
     } finally {
       setRequestingW9(false)
     }
