@@ -769,7 +769,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
           </p>
         </div>
 
-        <div className="px-4 md:px-6 pt-6 pb-20 md:pb-6">{children}</div>
+        <div className="px-4 md:px-6 pt-6 pb-20 md:pb-6 overflow-x-hidden">{children}</div>
       </div>
 
       {/* Mobile bottom nav bar - Back / Menu / Reload */}

@@ -93,8 +93,7 @@
 
   /* Inputs */
   .input-luxury {
-    @apply w-full max-w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
-    box-sizing: border-box;
+    @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
   }
   .input-luxury:focus {
     box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
@@ -108,8 +107,7 @@
   }
 
   .select-luxury {
-    @apply w-full max-w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
-    box-sizing: border-box;
+    @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 rounded;
   }
   .select-luxury:focus {
     box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
