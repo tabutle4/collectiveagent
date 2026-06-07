@@ -435,7 +435,10 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
       const checkMobile = () => setIsMobile(window.innerWidth < 768)
       checkMobile()
       window.addEventListener('resize', checkMobile)
-      setIsPwa(window.matchMedia('(display-mode: standalone)').matches)
+      setIsPwa(
+        ('standalone' in window.navigator && (window.navigator as any).standalone === true) ||
+        window.matchMedia('(display-mode: standalone)').matches
+      )
       return () => window.removeEventListener('resize', checkMobile)
     }
   }, [])
