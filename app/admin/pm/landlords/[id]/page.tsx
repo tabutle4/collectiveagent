@@ -1314,42 +1314,46 @@ export default function LandlordDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-wrap items-start gap-3 mb-4">
-        <button
-          onClick={() => router.push('/admin/pm/landlords')}
-          className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div className="flex-1">
-          <h1 className="page-title">{landlord.first_name} {landlord.last_name}</h1>
-          <p className="text-sm text-luxury-gray-3">{landlord.email}</p>
+      <div className="mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            onClick={() => router.push('/admin/pm/landlords')}
+            className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors flex-shrink-0"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="page-title truncate">{landlord.first_name} {landlord.last_name}</h1>
+            <p className="text-sm text-luxury-gray-3 truncate">{landlord.email}</p>
+          </div>
+          <span className={`text-xs font-medium flex-shrink-0 ${
+            landlord.status === 'active' ? 'text-green-600' : 'text-amber-600'
+          }`}>
+            {landlord.status}
+          </span>
         </div>
-        <button
-          onClick={sendInvite}
-          disabled={sendingInvite}
-          className="btn btn-secondary flex items-center gap-2"
-        >
-          {sendingInvite ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Mail size={14} />
-          )}
-          {sendingInvite ? 'Sending...' : 'Send Invite'}
-        </button>
-        <Link
-          href={`/pm/landlord/dashboard?preview=${landlordId}`}
-          target="_blank"
-          className="btn btn-secondary flex items-center gap-2"
-        >
-          <ExternalLink size={14} />
-          Preview Portal
-        </Link>
-        <span className={`text-xs font-medium ${
-          landlord.status === 'active' ? 'text-green-600' : 'text-amber-600'
-        }`}>
-          {landlord.status}
-        </span>
+        <div className="flex flex-wrap gap-2 ml-9">
+          <button
+            onClick={sendInvite}
+            disabled={sendingInvite}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            {sendingInvite ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Mail size={14} />
+            )}
+            {sendingInvite ? 'Sending...' : 'Send Invite'}
+          </button>
+          <Link
+            href={`/pm/landlord/dashboard?preview=${landlordId}`}
+            target="_blank"
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <ExternalLink size={14} />
+            Preview Portal
+          </Link>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -1358,7 +1362,7 @@ export default function LandlordDetailPage() {
 
       {/* Tabs */}
       <div className="container-card mb-6">
-        <div className="flex overflow-x-auto touch-pan-x space-x-1 border-b border-luxury-gray-5/50 -mx-5 px-5 pb-px">
+        <div className="flex overflow-x-auto touch-pan-x gap-0 border-b border-luxury-gray-5/50 pb-px">
           {TABS.map(tab => {
             const Icon = tab.icon
             return (

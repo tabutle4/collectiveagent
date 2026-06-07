@@ -99,6 +99,14 @@
     box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.06);
   }
 
+  /* iOS Safari renders date/time inputs as inline-flex, ignoring w-full.
+     display: block forces correct width. */
+  input[type="date"].input-luxury,
+  input[type="time"].input-luxury,
+  input[type="datetime-local"].input-luxury {
+    display: block;
+  }
+
   .textarea-luxury {
     @apply w-full px-3 py-2 text-sm bg-white border border-luxury-gray-6 focus:border-luxury-black focus:outline-none transition-colors duration-200 min-h-[80px] resize-y rounded;
   }
