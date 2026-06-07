@@ -293,79 +293,10 @@ export async function POST(request: NextRequest) {
           emailSubject = emailSubject.split(placeholder).join(variables[key])
         })
       } else {
-        // Fallback to old system
-        let emailBody =
-          campaign?.email_body ||
-          `
-Hi ${agent.preferred_first_name},
-
-${campaign ? `Please complete the ${campaign.name} by clicking the link below:` : 'Thank you for your interest in Collective Realty Co.'}
-
-${campaignLink ? campaignLink + '\n' : ''}${variables.deadline ? `Deadline: ${variables.deadline}` : ''}
-
-Thank you,
-Collective Realty Co.
-        `
-
-        emailBody = emailBody
-          .replace(/{first_name}/g, variables.first_name)
-          .replace(/{last_name}/g, variables.last_name)
-          .replace(/{campaign_link}/g, campaignLink)
-          .replace(/{deadline}/g, variables.deadline)
-
-        emailSubject =
-          campaign?.email_subject ||
-          (campaign ? `Action Required: ${campaign.name}` : 'Welcome to Collective Realty Co.')
-
-        emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #2d2d2d; color: white; padding: 30px; text-align: center; }
-    .content { padding: 30px; background: #fff; }
-    .button { 
-      display: inline-block; 
-      padding: 12px 30px; 
-      background: #2d2d2d; 
-      color: white; 
-      text-decoration: none; 
-      border-radius: 4px; 
-      margin: 20px 0; 
-    }
-    .footer { 
-      margin-top: 30px; 
-      padding-top: 20px; 
-      border-top: 1px solid #ddd; 
-      font-size: 12px; 
-      color: #666; 
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Collective Realty Co.</h1>
-    </div>
-    
-    <div class="content">
-      ${emailBody.replace(/\n/g, '<br>')}
-      
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${campaignLink}" class="button">Complete Campaign</a>
-      </div>
-      
-      <div class="footer">
-        <p>This is an automated message from Collective Realty Co.</p>
-        <p>Questions? Contact us at office@collectiverealtyco.com</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-        `
+        // No template configured -- block send rather than sending bare HTML
+        console.error('No email template configured for this campaign. Assign a template before sending.')
+        results.push({ success: false, email: agent.email, error: 'No email template configured' })
+        continue
       }
 
       try {
