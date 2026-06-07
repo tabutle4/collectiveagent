@@ -137,6 +137,8 @@ export async function GET(
         other_deductions,
         other_deductions_description,
         deposit_amount,
+        reserve_amount,
+        disbursement_type,
         net_amount,
         payment_status,
         period_month,
@@ -194,6 +196,19 @@ export async function GET(
       Number(statement.held_in_trust_at_statement_date) - pendingDepositReturn
     )
 
+    // Reserve balance: sum of reserve_amount withheld on rent disbursements
+    // minus reserve disbursements that have been paid out.
+    const reserveHeld = (disbDetail || [])
+      .filter((d: any) => (d.disbursement_type === 'rent' || d.gross_rent > 0))
+      .reduce((sum: number, d: any) => sum + Number(d.reserve_amount || 0), 0)
+
+    const reserveReleased = (disbDetail || [])
+      .filter((d: any) => d.disbursement_type === 'reserve' && ['paid', 'completed'].includes(d.payment_status))
+      .reduce((sum: number, d: any) => sum + Number(d.deposit_amount || 0), 0)
+
+    const reserveBalance = Math.max(0, reserveHeld - reserveReleased)
+    const depositBalance = Math.max(0, displayedHeldInTrust - reserveBalance)
+
     // ----- Render HTML -----
     const landlord = statement.landlords
     const property = statement.managed_properties
@@ -238,6 +253,10 @@ export async function GET(
       has_net_disbursed: Number(statement.total_net_disbursed) > 0,
       total_net_disbursed_raw: Number(statement.total_net_disbursed),
       held_in_trust: fmt$(displayedHeldInTrust),
+      deposit_balance: fmt$(depositBalance),
+      reserve_balance: fmt$(reserveBalance),
+      reserve_held: fmt$(reserveHeld),
+      has_reserve: reserveHeld > 0,
       disbursement_rows: disbursementRows,
       notes: statement.notes || '',
       sent_at: statement.sent_at ? fmtDate(statement.sent_at) : null,
@@ -399,6 +418,15 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-weight: 600;">Held in Trust</span>
         <span style="font-weight: 600; color: #C5A278;">${data.held_in_trust}</span>
       </div>
+      ${data.has_reserve ? `
+      <div style="display: flex; justify-content: space-between; padding: 2px 0 2px 12px; font-size: 10px; color: #888;">
+        <span>Security deposits</span>
+        <span>${data.deposit_balance}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 2px 0 2px 12px; font-size: 10px; color: #888;">
+        <span>Reserve fund</span>
+        <span>${data.reserve_balance}</span>
+      </div>` : ''}
     </div>
   </div>
 

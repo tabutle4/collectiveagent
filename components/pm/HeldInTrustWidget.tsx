@@ -1,23 +1,5 @@
 'use client'
 
-// Held-in-Trust widget.
-//
-// Surfaces the live held-in-trust balance for a landlord (and optionally
-// scoped to one property) on the admin pages. The data already exists via
-// /api/pm/held-in-trust - this is just the UI surface that displays it.
-//
-// Why this matters for CRC:
-//   Texas brokers have a fiduciary duty over funds held in trust (Texas
-//   Property Code Chapter 92 + TREC rules). Having this visible at all
-//   times reduces the risk of accidentally over-disbursing a deposit.
-//
-// Math (computed server-side in lib/pm-calculations):
-//   heldInTrust = depositsPaidIn - returnedToLandlord - returnedToTenant
-//
-// Usage:
-//   <HeldInTrustWidget landlordId={landlordId} />
-//   <HeldInTrustWidget landlordId={landlordId} propertyId={propertyId} />
-
 import { useState, useEffect } from 'react'
 import { Shield } from 'lucide-react'
 
@@ -25,13 +7,16 @@ interface HeldInTrustData {
   depositsPaidIn: number
   returnedToLandlord: number
   returnedToTenant: number
+  reserveHeld: number
+  reserveReleased: number
+  depositBalance: number
+  reserveBalance: number
   heldInTrust: number
 }
 
 interface Props {
   landlordId: string
   propertyId?: string
-  // Optional - render a tighter compact version (e.g. for sidebars).
   compact?: boolean
 }
 
@@ -68,7 +53,6 @@ export default function HeldInTrustWidget({ landlordId, propertyId, compact = fa
   const formatMoney = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-  // Loading state - skeleton matches the final layout height to avoid jump
   if (loading) {
     return (
       <div className="container-card">
@@ -97,6 +81,8 @@ export default function HeldInTrustWidget({ landlordId, propertyId, compact = fa
     )
   }
 
+  const hasReserve = (data.reserveHeld ?? 0) > 0
+
   return (
     <div className="container-card">
       <div className="flex items-center gap-2 mb-3">
@@ -106,7 +92,6 @@ export default function HeldInTrustWidget({ landlordId, propertyId, compact = fa
         </h3>
       </div>
 
-      {/* Big number */}
       <p className="text-2xl font-semibold text-luxury-gray-1 mb-3">
         {formatMoney(data.heldInTrust)}
       </p>
@@ -114,22 +99,26 @@ export default function HeldInTrustWidget({ landlordId, propertyId, compact = fa
       {!compact && (
         <div className="space-y-1.5 pt-3 border-t border-luxury-gray-5">
           <div className="flex justify-between text-xs">
-            <span className="text-luxury-gray-3">Tenant deposits paid</span>
-            <span className="text-luxury-gray-1 font-medium">
-              {formatMoney(data.depositsPaidIn)}
-            </span>
+            <span className="text-luxury-gray-3">Security deposits</span>
+            <span className="text-luxury-gray-1 font-medium">{formatMoney(data.depositBalance ?? data.heldInTrust)}</span>
+          </div>
+          {hasReserve && (
+            <div className="flex justify-between text-xs">
+              <span className="text-luxury-gray-3">Reserve held</span>
+              <span className="text-luxury-gray-1 font-medium">{formatMoney(data.reserveBalance ?? 0)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-xs pt-1 border-t border-luxury-gray-5">
+            <span className="text-luxury-gray-3">Tenant deposits paid in</span>
+            <span className="text-luxury-gray-1 font-medium">{formatMoney(data.depositsPaidIn)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-luxury-gray-3">Returned to landlord</span>
-            <span className="text-luxury-gray-1 font-medium">
-              {formatMoney(data.returnedToLandlord)}
-            </span>
+            <span className="text-luxury-gray-1 font-medium">{formatMoney(data.returnedToLandlord)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-luxury-gray-3">Refunded to tenant</span>
-            <span className="text-luxury-gray-1 font-medium">
-              {formatMoney(data.returnedToTenant)}
-            </span>
+            <span className="text-luxury-gray-1 font-medium">{formatMoney(data.returnedToTenant)}</span>
           </div>
         </div>
       )}

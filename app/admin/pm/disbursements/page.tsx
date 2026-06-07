@@ -862,6 +862,7 @@ export default function DisbursementsPage() {
             onClick={() => openChargedBasisModal()}
             className="btn btn-secondary inline-flex items-center gap-2"
             title="Auto-charge mgmt fee for charged-basis landlords whose tenant did not pay this period"
+            style={{ display: 'none' }}
           >
             Run Monthly Charged Fees
           </button>
