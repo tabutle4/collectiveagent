@@ -1551,12 +1551,20 @@ export default function AdminTransactionDetailPage() {
   const [savingContact, setSavingContact] = useState(false)
   const [extractingContacts, setExtractingContacts] = useState(false)
   const [contactSuggestions, setContactSuggestions] = useState<any[]>([])
+  const [userPermissions, setUserPermissions] = useState<string[]>([])
+  const [additionalIncome, setAdditionalIncome] = useState<any[]>([])
+  const [addingIncome, setAddingIncome] = useState<{ listing: boolean; buying: boolean }>({ listing: false, buying: false })
+  const [incomeForm, setIncomeForm] = useState<{ listing: { label: string; amount: string }; buying: { label: string; amount: string } }>({
+    listing: { label: '', amount: '' },
+    buying: { label: '', amount: '' },
+  })
+  const [sendingDoc, setSendingDoc] = useState<string | null>(null)
 
   // Auth
   useEffect(() => {
     fetch('/api/auth/me')
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then(d => setUser(d.user))
+      .then(d => { setUser(d.user); setUserPermissions(d.permissions || []) })
       .catch(() => router.push('/auth/login'))
   }, [router])
 
@@ -1645,6 +1653,10 @@ export default function AdminTransactionDetailPage() {
       .then(d => setContacts(d.contacts || []))
       .catch(() => {})
       .finally(() => setLoadingContacts(false))
+    fetch(`/api/admin/transactions/${id}/additional-income`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { rows: [] })
+      .then(d => setAdditionalIncome(d.rows || []))
+      .catch(() => {})
   }, [activeTab, id])
 
   // Fetch smart calc reference data on mount
@@ -1820,6 +1832,68 @@ export default function AdminTransactionDetailPage() {
       }
     } finally {
       setRecalcRowId(null)
+    }
+  }
+
+  const saveBaseCommission = async (side: 'listing' | 'buying', value: string) => {
+    const field = side === 'listing' ? 'listing_base_commission' : 'buying_base_commission'
+    await updateTransaction({ [field]: parseFloat(value) || 0 })
+    await fetch(`/api/admin/transactions/${id}/additional-income`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ side }),
+    })
+    loadData()
+  }
+
+  const addIncomeRow = async (side: 'listing' | 'buying') => {
+    const form = incomeForm[side]
+    if (!form.label.trim() || !form.amount) return
+    setAddingIncome(prev => ({ ...prev, [side]: true }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/additional-income`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ side, label: form.label.trim(), amount: parseFloat(form.amount) }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setAdditionalIncome(prev => [...prev, d.row])
+        setIncomeForm(prev => ({ ...prev, [side]: { label: '', amount: '' } }))
+        loadData()
+      }
+    } finally {
+      setAddingIncome(prev => ({ ...prev, [side]: false }))
+    }
+  }
+
+  const deleteIncomeRow = async (rowId: string, side: 'listing' | 'buying') => {
+    await fetch(`/api/admin/transactions/${id}/additional-income`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ row_id: rowId }),
+    })
+    setAdditionalIncome(prev => prev.filter((r: any) => r.id !== rowId))
+    loadData()
+  }
+
+  const sendDocument = async (tiaId: string, emailType: 'statement' | 'cda') => {
+    if (!confirm(`Send ${emailType === 'statement' ? 'commission statement' : 'CDA'} to agent?`)) return
+    setSendingDoc(tiaId + emailType)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send_email', email_type: emailType, internal_agent_id: tiaId }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Send failed')
+      alert(`Sent to ${result.sent_to}${result.cc ? ` (cc: ${result.cc})` : ''}`)
+      await loadData()
+    } catch (err: any) {
+      alert(err.message || 'Failed to send')
+    } finally {
+      setSendingDoc(null)
     }
   }
 
@@ -3031,20 +3105,114 @@ export default function AdminTransactionDetailPage() {
                     onRefresh={loadData}
                     canEdit={true}
                   />
-                  <EditableFieldRow
-                    label="Listing Side"
-                    value={txn.listing_side_commission}
-                    field="listing_side_commission"
-                    type="number"
-                    onSave={(f, v) => updateTransaction({ [f]: v })}
-                  />
-                  <EditableFieldRow
-                    label="Buying Side"
-                    value={txn.buying_side_commission}
-                    field="buying_side_commission"
-                    type="number"
-                    onSave={(f, v) => updateTransaction({ [f]: v })}
-                  />
+                  {/* Listing side: read-only total, base commission editable, additional income rows */}
+                  {(() => {
+                    const listingRows = additionalIncome.filter((r: any) => r.side === 'listing')
+                    const listingTotal = parseFloat(txn.listing_side_commission || 0) || 0
+                    return (
+                      <>
+                        <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                          <span className="field-label shrink-0">Listing Side</span>
+                          <span className="text-xs font-semibold text-luxury-gray-1 font-mono">{fmt$(listingTotal)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-4 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                          <span className="field-label shrink-0 text-luxury-gray-3">Base commission</span>
+                          <EditableFieldRow
+                            label=""
+                            value={txn.listing_base_commission ?? txn.listing_side_commission}
+                            field="listing_base_commission"
+                            type="number"
+                            onSave={(_f, v) => saveBaseCommission('listing', String(v ?? ''))}
+                          />
+                        </div>
+                        {listingRows.map((r: any) => (
+                          <div key={r.id} className="flex justify-between items-center gap-4 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                            <span className="field-label shrink-0 text-luxury-gray-3">{r.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-luxury-gray-2">{fmt$(r.amount)}</span>
+                              <button onClick={() => deleteIncomeRow(r.id, 'listing')} className="text-luxury-gray-4 hover:text-red-500 text-xs leading-none">&times;</button>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex items-center gap-2 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                          <input
+                            placeholder="Description"
+                            value={incomeForm.listing.label}
+                            onChange={e => setIncomeForm(prev => ({ ...prev, listing: { ...prev.listing, label: e.target.value } }))}
+                            className="flex-1 text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-transparent text-luxury-gray-1 placeholder-luxury-gray-4"
+                          />
+                          <input
+                            placeholder="Amount"
+                            type="number"
+                            value={incomeForm.listing.amount}
+                            onChange={e => setIncomeForm(prev => ({ ...prev, listing: { ...prev.listing, amount: e.target.value } }))}
+                            className="w-20 text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-transparent text-luxury-gray-1"
+                          />
+                          <button
+                            onClick={() => addIncomeRow('listing')}
+                            disabled={addingIncome.listing || !incomeForm.listing.label || !incomeForm.listing.amount}
+                            className="text-xs text-luxury-accent hover:text-luxury-accent/80 disabled:opacity-40 whitespace-nowrap"
+                          >
+                            {addingIncome.listing ? 'Saving...' : '+ Add'}
+                          </button>
+                        </div>
+                      </>
+                    )
+                  })()}
+                  {/* Buying side: read-only total, base commission editable, additional income rows */}
+                  {(() => {
+                    const buyingRows = additionalIncome.filter((r: any) => r.side === 'buying')
+                    const buyingTotal = parseFloat(txn.buying_side_commission || 0) || 0
+                    return (
+                      <>
+                        <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                          <span className="field-label shrink-0">Buying Side</span>
+                          <span className="text-xs font-semibold text-luxury-gray-1 font-mono">{fmt$(buyingTotal)}</span>
+                        </div>
+                        <div className="flex justify-between items-center gap-4 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                          <span className="field-label shrink-0 text-luxury-gray-3">Base commission</span>
+                          <EditableFieldRow
+                            label=""
+                            value={txn.buying_base_commission ?? txn.buying_side_commission}
+                            field="buying_base_commission"
+                            type="number"
+                            onSave={(_f, v) => saveBaseCommission('buying', String(v ?? ''))}
+                          />
+                        </div>
+                        {buyingRows.map((r: any) => (
+                          <div key={r.id} className="flex justify-between items-center gap-4 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                            <span className="field-label shrink-0 text-luxury-gray-3">{r.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-luxury-gray-2">{fmt$(r.amount)}</span>
+                              <button onClick={() => deleteIncomeRow(r.id, 'buying')} className="text-luxury-gray-4 hover:text-red-500 text-xs leading-none">&times;</button>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex items-center gap-2 py-1.5 pl-4 border-b border-luxury-gray-5/30">
+                          <input
+                            placeholder="Description"
+                            value={incomeForm.buying.label}
+                            onChange={e => setIncomeForm(prev => ({ ...prev, buying: { ...prev.buying, label: e.target.value } }))}
+                            className="flex-1 text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-transparent text-luxury-gray-1 placeholder-luxury-gray-4"
+                          />
+                          <input
+                            placeholder="Amount"
+                            type="number"
+                            value={incomeForm.buying.amount}
+                            onChange={e => setIncomeForm(prev => ({ ...prev, buying: { ...prev.buying, amount: e.target.value } }))}
+                            className="w-20 text-xs border border-luxury-gray-5 rounded px-2 py-1 bg-transparent text-luxury-gray-1"
+                          />
+                          <button
+                            onClick={() => addIncomeRow('buying')}
+                            disabled={addingIncome.buying || !incomeForm.buying.label || !incomeForm.buying.amount}
+                            className="text-xs text-luxury-accent hover:text-luxury-accent/80 disabled:opacity-40 whitespace-nowrap"
+                          >
+                            {addingIncome.buying ? 'Saving...' : '+ Add'}
+                          </button>
+                        </div>
+                      </>
+                    )
+                  })()}
                   {/* Office Gross is read-only - auto-derived from sides by
                       the API. The auto-derive runs on single-sided deals
                       (one of listing_side / buying_side is 0); for
@@ -3529,21 +3697,50 @@ export default function AdminTransactionDetailPage() {
                   </div>
                 )}
 
-                {/* Document generation buttons */}
-                {agents.length > 0 && (
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-luxury-gray-5/50">
-                    <button className="btn btn-secondary text-xs flex items-center gap-1.5">
+                {/* Statement & CDA buttons -- per agent */}
+                {agents.filter((a: any) => a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent').map((a: any) => (
+                  <div key={a.id + '_docs'} className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
+                    <button
+                      onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
+                      className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                    >
                       <FileText size={12} />
-                      Commission Statement
+                      Statement
                     </button>
-                    {!leaseTransaction && (
-                      <button className="btn btn-secondary text-xs flex items-center gap-1.5">
-                        <FileText size={12} />
-                        Generate CDA
-                      </button>
+                    <button
+                      onClick={() => window.open(`/api/admin/transactions/${id}/cda/${a.id}`, '_blank')}
+                      className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                    >
+                      <FileText size={12} />
+                      CDA
+                    </button>
+                    {userPermissions.includes('can_generate_cda') && (
+                      <>
+                        <button
+                          onClick={() => sendDocument(a.id, 'statement')}
+                          disabled={sendingDoc === a.id + 'statement'}
+                          className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <Send size={12} />
+                          {sendingDoc === a.id + 'statement' ? 'Sending...' : a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
+                        </button>
+                        <button
+                          onClick={() => sendDocument(a.id, 'cda')}
+                          disabled={sendingDoc === a.id + 'cda'}
+                          className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <Send size={12} />
+                          {sendingDoc === a.id + 'cda' ? 'Sending...' : 'Send CDA'}
+                        </button>
+                      </>
+                    )}
+                    {a.agent_statement_sent_date && (
+                      <span className="text-xs text-luxury-gray-3 self-center">
+                        Sent {new Date(a.agent_statement_sent_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
                     )}
                   </div>
-                )}
+                ))}
               </div>
             </div>
           )}
@@ -3659,7 +3856,7 @@ export default function AdminTransactionDetailPage() {
 
                         {isExpanded && (
                           <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                            <div className="grid grid-cols-2 gap-3 mb-3">
                               <div>
                                 <label className="field-label">Check Amount</label>
                                 <input
@@ -4952,7 +5149,7 @@ export default function AdminTransactionDetailPage() {
                   here, those selected items are applied. */}
 
               {/* Payment Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Payment Date</label>
                   <input
@@ -4981,7 +5178,7 @@ export default function AdminTransactionDetailPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Reference / Check #</label>
                   <input

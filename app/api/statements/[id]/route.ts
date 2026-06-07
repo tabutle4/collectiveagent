@@ -168,7 +168,7 @@ export async function GET(
     }))
 
     const html = generateStatementHTML({
-      logo_url: '/logo-dark.png',
+      logo_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/logo.png`,
       agent_name: agentName,
       representation: formatType(txn?.transaction_type),
       transaction_number: `TR-${txn?.id?.slice(0, 8).toUpperCase() || 'N/A'}`,

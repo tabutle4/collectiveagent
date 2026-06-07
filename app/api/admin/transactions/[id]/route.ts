@@ -3927,6 +3927,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
+      // Track sent date on TIA row and update CDA status on transaction
+      if (email_type === 'statement') {
+        await supabase
+          .from('transaction_internal_agents')
+          .update({ agent_statement_sent: true, agent_statement_sent_date: new Date().toISOString() })
+          .eq('id', internal_agent_id)
+      } else if (email_type === 'cda') {
+        await supabase
+          .from('transaction_internal_agents')
+          .update({ agent_statement_sent: true, agent_statement_sent_date: new Date().toISOString() })
+          .eq('id', internal_agent_id)
+        await supabase
+          .from('transactions')
+          .update({
+            cda_status: 'sent',
+            cda_completed_at: new Date().toISOString(),
+            cda_completed_by: auth.user?.id || null,
+          })
+          .eq('id', id)
+      }
+
       return NextResponse.json({ success: true, sent_to: preview.to, cc: preview.cc })
     }
 
