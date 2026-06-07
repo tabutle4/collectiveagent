@@ -4,8 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Users, Building2, Key, FileText, Banknote, Wrench, UserCircle2, BarChart2 } from 'lucide-react'
 
-// Primary workflow navigation, ordered by typical onboarding sequence:
-// landlord first, then their property, then tenant, then the lease that ties them together.
 const workflowItems = [
   { href: '/admin/pm/landlords', label: 'Landlords', icon: Users },
   { href: '/admin/pm/properties', label: 'Properties', icon: Building2 },
@@ -13,7 +11,6 @@ const workflowItems = [
   { href: '/admin/pm/leases', label: 'Leases', icon: Key },
 ]
 
-// Operational tools, used after initial setup is complete.
 const operationsItems = [
   { href: '/admin/pm/invoices', label: 'Invoices', icon: FileText },
   { href: '/admin/pm/disbursements', label: 'Disbursements', icon: Banknote },
@@ -28,34 +25,38 @@ export default function PMLayout({ children }: { children: React.ReactNode }) {
   return (
     <div>
       {/* Workflow Navigation */}
-      <div className="flex flex-wrap gap-2 mb-2">
-        {workflowItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`btn ${isActive(item.href) ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2 text-sm`}
-          >
-            <item.icon size={14} />
-            {item.label}
-          </Link>
-        ))}
+      <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6 mb-1">
+        <div className="flex gap-2 min-w-max pb-1">
+          {workflowItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`btn ${isActive(item.href) ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2 text-sm flex-shrink-0`}
+            >
+              <item.icon size={14} />
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* Operations Navigation */}
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mr-1">
-          Operations
-        </span>
-        {operationsItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`btn ${isActive(item.href) ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2 text-xs`}
-          >
-            <item.icon size={12} />
-            {item.label}
-          </Link>
-        ))}
+      <div className="overflow-x-auto -mx-4 md:-mx-6 px-4 md:px-6 mb-5">
+        <div className="flex items-center gap-2 min-w-max pb-1">
+          <span className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest flex-shrink-0">
+            Operations
+          </span>
+          {operationsItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`btn ${isActive(item.href) ? 'btn-primary' : 'btn-secondary'} flex items-center gap-2 text-xs flex-shrink-0`}
+            >
+              <item.icon size={12} />
+              {item.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       {children}
