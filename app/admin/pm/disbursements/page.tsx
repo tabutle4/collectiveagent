@@ -1306,7 +1306,7 @@ export default function DisbursementsPage() {
                   </div>
 
                   {/* Period */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="field-label">Period Month</label>
                       <select
@@ -1789,7 +1789,7 @@ export default function DisbursementsPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">Gross Rent</label>
                   <div className="relative">
@@ -1886,7 +1886,7 @@ export default function DisbursementsPage() {
               {/* When status is completed/paid, show payment details */}
               {['completed', 'paid'].includes(editForm.payment_status) && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="field-label">Payment Date</label>
                       <input
@@ -1991,7 +1991,7 @@ export default function DisbursementsPage() {
             </div>
 
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">Month</label>
                   <select

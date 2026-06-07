@@ -4952,7 +4952,7 @@ export default function AdminTransactionDetailPage() {
                   here, those selected items are applied. */}
 
               {/* Payment Details */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Payment Date</label>
                   <input
@@ -4981,7 +4981,7 @@ export default function AdminTransactionDetailPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Reference / Check #</label>
                   <input

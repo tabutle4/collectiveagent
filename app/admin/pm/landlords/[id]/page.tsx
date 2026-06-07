@@ -1421,7 +1421,7 @@ export default function LandlordDetailPage() {
                   </h3>
                   {editingOverview ? (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="field-label">First Name</label>
                           <input
@@ -2109,7 +2109,7 @@ export default function LandlordDetailPage() {
                   onChange={e => setPropertyForm({ ...propertyForm, property_address: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">Unit/Suite</label>
                   <input
@@ -2129,7 +2129,7 @@ export default function LandlordDetailPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">State</label>
                   <input
@@ -2204,7 +2204,7 @@ export default function LandlordDetailPage() {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">Lease Start</label>
                   <input
@@ -2258,7 +2258,7 @@ export default function LandlordDetailPage() {
               </button>
             </div>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">First Name</label>
                   <input

@@ -988,7 +988,7 @@ export default function AdminBillingPage() {
                                 >
                                   {isEditing ? (
                                     <div className="space-y-2">
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         <div>
                                           <label className="block text-xs text-luxury-gray-3 mb-1">
                                             Amount ($)
@@ -1155,7 +1155,7 @@ export default function AdminBillingPage() {
                         </div>
                         {showCreditForm === agent.id && (
                           <div className="inner-card space-y-2 mb-2">
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <div>
                                 <label className="block text-xs text-luxury-gray-3 mb-1">
                                   Amount ($)
@@ -1323,7 +1323,7 @@ export default function AdminBillingPage() {
                                           Record a payment received outside Payload. This zeroes
                                           the invoice balance with an offsetting line item.
                                         </p>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                           <div>
                                             <label className="block text-xs text-luxury-gray-3 mb-1">
                                               Method
@@ -1391,7 +1391,7 @@ export default function AdminBillingPage() {
                               </div>
                               {showMonthlyForm === agent.id && (
                                 <div className="inner-card space-y-2">
-                                  <div className="grid grid-cols-2 gap-2">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <div>
                                       <label className="block text-xs text-luxury-gray-3 mb-1">
                                         Month
@@ -1461,7 +1461,7 @@ export default function AdminBillingPage() {
                             </div>
                             {showCustomForm === agent.id && (
                               <div className="inner-card space-y-2">
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                   <div>
                                     <label className="block text-xs text-luxury-gray-3 mb-1">
                                       Amount ($)

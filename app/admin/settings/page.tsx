@@ -1078,7 +1078,7 @@ export default function SettingsPage() {
                       </h3>
                       
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="field-label">Plan Code</label>
                             <input
@@ -1111,7 +1111,7 @@ export default function SettingsPage() {
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="field-label">Agent Split (%)</label>
                             <input
@@ -1190,7 +1190,7 @@ export default function SettingsPage() {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="field-label">Processing Fee</label>
                             <div className="relative">
@@ -1491,7 +1491,7 @@ export default function SettingsPage() {
                       </h3>
                       
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="field-label">Rule Key</label>
                             <input
@@ -1523,7 +1523,7 @@ export default function SettingsPage() {
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="field-label">Agent Split (optional)</label>
                             <input

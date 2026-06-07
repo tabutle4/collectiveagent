@@ -449,7 +449,7 @@ function TenantInvoicesTab() {
                 </>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[['rent_amount','Rent Amount'],['late_fee','Late Fee']].map(([k,label]) => (
                       <div key={k}>
                         <label className="field-label">{label}</label>

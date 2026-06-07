@@ -320,7 +320,7 @@ export default function TenantDetailPage() {
             </div>
 
             {isEditing ? (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="field-label">First Name</label>
                   <input
@@ -375,7 +375,7 @@ export default function TenantDetailPage() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-luxury-gray-3">Name</p>
                   <p className="text-sm font-medium text-luxury-gray-1">

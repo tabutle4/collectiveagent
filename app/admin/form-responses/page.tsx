@@ -1465,10 +1465,10 @@ export default function FormResponsesPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex space-x-2 border-b border-luxury-gray-5">
+        <div className="flex overflow-x-auto touch-pan-x space-x-2 border-b border-luxury-gray-5 pb-px">
           <button
             onClick={() => setActiveTab('prospects')}
-            className={`px-4 py-2 text-sm transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 text-sm transition-colors ${
               activeTab === 'prospects'
                 ? 'border-b-2 border-luxury-black text-luxury-black font-medium'
                 : 'text-luxury-gray-2 hover:text-luxury-black'
@@ -1478,7 +1478,7 @@ export default function FormResponsesPage() {
           </button>
           <button
             onClick={() => setActiveTab('pre-listing')}
-            className={`px-4 py-2 text-sm transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 text-sm transition-colors ${
               activeTab === 'pre-listing'
                 ? 'border-b-2 border-luxury-black text-luxury-black font-medium'
                 : 'text-luxury-gray-2 hover:text-luxury-black'
@@ -1488,7 +1488,7 @@ export default function FormResponsesPage() {
           </button>
           <button
             onClick={() => setActiveTab('just-listed')}
-            className={`px-4 py-2 text-sm transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 text-sm transition-colors ${
               activeTab === 'just-listed'
                 ? 'border-b-2 border-luxury-black text-luxury-black font-medium'
                 : 'text-luxury-gray-2 hover:text-luxury-black'
@@ -1498,7 +1498,7 @@ export default function FormResponsesPage() {
           </button>
           <button
             onClick={() => setActiveTab('forms')}
-            className={`px-4 py-2 text-sm transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 text-sm transition-colors ${
               activeTab === 'forms'
                 ? 'border-b-2 border-luxury-black text-luxury-black font-medium'
                 : 'text-luxury-gray-2 hover:text-luxury-black'

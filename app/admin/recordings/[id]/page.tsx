@@ -440,7 +440,7 @@ export default function RecordingDetailPage() {
         <div className="container-card p-5">
           <p className="text-luxury-gray-3 text-xs uppercase tracking-wide mb-3">Transcript</p>
           {(transcript || chatTranscript || zoomSummary) && (
-            <div className="flex gap-1 mb-0">
+            <div className="flex overflow-x-auto touch-pan-x gap-1 mb-0">
               {transcript && <button onClick={() => setActiveTab('transcript')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'transcript' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Transcript</button>}
               {chatTranscript && <button onClick={() => setActiveTab('chat')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'chat' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Chat</button>}
               {zoomSummary && <button onClick={() => setActiveTab('summary')} className={`text-xs px-3 py-1.5 rounded-t-md border-b-0 border transition-colors ${activeTab === 'summary' ? 'bg-luxury-gray-5 text-luxury-black border-luxury-gray-5' : 'text-luxury-gray-3 border-transparent'}`}>Summary</button>}

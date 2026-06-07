@@ -1225,7 +1225,7 @@ export default function ProfilePage({
                     </select>
                     {realEstateForm.commission_plan === 'custom' && (
                       <div className="mt-3 space-y-3 pt-3 border-t border-luxury-gray-5">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
                             <label className="block text-xs text-luxury-gray-3 mb-1.5">Agent Split %</label>
                             <input
