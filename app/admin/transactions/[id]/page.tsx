@@ -1436,11 +1436,14 @@ export default function AdminTransactionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const searchParams = useSearchParams()
-  const activeTab = (searchParams.get('tab') as NavTab) || 'overview'
+  const [activeTab, setActiveTabState] = useState<NavTab>(
+    (searchParams.get('tab') as NavTab) || 'overview'
+  )
   const setActiveTab = (newTab: NavTab) => {
+    setActiveTabState(newTab)
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', newTab)
-    router.replace(`?${params.toString()}`, { scroll: false })
+    window.history.replaceState(null, '', `?${params.toString()}`)
   }
 
   // Check & Payouts state
@@ -2717,7 +2720,7 @@ export default function AdminTransactionDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex overflow-x-auto px-3 pb-0 gap-0 border-t border-luxury-gray-5/50">
+        <div className="flex overflow-x-auto px-3 pb-px gap-0 border-t border-luxury-gray-5/50 touch-pan-x">
           {navTabs
             .filter(t => t.show)
             .map(tab => (
@@ -3248,7 +3251,7 @@ export default function AdminTransactionDetailPage() {
 
               {/* Summary cards */}
               <div className="container-card">
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                   <div className="inner-card text-center">
                     <p className="text-xs text-luxury-gray-3 mb-0.5">Office Gross</p>
                     <p className="text-sm font-semibold text-luxury-gray-1">
@@ -3752,7 +3755,7 @@ export default function AdminTransactionDetailPage() {
                             </div>
 
                             {/* Payment Method + Funds Status */}
-                            <div className="grid grid-cols-3 gap-3 mb-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                               <div>
                                 <label className="field-label">Payment Type</label>
                                 <select
