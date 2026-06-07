@@ -38,12 +38,16 @@ export class GraphMailError extends Error {
 export interface SendMailInput {
   /** UPN of the sending mailbox (e.g., "leah@collectiverealtyco.com"). */
   fromUpn: string
-  /** Single recipient address. */
-  to: string
+  /** Single recipient address or array of addresses. */
+  to: string | string[]
   /** Subject line. Plain text, no merge tokens at this layer. */
   subject: string
   /** Fully rendered HTML body. */
   html: string
+  /** Optional CC address(es). */
+  cc?: string | string[]
+  /** Optional BCC address(es). */
+  bcc?: string | string[]
   /** Optional reply-to address. */
   replyTo?: string
   /** Whether Graph should save a copy in the sender's Sent Items. Default true. */
@@ -55,12 +59,20 @@ export interface SendMailResult {
   messageId: string | null
 }
 
+function toRecipientList(val: string | string[] | undefined): { emailAddress: { address: string } }[] {
+  if (!val) return []
+  const arr = Array.isArray(val) ? val : [val]
+  return arr.filter(Boolean).map(a => ({ emailAddress: { address: a } }))
+}
+
 export async function sendMailAs(input: SendMailInput): Promise<SendMailResult> {
   const {
     fromUpn,
     to,
     subject,
     html,
+    cc,
+    bcc,
     replyTo,
     saveToSentItems = true,
   } = input
@@ -73,8 +85,15 @@ export async function sendMailAs(input: SendMailInput): Promise<SendMailResult> 
       contentType: 'HTML',
       content: html,
     },
-    toRecipients: [{ emailAddress: { address: to } }],
+    toRecipients: toRecipientList(to),
   }
+
+  const ccList = toRecipientList(cc)
+  if (ccList.length > 0) message.ccRecipients = ccList
+
+  const bccList = toRecipientList(bcc)
+  if (bccList.length > 0) message.bccRecipients = bccList
+
   if (replyTo) {
     message.replyTo = [{ emailAddress: { address: replyTo } }]
   }
@@ -95,7 +114,6 @@ export async function sendMailAs(input: SendMailInput): Promise<SendMailResult> 
     return { messageId: null }
   }
 
-  // Graph error bodies: { error: { code, message, innerError } }
   let detail: unknown = null
   let graphCode: string | null = null
   let graphMessage: string | null = null
@@ -128,8 +146,6 @@ function translateGraphMailError(
     return 'Microsoft Graph token was rejected. Check that the Azure app credentials are correct and consent is granted.'
   }
   if (status === 403) {
-    // Most common cause in the CRC tenant: sender mailbox does not have
-    // an Exchange Online license, or Mail.Send is not consented.
     const suffix = code ? ` (${code})` : ''
     return `The sender mailbox is not licensed for Exchange Online, or Mail.Send is not consented for this mailbox.${suffix}`
   }

@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendEmail } from '@/lib/email/send'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { pmStatementReadyEmail } from '@/lib/email/pm-layout'
 
-// POST /api/pm/statements/[id]/send
-//
-// Emails the landlord a notification that their statement is ready,
-// with a link to the portal view of the statement. Uses the existing
-// PM email layout (matches all other PM emails). Office is BCC'd per
-// the PM module convention.
-//
-// Body: { } (no body needed - statement id is in URL)
-//
-// Side effect: updates statement.sent_at + sent_to_email on success.
-//
-// Resend sender: uses the verified @coachingbrokeragetools.com sending
-// domain (same as other transactional emails). Reply-to is
-// pm@collectiverealtyco.com so landlord responses land in the right inbox.
-
-const FROM_PM = 'CRC Property Management <pm@coachingbrokeragetools.com>'
+const FROM_UPN = 'tarab@collectiverealtyco.com'
 const REPLY_TO_PM = 'pm@collectiverealtyco.com'
 const BCC_OFFICE = 'office@collectiverealtyco.com'
 
@@ -41,7 +26,6 @@ export async function POST(
   try {
     const { id } = await params
 
-    // Load statement + landlord + property
     const { data: statement, error: stErr } = await supabaseAdmin
       .from('pm_statements')
       .select(`
@@ -68,8 +52,6 @@ export async function POST(
       ? `${property.property_address}${property.unit ? ` ${property.unit}` : ''}`
       : 'your property'
 
-    // Generate a permanent access token for this statement so the landlord
-    // can view it without needing an active portal session.
     const crypto = await import('crypto')
     const accessToken = crypto.randomBytes(32).toString('hex')
 
@@ -78,7 +60,6 @@ export async function POST(
       .update({ access_token: accessToken, updated_at: new Date().toISOString() })
       .eq('id', id)
 
-    // Statement URL includes token so landlord can view without login
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://agent.collectiverealtyco.com'
     const statementUrl = `${baseUrl}/pm/statement/${statement.id}?token=${accessToken}`
 
@@ -91,20 +72,15 @@ export async function POST(
       Number(statement.total_net_pending || 0)
     )
 
-    const result = await sendEmail({
+    await sendMailAs({
+      fromUpn: FROM_UPN,
       to: landlord.email,
-      from: FROM_PM,
-      replyTo: REPLY_TO_PM,
       bcc: BCC_OFFICE,
+      replyTo: REPLY_TO_PM,
       subject: `Your ${period} Property Management Statement`,
       html,
     })
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error || 'Send failed' }, { status: 500 })
-    }
-
-    // Stamp sent_at + sent_to_email
     const { error: updErr } = await supabaseAdmin
       .from('pm_statements')
       .update({
@@ -115,17 +91,15 @@ export async function POST(
       .eq('id', id)
 
     if (updErr) {
-      // Email already went out so don't fail the request, just log
       console.error('Statement sent but failed to stamp sent_at:', updErr)
     }
 
     return NextResponse.json({
       success: true,
-      emailId: result.emailId,
       sentTo: landlord.email,
     })
   } catch (err: any) {
     console.error('Statement send error:', err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: err.userMessage || err.message }, { status: 500 })
   }
 }

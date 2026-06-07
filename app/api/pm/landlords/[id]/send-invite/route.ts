@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
-import { Resend } from 'resend'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { pmLandlordInviteEmail } from '@/lib/email/pm-layout'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const FROM_UPN = 'tarab@collectiverealtyco.com'
+const BCC_OFFICE = 'office@collectiverealtyco.com'
+const REPLY_TO = 'pm@collectiverealtyco.com'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check permissions using standard PM pattern
     const auth = await requirePermission(request, 'can_manage_pm')
     if (auth.error) return auth.error
 
     const { id } = await params
     const supabase = await createClient()
 
-    // Get landlord
     const { data: landlord, error: landlordError } = await supabase
       .from('landlords')
       .select('id, first_name, last_name, email')
@@ -29,28 +29,23 @@ export async function POST(
       return NextResponse.json({ error: 'Landlord not found' }, { status: 404 })
     }
 
-    // Send invite email
     const html = pmLandlordInviteEmail(landlord.first_name)
 
-    const { error: emailError } = await resend.emails.send({
-      from: 'CRC Property Management <pm@coachingbrokeragetools.com>',
+    await sendMailAs({
+      fromUpn: FROM_UPN,
       to: landlord.email,
-      bcc: 'office@collectiverealtyco.com',
+      bcc: BCC_OFFICE,
+      replyTo: REPLY_TO,
       subject: 'Access Your Landlord Portal',
       html,
     })
 
-    if (emailError) {
-      console.error('Email error:', emailError)
-      return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      message: `Invite sent to ${landlord.email}` 
+    return NextResponse.json({
+      success: true,
+      message: `Invite sent to ${landlord.email}`,
     })
-  } catch (err) {
+  } catch (err: any) {
     console.error('Send landlord invite error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: err.userMessage || err.message || 'Internal server error' }, { status: 500 })
   }
 }

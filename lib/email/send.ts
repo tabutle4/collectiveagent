@@ -1,11 +1,8 @@
-import { Resend } from 'resend'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { getWelcomeEmailHtml, getWeeklyReportEmailHtml } from './templates'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-const FROM_EMAIL = 'transactions@coachingbrokeragetools.com'
-const FROM_NAME = 'Leah Parpan - Listing & Transaction Coordinator'
+const FROM_UPN = 'transactions@collectiverealtyco.com'
 const REPLY_TO = 'tcandcompliance@collectiverealtyco.com'
 const BCC_EMAIL = 'tcandcompliance@collectiverealtyco.com'
 
@@ -19,7 +16,6 @@ export async function sendWelcomeEmail(
   }
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
-    // Use the coordination's scheduled time for the welcome email text
     const scheduledTime = coordination.next_email_scheduled_for || null
 
     const html = getWelcomeEmailHtml(
@@ -31,54 +27,23 @@ export async function sendWelcomeEmail(
       scheduledTime
     )
 
-    const { data, error } = await resend.emails.send({
-      from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    await sendMailAs({
+      fromUpn: FROM_UPN,
       to: coordination.seller_email,
-      cc: [agent.email],
-      bcc: [BCC_EMAIL],
+      cc: agent.email,
+      bcc: BCC_EMAIL,
       replyTo: REPLY_TO,
       subject: `Collective Realty Co. - Welcome to Weekly Listing Coordination - ${listing.property_address}`,
       html,
     })
 
-    if (error) {
-      console.error('Error sending welcome email:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, emailId: data?.id }
+    // Graph does not return a message ID. Return a sentinel so callers that gate
+    // on emailId truthiness (e.g. send-all-weekly-reports) still mark the report sent.
+    return { success: true, emailId: `graph-${Date.now()}` }
   } catch (error: any) {
     console.error('Error sending welcome email:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error.userMessage || error.message }
   }
-}
-
-/**
- * Calculate the next Monday at 6:00 PM
- */
-function getNextMonday6PM(): Date {
-  const now = new Date()
-  const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
-
-  // Calculate days until next Monday
-  let daysUntilMonday = (8 - dayOfWeek) % 7
-  if (daysUntilMonday === 0) {
-    // If it's Monday, check if it's before 6pm
-    const currentHour = now.getHours()
-    if (currentHour < 18) {
-      // Before 6pm today, schedule for today
-      daysUntilMonday = 0
-    } else {
-      // After 6pm, schedule for next Monday
-      daysUntilMonday = 7
-    }
-  }
-
-  const nextMonday = new Date(now)
-  nextMonday.setDate(now.getDate() + daysUntilMonday)
-  nextMonday.setHours(18, 0, 0, 0) // 6:00 PM
-
-  return nextMonday
 }
 
 export async function sendWeeklyReportEmail(
@@ -91,6 +56,13 @@ export async function sendWeeklyReportEmail(
   scheduleFor?: Date
 ): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
+    // Graph does not support scheduled sends. Log a warning if scheduleFor was passed.
+    // The email is sent immediately. The caller (send-all-weekly-reports) still stamps
+    // email_scheduled_for in the DB for display purposes, which is fine.
+    if (scheduleFor) {
+      console.warn('sendWeeklyReportEmail: scheduleFor is not supported via Microsoft Graph. Email sent immediately.')
+    }
+
     const html = getWeeklyReportEmailHtml(
       coordination,
       listing,
@@ -99,32 +71,22 @@ export async function sendWeeklyReportEmail(
       reportDownloadUrl2
     )
 
-    const emailOptions: any = {
-      from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    await sendMailAs({
+      fromUpn: FROM_UPN,
       to: coordination.seller_email,
-      cc: [agentEmail],
-      bcc: [BCC_EMAIL],
+      cc: agentEmail,
+      bcc: BCC_EMAIL,
       replyTo: REPLY_TO,
       subject: `Collective Realty Co. - Weekly Report - ${listing.property_address} | ${dateSent}`,
       html,
-    }
+    })
 
-    // If scheduleFor is provided, schedule the email
-    if (scheduleFor) {
-      emailOptions.schedule = scheduleFor.toISOString()
-    }
-
-    const { data, error } = await resend.emails.send(emailOptions)
-
-    if (error) {
-      console.error('Error sending weekly report email:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, emailId: data?.id }
+    // Graph does not return a message ID. Return a sentinel so callers that gate
+    // on emailId truthiness still mark the report sent.
+    return { success: true, emailId: `graph-${Date.now()}` }
   } catch (error: any) {
     console.error('Error sending weekly report email:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error.userMessage || error.message }
   }
 }
 
@@ -146,24 +108,22 @@ export async function sendEmail({
   replyTo?: string
 }): Promise<{ success: boolean; emailId?: string; error?: string }> {
   try {
-    const { data, error } = await resend.emails.send({
-      from: from || `${FROM_NAME} <${FROM_EMAIL}>`,
-      to: Array.isArray(to) ? to : [to],
-      cc: cc ? (Array.isArray(cc) ? cc : [cc]) : undefined,
-      bcc: bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined,
+    // from is ignored - all sends go via Graph using FROM_UPN.
+    // Callers that previously passed a custom from address route through
+    // transactions@ via Graph. Reply-to still honours the caller's preference.
+    await sendMailAs({
+      fromUpn: FROM_UPN,
+      to,
+      cc,
+      bcc,
       replyTo: replyTo || REPLY_TO,
       subject,
       html,
     })
 
-    if (error) {
-      console.error('Error sending email:', error)
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, emailId: data?.id }
+    return { success: true }
   } catch (error: any) {
     console.error('Error sending email:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error.userMessage || error.message }
   }
 }

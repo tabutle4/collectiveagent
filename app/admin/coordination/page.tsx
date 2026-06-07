@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ListingCoordination, Listing } from '@/types/listing-coordination'
-import { Send, Trash2, Calendar, X } from 'lucide-react'
+import { Send, Trash2, X } from 'lucide-react'
 
 interface CoordinationWithListing extends ListingCoordination {
   listing?: Listing
@@ -35,12 +35,7 @@ export default function AdminCoordinationDashboard() {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active')
   const [activeTab, setActiveTab] = useState<'list' | 'emails'>('list')
   const [showSendReportsModal, setShowSendReportsModal] = useState(false)
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [sendingReports, setSendingReports] = useState(false)
-  const [scheduling, setScheduling] = useState(false)
-  const [scheduleDate, setScheduleDate] = useState('')
-  const [scheduleTime, setScheduleTime] = useState('18:00')
-  const [applyToAll, setApplyToAll] = useState(true)
 
   useEffect(() => {
     loadCoordinations()
@@ -103,19 +98,17 @@ export default function AdminCoordinationDashboard() {
     })
   }
 
-  const handleSendAllReports = async (sendNow: boolean) => {
+  const handleSendAllReports = async () => {
     setSendingReports(true)
     try {
       const response = await fetch('/api/coordination/send-all-weekly-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, send_now: sendNow }),
+        body: JSON.stringify({ userId: user?.id }),
       })
       const data = await response.json()
       if (data.success) {
-        alert(
-          `Successfully ${sendNow ? 'sent' : 'scheduled'} ${data.sent || data.scheduled} report(s).`
-        )
+        alert(`Successfully sent ${data.sent} report(s).`)
         setShowSendReportsModal(false)
         loadCoordinations()
       } else {
@@ -129,34 +122,6 @@ export default function AdminCoordinationDashboard() {
     }
   }
 
-  const handleScheduleEmails = async () => {
-    if (!scheduleDate || !scheduleTime) {
-      alert('Please select both date and time')
-      return
-    }
-    setScheduling(true)
-    try {
-      const response = await fetch('/api/coordination/update-schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id, scheduleDate, scheduleTime, applyToAll }),
-      })
-      const data = await response.json()
-      if (data.success) {
-        alert(data.message || 'Schedule updated successfully')
-        setShowScheduleModal(false)
-        loadCoordinations()
-      } else {
-        alert(`Error: ${data.error}`)
-      }
-    } catch (error: any) {
-      console.error('Error scheduling emails:', error)
-      alert('Failed to schedule emails')
-    } finally {
-      setScheduling(false)
-    }
-  }
-
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
@@ -167,16 +132,6 @@ export default function AdminCoordinationDashboard() {
             className="btn btn-primary flex items-center gap-2"
           >
             <Send size={14} /> Send All Reports
-          </button>
-          <button
-            onClick={() => {
-              setScheduleDate(new Date().toISOString().split('T')[0])
-              setScheduleTime('18:00')
-              setShowScheduleModal(true)
-            }}
-            className="btn btn-secondary flex items-center gap-2"
-          >
-            <Calendar size={14} /> Schedule Emails
           </button>
           <button
             onClick={() => router.push('/admin/coordination/activate')}
@@ -486,84 +441,22 @@ export default function AdminCoordinationDashboard() {
               </button>
             </div>
             <p className="text-xs text-luxury-gray-3 mb-5">
-              Choose when to send all weekly reports for active coordinations:
+              This will send weekly reports to all active coordinations now.
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => handleSendAllReports(true)}
+                onClick={() => setShowSendReportsModal(false)}
+                className="flex-1 btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendAllReports}
                 disabled={sendingReports}
                 className="flex-1 btn btn-primary disabled:opacity-50"
               >
                 {sendingReports ? 'Sending...' : 'Send Now'}
               </button>
-              <button
-                onClick={() => handleSendAllReports(false)}
-                disabled={sendingReports}
-                className="flex-1 btn btn-secondary disabled:opacity-50"
-              >
-                {sendingReports ? 'Scheduling...' : 'Schedule Monday'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Schedule Emails Modal */}
-      {showScheduleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="container-card max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-luxury-gray-1">Schedule Emails</h2>
-              <button
-                onClick={() => setShowScheduleModal(false)}
-                className="text-luxury-gray-3 hover:text-luxury-gray-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-luxury-gray-3 mb-1">Date</label>
-                <input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={e => setScheduleDate(e.target.value)}
-                  className="input-luxury"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-luxury-gray-3 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={scheduleTime}
-                  onChange={e => setScheduleTime(e.target.value)}
-                  className="input-luxury"
-                />
-              </div>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={applyToAll}
-                  onChange={e => setApplyToAll(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span className="text-xs text-luxury-gray-2">Apply to all coordinations</span>
-              </label>
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="flex-1 btn btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleScheduleEmails}
-                  disabled={scheduling}
-                  className="flex-1 btn btn-primary disabled:opacity-50"
-                >
-                  {scheduling ? 'Scheduling...' : 'Schedule'}
-                </button>
-              </div>
             </div>
           </div>
         </div>

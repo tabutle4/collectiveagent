@@ -1,21 +1,12 @@
-import { Resend } from 'resend'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { getEmailLayout } from '@/lib/email/layout'
 import { supabaseAdmin } from '@/lib/supabase'
 
-if (!process.env.RESEND_API_KEY) {
-  throw new Error('Missing env.RESEND_API_KEY')
-}
+// Sending mailboxes
+const UPN_TARA = 'tarab@collectiverealtyco.com'
+const UPN_COURTNEY = 'courtneyo@collectiverealtyco.com'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-const FROM_EMAILS = {
-  onboarding: 'Collective Realty Co. <onboarding@coachingbrokeragetools.com>',
-  support: 'Collective Support <support@coachingbrokeragetools.com>',
-  notifications: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
-  office: 'Collective Realty Co. <office@coachingbrokeragetools.com>',
-  admin: 'Collective Admin <admin@coachingbrokeragetools.com>',
-}
-
+const REPLY_TO_OFFICE = 'office@collectiverealtyco.com'
 const ADMIN_EMAIL = 'office@collectiverealtyco.com'
 
 // ─── LUXURY TEMPLATE (prospect-facing and onboarding emails) ──────────────────
@@ -35,8 +26,8 @@ function getLuxuryEmailTemplate({
 }) {
   const companyName = isReferral ? 'Referral Collective' : 'Collective Realty Co.'
   const tagline = isReferral ? 'Referral-Only Brokerage' : 'The Coaching Brokerage'
-  const footerText = isReferral 
-    ? 'Referral Collective - Keep Your License Active' 
+  const footerText = isReferral
+    ? 'Referral Collective - Keep Your License Active'
     : 'Welcome to Collective Realty Co. - Where Excellence Meets Opportunity'
 
   return `
@@ -102,7 +93,7 @@ function getLuxuryEmailTemplate({
   `
 }
 
-// ─── PROSPECT WELCOME (luxury) ────────────────────────────────────────────────
+// ─── PROSPECT WELCOME (sent from tarab@) ─────────────────────────────────────
 
 export async function sendProspectWelcomeEmail(prospect: {
   preferred_first_name: string
@@ -111,8 +102,7 @@ export async function sendProspectWelcomeEmail(prospect: {
   mls_choice?: string
 }) {
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
-  
-  // Fetch referral settings if needed
+
   let referralAnnualFee = 299
   let referralBrokerageName = 'Referral Collective'
   if (isReferral) {
@@ -127,10 +117,7 @@ export async function sendProspectWelcomeEmail(prospect: {
       }
     } catch {}
   }
-  
-  const brokerageName = isReferral ? referralBrokerageName : 'Collective Realty Co.'
-  
-  // Different content for referral vs standard agents
+
   const contentSection = isReferral
     ? `
       <p class="intro-text">Thank you for submitting your information. We're excited to help you keep your license active while earning referral income with minimal overhead.</p>
@@ -183,19 +170,19 @@ export async function sendProspectWelcomeEmail(prospect: {
     isReferral,
   })
 
-  return resend.emails.send({
-    from: FROM_EMAILS.onboarding,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: prospect.email,
-    replyTo: 'office@collectiverealtyco.com',
-    cc: ADMIN_EMAIL,
-    subject: isReferral 
+    bcc: ADMIN_EMAIL,
+    replyTo: REPLY_TO_OFFICE,
+    subject: isReferral
       ? 'Thank You for Your Interest in Joining Referral Collective'
       : 'Thank You for Your Interest in Joining Collective Realty Co., The Coaching Brokerage',
     html,
   })
 }
 
-// ─── NEW PROSPECT NOTIFICATION (internal) ────────────────────────────────────
+// ─── NEW PROSPECT NOTIFICATION (internal) ─────────────────────────────────────
 
 export async function sendNewProspectNotification(prospect: {
   id: string
@@ -209,8 +196,9 @@ export async function sendNewProspectNotification(prospect: {
   const adminUrl = `https://agent.collectiverealtyco.com/admin/prospects/${prospect.id}`
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
   const agentType = isReferral ? 'Referral Collective' : 'Standard Agent'
-  return resend.emails.send({
-    from: FROM_EMAILS.notifications,
+
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: ADMIN_EMAIL,
     subject: `New ${isReferral ? 'Referral ' : ''}Prospect: ${prospect.first_name} ${prospect.last_name}`,
     html: `
@@ -224,14 +212,14 @@ export async function sendNewProspectNotification(prospect: {
           <tr><td style="padding: 8px 0; color: #888;">Type</td><td style="padding: 8px 0; font-weight: 600; color: ${isReferral ? '#C5A278' : '#1a1a1a'};">${agentType}</td></tr>
         </table>
         <div style="margin-top: 32px;">
-          <a href="${adminUrl}" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">View Prospect →</a>
+          <a href="${adminUrl}" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">View Prospect</a>
         </div>
       </div>
     `,
   })
 }
 
-// ─── PASSWORD RESET (getEmailLayout) ─────────────────────────────────────────
+// ─── PASSWORD RESET ────────────────────────────────────────────────────────────
 
 export async function sendPasswordResetEmail(email: string, resetToken: string, userName: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -249,8 +237,8 @@ export async function sendPasswordResetEmail(email: string, resetToken: string, 
     { title: 'Reset Your Password', preheader: 'Reset your Collective Realty Co. password' }
   )
 
-  return resend.emails.send({
-    from: FROM_EMAILS.support,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: email,
     cc: ADMIN_EMAIL,
     subject: 'Reset Your Password - Collective Realty Co.',
@@ -258,7 +246,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string, 
   })
 }
 
-// ─── CONTACT FORM CONFIRMATION (getEmailLayout) ───────────────────────────────
+// ─── CONTACT FORM CONFIRMATION ────────────────────────────────────────────────
 
 export async function sendContactEmail({
   message,
@@ -290,16 +278,16 @@ export async function sendContactEmail({
     }
   )
 
-  await resend.emails.send({
-    from: FROM_EMAILS.support,
+  await sendMailAs({
+    fromUpn: UPN_TARA,
     to: userEmail,
-    cc: 'office@collectiverealtyco.com',
+    cc: ADMIN_EMAIL,
     subject: subject ? `Support Request: ${subject}` : `Support Request Received`,
     html,
   })
 }
 
-// ─── FORM SUBMISSION NOTIFICATION (getEmailLayout) ────────────────────────────
+// ─── FORM SUBMISSION NOTIFICATION ────────────────────────────────────────────
 
 export async function sendFormSubmissionNotification({
   formName,
@@ -351,15 +339,15 @@ export async function sendFormSubmissionNotification({
     { title: `New ${formName} Submission`, preheader: `New submission received for ${formName}` }
   )
 
-  return resend.emails.send({
-    from: FROM_EMAILS.notifications,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: notificationEmail,
     subject: `New ${formName} Submission`,
     html,
   })
 }
 
-// ─── ONBOARDING NEXT STEPS (luxury, triggered at step 2) ─────────────────────
+// ─── ONBOARDING NEXT STEPS (sent from tarab@) ────────────────────────────────
 
 export async function sendOnboardingNextStepsEmail(prospect: {
   preferred_first_name: string
@@ -372,8 +360,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
   const onboardingUrl = `${appUrl}/onboard/${prospect.campaign_token}`
   const firstName = prospect.preferred_first_name || prospect.first_name
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
-  
-  // Fetch referral settings if needed
+
   let referralAnnualFee = 299
   let referralBrokerageName = 'Referral Collective'
   if (isReferral) {
@@ -388,74 +375,25 @@ export async function sendOnboardingNextStepsEmail(prospect: {
       }
     } catch {}
   }
-  
+
   const brokerageName = isReferral ? referralBrokerageName : 'Collective Realty Co.'
 
-  // Different step content for referral vs standard agents
   const stepsContent = isReferral
     ? `
-      <div class="section-box">
-        <h2 class="section-title">Step 1 - Your Info</h2>
-        <p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 2 - Payment</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>Pay Your Annual Membership Fee</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your $${referralAnnualFee} annual fee to unlock your agreements and TREC sponsorship. No monthly fees, no processing fees.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 3 - Referral Agent Agreement</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Sign Your Referral Agent Independent Contractor Agreement</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Review and sign your ICA in the onboarding portal. This outlines your referral-only scope under TREC LFRO rules.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 4 - Policy Manual</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Review and Acknowledge the Policy Manual</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Read through the brokerage policy manual and confirm your acknowledgment to continue.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 5 - W-9</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Complete Your W-9</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 6 - TREC Sponsorship</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Accept Your TREC Invitation</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p>
-      </div>
+      <div class="section-box"><h2 class="section-title">Step 1 - Your Info</h2><p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 2 - Payment</h2><p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>Pay Your Annual Membership Fee</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your $${referralAnnualFee} annual fee to unlock your agreements and TREC sponsorship. No monthly fees, no processing fees.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 3 - Referral Agent Agreement</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Sign Your Referral Agent Independent Contractor Agreement</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Review and sign your ICA in the onboarding portal. This outlines your referral-only scope under TREC LFRO rules.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 4 - Policy Manual</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Review and Acknowledge the Policy Manual</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Read through the brokerage policy manual and confirm your acknowledgment to continue.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 5 - W-9</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Complete Your W-9</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 6 - TREC Sponsorship</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>Accept Your TREC Invitation</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p></div>
     `
     : `
-      <div class="section-box">
-        <h2 class="section-title">Step 1 - Your Info</h2>
-        <p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 2 - Payment</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>1. Pay Your Onboarding and Prorated Monthly Fee</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your onboarding fee to unlock your agreements and TREC sponsorship. You will be prompted to pay directly in your onboarding portal.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Steps 3 and 4 - Agreements</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Sign Your Independent Contractor Agreement</strong></p>
-        <p style="color:#555;font-size:14px;margin:0 0 16px;line-height:1.6;">Review and sign your ICA in the onboarding portal. This unlocks the next step.</p>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>2. Sign Your Commission Plan Agreement</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Review and sign the agreement for the commission plan you selected.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 5 - Policy Manual</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Review and Acknowledge the Policy Manual</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Read through the brokerage policy manual and confirm your acknowledgment to continue.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 6 - W-9</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Complete Your W-9</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p>
-      </div>
-      <div class="section-box">
-        <h2 class="section-title">Step 7 - TREC Sponsorship</h2>
-        <p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Accept Your TREC Invitation</strong></p>
-        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p>
-      </div>
+      <div class="section-box"><h2 class="section-title">Step 1 - Your Info</h2><p style="text-align:center;color:#888;font-size:14px;margin:0;">Completed. Your information has been saved.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 2 - Payment</h2><p style="color:#333;font-size:14px;margin:0 0 8px;"><strong>1. Pay Your Onboarding and Prorated Monthly Fee</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your onboarding fee to unlock your agreements and TREC sponsorship. You will be prompted to pay directly in your onboarding portal.</p></div>
+      <div class="section-box"><h2 class="section-title">Steps 3 and 4 - Agreements</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Sign Your Independent Contractor Agreement</strong></p><p style="color:#555;font-size:14px;margin:0 0 16px;line-height:1.6;">Review and sign your ICA in the onboarding portal. This unlocks the next step.</p><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>2. Sign Your Commission Plan Agreement</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Review and sign the agreement for the commission plan you selected.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 5 - Policy Manual</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Review and Acknowledge the Policy Manual</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Read through the brokerage policy manual and confirm your acknowledgment to continue.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 6 - W-9</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Complete Your W-9</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Complete your W-9 directly in your onboarding portal. It only takes a few minutes and is required for tax reporting purposes.</p></div>
+      <div class="section-box"><h2 class="section-title">Step 7 - TREC Sponsorship</h2><p style="color:#333;font-size:14px;margin:0 0 6px;"><strong>1. Accept Your TREC Invitation</strong></p><p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Once your documents are complete, we will submit your TREC sponsorship request. You will receive an invitation email from TREC. Please accept it promptly.</p></div>
     `
 
   const html = getLuxuryEmailTemplate({
@@ -484,11 +422,11 @@ export async function sendOnboardingNextStepsEmail(prospect: {
     isReferral,
   })
 
-  return resend.emails.send({
-    from: FROM_EMAILS.onboarding,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: prospect.email,
-    replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
+    replyTo: REPLY_TO_OFFICE,
     subject: isReferral
       ? 'Next Steps: Your License Sponsorship with Referral Collective'
       : 'Next Steps: Your License Sponsorship with Collective Realty Co.',
@@ -496,7 +434,7 @@ export async function sendOnboardingNextStepsEmail(prospect: {
   })
 }
 
-// ─── COURTNEY FOLLOW-UP (luxury, 3 days after prospect form) ─────────────────
+// ─── COURTNEY FOLLOW-UP (sent from courtneyo@) ───────────────────────────────
 
 const STEP_LABELS: Record<number, string> = {
   1: 'Your Info',
@@ -562,16 +500,17 @@ export async function sendCourtneyFollowUpEmail(prospect: {
     closing: ``,
   })
 
-  return resend.emails.send({
-    from: 'Courtney Okanlomo <courtneyo@coachingbrokeragetools.com>',
-    replyTo: 'courtneyo@collectiverealtyco.com',
+  return sendMailAs({
+    fromUpn: UPN_COURTNEY,
     to: prospect.email,
+    bcc: ADMIN_EMAIL,
+    replyTo: 'courtneyo@collectiverealtyco.com',
     subject: 'Courtney O. - Just Wanted You To Know',
     html,
   })
 }
 
-// ─── REFERRAL FOLLOW-UP EMAIL (simpler version for referral agents) ──────────
+// ─── REFERRAL FOLLOW-UP (sent from tarab@) ───────────────────────────────────
 
 const REFERRAL_STEP_LABELS: Record<number, string> = {
   1: 'Your Info',
@@ -597,7 +536,6 @@ export async function sendReferralFollowUpEmail(prospect: {
   const infoPageUrl = `${appUrl}/referral-collective-information`
   const firstName = prospect.preferred_first_name || prospect.first_name
 
-  // Use provided splits or defaults
   const apartmentSplit = prospect.referral_split_apartment ?? 85
   const internalSplit = prospect.referral_split_internal ?? 90
   const externalSplit = prospect.referral_split_external ?? 88
@@ -637,42 +575,24 @@ export async function sendReferralFollowUpEmail(prospect: {
     isReferral: true,
   })
 
-  return resend.emails.send({
-    from: FROM_EMAILS.onboarding,
-    replyTo: 'office@collectiverealtyco.com',
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: prospect.email,
+    replyTo: REPLY_TO_OFFICE,
     subject: 'Quick Reminder - Complete Your Referral Collective Onboarding',
     html,
   })
 }
 
-// ─── RESET STEPS EMAIL ────────────────────────────────────────────────────────
+// ─── ONBOARDING RESET (sent from tarab@) ─────────────────────────────────────
 
 const STEP_DESCRIPTIONS: Record<number, { label: string; description: string }> = {
-  1: {
-    label: 'Step 1 - Your Information',
-    description: 'Please review and resubmit your personal and license information.',
-  },
-  2: {
-    label: 'Step 2 - Onboarding Payment',
-    description: 'Your invoice has been updated. Please complete your onboarding payment to continue.',
-  },
-  3: {
-    label: 'Step 3 - Independent Contractor Agreement',
-    description: 'Please review and sign your Independent Contractor Agreement.',
-  },
-  4: {
-    label: 'Step 4 - Commission Plan Agreement',
-    description: 'Please review and sign your Commission Plan Agreement.',
-  },
-  5: {
-    label: 'Step 5 - Policy Manual',
-    description: 'Please review and acknowledge the Brokerage Policy Manual.',
-  },
-  6: {
-    label: 'Step 6 - W-9',
-    description: 'Please complete your W-9 in the onboarding portal.',
-  },
+  1: { label: 'Step 1 - Your Information', description: 'Please review and resubmit your personal and license information.' },
+  2: { label: 'Step 2 - Onboarding Payment', description: 'Your invoice has been updated. Please complete your onboarding payment to continue.' },
+  3: { label: 'Step 3 - Independent Contractor Agreement', description: 'Please review and sign your Independent Contractor Agreement.' },
+  4: { label: 'Step 4 - Commission Plan Agreement', description: 'Please review and sign your Commission Plan Agreement.' },
+  5: { label: 'Step 5 - Policy Manual', description: 'Please review and acknowledge the Brokerage Policy Manual.' },
+  6: { label: 'Step 6 - W-9', description: 'Please complete your W-9 in the onboarding portal.' },
 }
 
 export async function sendOnboardingResetEmail(prospect: {
@@ -718,16 +638,17 @@ export async function sendOnboardingResetEmail(prospect: {
     closing: ``,
   })
 
-  return resend.emails.send({
-    from: FROM_EMAILS.onboarding,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: prospect.email,
-    replyTo: 'office@collectiverealtyco.com',
     cc: ADMIN_EMAIL,
+    replyTo: REPLY_TO_OFFICE,
     subject: 'Action Required: Please Complete Your Onboarding Steps',
     html,
   })
 }
-// ─── CALENDAR EVENT REMINDER (getEmailLayout) ─────────────────────────────────
+
+// ─── CALENDAR EVENT REMINDER (sent from tarab@) ───────────────────────────────
 
 export async function sendCalendarReminderEmail({
   title,
@@ -765,15 +686,15 @@ export async function sendCalendarReminderEmail({
     }
   )
 
-  return resend.emails.send({
-    from: FROM_EMAILS.notifications,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: 'agents@collectiverealtyco.com',
     subject: `Reminder: ${title} starts in 10 minutes`,
     html,
   })
 }
 
-// ─── W-9 AND TREC READY (agent-facing, sent after broker co-signs) ────────────
+// ─── W-9 AND TREC READY (sent from tarab@) ───────────────────────────────────
 
 export async function sendW9TrecReadyEmail(agent: {
   preferred_first_name: string
@@ -786,17 +707,14 @@ export async function sendW9TrecReadyEmail(agent: {
     greeting: `Hi ${firstName}!`,
     content: `
       <p class="intro-text">You are almost there! Two more steps are coming your way.</p>
-
       <div class="section-box">
         <h2 class="section-title">Step 1 - Complete Your W-9</h2>
         <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Head back to your onboarding portal and complete your W-9 on the W-9 step. It only takes a few minutes. This is required for tax reporting purposes -- please complete it promptly.</p>
       </div>
-
       <div class="section-box">
         <h2 class="section-title">Step 2 - Accept Your TREC Invitation</h2>
         <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">Please look for an email from TREC to accept your sponsorship invitation. This officially transfers your license to Collective Realty Co. Please accept it as soon as you receive it.</p>
       </div>
-
       <p class="intro-text" style="margin-top:24px;">Shortly after completing these two steps, the fun begins! You will receive your structured onboarding emails, a checklist to follow, and calendar invites for training and biweekly onboarding meetings for systems and compliance.</p>
       <p class="intro-text">Let us know if you have any questions as you proceed!</p>
     `,
@@ -814,10 +732,10 @@ export async function sendW9TrecReadyEmail(agent: {
     closing: ``,
   })
 
-  return resend.emails.send({
-    from: FROM_EMAILS.onboarding,
+  return sendMailAs({
+    fromUpn: UPN_TARA,
     to: agent.email,
-    replyTo: 'office@collectiverealtyco.com',
+    replyTo: REPLY_TO_OFFICE,
     subject: 'Two More Steps Before the Fun Begins',
     html,
   })
