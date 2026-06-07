@@ -132,11 +132,14 @@ export default function SettingsPage() {
   const { hasPermission } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const activeTab = (searchParams.get('tab') as Tab) || 'brokerage'
+  const [activeTab, setActiveTabState] = useState<Tab>(
+    (searchParams.get('tab') as Tab) || 'brokerage'
+  )
   const setActiveTab = (newTab: Tab) => {
+    setActiveTabState(newTab)
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', newTab)
-    router.replace(`?${params.toString()}`, { scroll: false })
+    window.history.replaceState(null, '', `?${params.toString()}`)
   }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

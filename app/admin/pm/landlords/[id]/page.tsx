@@ -707,11 +707,14 @@ export default function LandlordDetailPage() {
   const landlordId = params.id as string
 
   const searchParams = useSearchParams()
-  const activeTab = (searchParams.get('tab') as TabType) || 'overview'
+  const [activeTab, setActiveTabState] = useState<TabType>(
+    (searchParams.get('tab') as TabType) || 'overview'
+  )
   const setActiveTab = (newTab: TabType) => {
+    setActiveTabState(newTab)
     const params = new URLSearchParams(searchParams.toString())
     params.set('tab', newTab)
-    router.replace(`?${params.toString()}`, { scroll: false })
+    window.history.replaceState(null, '', `?${params.toString()}`)
   }
   const [loading, setLoading] = useState(true)
   const [landlord, setLandlord] = useState<Landlord | null>(null)
@@ -1311,7 +1314,7 @@ export default function LandlordDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-4 mb-4">
+      <div className="flex flex-wrap items-start gap-3 mb-4">
         <button
           onClick={() => router.push('/admin/pm/landlords')}
           className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
@@ -1355,14 +1358,14 @@ export default function LandlordDetailPage() {
 
       {/* Tabs */}
       <div className="container-card mb-6">
-        <div className="flex space-x-1 border-b border-luxury-gray-5/50 -mx-5 px-5">
+        <div className="flex overflow-x-auto touch-pan-x space-x-1 border-b border-luxury-gray-5/50 -mx-5 px-5 pb-px">
           {TABS.map(tab => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-3 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                className={`flex-shrink-0 flex items-center gap-2 px-4 py-3 text-xs font-medium transition-colors border-b-2 -mb-px ${
                   activeTab === tab.key
                     ? 'border-luxury-accent text-luxury-gray-1'
                     : 'border-transparent text-luxury-gray-3 hover:text-luxury-gray-1'
