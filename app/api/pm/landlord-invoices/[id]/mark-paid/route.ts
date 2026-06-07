@@ -111,6 +111,7 @@ export async function POST(
             payee_id: agreement.referring_agent_id,
             payee_name: agentName,
             amount: agentAmount,
+            amount_1099_reportable: agentAmount,
             payment_status: 'pending',
           })
           .select()

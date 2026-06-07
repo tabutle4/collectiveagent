@@ -207,11 +207,22 @@ export async function POST(request: NextRequest) {
     )
 
     // 4. Held in trust at statement date (uses computeHeldInTrust helper
-    //    so the number matches the widget exactly)
+    //    so the number matches the widget exactly).
+    //    Subtract pending deposit disbursements: money already committed
+    //    to go out should not appear as held in trust on the statement.
     const heldInTrustResult = await computeHeldInTrust(supabaseAdmin, {
       landlordId,
       propertyId,
     })
+
+    const pendingDepositReturn = (pendingDisbursements).reduce(
+      (sum, d: any) => sum + Number(d.deposit_amount || 0), 0
+    )
+
+    const heldInTrustAtStatement = Math.max(
+      0,
+      heldInTrustResult.heldInTrust - pendingDepositReturn
+    )
 
     // ----- Insert pm_statements row -----
     const { data: statement, error: insErr } = await supabaseAdmin
@@ -231,7 +242,7 @@ export async function POST(request: NextRequest) {
         total_deposits_refunded_to_tenant: Math.round(totalDepositsRefundedToTenant * 100) / 100,
         total_net_disbursed: Math.round(totalNetDisbursed * 100) / 100,
         total_net_pending: Math.round(totalNetPending * 100) / 100,
-        held_in_trust_at_statement_date: Math.round(heldInTrustResult.heldInTrust * 100) / 100,
+        held_in_trust_at_statement_date: Math.round(heldInTrustAtStatement * 100) / 100,
         created_by: auth.user?.id || null,
       })
       .select('*')

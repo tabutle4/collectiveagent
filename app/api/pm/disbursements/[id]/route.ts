@@ -64,6 +64,7 @@ export async function PATCH(
     const allowedFields = [
       'payment_status', 'payment_date', 'payment_method', 'payment_reference',
       'gross_rent', 'management_fee', 'agent_fee', 'deposit_amount',
+      'reserve_amount', 'disbursement_type',
       'other_deductions', 'other_deductions_description',
       'net_amount', 'notes',
       'payload_payout_id',
@@ -86,11 +87,12 @@ export async function PATCH(
       (filteredUpdates.gross_rent !== undefined ||
         filteredUpdates.management_fee !== undefined ||
         filteredUpdates.deposit_amount !== undefined ||
+        filteredUpdates.reserve_amount !== undefined ||
         filteredUpdates.other_deductions !== undefined)
     ) {
       const { data: current } = await supabase
         .from('landlord_disbursements')
-        .select('gross_rent, management_fee, other_deductions, deposit_amount')
+        .select('gross_rent, management_fee, other_deductions, deposit_amount, reserve_amount, disbursement_type')
         .eq('id', resolvedParams.id)
         .single()
 
@@ -100,14 +102,21 @@ export async function PATCH(
         .eq('disbursement_id', resolvedParams.id)
 
       if (current) {
-        const gross = Number(filteredUpdates.gross_rent ?? current.gross_rent ?? 0)
-        const mgmt = Number(filteredUpdates.management_fee ?? current.management_fee ?? 0)
-        const other = Number(filteredUpdates.other_deductions ?? current.other_deductions ?? 0)
-        const lineItems = (deductionRows || []).reduce(
-          (sum: number, d: any) => sum + Number(d.amount || 0),
-          0
-        )
-        filteredUpdates.net_amount = gross - mgmt - other - lineItems
+        const currentType = filteredUpdates.disbursement_type ?? current.disbursement_type ?? 'rent'
+        const isDepositOrReserve = currentType === 'deposit' || currentType === 'reserve'
+        if (isDepositOrReserve) {
+          filteredUpdates.net_amount = Number(filteredUpdates.deposit_amount ?? current.deposit_amount ?? 0)
+        } else {
+          const gross = Number(filteredUpdates.gross_rent ?? current.gross_rent ?? 0)
+          const mgmt = Number(filteredUpdates.management_fee ?? current.management_fee ?? 0)
+          const other = Number(filteredUpdates.other_deductions ?? current.other_deductions ?? 0)
+          const reserve = Number(filteredUpdates.reserve_amount ?? current.reserve_amount ?? 0)
+          const lineItems = (deductionRows || []).reduce(
+            (sum: number, d: any) => sum + Number(d.amount || 0),
+            0
+          )
+          filteredUpdates.net_amount = gross - mgmt - other - reserve - lineItems
+        }
       }
     }
 
