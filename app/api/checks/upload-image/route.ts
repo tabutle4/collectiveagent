@@ -126,14 +126,18 @@ async function uploadToOneDrive(
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_checks')
-  if (auth.error) return auth.error
+  // Accept either permission: check image uploads need can_manage_checks,
+  // compliance doc uploads need can_review_compliance
+  const authChecks = await requirePermission(request, 'can_manage_checks')
+  const authDocs = await requirePermission(request, 'can_review_compliance')
+  if (authChecks.error && authDocs.error) return authChecks.error
 
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const checkId = formData.get('check_id') as string | null
     const transactionId = formData.get('transaction_id') as string | null
+    const subfolder = (formData.get('subfolder') as string | null) || 'Checks'
     // transactionFolderPath kept for backward compat but we now prefer transaction_id
     const transactionFolderPath = formData.get('transaction_folder_path') as string | null
 
@@ -165,13 +169,13 @@ export async function POST(request: NextRequest) {
     let folderPath: string
     if (transactionId) {
       const txnRelPath = await ensureTransactionFolder(token, transactionId)
-      folderPath = `${txnRelPath}/Checks`
+      folderPath = `${txnRelPath}/${subfolder}`
     } else if (transactionFolderPath) {
       const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || 'Collective Agent'
       const cleanPath = transactionFolderPath
         .replace(new RegExp(`^${rootFolder}/`), '')
         .replace(/\/+$/, '')
-      folderPath = `${cleanPath}/Checks`
+      folderPath = `${cleanPath}/${subfolder}`
     } else {
       folderPath = 'Checks/Unlinked Checks'
     }

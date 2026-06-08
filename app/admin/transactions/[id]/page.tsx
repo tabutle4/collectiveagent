@@ -573,6 +573,19 @@ function ComplianceDocumentsTab({
   const [docContactSuggestions, setDocContactSuggestions] = useState<any[]>([])
   const [savingDocContact, setSavingDocContact] = useState<number | null>(null)
 
+  const deleteDoc = async (docId: string) => {
+    if (!confirm('Delete this document? This cannot be undone.')) return
+    setActionLoading(docId)
+    try {
+      await postAction('delete', { document_id: docId })
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const saveDocContact = async (contact: any, index: number) => {
     setSavingDocContact(index)
     try {
@@ -702,6 +715,7 @@ function ComplianceDocumentsTab({
       const fd = new FormData()
       fd.append('file', namedFile)
       fd.append('transaction_id', transactionId)
+      fd.append('subfolder', 'Documents')
       const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
@@ -782,6 +796,7 @@ function ComplianceDocumentsTab({
       const fd = new FormData()
       fd.append('file', namedFile)
       fd.append('transaction_id', transactionId)
+      fd.append('subfolder', 'Documents')
       const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
@@ -1370,6 +1385,14 @@ function ComplianceDocumentsTab({
                             <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
                               onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], latest.id, rd.id, rd.name)} />
                           </label>
+                          <button
+                            onClick={() => deleteDoc(latest.id)}
+                            disabled={!!actionLoading}
+                            className="text-[11px] px-2.5 py-1 text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50 flex items-center gap-1"
+                            title="Delete document"
+                          >
+                            <Trash2 size={10} />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1513,6 +1536,14 @@ function ComplianceDocumentsTab({
                             <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
                               onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], doc.id, doc.required_document_id)} />
                           </label>
+                          <button
+                            onClick={() => deleteDoc(doc.id)}
+                            disabled={!!actionLoading}
+                            className="text-[10px] px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
+                            title="Delete document"
+                          >
+                            <Trash2 size={9} />
+                          </button>
                         </div>
                         {rejectingId === doc.id && (
                           <div className="w-36 mt-1">
