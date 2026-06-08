@@ -79,6 +79,51 @@ Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})${teamName ? ` [
       `${b.brokerage_name} (${(b.brokerage_role || '').replace(/_/g, ' ')}): $${b.commission_amount || 0} - ${b.payment_status || 'pending'}`
     ).join('\n') || 'None'
 
+    // Fetch required docs from DB and match against uploaded docs for this transaction
+    let docStatusSection = ''
+    try {
+      if (transaction.id && transaction.transaction_type) {
+        const { data: pft } = await supabase
+          .from('processing_fee_types')
+          .select('id, name')
+          .eq('code', transaction.transaction_type)
+          .maybeSingle()
+
+        if (pft) {
+          const { data: requiredDocs } = await supabase
+            .from('required_documents')
+            .select('id, name, is_required')
+            .eq('processing_fee_type_id', pft.id)
+            .eq('is_active', true)
+            .order('display_order', { ascending: true })
+
+          const { data: uploadedDocs } = await supabase
+            .from('transaction_documents')
+            .select('required_document_id, compliance_status')
+            .eq('transaction_id', transaction.id)
+            .neq('compliance_status', 'superseded')
+
+          if (requiredDocs && requiredDocs.length > 0) {
+            const lines = requiredDocs.map((rd: any) => {
+              const uploads = (uploadedDocs || []).filter((u: any) => u.required_document_id === rd.id)
+              let status: string
+              if (uploads.length === 0) {
+                status = rd.is_required ? 'MISSING (required)' : 'not uploaded (optional)'
+              } else if (uploads.every((u: any) => u.compliance_status === 'approved')) {
+                status = 'approved'
+              } else if (uploads.some((u: any) => u.compliance_status === 'rejected')) {
+                status = 'rejected'
+              } else {
+                status = 'pending review'
+              }
+              return `  - ${rd.name}: ${status}`
+            })
+            docStatusSection = `\nREQUIRED DOCUMENTS STATUS (live from DB - ${pft.name})\n${lines.join('\n')}`
+          }
+        }
+      }
+    } catch { /* best-effort - don't block review if this fails */ }
+
     const context = `
 TRANSACTION SUMMARY
 -------------------
@@ -107,7 +152,7 @@ ${checkSummary || 'No checks recorded'}
 
 CHECKLIST ITEMS
 ---------------
-${checklistItems || 'No checklist'}
+${checklistItems || 'No checklist'}${docStatusSection}
 `
 
     // Contact extraction mode — identify parties from transaction data

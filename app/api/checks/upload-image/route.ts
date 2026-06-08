@@ -155,7 +155,11 @@ export async function POST(request: NextRequest) {
 
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const timestamp = new Date().toISOString().slice(0, 10)
-    const filename = `check-${checkId || 'new'}-${timestamp}.${ext}`
+    // For compliance doc uploads (no checkId), preserve the filename the client set
+    // (e.g. "Sales Contract - 2026-06-08.pdf"). For check uploads, use the check-based name.
+    const filename = checkId
+      ? `check-${checkId}-${timestamp}.${ext}`
+      : (file.name && file.name !== 'blob' ? file.name : `doc-${timestamp}.${ext}`)
 
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
