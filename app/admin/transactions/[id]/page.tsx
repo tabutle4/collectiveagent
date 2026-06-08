@@ -26,6 +26,8 @@ import {
   Pencil,
   Upload,
   CheckCircle,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
@@ -639,6 +641,8 @@ function ComplianceDocumentsTab({
   const [editSlotSelected, setEditSlotSelected] = useState<string[]>([])
   const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
   const [viewingDocId, setViewingDocId] = useState<string | null>(null)
+  // When a doc viewer is open, this tracks whether it is expanded to a larger height.
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
   const [selectedTxFields, setSelectedTxFields] = useState<Set<string>>(new Set())
 
@@ -754,7 +758,11 @@ function ComplianceDocumentsTab({
   // Core upload: OneDrive upload + AI read + add_document record(s). Does NOT
   // touch the uploadingSlotId indicator or call load() - callers handle those so
   // this can run inside a concurrent pool without flipping shared UI state per file.
-  const uploadOneDoc = async (file: File, requiredDocId: string | null, slotName?: string) => {
+  // PHASE 1: upload the file to OneDrive and save the document row immediately,
+  // WITHOUT waiting for the AI read. The doc lands in the slot the admin picked
+  // (or unassigned). Returns the new doc id + the named file so the AI read can
+  // run afterward in the background. This is what makes the upload feel fast.
+  const uploadOneDoc = async (file: File, requiredDocId: string | null, slotName?: string): Promise<{ docId: string | null; namedFile: File }> => {
     // Prepend slot label to filename so OneDrive shows "Invoice - 2026-06-02.pdf"
     const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
     const date = new Date().toISOString().slice(0, 10)
@@ -765,68 +773,73 @@ function ComplianceDocumentsTab({
 
     const oneDriveUrl = await uploadDocToOneDrive(namedFile)
 
-    // AI doc read: get summary + suggested required-doc slot assignments
-    let aiSummary: string | null = null
-    let suggestedSlots: string[] = []
+    const result = await postAction('add_document', {
+      file_name: namedFile.name,
+      file_url: oneDriveUrl,
+      onedrive_file_url: oneDriveUrl,
+      file_size: file.size,
+      file_type: file.type,
+      required_document_id: requiredDocId || null,
+      ai_summary: null,
+    })
+    return { docId: result?.doc?.id || null, namedFile }
+  }
+
+  // PHASE 2: run the AI read on an already-uploaded doc and apply the result.
+  // Runs in the background after the upload returns. Attaches the verification
+  // summary and, if the doc came in unassigned, slots it per the AI suggestion.
+  const runAiReviewForDoc = async (docId: string, namedFile: File) => {
     try {
       const extractFd = new FormData()
       extractFd.append('file', namedFile)
       extractFd.append('transaction_id', transactionId)
       const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
-      if (extractRes.ok) {
-        const extractData = await extractRes.json()
-        const summary = extractData.summary || null
-        const pageContents = extractData.page_contents || []
-        const verificationChecklist = extractData.verification_checklist || []
-        const commissionDetails = extractData.commission_details || []
-        aiSummary = summary
-          ? JSON.stringify({ summary, page_contents: pageContents, verification_checklist: verificationChecklist, commission_details: commissionDetails })
-          : null
-        suggestedSlots = extractData.suggested_slots || []
-        if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
-          setTxFieldsPreview(extractData.transaction_fields)
-          const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
-          setSelectedTxFields(new Set(Object.keys(extractData.transaction_fields).filter(k => !CONTACT_FIELDS.includes(k))))
-        }
-        if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
-          const found = extractData.contacts.map((c: any) => ({
-            ...c,
-            notes: 'Found in uploaded document',
-          }))
-          onContactSuggestions(found)
-          setDocContactSuggestions(prev => {
-            const existingNames = new Set(prev.map((c: any) => c.name))
-            return [...prev, ...found.filter((c: any) => !existingNames.has(c.name))]
-          })
-        }
+      if (!extractRes.ok) return
+      const extractData = await extractRes.json()
+      const summary = extractData.summary || null
+      const pageContents = extractData.page_contents || []
+      const verificationChecklist = extractData.verification_checklist || []
+      const commissionDetails = extractData.commission_details || []
+      const aiSummary = summary
+        ? JSON.stringify({ summary, page_contents: pageContents, verification_checklist: verificationChecklist, commission_details: commissionDetails })
+        : null
+      const suggestedSlots = extractData.suggested_slots || []
+
+      if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
+        setTxFieldsPreview(extractData.transaction_fields)
+        const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
+        setSelectedTxFields(new Set(Object.keys(extractData.transaction_fields).filter(k => !CONTACT_FIELDS.includes(k))))
       }
-    } catch { /* best-effort */ }
+      if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
+        const found = extractData.contacts.map((cx: any) => ({ ...cx, notes: 'Found in uploaded document' }))
+        onContactSuggestions(found)
+        setDocContactSuggestions(prev => {
+          const existingNames = new Set(prev.map((cx: any) => cx.name))
+          return [...prev, ...found.filter((cx: any) => !existingNames.has(cx.name))]
+        })
+      }
 
-    const targetSlots: (string | null)[] = requiredDocId
-      ? [requiredDocId]
-      : suggestedSlots.length > 0 ? suggestedSlots : [null]
-
-    for (const slotId of targetSlots) {
-      await postAction('add_document', {
-        file_name: namedFile.name,
-        file_url: oneDriveUrl,
-        onedrive_file_url: oneDriveUrl,
-        file_size: file.size,
-        file_type: file.type,
-        required_document_id: slotId || null,
+      await postAction('apply_ai_review', {
+        document_id: docId,
         ai_summary: aiSummary,
+        suggested_slots: suggestedSlots,
       })
-    }
+    } catch { /* best-effort - the doc is already saved, review can be re-run */ }
   }
 
   const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
-      await uploadOneDoc(file, requiredDocId, slotName)
+      const { docId, namedFile } = await uploadOneDoc(file, requiredDocId, slotName)
       await load()
+      setUploadingSlotId(null)
+      // AI review runs after the upload returns so the file appears immediately.
+      if (docId) {
+        await runAiReviewForDoc(docId, namedFile)
+        await load()
+      }
     } catch (err: any) {
       setError(err.message)
-    } finally {
       setUploadingSlotId(null)
     }
   }
@@ -842,10 +855,13 @@ function ComplianceDocumentsTab({
     if (list.length === 0) return
     setMultiUploadRemaining(list.length)
     setError(null)
+    // Collect uploaded docs so the AI review can run after ALL uploads finish.
+    const uploaded: { docId: string; namedFile: File }[] = []
     try {
       // First file alone - creates + caches the OneDrive folder URL
       try {
-        await uploadOneDoc(list[0], null)
+        const r = await uploadOneDoc(list[0], null)
+        if (r.docId) uploaded.push({ docId: r.docId, namedFile: r.namedFile })
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -860,7 +876,8 @@ function ComplianceDocumentsTab({
         while (cursor < rest.length) {
           const myIndex = cursor++
           try {
-            await uploadOneDoc(rest[myIndex], null)
+            const r = await uploadOneDoc(rest[myIndex], null)
+            if (r.docId) uploaded.push({ docId: r.docId, namedFile: r.namedFile })
           } catch (err: any) {
             setError(err.message)
           } finally {
@@ -873,6 +890,23 @@ function ComplianceDocumentsTab({
       )
     } finally {
       setMultiUploadRemaining(0)
+      await load()
+    }
+
+    // Now that all files are uploaded and visible, run the AI review on each in a
+    // bounded pool (review after upload). Reload once at the end to show results.
+    if (uploaded.length > 0) {
+      let rcursor = 0
+      const REVIEW_CONCURRENCY = 3
+      const reviewWorker = async () => {
+        while (rcursor < uploaded.length) {
+          const u = uploaded[rcursor++]
+          await runAiReviewForDoc(u.docId, u.namedFile)
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(REVIEW_CONCURRENCY, uploaded.length) }, () => reviewWorker())
+      )
       await load()
     }
   }
@@ -889,25 +923,8 @@ function ComplianceDocumentsTab({
 
       const oneDriveUrl = await uploadDocToOneDrive(namedFile)
 
-      let aiSummary: string | null = null
-      try {
-        const extractFd = new FormData()
-        extractFd.append('file', namedFile)
-        extractFd.append('transaction_id', transactionId)
-        const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
-        if (extractRes.ok) {
-          const extractData = await extractRes.json()
-          const summary = extractData.summary || null
-          const pageContents = extractData.page_contents || []
-          const verificationChecklist = extractData.verification_checklist || []
-          const commissionDetails = extractData.commission_details || []
-          aiSummary = summary
-            ? JSON.stringify({ summary, page_contents: pageContents, verification_checklist: verificationChecklist, commission_details: commissionDetails })
-            : null
-        }
-      } catch { /* best-effort */ }
-
-      await postAction('replace', {
+      // Replace immediately without waiting on the AI read.
+      const result = await postAction('replace', {
         old_document_id: oldDocId,
         file_name: namedFile.name,
         file_url: oneDriveUrl,
@@ -915,12 +932,19 @@ function ComplianceDocumentsTab({
         file_size: namedFile.size,
         file_type: namedFile.type,
         required_document_id: requiredDocId || null,
-        ai_summary: aiSummary,
+        ai_summary: null,
       })
       await load()
+      setUploadingSlotId(null)
+      // AI review runs after the replace returns. The replaced doc already has its
+      // slot, so apply_ai_review only attaches the summary (no reslotting).
+      const newDocId = result?.doc?.id || null
+      if (newDocId) {
+        await runAiReviewForDoc(newDocId, namedFile)
+        await load()
+      }
     } catch (err: any) {
       setError(err.message)
-    } finally {
       setUploadingSlotId(null)
     }
   }
@@ -1416,16 +1440,24 @@ function ComplianceDocumentsTab({
                       </div>
                       {viewingDocId === latest.id && (
                         <div className="mb-2 rounded border border-luxury-gray-5 overflow-hidden bg-luxury-light">
+                          <div className="flex justify-end px-2 py-1 border-b border-luxury-gray-5 bg-white">
+                            <button
+                              onClick={() => setExpandedDocId(expandedDocId === latest.id ? null : latest.id)}
+                              className="text-[10px] text-luxury-gray-3 hover:text-luxury-accent flex items-center gap-1"
+                            >
+                              {expandedDocId === latest.id ? <><Minimize2 size={10} /> Collapse</> : <><Maximize2 size={10} /> Expand</>}
+                            </button>
+                          </div>
                           {(latest.file_type || '').startsWith('image/') ? (
                             <img
                               src={`/api/uploads/view?url=${encodeURIComponent(latest.onedrive_file_url || latest.file_url)}`}
                               alt={latest.file_name}
-                              className="w-full max-h-96 object-contain"
+                              className={`w-full object-contain ${expandedDocId === latest.id ? 'max-h-[80vh]' : 'max-h-96'}`}
                             />
                           ) : (
                             <iframe
                               src={`/api/uploads/view?url=${encodeURIComponent(latest.onedrive_file_url || latest.file_url)}`}
-                              className="w-full h-96 border-0"
+                              className={`w-full border-0 ${expandedDocId === latest.id ? 'h-[80vh]' : 'h-96'}`}
                               title={latest.file_name}
                             />
                           )}
@@ -1671,16 +1703,24 @@ function ComplianceDocumentsTab({
                           >{doc.file_name}</button>
                           {viewingDocId === doc.id && (
                             <div className="mt-1 rounded border border-luxury-gray-5 overflow-hidden bg-luxury-light">
+                              <div className="flex justify-end px-2 py-1 border-b border-luxury-gray-5 bg-white">
+                                <button
+                                  onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                                  className="text-[10px] text-luxury-gray-3 hover:text-luxury-accent flex items-center gap-1"
+                                >
+                                  {expandedDocId === doc.id ? <><Minimize2 size={10} /> Collapse</> : <><Maximize2 size={10} /> Expand</>}
+                                </button>
+                              </div>
                               {(doc.file_type || '').startsWith('image/') ? (
                                 <img
                                   src={`/api/uploads/view?url=${encodeURIComponent(doc.onedrive_file_url || doc.file_url)}`}
                                   alt={doc.file_name}
-                                  className="w-full max-h-96 object-contain"
+                                  className={`w-full object-contain ${expandedDocId === doc.id ? 'max-h-[80vh]' : 'max-h-96'}`}
                                 />
                               ) : (
                                 <iframe
                                   src={`/api/uploads/view?url=${encodeURIComponent(doc.onedrive_file_url || doc.file_url)}`}
-                                  className="w-full h-96 border-0"
+                                  className={`w-full border-0 ${expandedDocId === doc.id ? 'h-[80vh]' : 'h-96'}`}
                                   title={doc.file_name}
                                 />
                               )}
@@ -5138,7 +5178,8 @@ export default function AdminTransactionDetailPage() {
           )}
         </div>
 
-        {/* ── Right Panel ────────────────────────────────────────────────────── */}
+        {/* ── Right Panel (hidden on Documents tab to maximize compliance space) ── */}
+        {activeTab !== 'documents' && (
         <div className="md:w-72 md:flex-shrink-0 border-t md:border-t-0 md:border-l border-luxury-gray-5 p-4 space-y-3 bg-white">
           {/* Agents - sorted: listing, primary, team lead, referral */}
           {agents.length > 0 && [...agents].sort((a: any, b: any) => {
@@ -5441,6 +5482,7 @@ export default function AdminTransactionDetailPage() {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* ── Email Agent Modal ───────────────────────────────────────────────── */}

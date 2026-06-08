@@ -387,6 +387,66 @@ export async function POST(
       return NextResponse.json({ doc: data })
     }
 
+    // ── Apply AI review to an already-uploaded doc (runs after upload, not during) ──
+    // Writes the AI summary to compliance_notes, and if the doc is still unassigned,
+    // assigns it to the AI-suggested slots (first slot in place, extras as siblings).
+    if (action === 'apply_ai_review') {
+      const { document_id, ai_summary, suggested_slots } = body
+      if (!document_id) return NextResponse.json({ error: 'document_id required' }, { status: 400 })
+
+      const { data: sourceDoc } = await supabase
+        .from('transaction_documents')
+        .select('*')
+        .eq('id', document_id)
+        .eq('transaction_id', id)
+        .single()
+
+      if (!sourceDoc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+      const slots: string[] = Array.isArray(suggested_slots) ? suggested_slots.filter(Boolean) : []
+      // Only auto-slot when the doc came in unassigned. If the admin already picked a
+      // slot, leave it where they put it and just attach the summary.
+      const shouldAutoSlot = !sourceDoc.required_document_id && slots.length > 0
+
+      // Update the source doc: always attach the summary; set the first suggested
+      // slot in place if it was unassigned.
+      const { data: updated, error: updErr } = await supabase
+        .from('transaction_documents')
+        .update({
+          compliance_notes: ai_summary || sourceDoc.compliance_notes || null,
+          required_document_id: shouldAutoSlot ? slots[0] : sourceDoc.required_document_id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', document_id)
+        .eq('transaction_id', id)
+        .select()
+        .single()
+
+      if (updErr) throw updErr
+
+      // Extra suggested slots become sibling rows (same file, different slot)
+      if (shouldAutoSlot && slots.length > 1) {
+        const siblings = slots.slice(1).map((slotId: string) => ({
+          transaction_id: id,
+          uploaded_by: sourceDoc.uploaded_by,
+          file_name: sourceDoc.file_name,
+          file_url: sourceDoc.file_url,
+          onedrive_file_url: sourceDoc.onedrive_file_url,
+          file_size: sourceDoc.file_size,
+          file_type: sourceDoc.file_type,
+          required_document_id: slotId,
+          compliance_status: 'pending',
+          compliance_notes: ai_summary || null,
+          version: sourceDoc.version || 1,
+        }))
+        const { error: sibErr } = await supabase.from('transaction_documents').insert(siblings)
+        if (sibErr) throw sibErr
+      }
+
+      await syncComplianceStatus(id)
+      return NextResponse.json({ doc: updated })
+    }
+
     // ── Mark file complete ───────────────────────────────────────────────────
     if (action === 'mark_complete') {
       const today = new Date().toISOString().split('T')[0]
