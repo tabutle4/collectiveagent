@@ -133,8 +133,10 @@ Type: ${transaction.transaction_type || 'N/A'}
 Status: ${transaction.status || 'N/A'}
 Compliance Status: ${transaction.compliance_status || 'not submitted'}
 ${txnIsLease ? `Monthly Rent: $${transaction.monthly_rent || 0} | Lease Term: ${transaction.lease_term || 'N/A'} months | Move-In: ${transaction.move_in_date || 'not set'}` : `Sales Price: $${transaction.sales_price || 0} | Closing Date: ${transaction.closing_date || 'not set'}`}
+Sales Volume: $${transaction.sales_volume || 0}
 Office Gross: $${transaction.office_gross || 0}
 Office Net: $${transaction.office_net || 0}
+Total Agent Debts Deducted on This Deal: $${(agents || []).reduce((s: number, a: any) => s + (parseFloat(a.debts_deducted) || 0), 0)}
 Has Internal Referral: ${transaction.internal_referral ? 'YES - $' + transaction.internal_referral_fee : 'No'}
 Has External Referral: ${transaction.external_referral ? 'YES - $' + transaction.external_referral_fee : 'No'}
 
@@ -161,20 +163,25 @@ ${checklistItems || 'No checklist'}${docStatusSection}
       const existing_contacts: any[] = rawExistingContacts || []
       const existingNames = existing_contacts.map((c: any) => c.name).filter(Boolean)
 
-      // Fetch uploaded doc summaries so Claude can extract contacts from them
+      // Fetch uploaded doc summaries so Claude can extract contacts from them.
+      // The AI review now lives in ai_review (jsonb); fall back to compliance_notes
+      // for docs reviewed before that column existed.
       const { data: uploadedDocs } = await supabase
         .from('transaction_documents')
-        .select('file_name, compliance_notes')
+        .select('file_name, compliance_notes, ai_review')
         .eq('transaction_id', transaction.id)
-        .not('compliance_notes', 'is', null)
         .order('created_at', { ascending: false })
         .limit(10)
 
       const docSummaries = (uploadedDocs || [])
         .map((d: any) => {
           let text = ''
-          try { text = JSON.parse(d.compliance_notes)?.summary || d.compliance_notes } catch { text = d.compliance_notes || '' }
-          return `${d.file_name}: ${text}`
+          const source = d.ai_review ?? d.compliance_notes
+          if (source) {
+            if (typeof source === 'object') text = source.summary || ''
+            else { try { text = JSON.parse(source)?.summary || source } catch { text = source } }
+          }
+          return text ? `${d.file_name}: ${text}` : ''
         })
         .filter(Boolean)
         .join('\n---\n')

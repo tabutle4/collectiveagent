@@ -87,7 +87,7 @@ export async function GET(
       .from('transaction_documents')
       .select(`
         id, file_name, file_url, file_size, file_type,
-        required_document_id, compliance_status, compliance_notes,
+        required_document_id, compliance_status, compliance_notes, ai_review,
         reviewed_by, reviewed_at, version, onedrive_file_url,
         created_at, uploaded_by,
         uploader:users!transaction_documents_uploaded_by_fkey(
@@ -146,7 +146,7 @@ export async function POST(
           required_document_id: required_document_id || null,
           onedrive_file_url: onedrive_file_url || null,
           compliance_status: 'pending',
-          compliance_notes: ai_summary || null,
+          ai_review: ai_summary || null,
           version: 1,
         })
         .select()
@@ -197,7 +197,7 @@ export async function POST(
           file_type: file_type || null,
           required_document_id: required_document_id || null,
           compliance_status: 'pending',
-          compliance_notes: ai_summary || null,
+          ai_review: ai_summary || null,
           version: (oldDoc?.version || 1) + 1,
         })
         .select()
@@ -413,7 +413,7 @@ export async function POST(
       const { data: updated, error: updErr } = await supabase
         .from('transaction_documents')
         .update({
-          compliance_notes: ai_summary || sourceDoc.compliance_notes || null,
+          ai_review: ai_summary || sourceDoc.ai_review || null,
           required_document_id: shouldAutoSlot ? slots[0] : sourceDoc.required_document_id,
           updated_at: new Date().toISOString(),
         })
@@ -436,7 +436,7 @@ export async function POST(
           file_type: sourceDoc.file_type,
           required_document_id: slotId,
           compliance_status: 'pending',
-          compliance_notes: ai_summary || null,
+          ai_review: ai_summary || null,
           version: sourceDoc.version || 1,
         }))
         const { error: sibErr } = await supabase.from('transaction_documents').insert(siblings)

@@ -633,6 +633,10 @@ function ComplianceDocumentsTab({
   const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
   // Multi-file upload progress: number of files left to process (0 = idle)
   const [multiUploadRemaining, setMultiUploadRemaining] = useState(0)
+  // Count of AI document reviews running in the background after upload. While > 0, a banner
+  // warns the admin not to leave and beforeunload guards tab close, since navigating away
+  // aborts the review before it is saved.
+  const [reviewsInFlight, setReviewsInFlight] = useState(0)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [assigningDocId, setAssigningDocId] = useState<string | null>(null)
   const [assignSelected, setAssignSelected] = useState<string[]>([])
@@ -643,6 +647,9 @@ function ComplianceDocumentsTab({
   const [viewingDocId, setViewingDocId] = useState<string | null>(null)
   // When a doc viewer is open, this tracks whether it is expanded to a larger height.
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null)
+  // For approved/rejected docs the AI review is collapsed by default; this tracks which
+  // ones the user has expanded to view (kept for audit, one click to see).
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
   const [selectedTxFields, setSelectedTxFields] = useState<Set<string>>(new Set())
 
@@ -662,6 +669,18 @@ function ComplianceDocumentsTab({
   }
 
   useEffect(() => { load() }, [transactionId])
+
+  // Warn on tab close / refresh while AI reviews are still running. The browser shows its
+  // own generic dialog (text cannot be customized); the on-page banner carries the message.
+  useEffect(() => {
+    if (reviewsInFlight <= 0) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [reviewsInFlight])
 
   const postAction = async (action: string, extra: Record<string, any> = {}) => {
     const res = await fetch(`/api/admin/transactions/${transactionId}/documents`, {
@@ -789,6 +808,7 @@ function ComplianceDocumentsTab({
   // Runs in the background after the upload returns. Attaches the verification
   // summary and, if the doc came in unassigned, slots it per the AI suggestion.
   const runAiReviewForDoc = async (docId: string, namedFile: File) => {
+    setReviewsInFlight(n => n + 1)
     try {
       const extractFd = new FormData()
       extractFd.append('file', namedFile)
@@ -825,6 +845,9 @@ function ComplianceDocumentsTab({
         suggested_slots: suggestedSlots,
       })
     } catch { /* best-effort - the doc is already saved, review can be re-run */ }
+    finally {
+      setReviewsInFlight(n => Math.max(0, n - 1))
+    }
   }
 
   const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
@@ -1064,9 +1087,29 @@ function ComplianceDocumentsTab({
 
   const requiredDocs = docsData?.required_docs || []
   const uploadedDocs = docsData?.uploaded_docs || []
-  const approvedCount = uploadedDocs.filter(d => d.compliance_status === 'approved').length
-  const rejectedCount = uploadedDocs.filter(d => d.compliance_status === 'rejected').length
-  const pendingCount = uploadedDocs.filter(d => d.compliance_status === 'pending').length
+  // Count status per displayed document, not per raw row. Each required-doc slot shows
+  // only its latest doc (linked[0]); older versions and siblings of the same slot are
+  // hidden, so counting every row inflated the totals (e.g. an approved doc with a
+  // still-pending older version showed as 'pending'). Count the latest doc per slot,
+  // plus each unassigned (Additional) doc once. uploaded_docs is ordered newest-first.
+  const countedDocs = (() => {
+    const seenSlots = new Set<string>()
+    const result: any[] = []
+    for (const d of uploadedDocs) {
+      if (d.required_document_id) {
+        if (seenSlots.has(d.required_document_id)) continue
+        seenSlots.add(d.required_document_id)
+        result.push(d)
+      } else {
+        // unassigned/Additional docs are each shown once
+        result.push(d)
+      }
+    }
+    return result
+  })()
+  const approvedCount = countedDocs.filter(d => d.compliance_status === 'approved').length
+  const rejectedCount = countedDocs.filter(d => d.compliance_status === 'rejected').length
+  const pendingCount = countedDocs.filter(d => d.compliance_status === 'pending').length
 
   const statusBadge = (status: string) => {
     if (status === 'approved') return (
@@ -1094,6 +1137,16 @@ function ComplianceDocumentsTab({
   return (
     <div className="space-y-4">
       <h1 className="page-title">DOCUMENTS</h1>
+
+      {reviewsInFlight > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-center gap-2 sticky top-2 z-10">
+          <AlertCircle size={16} className="text-amber-600 shrink-0" />
+          <p className="text-xs text-amber-800">
+            <span className="font-semibold">AI is reviewing {reviewsInFlight === 1 ? 'a document' : `${reviewsInFlight} documents`}.</span>
+            {' '}Please keep this page open until the review finishes. Leaving or closing now will stop the review before it is saved.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
@@ -1467,10 +1520,32 @@ function ComplianceDocumentsTab({
                         <p className="text-[10px] text-luxury-gray-3 mb-2">Uploaded by {fmtDocName(latest.uploader)}</p>
                       )}
                       {/* AI summary shown while pending */}
-                      {latest.compliance_status === 'pending' && latest.compliance_notes && (() => {
+                      {latest.ai_review && (() => {
+                        // ai_review (jsonb) holds the AI document review, stored separately from
+                        // compliance_notes so it survives approve/reject and stays viewable for audit.
+                        // supabase may return it as an object or a JSON string.
                         let parsed: { summary?: string; page_contents?: any[]; verification_checklist?: any[]; commission_details?: any[] } | null = null
-                        try { parsed = JSON.parse(latest.compliance_notes) } catch { /* plain text */ }
-                        const summaryText = parsed?.summary || latest.compliance_notes
+                        if (typeof latest.ai_review === 'string') {
+                          try { parsed = JSON.parse(latest.ai_review) } catch { /* not json */ }
+                        } else if (typeof latest.ai_review === 'object') {
+                          parsed = latest.ai_review
+                        }
+                        if (!parsed) return null
+                        // Pending docs: review shown open. Approved/rejected: collapsed by default,
+                        // expandable via toggle so it stays available for audit without clutter.
+                        const isDecided = latest.compliance_status === 'approved' || latest.compliance_status === 'rejected'
+                        const reviewOpen = !isDecided || expandedReviewId === latest.id
+                        if (isDecided && !reviewOpen) {
+                          return (
+                            <button
+                              onClick={() => setExpandedReviewId(latest.id)}
+                              className="mb-2 text-[11px] text-luxury-accent hover:underline flex items-center gap-1"
+                            >
+                              <span className="text-sm leading-none">&#10024;</span> Show AI review
+                            </button>
+                          )
+                        }
+                        const summaryText = parsed?.summary || ''
                         const pages = parsed?.page_contents || []
                         const checklist = parsed?.verification_checklist || []
                         const commissions = parsed?.commission_details || []
@@ -1485,9 +1560,19 @@ function ComplianceDocumentsTab({
                         }
                         return (
                           <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
-                            <p className="font-semibold mb-1 flex items-center gap-1">
-                              <span className="text-sm leading-none">&#10024;</span> AI Read
-                            </p>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-semibold flex items-center gap-1">
+                                <span className="text-sm leading-none">&#10024;</span> AI Read
+                              </p>
+                              {isDecided && (
+                                <button
+                                  onClick={() => setExpandedReviewId(null)}
+                                  className="text-[10px] text-amber-700 hover:underline"
+                                >
+                                  Hide
+                                </button>
+                              )}
+                            </div>
                             <p className="whitespace-pre-wrap mb-1">{summaryText}</p>
                             {pages.length > 0 && (
                               <div className="mt-1.5 pt-1.5 border-t border-amber-200">
@@ -4244,140 +4329,6 @@ export default function AdminTransactionDetailPage() {
                 </div>
               )}
 
-                  {/* Checklist */}
-                  {checklist.length > 0 && (
-                    <div className="container-card">
-                      <button
-                        className="flex items-center justify-between w-full mb-3"
-                        onClick={() => setChecklistExpanded(p => !p)}
-                      >
-                        <span className="section-title">
-                          Checklist ({completedCount}/{checklist.length})
-                        </span>
-                        {checklistExpanded ? (
-                          <ChevronUp size={14} className="text-luxury-gray-3" />
-                        ) : (
-                          <ChevronDown size={14} className="text-luxury-gray-3" />
-                        )}
-                      </button>
-
-                      {/* AI Review panel */}
-                      <div className="mb-3">
-                        <button
-                          onClick={runAiChecklistReview}
-                          disabled={aiReviewLoading}
-                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-luxury-accent/40 text-luxury-accent text-xs font-medium hover:bg-luxury-accent/5 transition-colors disabled:opacity-50"
-                        >
-                          {aiReviewLoading ? (
-                            <>
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent animate-pulse" />
-                              Reviewing...
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-base leading-none">&#10024;</span>
-                              Review Checklist with AI
-                            </>
-                          )}
-                        </button>
-
-                        {aiReviewError && (
-                          <p className="mt-2 text-xs text-red-500 text-center">{aiReviewError}</p>
-                        )}
-
-                        {aiReview && (
-                          <div className="mt-3 space-y-2">
-                            {/* Overall summary */}
-                            <div className={`p-3 rounded-lg border text-xs ${aiReview.ready_to_pay ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold">
-                                  {aiReview.ready_to_pay ? 'Looks good to pay' : 'Items need attention'}
-                                </span>
-                              </div>
-                              <p>{aiReview.overall}</p>
-                            </div>
-
-                            {/* Critical flags */}
-                            {aiReview.flags && aiReview.flags.length > 0 && (
-                              <div className="p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-xs">
-                                <p className="font-semibold mb-1">Flags</p>
-                                <ul className="space-y-1">
-                                  {aiReview.flags.map((flag: string, i: number) => (
-                                    <li key={i} className="flex items-start gap-1.5">
-                                      <span className="mt-0.5 shrink-0">&#9679;</span>
-                                      <span>{flag}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {/* Per-item notes */}
-                            <div className="space-y-1.5">
-                              {aiReview.items.map((item: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className={`p-2.5 rounded-lg border text-xs ${
-                                    item.status === 'ok'
-                                      ? 'bg-green-50/60 border-green-200/60 text-green-800'
-                                      : item.status === 'flagged'
-                                        ? 'bg-red-50 border-red-200 text-red-800'
-                                        : item.status === 'missing'
-                                          ? 'bg-orange-50 border-orange-200 text-orange-800'
-                                          : 'bg-amber-50/60 border-amber-200/60 text-amber-800'
-                                  }`}
-                                >
-                                  <p className="font-semibold mb-0.5">{item.label}</p>
-                                  <p className="opacity-90">{item.note}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {checklistExpanded && (
-                        <div className="space-y-1.5">
-                          {checklist.map((item: any) => (
-                            <div
-                              key={item.id}
-                              className={`flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-colors ${item.completion ? 'bg-green-50/50' : 'hover:bg-luxury-light'}`}
-                              onClick={() => toggleChecklist(item.id, !!item.completion)}
-                            >
-                              <div
-                                className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}
-                              >
-                                {item.completion && <Check size={10} className="text-white" />}
-                              </div>
-                              <div className="flex-1">
-                                <p
-                                  className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}
-                                >
-                                  {item.label}
-                                </p>
-                                {item.description && (
-                                  <p className="text-xs text-luxury-gray-3 mt-0.5">
-                                    {item.description}
-                                  </p>
-                                )}
-                                {item.section && (
-                                  <p className="text-xs text-luxury-gray-4 mt-0.5">
-                                    {item.section}
-                                  </p>
-                                )}
-                              </div>
-                              {item.completion && (
-                                <p className="text-xs text-luxury-gray-3 shrink-0">
-                                  {fmtDate(item.completion.completed_at)}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
               {/* Checks exist */}
               {checks.length > 0 && (
                 <>
@@ -4904,6 +4855,140 @@ export default function AdminTransactionDetailPage() {
 
                 </>
               )}
+
+                  {/* Checklist */}
+                  {checklist.length > 0 && (
+                    <div className="container-card">
+                      <button
+                        className="flex items-center justify-between w-full mb-3"
+                        onClick={() => setChecklistExpanded(p => !p)}
+                      >
+                        <span className="section-title">
+                          Checklist ({completedCount}/{checklist.length})
+                        </span>
+                        {checklistExpanded ? (
+                          <ChevronUp size={14} className="text-luxury-gray-3" />
+                        ) : (
+                          <ChevronDown size={14} className="text-luxury-gray-3" />
+                        )}
+                      </button>
+
+                      {/* AI Review panel */}
+                      <div className="mb-3">
+                        <button
+                          onClick={runAiChecklistReview}
+                          disabled={aiReviewLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-luxury-accent/40 text-luxury-accent text-xs font-medium hover:bg-luxury-accent/5 transition-colors disabled:opacity-50"
+                        >
+                          {aiReviewLoading ? (
+                            <>
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent animate-pulse" />
+                              Reviewing...
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-base leading-none">&#10024;</span>
+                              Review Checklist with AI
+                            </>
+                          )}
+                        </button>
+
+                        {aiReviewError && (
+                          <p className="mt-2 text-xs text-red-500 text-center">{aiReviewError}</p>
+                        )}
+
+                        {aiReview && (
+                          <div className="mt-3 space-y-2">
+                            {/* Overall summary */}
+                            <div className={`p-3 rounded-lg border text-xs ${aiReview.ready_to_pay ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold">
+                                  {aiReview.ready_to_pay ? 'Looks good to pay' : 'Items need attention'}
+                                </span>
+                              </div>
+                              <p>{aiReview.overall}</p>
+                            </div>
+
+                            {/* Critical flags */}
+                            {aiReview.flags && aiReview.flags.length > 0 && (
+                              <div className="p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-xs">
+                                <p className="font-semibold mb-1">Flags</p>
+                                <ul className="space-y-1">
+                                  {aiReview.flags.map((flag: string, i: number) => (
+                                    <li key={i} className="flex items-start gap-1.5">
+                                      <span className="mt-0.5 shrink-0">&#9679;</span>
+                                      <span>{flag}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Per-item notes */}
+                            <div className="space-y-1.5">
+                              {aiReview.items.map((item: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className={`p-2.5 rounded-lg border text-xs ${
+                                    item.status === 'ok'
+                                      ? 'bg-green-50/60 border-green-200/60 text-green-800'
+                                      : item.status === 'flagged'
+                                        ? 'bg-red-50 border-red-200 text-red-800'
+                                        : item.status === 'missing'
+                                          ? 'bg-orange-50 border-orange-200 text-orange-800'
+                                          : 'bg-amber-50/60 border-amber-200/60 text-amber-800'
+                                  }`}
+                                >
+                                  <p className="font-semibold mb-0.5">{item.label}</p>
+                                  <p className="opacity-90">{item.note}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {checklistExpanded && (
+                        <div className="space-y-1.5">
+                          {checklist.map((item: any) => (
+                            <div
+                              key={item.id}
+                              className={`flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-colors ${item.completion ? 'bg-green-50/50' : 'hover:bg-luxury-light'}`}
+                              onClick={() => toggleChecklist(item.id, !!item.completion)}
+                            >
+                              <div
+                                className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}
+                              >
+                                {item.completion && <Check size={10} className="text-white" />}
+                              </div>
+                              <div className="flex-1">
+                                <p
+                                  className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}
+                                >
+                                  {item.label}
+                                </p>
+                                {item.description && (
+                                  <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                    {item.description}
+                                  </p>
+                                )}
+                                {item.section && (
+                                  <p className="text-xs text-luxury-gray-4 mt-0.5">
+                                    {item.section}
+                                  </p>
+                                )}
+                              </div>
+                              {item.completion && (
+                                <p className="text-xs text-luxury-gray-3 shrink-0">
+                                  {fmtDate(item.completion.completed_at)}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
             </div>
           )}
 
