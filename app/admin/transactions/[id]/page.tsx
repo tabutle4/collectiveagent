@@ -3630,7 +3630,7 @@ export default function AdminTransactionDetailPage() {
                       return (
                         <div key={a.id} className="inner-card">
                           {/* Header with actions */}
-                          <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-start justify-between gap-2 mb-3 flex-wrap">
                             <div className="flex items-center gap-3 min-w-0 flex-1">
                               {a.user?.headshot_url && (
                                 <img
