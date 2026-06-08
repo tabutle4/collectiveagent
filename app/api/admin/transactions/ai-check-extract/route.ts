@@ -11,7 +11,8 @@ async function extractCheckWithClaude(
   check_amount: number | null
   check_from: string | null
   check_number: string | null
-  received_date: string | null
+  check_date: string | null
+  cleared_date: string | null
   payment_method: string
   notes: string | null
   confidence: 'high' | 'medium' | 'low'
@@ -26,7 +27,8 @@ Extract the following fields and return ONLY valid JSON with no extra text:
   "check_amount": <number or null - the dollar amount paid>,
   "check_from": <string or null - who sent/wrote the payment: person name, company name, or bank name>,
   "check_number": <string or null - check number if present, or transaction/reference number for Zelle/ACH>,
-  "received_date": <string or null - date in YYYY-MM-DD format if visible>,
+  "check_date": <string or null - YYYY-MM-DD - the date printed on the check (when the check was written)>,
+  "cleared_date": <string or null - YYYY-MM-DD - the date the check cleared or was deposited per the bank; use null if not visible>,
   "payment_method": <"check" | "zelle" | "payload" | "ecommission" | "wire" - your best guess at what type of payment this is>,
   "notes": <string or null - any other relevant info such as memo line, property address mentioned, or bank name>,
   "confidence": <"high" | "medium" | "low" - how confident you are in the extracted data>
@@ -38,7 +40,10 @@ Rules:
 - For bank deposit screenshots: check_amount is the deposit total
 - For Payload PDFs: use "payload" as payment_method and the transaction ID as check_number
 - If a field is not visible or not applicable, use null
-- received_date should be the date shown on the document, not today's date
+- check_date is the date printed on the face of the check (when it was written)
+- cleared_date is the date the bank processed/cleared the check, if visible (e.g. on a deposit receipt or bank statement)
+- received_date is derived automatically from cleared_date by the app (day before cleared); do not return it
+- For Zelle/ACH/Payload: check_date is the transaction date shown
 - Return ONLY the JSON object, no markdown, no explanation`
 
   const messageContent: any[] = []
@@ -98,7 +103,8 @@ Rules:
     check_amount: typeof parsed.check_amount === 'number' ? parsed.check_amount : null,
     check_from: parsed.check_from || null,
     check_number: parsed.check_number ? String(parsed.check_number) : null,
-    received_date: parsed.received_date || null,
+    check_date: parsed.check_date || null,
+    cleared_date: parsed.cleared_date || null,
     payment_method: parsed.payment_method || 'check',
     notes: parsed.notes || null,
     confidence: parsed.confidence || 'medium',

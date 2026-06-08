@@ -205,6 +205,7 @@ ${context}
 
 Checklist item definitions for context:
 - "Pay Other Agent" = pay a co-op brokerage or external referral agent on the other side of the deal (NOT CRC agents). Check if any external agents/brokerages are listed under EXTERNAL AGENTS TO PAY.
+- TEAM SPLIT NOTE: An agent with role "team_lead" receives a carved-out portion of the deal but does NOT pay another team lead fee. The "Team Lead Commission" shown on a primary agent row is informational only - it tracks what the team lead earns from that deal, not an additional deduction from the team lead themselves. Do not flag a team lead agent for "paying a team lead" - that is expected behavior, not an error.
 - "Deposit Check" = verify a check has been received and deposited from the client/title company. Amount should match Office Gross.
 - "Update Transaction" = ensure all transaction fields (status, dates, amounts) are accurate.
 - "Commission Plan" = verify the commission plan and split % are correct for each agent.
