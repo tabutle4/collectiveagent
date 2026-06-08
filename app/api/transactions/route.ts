@@ -163,14 +163,19 @@ export async function POST(request: NextRequest) {
         ? (agentUser?.lease_commission_plan || agentUser?.commission_plan || '')
         : (agentUser?.commission_plan || '')
 
-      // Determine default role and side from type code
+      // Determine default role and side from type code.
+      // side must be a valid Side value: 'buyer' | 'seller' | 'tenant' | 'landlord'
+      // (NOT the category 'buying'/'listing' — those fail the DB constraint).
       const isListingSide =
         txnType.includes('landlord') || txnType.includes('seller')
-      const isBuyingSide =
-        txnType.includes('buyer') || txnType.includes('tenant')
 
       const agentRole = isListingSide ? 'listing_agent' : 'primary_agent'
-      const side = isListingSide ? 'listing' : isBuyingSide ? 'buying' : null
+      const side =
+        txnType.includes('landlord') ? 'landlord'
+        : txnType.includes('seller') ? 'seller'
+        : txnType.includes('tenant') ? 'tenant'
+        : txnType.includes('buyer') ? 'buyer'
+        : null
       const countsToward = !isLease && (agentRole === 'primary_agent' || agentRole === 'listing_agent')
 
       // Auto-set office_location from agent profile if not already set
