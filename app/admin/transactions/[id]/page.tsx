@@ -3563,7 +3563,7 @@ export default function AdminTransactionDetailPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap justify-end">
                               {/* Recalculate - excluded for retainer rows, which have their own
                                   fee structure (basis minus retainer_fee = net) and don't use the
                                   commission cascade. Without this guard, clicking Recalculate
