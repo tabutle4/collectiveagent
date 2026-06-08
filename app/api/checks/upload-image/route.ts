@@ -125,8 +125,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'File must be an image or PDF' }, { status: 400 })
+    // Infer MIME type from extension when browser doesn't set it (common with some PDFs)
+    const fileExt = (file.name.split('.').pop() || '').toLowerCase()
+    const EXT_MIME: Record<string, string> = {
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }
+    const effectiveType = file.type || EXT_MIME[fileExt] || ''
+
+    const ALLOWED_TYPES = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    if (!effectiveType.startsWith('image/') && !ALLOWED_TYPES.includes(effectiveType)) {
+      return NextResponse.json({ error: 'File must be an image, PDF, or Word document' }, { status: 400 })
     }
 
     if (file.size > 10 * 1024 * 1024) {
@@ -164,7 +178,7 @@ export async function POST(request: NextRequest) {
       folderPath = 'Checks/Unlinked Checks'
     }
 
-    const fileUrl = await uploadToOneDrive(token, folderPath, filename, fileBuffer, file.type)
+    const fileUrl = await uploadToOneDrive(token, folderPath, filename, fileBuffer, effectiveType || file.type)
 
     if (checkId) {
       await supabase.from('checks_received').update({ check_image_url: fileUrl }).eq('id', checkId)
