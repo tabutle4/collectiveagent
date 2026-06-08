@@ -150,9 +150,24 @@ export async function POST(request: NextRequest) {
     }
 
     const arrayBuffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
     const fileBase64 = Buffer.from(arrayBuffer).toString('base64')
 
-    const extracted = await extractCheckWithClaude(fileBase64, file.type)
+    // Detect the true media type from the file's magic bytes. Browsers and OneDrive
+    // sometimes report the wrong file.type (e.g. a JPEG labeled image/png), which the
+    // Claude API rejects with a 400. Sniffing the bytes is authoritative.
+    const sniffMediaType = (b: Uint8Array, fallback: string): string => {
+      if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+      if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+      if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
+      if (b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+        && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp'
+      if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf'
+      return fallback
+    }
+    const realMediaType = sniffMediaType(bytes, file.type)
+
+    const extracted = await extractCheckWithClaude(fileBase64, realMediaType)
 
     return NextResponse.json({ extracted })
   } catch (err: any) {
