@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 export const dynamic = 'force-dynamic'
+
 
 // Returns a OneDrive resumable upload session URL.
 // The client uploads the file DIRECTLY to that URL — Vercel never receives the file bytes.
@@ -16,24 +18,6 @@ export const dynamic = 'force-dynamic'
 //   5. OneDrive returns the final item with webUrl
 //   6. Client POSTs the webUrl to /api/uploads/complete to save it to the DB
 
-async function getGraphToken(): Promise<string> {
-  const res = await fetch(
-    `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: process.env.MICROSOFT_CLIENT_ID!,
-        client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-        scope: 'https://graph.microsoft.com/.default',
-      }),
-    }
-  )
-  const data = await res.json()
-  if (!data.access_token) throw new Error('Failed to get Graph token')
-  return data.access_token
-}
 
 async function ensureTransactionFolder(token: string, transactionId: string): Promise<string> {
   const rootFolder = process.env.ONEDRIVE_ROOT_FOLDER || 'Collective Agent'
@@ -52,7 +36,10 @@ async function ensureTransactionFolder(token: string, transactionId: string): Pr
     .trim()
   const folderPath = `Transactions/${sanitizedAddress}-${transactionId}`
 
-  // Create Documents subfolder (Graph creates parents automatically)
+  // Early exit: folder already created on a previous upload
+  if (txn.onedrive_folder_url) return `${process.env.ONEDRIVE_ROOT_FOLDER || 'Collective Agent'}/${folderPath}/Documents`
+
+  // First upload for this transaction: create Documents subfolder in OneDrive
   await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oneDriveUser)}/drive/root:/${rootFolder}/${folderPath}:/children`,
     {

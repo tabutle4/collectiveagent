@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 // Create a transaction folder in OneDrive and save the URL to the transaction row.
 // Returns the relative folder path (without root prefix) to use for upload.
@@ -20,16 +21,15 @@ async function ensureTransactionFolder(
 
   if (!txn) throw new Error('Transaction not found')
 
-  // Build the canonical folder path from address+id (idempotent)
-  // If folder already exists in OneDrive, the conflictBehavior below handles it.
-
-  // Build the folder path: Transactions/123 Main St-[id]
   const sanitizedAddress = (txn.property_address || 'Unknown Address')
     .replace(/[/\\?%*:|"<>]/g, '-')
     .trim()
   const folderPath = `Transactions/${sanitizedAddress}-${transactionId}`
 
-  // Create the Checks subfolder (Graph creates parent folders automatically)
+  // Early exit: folder already created on a previous upload — skip all Graph folder calls
+  if (txn.onedrive_folder_url) return folderPath
+
+  // First upload for this transaction: create the Checks subfolder in OneDrive
   await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oneDriveUser)}/drive/root:/${rootFolder}/${folderPath}:/children`,
     {
@@ -70,26 +70,6 @@ async function ensureTransactionFolder(
   }
 
   return folderPath
-}
-
-// Get Graph access token using client credentials
-async function getGraphToken(): Promise<string> {
-  const res = await fetch(
-    `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: process.env.MICROSOFT_CLIENT_ID!,
-        client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-        scope: 'https://graph.microsoft.com/.default',
-      }),
-    }
-  )
-  const data = await res.json()
-  if (!data.access_token) throw new Error('Failed to get Graph token')
-  return data.access_token
 }
 
 // Upload a file to OneDrive using Graph API

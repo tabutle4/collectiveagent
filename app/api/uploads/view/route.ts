@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,24 +11,6 @@ export const dynamic = 'force-dynamic'
 //
 // Usage: /api/uploads/view?url=<encoded-onedrive-webUrl>
 
-async function getGraphToken(): Promise<string> {
-  const res = await fetch(
-    `https://login.microsoftonline.com/${process.env.MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: process.env.MICROSOFT_CLIENT_ID!,
-        client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
-        scope: 'https://graph.microsoft.com/.default',
-      }),
-    }
-  )
-  const data = await res.json()
-  if (!data.access_token) throw new Error('Failed to get Graph token')
-  return data.access_token
-}
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
