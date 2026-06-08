@@ -648,7 +648,7 @@ export default function AgentCardFinancials({
   const processingFee = num(a.processing_fee ?? calc?.processing_fee)
   const coachingFee = num(a.coaching_fee ?? calc?.coaching_fee)
   const debtsDeducted = num(a.debts_deducted)
-  const salesVolume = num(a.sales_volume)
+  const salesVolume = num(txn?.sales_volume ?? a.sales_volume)
 
   // LIVE recompute - always uses canonical formula
   const live = computeCommission({
