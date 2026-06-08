@@ -212,9 +212,47 @@ Checklist item definitions for context:
 - "Review Agent Account" = check for outstanding debts or credits that should be applied.
 - "Transfer Brokerage Split" = confirm the CRC brokerage portion was transferred to the CRC account.
 
+COLLECTIVE REALTY CO. REQUIRED DOCUMENTS BY TRANSACTION TYPE
+(These are CRC's exact compliance requirements. Use this to evaluate what has been uploaded.)
+
+BUYER (buyer_v2): Required: IABS Form, Buyer Rep Agreement, Information About Special Flood Hazard Areas, Copy of Home Inspection, For Your Protection Get A Home Inspection, Inspection Information Form, General Information & Notice to Buyer, Wire Fraud Warning, Notice To Prospective Buyers, Disclosure Of Relationship, Sales Contract, Third-Party Financing Addendum, All Applicable Amendments, Seller Disclosures, Title Commitment, Earnest & Option Funds Receipt, Buyer Walk Through & Acceptance, Post Closing: Survey, Post Closing: Final Settlement Statement | Optional: HOA Addendum, MUD District Addendum, Lead Base Paint Disclosures, Compensation Agreement TXR 2402, Referral Agreement & W9
+
+SELLER (seller_v2): Required: IABS Form, Listing Agreement, General Notice to Seller, Wire Fraud Warning, Disclosure Of Relationship, Sales Contract, Third-Party Financing Addendum, All Applicable Amendments, Seller Disclosures, Title Commitment, Earnest & Option Funds Receipt, Post Closing: Survey, Post Closing: Final Settlement Statement | Optional: Copy of Home Inspection from other broker, HOA Addendum, MUD District Addendum, Lead Base Paint Disclosures, Compensation Agreement TXR 2402, Referral Agreement & W9, Buyer Walk Through & Acceptance
+
+NEW CONSTRUCTION BUYER (nc_buyer_v2): Required: IABS Form, Buyer Rep Agreement, Information About Special Flood Hazard Areas, Copy of Home Inspection, For Your Protection Get A Home Inspection, Inspector Information Form, General Information & Notice to Buyer, Wire Fraud Warning, Disclosure Of Relationship, Sales Contract, All Applicable Amendments, Title Commitment, Post Closing: Survey, Post Closing: Buyer Walk Through & Acceptance, Post Closing: Final Settlement Statement | Optional: Earnest & Option Funds Receipt, Compensation Agreement TXR 2402, Referral Agreement & W9
+
+LAND/LOT BUYER (land_buyer_v2): Required: IABS Form, Buyer Rep Agreement, Information About Special Flood Hazard Areas, General Information & Notice to Buyer, Wire Fraud Warning, Notice To Prospective Buyers, Disclosure Of Relationship, Sales Contract, All Applicable Amendments, Title Commitment, Earnest & Option Funds Receipt, Post Closing: Final Settlement Statement, Post Closing: Survey | Optional: Third-Party Financing Addendum, HOA Addendum, MUD District Addendum, Compensation Agreement TXR 2402, Referral Agreement & W9
+
+LAND/LOT SELLER (land_seller_v2): Required: IABS Form, Buyer Rep Agreement, Information About Special Flood Hazard Areas, General Information & Notice to Buyer, Wire Fraud Warning, Notice To Prospective Buyers, Disclosure Of Relationship, Sales Contract, All Applicable Amendments, Title Commitment, Earnest & Option Funds Receipt, Compensation Agreement TXR 2402, Post Closing: Survey | Optional: Third-Party Financing Addendum, HOA Addendum, MUD District Addendum, Referral Agreement
+
+COMMERCIAL BUYER (commercial_buyer_v2): Required: IABS Form, Commercial Buyer Rep Agreement, Commercial Property Condition Statement, General Information & Notice To Buyer/Seller, Wiring Fraud Warning, Broker Notice To Tenant/Buyer, Commercial Contract, Commercial Financing Addendum, Title Commitment, Earnest Money & Option Fee Receipt, Survey | Optional: Referral Agreement & W9
+
+TENANT - APARTMENT (tenant_apt_v2): Required: Invoice only. IMPORTANT: Apartment transactions do NOT require a lease in the file. The PM company or apartment complex holds the lease. The invoice is the commission invoice from the complex or PM company to CRC.
+
+TENANT - NON-APARTMENT (tenant_non_apt_v2): Required: IABS Form, Tenant Rep Agreement, Broker Notice to Tenant, Agreement Between Brokers, Final Lease Agreement | Optional: Final Pet Agreement, Confirmation of payments issued, Referral Agreement & W9
+
+TENANT - SIMPLYHOME (tenant_simplyhome_v2): Required: IABS Form, Tenant Rep Agreement, Agreement Between Brokers | Optional: Referral Agreement & W9
+
+TENANT - COMMERCIAL (tenant_commercial_v2): Required: IABS Form, Commercial Tenant Rep Agreement, Commission Agreement, Commercial Lease Agreement, Confirmation Of Payments Issued | Optional: Referral Agreement & W9
+
+LANDLORD (landlord_v2): Required: IABS Form, Listing Agreement, Landlord Floodplain & Flood Notice, Addendum Regarding Rental Flood Disclosure, Final Lease Agreement, Confirmation of payments issued, Tenant Screening Confirmations or landlord waiver in writing, Lease Application from Tenant signed by Landlord, Paystubs from Tenant, Agreement Between Brokers, Other Broker W-9 | Optional: Final Pet Agreement, Referral Agreement & W9
+
+REFERRED OUT (referred_out_v2): Required: Referral Agreement
+
+DOCUMENT IDENTIFICATION GUIDE:
+- "Final Lease Agreement" = ANY signed lease: TAA (Texas Apartment Association), TAR Residential Lease (TAR 2001), SimplyHome lease, commercial lease, or any PM company lease. They look completely different from each other. Accept any of them.
+- "Sales Contract" = any TREC purchase contract (One to Four Family, New Construction, Commercial, Land). Often has addenda attached in the same PDF.
+- "IABS Form" = Information About Brokerage Services (TREC OP-K), typically 1 page.
+- "Seller Disclosures" = Seller's Disclosure Notice (TREC OP-H).
+- "Agreement Between Brokers" and "Compensation Agreement Between Brokers TXR 2402" = same type - co-op compensation agreement.
+- Post Closing documents (survey, final settlement statement, buyer walk-through) are submitted AFTER closing. Do not flag them as missing on transactions that have not closed yet.
+- "Invoice" for apartment tenant = commission invoice from the apartment complex or PM company, not the lease.
+
 Document cross-checks to perform (flag anything that does not match):
+- REQUIRED DOCUMENTS: Use the REQUIRED DOCUMENTS STATUS section above. Flag any required slot that is MISSING. Note pending docs that need review. Do not flag optional docs as missing.
 - CONTRACT (sales or lease): The sales_price or monthly_rent in the transaction must match what the contract says. If a check was received, the check amount should match or be explained.
-- LEASE AGREEMENT: monthly_rent × lease_term should equal sales_volume. If they differ, flag it.
+- LEASE AGREEMENT: monthly_rent x lease_term should equal sales_volume. If they differ, flag it. Accept any lease form (TAA, TAR, SimplyHome, commercial, PM company) as a valid Final Lease Agreement.
+- APARTMENT TENANT: Only an invoice is required - not a lease. Do not flag a missing lease for tenant_apt_v2 transactions.
 - ABB (Buyer Representation Agreement): The agent's commission basis % (Agent Split %) represents what was agreed in the ABB. If an agent's agent_gross is less than expected given the sales price and their split %, flag the discrepancy.
 - LISTING AGREEMENT: For listing-side agents, verify brokerage_split is consistent with the listing agreement commission rate (typically a % of sales price). If office_gross seems low relative to sales price, flag it.
 - REP AGREEMENT: Any agent marked as buyer or listing agent should have a commission plan that is consistent with their representation agreement. Flag if commission plan is missing or set to an unexpected value.
