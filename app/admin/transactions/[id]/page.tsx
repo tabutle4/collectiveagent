@@ -3628,8 +3628,8 @@ export default function AdminTransactionDetailPage() {
                       return (
                         <div key={a.id} className="inner-card">
                           {/* Header with actions */}
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3">
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
                               {a.user?.headshot_url && (
                                 <img
                                   src={a.user.headshot_url}
@@ -3675,7 +3675,7 @@ export default function AdminTransactionDetailPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <div className="flex items-center gap-2 flex-wrap justify-end flex-shrink-0">
                               {/* Recalculate - excluded for retainer rows, which have their own
                                   fee structure (basis minus retainer_fee = net) and don't use the
                                   commission cascade. Without this guard, clicking Recalculate

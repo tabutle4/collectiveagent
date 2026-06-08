@@ -9,6 +9,17 @@ export const dynamic = 'force-dynamic'
 // Leah sees the email content in the Documents tab and can approve/reject.
 
 export async function POST(request: NextRequest) {
+  // Validate shared secret to prevent spoofed inbound email payloads.
+  // The secret is appended to the webhook URL in Resend: ?secret=RESEND_INBOUND_SECRET
+  const expectedSecret = process.env.RESEND_INBOUND_SECRET
+  if (expectedSecret) {
+    const { searchParams } = new URL(request.url)
+    const providedSecret = searchParams.get('secret')
+    if (providedSecret !== expectedSecret) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
   try {
     const body = await request.json()
 

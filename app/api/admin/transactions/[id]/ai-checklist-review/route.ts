@@ -115,6 +115,24 @@ ${checklistItems || 'No checklist'}
       const existing_contacts: any[] = rawExistingContacts || []
       const existingNames = existing_contacts.map((c: any) => c.name).filter(Boolean)
 
+      // Fetch uploaded doc summaries so Claude can extract contacts from them
+      const { data: uploadedDocs } = await supabase
+        .from('transaction_documents')
+        .select('file_name, compliance_notes')
+        .eq('transaction_id', transaction.id)
+        .not('compliance_notes', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      const docSummaries = (uploadedDocs || [])
+        .map((d: any) => {
+          let text = ''
+          try { text = JSON.parse(d.compliance_notes)?.summary || d.compliance_notes } catch { text = d.compliance_notes || '' }
+          return `${d.file_name}: ${text}`
+        })
+        .filter(Boolean)
+        .join('\n---\n')
+
       const contactPrompt = `You are reviewing a real estate transaction for Collective Realty Co. Extract all contact information visible in this data.
 
 TRANSACTION: ${transaction.property_address || 'N/A'} | Type: ${transaction.transaction_type || 'N/A'}
@@ -131,13 +149,14 @@ SELLER/LANDLORD NAME: ${(transaction as any).seller_name || (transaction as any)
 SELLER/LANDLORD EMAIL: ${(transaction as any).seller_email || (transaction as any).landlord_email || 'N/A'}
 BUYER/TENANT NAME: ${(transaction as any).buyer_name || (transaction as any).tenant_name || 'N/A'}
 BUYER/TENANT EMAIL: ${(transaction as any).buyer_email || (transaction as any).tenant_email || 'N/A'}
+${docSummaries ? `\nDOCUMENT SUMMARIES (AI-extracted from uploaded files):\n${docSummaries}` : ''}
 EXISTING CONTACTS ALREADY SAVED (do not duplicate): ${existingNames.length > 0 ? existingNames.join(', ') : 'none'}
 
 Extract all non-agent parties you can identify. Return ONLY valid JSON, no markdown:
 {
   "contacts": [
     {
-      "contact_type": "<one of: buyer, seller, tenant, landlord, title_company, lender, attorney, inspector, appraiser, hoa, property_manager, coop_agent, other>",
+      "contact_type": "<one of: buyer, seller, tenant, landlord, title_company, title_officer, lender, loan_officer, attorney, inspector, appraiser, cooperating_agent, property_manager, hoa, other>",
       "name": "<full name or company name>",
       "email": "<email if visible, else null>",
       "phone": "<phone if visible, else null>",

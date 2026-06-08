@@ -8,8 +8,19 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // Resend inbound email webhook
 // Receives emails sent to repair+{repair_id}@coachingbrokeragetools.com
 export async function POST(request: NextRequest) {
+  // Validate shared secret to prevent spoofed inbound email payloads.
+  // The secret is appended to the webhook URL in Resend: ?secret=RESEND_INBOUND_SECRET
+  const expectedSecret = process.env.RESEND_INBOUND_SECRET
+  if (expectedSecret) {
+    const { searchParams } = new URL(request.url)
+    const providedSecret = searchParams.get('secret')
+    if (providedSecret !== expectedSecret) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
   const supabase = await createClient()
-  
+
   try {
     const body = await request.json()
     
