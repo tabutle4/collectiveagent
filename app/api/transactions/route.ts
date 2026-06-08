@@ -134,6 +134,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
+    // Auto-add the agent to transaction_internal_agents
+    // so they don't have to be added manually after creation
+    try {
+      // Fetch agent's commission plan
+      const { data: agentUser } = await supabase
+        .from('users')
+        .select('commission_plan, lease_commission_plan')
+        .eq('id', submittedBy)
+        .single()
+
+      const txnType = transactionData.transaction_type || ''
+
+      // Look up processing_fee_types for is_lease flag — future-proof against new type codes
+      const { data: pft } = await supabase
+        .from('processing_fee_types')
+        .select('is_lease, name')
+        .eq('code', txnType)
+        .maybeSingle()
+
+      const isLease = pft?.is_lease ?? (
+        txnType.includes('tenant') || txnType.includes('landlord') ||
+        txnType.includes('apartment') || txnType.includes('lease')
+      )
+
+      const commissionPlan = isLease
+        ? (agentUser?.lease_commission_plan || agentUser?.commission_plan || '')
+        : (agentUser?.commission_plan || '')
+
+      // Determine default role and side from type code
+      // Fallback string checks cover any future types not yet in the DB
+      const isListingSide =
+        txnType.includes('landlord') || txnType.includes('seller')
+      const isBuyingSide =
+        txnType.includes('buyer') || txnType.includes('tenant')
+
+      const agentRole = isListingSide ? 'listing_agent' : 'primary_agent'
+      const side = isListingSide ? 'listing' : isBuyingSide ? 'buying' : null
+
+      const countsToward = !isLease && (agentRole === 'primary_agent' || agentRole === 'listing_agent')
+
+      await supabase.from('transaction_internal_agents').insert({
+        transaction_id: newTransaction.id,
+        agent_id: submittedBy,
+        agent_role: agentRole,
+        side,
+        commission_plan: commissionPlan,
+        counts_toward_progress: countsToward,
+        units: 1,
+        funding_source: 'crc',
+        payment_status: 'pending',
+        uses_canonical_math: true,
+      })
+    } catch {
+      // best-effort: agent auto-add failed but transaction was created
+      // agent can still be added manually
+    }
+
     return NextResponse.json({ transaction: newTransaction })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })
