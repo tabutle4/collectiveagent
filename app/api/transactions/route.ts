@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { fetchAllRows } from '@/lib/supabase'
+import { fetchAllRows, supabaseAdmin } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions, PermissionCode } from '@/lib/permissions'
 
@@ -134,20 +134,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    // Auto-add the agent to transaction_internal_agents
-    // so they don't have to be added manually after creation
+    // Auto-add the agent to transaction_internal_agents and set office_location.
+    // Uses supabaseAdmin to bypass RLS (the agent being added may differ from the
+    // logged-in admin, and RLS on users/TIA would block a session-scoped client).
     try {
-      // Fetch agent's commission plan
-      const { data: agentUser } = await supabase
+      // Fetch agent's commission plan and office using admin client (bypasses RLS)
+      const { data: agentUser } = await supabaseAdmin
         .from('users')
-        .select('commission_plan, lease_commission_plan')
+        .select('commission_plan, lease_commission_plan, office')
         .eq('id', submittedBy)
         .single()
 
       const txnType = transactionData.transaction_type || ''
 
       // Look up processing_fee_types for is_lease flag — future-proof against new type codes
-      const { data: pft } = await supabase
+      const { data: pft } = await supabaseAdmin
         .from('processing_fee_types')
         .select('is_lease, name')
         .eq('code', txnType)
@@ -163,7 +164,6 @@ export async function POST(request: NextRequest) {
         : (agentUser?.commission_plan || '')
 
       // Determine default role and side from type code
-      // Fallback string checks cover any future types not yet in the DB
       const isListingSide =
         txnType.includes('landlord') || txnType.includes('seller')
       const isBuyingSide =
@@ -171,24 +171,37 @@ export async function POST(request: NextRequest) {
 
       const agentRole = isListingSide ? 'listing_agent' : 'primary_agent'
       const side = isListingSide ? 'listing' : isBuyingSide ? 'buying' : null
-
       const countsToward = !isLease && (agentRole === 'primary_agent' || agentRole === 'listing_agent')
 
-      await supabase.from('transaction_internal_agents').insert({
-        transaction_id: newTransaction.id,
-        agent_id: submittedBy,
-        agent_role: agentRole,
-        side,
-        commission_plan: commissionPlan,
-        counts_toward_progress: countsToward,
-        units: 1,
-        funding_source: 'crc',
-        payment_status: 'pending',
-        uses_canonical_math: true,
-      })
-    } catch {
-      // best-effort: agent auto-add failed but transaction was created
-      // agent can still be added manually
+      // Auto-set office_location from agent profile if not already set
+      if (agentUser?.office && !transactionData.office_location) {
+        await supabaseAdmin
+          .from('transactions')
+          .update({ office_location: agentUser.office })
+          .eq('id', newTransaction.id)
+      }
+
+      const { error: tiaError } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .insert({
+          transaction_id: newTransaction.id,
+          agent_id: submittedBy,
+          agent_role: agentRole,
+          side,
+          commission_plan: commissionPlan,
+          counts_toward_progress: countsToward,
+          units: 1,
+          funding_source: 'crc',
+          payment_status: 'pending',
+          uses_canonical_math: true,
+        })
+
+      if (tiaError) {
+        console.error('Auto-add agent to TIA failed:', tiaError.message)
+      }
+    } catch (err: any) {
+      console.error('Auto-add agent block error:', err?.message || err)
+      // best-effort: transaction was created, agent can be added manually
     }
 
     return NextResponse.json({ transaction: newTransaction })

@@ -1716,6 +1716,7 @@ export default function AdminTransactionDetailPage() {
     setLoading(true)
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, { cache: 'no-store' })
+      if (res.status === 401) { router.push('/auth/login'); return }
       if (!res.ok) throw new Error('Failed to load')
       const json = await res.json()
       setData(json)
@@ -2047,6 +2048,7 @@ export default function AdminTransactionDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_transaction', updates }),
       })
+      if (res.status === 401) { router.push('/auth/login'); return }
       if (!res.ok) {
         let msg = 'Save failed.'
         try {
