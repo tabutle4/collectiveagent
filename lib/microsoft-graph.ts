@@ -317,7 +317,7 @@ export async function createListingFolder(
   folderId: string
   sharingUrl: string
 }> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to handle same address with different sellers
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
@@ -337,7 +337,7 @@ export async function regenerateFolderSharingLink(
   listingId: string,
   transactionType: 'sale' | 'lease' = 'sale'
 ): Promise<string> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to match the folder path used during creation
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
 
@@ -412,7 +412,7 @@ export async function archiveListingFolder(
   listingId: string,
   transactionType: 'sale' | 'lease' = 'sale'
 ): Promise<void> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to match the folder path used during creation
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   const sourcePath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
@@ -426,7 +426,7 @@ export async function unarchiveListingFolder(
   listingId: string,
   transactionType: 'sale' | 'lease' = 'sale'
 ): Promise<void> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to match the folder path used during creation
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   const sourcePath = `Listing Reports/Archive/${sanitizedAddress}-${transactionLabel}-${listingId}`
@@ -444,7 +444,7 @@ export async function getLatestListingReport(
   downloadUrl: string
   webUrl: string
 } | null> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to match the folder path used during creation
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
@@ -485,7 +485,7 @@ export async function uploadWeeklyReports(
   file2Url: string | null
   file2DownloadUrl: string | null
 }> {
-  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedAddress = propertyAddress.replace(/[/\\?%*:|"<>#]/g, '-')
   // Include transaction type and listing ID to match the folder path used during creation
   const transactionLabel = transactionType === 'lease' ? 'Lease' : 'Sale'
   const folderPath = `Listing Reports/Active/${sanitizedAddress}-${transactionLabel}-${listingId}`
@@ -502,7 +502,7 @@ export async function uploadWeeklyReports(
   }
 
   // Use just the Monday date for the filename
-  const dateLabel = weekStart.replace(/[/\\?%*:|"<>]/g, '-')
+  const dateLabel = weekStart.replace(/[/\\?%*:|"<>#]/g, '-')
 
   const file1NameWithDate = `Showing_Report_${dateLabel}_${file1Name}`
 
@@ -532,7 +532,7 @@ export async function createAgentFolder(
   lastName: string,
   userId: string
 ): Promise<{ folderPath: string; sharingUrl: string }> {
-  const sanitizedName = `${firstName} ${lastName}`.replace(/[/\\?%*:|"<>]/g, '-')
+  const sanitizedName = `${firstName} ${lastName}`.replace(/[/\\?%*:|"<>#]/g, '-')
   const folderPath = `Agent Documents/${sanitizedName}-${userId}`
 
   await graphClient.createFolder(folderPath)
