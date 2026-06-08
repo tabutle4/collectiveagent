@@ -629,6 +629,8 @@ function ComplianceDocumentsTab({
     }
   }
   const [uploadingSlotId, setUploadingSlotId] = useState<string | null>(null)
+  // Multi-file upload progress: number of files left to process (0 = idle)
+  const [multiUploadRemaining, setMultiUploadRemaining] = useState(0)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [assigningDocId, setAssigningDocId] = useState<string | null>(null)
   const [assignSelected, setAssignSelected] = useState<string[]>([])
@@ -749,78 +751,127 @@ function ComplianceDocumentsTab({
     return uploadData.url
   }
 
+  // Core upload: OneDrive upload + AI read + add_document record(s). Does NOT
+  // touch the uploadingSlotId indicator or call load() - callers handle those so
+  // this can run inside a concurrent pool without flipping shared UI state per file.
+  const uploadOneDoc = async (file: File, requiredDocId: string | null, slotName?: string) => {
+    // Prepend slot label to filename so OneDrive shows "Invoice - 2026-06-02.pdf"
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+    const date = new Date().toISOString().slice(0, 10)
+    const labelPart = slotName ? slotName.replace(/[/\\?%*:|"<>]/g, '-').trim() : null
+    const namedFile = labelPart
+      ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
+      : file
+
+    const oneDriveUrl = await uploadDocToOneDrive(namedFile)
+
+    // AI doc read: get summary + suggested required-doc slot assignments
+    let aiSummary: string | null = null
+    let suggestedSlots: string[] = []
+    try {
+      const extractFd = new FormData()
+      extractFd.append('file', namedFile)
+      extractFd.append('transaction_id', transactionId)
+      const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
+      if (extractRes.ok) {
+        const extractData = await extractRes.json()
+        const summary = extractData.summary || null
+        const pageContents = extractData.page_contents || []
+        aiSummary = summary
+          ? JSON.stringify({ summary, page_contents: pageContents })
+          : null
+        suggestedSlots = extractData.suggested_slots || []
+        if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
+          setTxFieldsPreview(extractData.transaction_fields)
+          const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
+          setSelectedTxFields(new Set(Object.keys(extractData.transaction_fields).filter(k => !CONTACT_FIELDS.includes(k))))
+        }
+        if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
+          const found = extractData.contacts.map((c: any) => ({
+            ...c,
+            notes: 'Found in uploaded document',
+          }))
+          onContactSuggestions(found)
+          setDocContactSuggestions(prev => {
+            const existingNames = new Set(prev.map((c: any) => c.name))
+            return [...prev, ...found.filter((c: any) => !existingNames.has(c.name))]
+          })
+        }
+      }
+    } catch { /* best-effort */ }
+
+    const targetSlots: (string | null)[] = requiredDocId
+      ? [requiredDocId]
+      : suggestedSlots.length > 0 ? suggestedSlots : [null]
+
+    for (const slotId of targetSlots) {
+      await postAction('add_document', {
+        file_name: namedFile.name,
+        file_url: oneDriveUrl,
+        onedrive_file_url: oneDriveUrl,
+        file_size: file.size,
+        file_type: file.type,
+        required_document_id: slotId || null,
+        ai_summary: aiSummary,
+      })
+    }
+  }
+
   const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
-      // Prepend slot label to filename so OneDrive shows "Invoice - 2026-06-02.pdf"
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
-      const date = new Date().toISOString().slice(0, 10)
-      const labelPart = slotName ? slotName.replace(/[/\\?%*:|"<>]/g, '-').trim() : null
-      const namedFile = labelPart
-        ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
-        : file
-
-      const oneDriveUrl = await uploadDocToOneDrive(namedFile)
-
-      // AI doc read: get summary + suggested required-doc slot assignments
-      let aiSummary: string | null = null
-      let suggestedSlots: string[] = []
-      try {
-        const extractFd = new FormData()
-        extractFd.append('file', namedFile)
-        extractFd.append('transaction_id', transactionId)
-        const extractRes = await fetch('/api/admin/transactions/ai-doc-read', { method: 'POST', body: extractFd })
-        if (extractRes.ok) {
-          const extractData = await extractRes.json()
-          const summary = extractData.summary || null
-          const pageContents = extractData.page_contents || []
-          // Store as JSON so both summary and page breakdown are preserved in compliance_notes
-          aiSummary = summary
-            ? JSON.stringify({ summary, page_contents: pageContents })
-            : null
-          suggestedSlots = extractData.suggested_slots || []
-          // If Claude found transaction fields in the doc, offer to fill them
-          if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
-            setTxFieldsPreview(extractData.transaction_fields)
-            const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
-            setSelectedTxFields(new Set(Object.keys(extractData.transaction_fields).filter(k => !CONTACT_FIELDS.includes(k))))
-          }
-          // If Claude found contacts in the doc, surface them as suggestions
-          if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
-            const found = extractData.contacts.map((c: any) => ({
-              ...c,
-              notes: 'Found in uploaded document',
-            }))
-            onContactSuggestions(found)
-            setDocContactSuggestions(prev => {
-              const existingNames = new Set(prev.map((c: any) => c.name))
-              return [...prev, ...found.filter((c: any) => !existingNames.has(c.name))]
-            })
-          }
-        }
-      } catch { /* best-effort */ }
-
-      // If caller specified a slot use it; otherwise use AI suggestions (one record per slot)
-      const targetSlots: (string | null)[] = requiredDocId
-        ? [requiredDocId]
-        : suggestedSlots.length > 0 ? suggestedSlots : [null]
-
-      for (const slotId of targetSlots) {
-        await postAction('add_document', {
-          file_name: namedFile.name,
-          file_url: oneDriveUrl,
-          onedrive_file_url: oneDriveUrl,
-          file_size: file.size,
-          file_type: file.type,
-          required_document_id: slotId || null,
-          ai_summary: aiSummary,
-        })
-      }
+      await uploadOneDoc(file, requiredDocId, slotName)
       await load()
     } catch (err: any) {
       setError(err.message)
     } finally {
       setUploadingSlotId(null)
+    }
+  }
+
+  // Upload several files at once, AI auto-assigning each to its matching slot.
+  // The first file uploads alone so OneDrive creates the transaction folder and
+  // saves onedrive_folder_url; the rest then run in a bounded pool of 3 (each hits
+  // the early-exit folder path, so no folder-creation race). Concurrency of 3 keeps
+  // total in-flight AI tokens well under rate limits while being ~3x faster than
+  // one-at-a-time. load() runs once at the end, not per file.
+  const handleMultiFileUpload = async (files: FileList) => {
+    const list = Array.from(files)
+    if (list.length === 0) return
+    setMultiUploadRemaining(list.length)
+    setError(null)
+    try {
+      // First file alone - creates + caches the OneDrive folder URL
+      try {
+        await uploadOneDoc(list[0], null)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setMultiUploadRemaining(n => Math.max(0, n - 1))
+      }
+
+      // Remaining files in a bounded pool of 3
+      const rest = list.slice(1)
+      const CONCURRENCY = 3
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < rest.length) {
+          const myIndex = cursor++
+          try {
+            await uploadOneDoc(rest[myIndex], null)
+          } catch (err: any) {
+            setError(err.message)
+          } finally {
+            setMultiUploadRemaining(n => Math.max(0, n - 1))
+          }
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, rest.length) }, () => worker())
+      )
+    } finally {
+      setMultiUploadRemaining(0)
+      await load()
     }
   }
 
@@ -1540,11 +1591,11 @@ function ComplianceDocumentsTab({
           <div className="container-card">
             <div className="flex items-center justify-between mb-3">
               <p className="section-title">Additional Documents</p>
-              <label className={`flex items-center gap-1.5 text-[11px] text-luxury-accent cursor-pointer hover:underline ${uploadingSlotId === 'unlinked' ? 'opacity-50 pointer-events-none' : ''}`}>
+              <label className={`flex items-center gap-1.5 text-[11px] text-luxury-accent cursor-pointer hover:underline ${multiUploadRemaining > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Upload size={11} />
-                {uploadingSlotId === 'unlinked' ? 'Uploading...' : 'Upload'}
-                <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                  onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], null)} />
+                {multiUploadRemaining > 0 ? `Uploading ${multiUploadRemaining}...` : 'Upload files'}
+                <input type="file" accept=".pdf,.doc,.docx,image/*" multiple className="hidden"
+                  onChange={e => e.target.files?.length && handleMultiFileUpload(e.target.files)} />
               </label>
             </div>
             {unlinked.length === 0 ? (
@@ -2194,9 +2245,42 @@ export default function AdminTransactionDetailPage() {
         'listing_side_commission', 'buying_side_commission',
         'gross_commission', 'office_gross',
         'transaction_type', 'is_intermediary',
+        'compliance_status',
       ]
       if (RELOAD_TRIGGERS.some(k => k in updates)) {
         await loadData()
+      }
+    } catch (err: any) {
+      alert(err?.message ? `Save failed: ${err.message}` : 'Save failed. Check your connection and try again.')
+      await loadData()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Compliance status from the Overview dropdown. Selecting "Complete" runs the
+  // full mark_complete flow (stamps compliance date on all checks) so it behaves
+  // exactly like the Documents tab "Mark File Complete" button. Any status change
+  // reloads the whole page so the header, Overview, and Documents tab all update.
+  const setComplianceStatus = async (status: string) => {
+    setSaving(true)
+    try {
+      if (status === 'complete') {
+        const res = await fetch(`/api/admin/transactions/${id}/documents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'mark_complete' }),
+        })
+        if (res.status === 401) { router.push('/auth/login'); return }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}))
+          alert(d?.error ? `Save failed: ${d.error}` : 'Save failed.')
+          await loadData()
+          return
+        }
+        await loadData()
+      } else {
+        await updateTransaction({ compliance_status: status })
       }
     } catch (err: any) {
       alert(err?.message ? `Save failed: ${err.message}` : 'Save failed. Check your connection and try again.')
@@ -3221,7 +3305,7 @@ export default function AdminTransactionDetailPage() {
                     <span className="field-label shrink-0">Compliance</span>
                     <select
                       value={txn.compliance_status || 'not_submitted'}
-                      onChange={e => updateTransaction({ compliance_status: e.target.value })}
+                      onChange={e => setComplianceStatus(e.target.value)}
                       className={`text-xs px-2 py-0.5 rounded border-0 cursor-pointer ${
                         txn.compliance_status === 'complete'
                           ? 'bg-green-50 text-green-700'
@@ -4969,6 +5053,7 @@ export default function AdminTransactionDetailPage() {
           {/* ── DOCUMENTS TAB ────────────────────────────────────────────── */}
           {activeTab === 'documents' && (
             <ComplianceDocumentsTab
+              key={`docs-${txn.compliance_status || 'none'}`}
               transactionId={id}
               transactionAddress={txn.property_address || ''}
               oneDriveFolderUrl={txn.onedrive_folder_url}
