@@ -108,19 +108,36 @@ export async function POST(
     const body = await request.json().catch(() => ({}))
     const action = body.action || 'send'
 
-    // ── Preview: build the email and return subject + html for Leah to review ──
+    // ── Preview: return structured doc arrays for Leah to review and edit ──
     if (action === 'preview') {
-      const { toEmail, approved, rejected, subject, html } = await buildEmailPayload(id)
-      return NextResponse.json({ to: toEmail, cc: CC_EMAIL, subject, html, approved_count: approved.length, rejected_count: rejected.length })
+      const { toEmail, approved, rejected, subject } = await buildEmailPayload(id)
+      return NextResponse.json({ to: toEmail, cc: CC_EMAIL, subject, approved, rejected })
     }
 
-    // ── Send: accept optionally-edited subject + html from the preview modal ──
-    const { toEmail, approved, rejected, txn } = await buildEmailPayload(id)
+    // ── Send: accept edited subject + doc arrays, rebuild HTML server-side ──
+    const { toEmail, txn } = await buildEmailPayload(id)
     const finalSubject = body.subject || ''
-    const finalHtml = body.html || ''
+    const editedApproved: { name: string; notes: string | null }[] = body.approved || []
+    const editedRejected: { name: string; notes: string | null }[] = body.rejected || []
 
-    if (!finalSubject || !finalHtml) {
-      return NextResponse.json({ error: 'subject and html are required' }, { status: 400 })
+    if (!finalSubject || (editedApproved.length === 0 && editedRejected.length === 0)) {
+      return NextResponse.json({ error: 'subject and at least one reviewed document are required' }, { status: 400 })
+    }
+
+    const { html: finalHtml } = buildComplianceReviewEmail({
+      propertyAddress: txn.property_address || 'Transaction',
+      transactionId: id,
+      reviewerName: TC_DISPLAY_NAME,
+      approved: editedApproved,
+      rejected: editedRejected,
+      recheckUrl: RECHECK_URL,
+    })
+
+    const approved = editedApproved
+    const rejected = editedRejected
+
+    if (!finalHtml) {
+      return NextResponse.json({ error: 'Failed to build email' }, { status: 500 })
     }
 
     const sendResult = await resend.emails.send({

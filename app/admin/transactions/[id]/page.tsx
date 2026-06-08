@@ -550,11 +550,13 @@ function ComplianceDocumentsTab({
   transactionAddress,
   oneDriveFolderUrl,
   onFillTransactionFields,
+  onContactSuggestions,
 }: {
   transactionId: string
   transactionAddress: string
   oneDriveFolderUrl?: string | null
   onFillTransactionFields?: (fields: Record<string, any>) => void
+  onContactSuggestions?: (contacts: any[]) => void
 }) {
   const [docsData, setDocsData] = useState<{
     required_docs: any[]
@@ -702,6 +704,29 @@ function ComplianceDocumentsTab({
           if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
             setTxFieldsPreview(extractData.transaction_fields)
           }
+          // If Claude found contact-type fields, surface them as contact suggestions
+          if (onContactSuggestions && extractData.transaction_fields) {
+            const f = extractData.transaction_fields
+            const CONTACT_MAP: { nameKey: string; emailKey?: string; type: string }[] = [
+              { nameKey: 'seller_name', emailKey: 'seller_email', type: 'seller' },
+              { nameKey: 'tenant_name', type: 'tenant' },
+              { nameKey: 'payer_name', emailKey: 'payer_email', type: 'title_company' },
+            ]
+            const found: any[] = []
+            for (const { nameKey, emailKey, type } of CONTACT_MAP) {
+              if (f[nameKey]) {
+                found.push({
+                  contact_type: type,
+                  name: f[nameKey],
+                  email: (emailKey && f[emailKey]) ? f[emailKey] : null,
+                  phone: null,
+                  company: null,
+                  notes: 'Found in uploaded document',
+                })
+              }
+            }
+            if (found.length > 0) onContactSuggestions(found)
+          }
         }
       } catch { /* best-effort */ }
 
@@ -793,12 +818,13 @@ function ComplianceDocumentsTab({
   }
 
   const [emailPreview, setEmailPreview] = useState<{
-    to: string; cc: string; subject: string; html: string;
-    approved_count: number; rejected_count: number
+    to: string; cc: string; subject: string;
+    approved: { name: string; notes: string | null }[];
+    rejected: { name: string; notes: string | null }[];
   } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [editableSubject, setEditableSubject] = useState('')
-  const [editableHtml, setEditableHtml] = useState('')
+  const [editableRejected, setEditableRejected] = useState<{ name: string; notes: string }[]>([])
 
   const openEmailPreview = async () => {
     const reviewed = docsData?.uploaded_docs.filter(
@@ -820,7 +846,7 @@ function ComplianceDocumentsTab({
       if (!res.ok) throw new Error(data.error)
       setEmailPreview(data)
       setEditableSubject(data.subject)
-      setEditableHtml(data.html)
+      setEditableRejected((data.rejected || []).map((d: any) => ({ name: d.name, notes: d.notes || '' })))
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -837,7 +863,7 @@ function ComplianceDocumentsTab({
       const res = await fetch(`/api/admin/transactions/${transactionId}/compliance-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', subject: editableSubject, html: editableHtml }),
+        body: JSON.stringify({ action: 'send', subject: editableSubject, approved: emailPreview?.approved || [], rejected: editableRejected }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -1096,23 +1122,49 @@ function ComplianceDocumentsTab({
                   className="input-luxury w-full text-sm mt-1"
                 />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="field-label">Email Body (HTML)</label>
-                  <span className="text-[10px] text-luxury-gray-3">
-                    {emailPreview.approved_count} approved, {emailPreview.rejected_count} rejected
-                  </span>
+              {emailPreview.approved.length > 0 && (
+                <div>
+                  <p className="field-label mb-2">
+                    Approved ({emailPreview.approved.length})
+                  </p>
+                  <div className="space-y-1">
+                    {emailPreview.approved.map((doc, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-luxury-gray-2 py-1 border-b border-luxury-gray-5 last:border-0">
+                        <span className="text-green-600 font-semibold">&#10003;</span>
+                        <span>{doc.name}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <textarea
-                  value={editableHtml}
-                  onChange={e => setEditableHtml(e.target.value)}
-                  className="input-luxury w-full text-xs font-mono resize-none"
-                  rows={14}
-                />
-                <p className="text-[10px] text-luxury-gray-3 mt-1">
-                  Edit the text within HTML tags to change what the agent sees.
-                </p>
-              </div>
+              )}
+              {editableRejected.length > 0 && (
+                <div>
+                  <p className="field-label mb-2">
+                    Rejected ({editableRejected.length}) - edit notes below
+                  </p>
+                  <div className="space-y-3">
+                    {editableRejected.map((doc, i) => (
+                      <div key={i} className="inner-card">
+                        <p className="text-xs font-semibold text-luxury-gray-1 mb-1.5 flex items-center gap-1.5">
+                          <span className="text-red-600">&#128683;</span>
+                          {doc.name}
+                        </p>
+                        <textarea
+                          value={doc.notes}
+                          onChange={e => {
+                            const updated = [...editableRejected]
+                            updated[i] = { ...updated[i], notes: e.target.value }
+                            setEditableRejected(updated)
+                          }}
+                          placeholder="Reason for rejection (agent will see this)"
+                          className="input-luxury w-full text-xs resize-none"
+                          rows={3}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-luxury-gray-5">
               <button onClick={() => setEmailPreview(null)} className="btn btn-secondary text-xs px-4 py-2">
@@ -1120,7 +1172,7 @@ function ComplianceDocumentsTab({
               </button>
               <button
                 onClick={sendComplianceEmail}
-                disabled={sending || !editableSubject || !editableHtml}
+                disabled={sending || !editableSubject}
                 className="btn btn-primary text-xs px-5 py-2 flex items-center gap-2 disabled:opacity-50"
               >
                 <Send size={12} />
@@ -3511,7 +3563,7 @@ export default function AdminTransactionDetailPage() {
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <div className="flex items-center gap-2">
                               {/* Recalculate - excluded for retainer rows, which have their own
                                   fee structure (basis minus retainer_fee = net) and don't use the
                                   commission cascade. Without this guard, clicking Recalculate
@@ -4695,6 +4747,12 @@ export default function AdminTransactionDetailPage() {
               transactionId={id}
               transactionAddress={txn.property_address || ''}
               oneDriveFolderUrl={txn.onedrive_folder_url}
+              onContactSuggestions={(found) => {
+                setContactSuggestions(prev => {
+                  const existingNames = new Set(prev.map((c: any) => c.name))
+                  return [...prev, ...found.filter((c: any) => !existingNames.has(c.name))]
+                })
+              }}
               onFillTransactionFields={async (fields) => {
                 // Map extracted fields to transaction columns, skip contact-type fields
                 const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
