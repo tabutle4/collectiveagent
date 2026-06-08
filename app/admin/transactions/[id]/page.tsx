@@ -777,8 +777,10 @@ function ComplianceDocumentsTab({
         const extractData = await extractRes.json()
         const summary = extractData.summary || null
         const pageContents = extractData.page_contents || []
+        const verificationChecklist = extractData.verification_checklist || []
+        const commissionDetails = extractData.commission_details || []
         aiSummary = summary
-          ? JSON.stringify({ summary, page_contents: pageContents })
+          ? JSON.stringify({ summary, page_contents: pageContents, verification_checklist: verificationChecklist, commission_details: commissionDetails })
           : null
         suggestedSlots = extractData.suggested_slots || []
         if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
@@ -897,8 +899,10 @@ function ComplianceDocumentsTab({
           const extractData = await extractRes.json()
           const summary = extractData.summary || null
           const pageContents = extractData.page_contents || []
+          const verificationChecklist = extractData.verification_checklist || []
+          const commissionDetails = extractData.commission_details || []
           aiSummary = summary
-            ? JSON.stringify({ summary, page_contents: pageContents })
+            ? JSON.stringify({ summary, page_contents: pageContents, verification_checklist: verificationChecklist, commission_details: commissionDetails })
             : null
         }
       } catch { /* best-effort */ }
@@ -1432,10 +1436,21 @@ function ComplianceDocumentsTab({
                       )}
                       {/* AI summary shown while pending */}
                       {latest.compliance_status === 'pending' && latest.compliance_notes && (() => {
-                        let parsed: { summary?: string; page_contents?: any[] } | null = null
+                        let parsed: { summary?: string; page_contents?: any[]; verification_checklist?: any[]; commission_details?: any[] } | null = null
                         try { parsed = JSON.parse(latest.compliance_notes) } catch { /* plain text */ }
                         const summaryText = parsed?.summary || latest.compliance_notes
                         const pages = parsed?.page_contents || []
+                        const checklist = parsed?.verification_checklist || []
+                        const commissions = parsed?.commission_details || []
+                        const flagged = checklist.filter((v: any) => v.needs_review)
+                        const okItems = checklist.filter((v: any) => !v.needs_review)
+                        const CATEGORY_LABELS: Record<string, string> = {
+                          empty_field: 'Empty field',
+                          wrong_info: 'Check value',
+                          missing_signature: 'Signature',
+                          missing_initial: 'Initial',
+                          commission: 'Commission',
+                        }
                         return (
                           <div className="mb-2 p-2 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
                             <p className="font-semibold mb-1 flex items-center gap-1">
@@ -1449,6 +1464,48 @@ function ComplianceDocumentsTab({
                                   <div key={i} className="flex gap-1.5 mb-0.5">
                                     <span className="shrink-0 text-amber-600 font-semibold w-12">p.{p.page}</span>
                                     <span>{p.document_name}{p.notes ? ` — ${p.notes}` : ''}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {flagged.length > 0 && (
+                              <div className="mt-1.5 pt-1.5 border-t border-amber-200">
+                                <p className="font-semibold mb-1 text-red-700">Verify these ({flagged.length}):</p>
+                                {flagged.map((v: any, i: number) => (
+                                  <div key={i} className="flex gap-1.5 mb-0.5">
+                                    <span className="shrink-0 text-red-600 font-semibold w-12">{v.page ? `p.${v.page}` : ''}</span>
+                                    <span className="text-red-700">
+                                      <span className="font-semibold">{CATEGORY_LABELS[v.category] || 'Check'}:</span> {v.item}
+                                      {v.finding ? `: ${v.finding}` : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {okItems.length > 0 && (
+                              <div className="mt-1.5 pt-1.5 border-t border-amber-200">
+                                <p className="font-semibold mb-1">Looks complete ({okItems.length}):</p>
+                                {okItems.map((v: any, i: number) => (
+                                  <div key={i} className="flex gap-1.5 mb-0.5">
+                                    <span className="shrink-0 text-amber-600 font-semibold w-12">{v.page ? `p.${v.page}` : ''}</span>
+                                    <span>
+                                      <span className="font-semibold">{CATEGORY_LABELS[v.category] || 'Check'}:</span> {v.item}
+                                      {v.finding ? `: ${v.finding}` : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {commissions.length > 0 && (
+                              <div className="mt-1.5 pt-1.5 border-t border-amber-200">
+                                <p className="font-semibold mb-1">Commission figures (compare across docs):</p>
+                                {commissions.map((cd: any, i: number) => (
+                                  <div key={i} className="flex gap-1.5 mb-0.5">
+                                    <span className="shrink-0 text-amber-600 font-semibold w-12">{cd.page ? `p.${cd.page}` : ''}</span>
+                                    <span>
+                                      {cd.label}: <span className="font-semibold">{fmt$(cd.amount)}</span>
+                                      {cd.source_doc ? ` (${cd.source_doc})` : ''}
+                                    </span>
                                   </div>
                                 ))}
                               </div>

@@ -117,6 +117,23 @@ export async function POST(request: NextRequest) {
       "document_name": "<name of the document or form on this page, e.g. 'One to Four Family Residential Contract', 'IABS Notice', 'Third Party Financing Addendum', 'Seller Disclosure Notice'>",
       "notes": "<1 sentence key detail, e.g. 'Signature page', 'Contains buyer financing terms', 'Unsigned'>"
     }
+  ],
+  "verification_checklist": [
+    {
+      "page": <page number this item is on>,
+      "category": "<one of: empty_field, wrong_info, missing_signature, missing_initial, commission>",
+      "item": "<what to verify, e.g. 'Buyer signature line', 'Effective date', 'Option fee amount'>",
+      "finding": "<what you observed: 'blank', 'present', 'appears unsigned', 'value is $X', 'does not match property address elsewhere'>",
+      "needs_review": <true | false - true if Leah should manually verify this>
+    }
+  ],
+  "commission_details": [
+    {
+      "page": <page number>,
+      "label": "<what this dollar figure is, e.g. 'Total sales commission', 'Listing side', 'Buyer side', 'CRC portion', 'Co-op brokerage', 'Referral fee', 'Invoice total'>",
+      "amount": <number>,
+      "source_doc": "<which form/document on that page this came from>"
+    }
   ]
 }
 
@@ -139,7 +156,9 @@ Rules:
 - Post Closing documents (survey, settlement statement, buyer walk-through) are submitted after closing - normal to be missing on active transactions.
 - contacts: list every non-agent party visible in this document (buyers, sellers, tenants, landlords, title company, title officer, lenders, loan officers, attorneys, inspectors, appraisers, cooperating agents, property managers, HOA contacts). Do NOT include the CRC listing/buyer agent - only the other parties. Use null for any field not clearly visible. Return an empty array if no contacts are found.
 - contacts contact_type: use "title_company" for the company (e.g. "First American Title"), "title_officer" for the individual officer. Use "loan_officer" for the individual lender contact, "lender" for the lending institution. Use "cooperating_agent" for the agent on the other side of the deal. Use "landlord" when the seller is a landlord on a lease.
-- page_contents: list every distinct document or form found in this file with its starting page number. For a single-page file return one entry. For a packet list each form separately. If page numbers cannot be determined return an empty array.${slotListText}`
+- page_contents: list every distinct document or form found in this file with its starting page number. For a single-page file return one entry. For a packet list each form separately. If page numbers cannot be determined return an empty array.
+- verification_checklist: this is the most important output. Leah manually verifies every document. For EACH page, list specific items she should check, with the page number so she can jump straight to it. Cover four things: (1) empty_field - any required field that is blank or incomplete; (2) wrong_info - any value that looks inconsistent with other parts of the document or with the property/parties (e.g. a name spelled differently, a date out of order, an address mismatch); (3) missing_signature and missing_initial - every signature and initial line, noting whether it appears signed/initialed or blank; (4) commission - every commission, fee, or dollar figure that affects what CRC is paid. Set needs_review=true for anything blank, inconsistent, unsigned, or that you cannot read with confidence. Set needs_review=false for items that are clearly complete and correct. Be thorough - it is better to flag an item for human review than to miss it. Always cite the exact page number.
+- commission_details: extract EVERY dollar figure related to commission, fees, splits, or payouts across all pages, each with its page number and a label, so Leah can compare figures across documents (e.g. the commission on the contract vs the CDA vs the settlement statement). Include the total sales/lease commission, each side, the CRC portion, any co-op or referral amounts, and invoice totals. If a figure is a percentage, convert to the dollar amount only if the base is clearly stated, otherwise note it in the label. Return an empty array if no dollar figures are present.${slotListText}`
 
     const messageContent: any[] = []
     if (isPdfReal) {
@@ -158,7 +177,7 @@ Rules:
       },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
-        max_tokens: 1024,
+        max_tokens: 4096,
         messages: [{ role: 'user', content: messageContent }],
       }),
     })
@@ -172,7 +191,7 @@ Rules:
     const text = data.content?.[0]?.text?.trim() || '{}'
     const clean = text.replace(/```json|```/g, '').trim()
 
-    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any>; contacts?: any[]; page_contents?: any[] } = {}
+    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any>; contacts?: any[]; page_contents?: any[]; verification_checklist?: any[]; commission_details?: any[] } = {}
     try { parsed = JSON.parse(clean) } catch { /* best-effort */ }
 
     // Validate suggested IDs against the real list to prevent hallucination
@@ -212,12 +231,40 @@ Rules:
           }))
       : []
 
+    // Validate verification_checklist
+    const VALID_CATEGORIES = new Set(['empty_field', 'wrong_info', 'missing_signature', 'missing_initial', 'commission'])
+    const verification_checklist = Array.isArray(parsed.verification_checklist)
+      ? parsed.verification_checklist
+          .filter((v: any) => v && v.item && typeof v.item === 'string')
+          .map((v: any) => ({
+            page: typeof v.page === 'number' ? v.page : null,
+            category: VALID_CATEGORIES.has(v.category) ? v.category : 'wrong_info',
+            item: String(v.item).trim(),
+            finding: v.finding && typeof v.finding === 'string' ? String(v.finding).trim() : null,
+            needs_review: v.needs_review === true,
+          }))
+      : []
+
+    // Validate commission_details
+    const commission_details = Array.isArray(parsed.commission_details)
+      ? parsed.commission_details
+          .filter((cd: any) => cd && cd.label && typeof cd.label === 'string' && typeof cd.amount === 'number')
+          .map((cd: any) => ({
+            page: typeof cd.page === 'number' ? cd.page : null,
+            label: String(cd.label).trim(),
+            amount: cd.amount,
+            source_doc: cd.source_doc && typeof cd.source_doc === 'string' ? String(cd.source_doc).trim() : null,
+          }))
+      : []
+
     return NextResponse.json({
       summary: parsed.summary || null,
       suggested_slots,
       transaction_fields: Object.keys(transaction_fields).length > 0 ? transaction_fields : null,
       contacts: contacts.length > 0 ? contacts : null,
       page_contents,
+      verification_checklist,
+      commission_details,
     })
   } catch (err: any) {
     console.error('ai-doc-read error:', err)

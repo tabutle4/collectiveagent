@@ -57,6 +57,7 @@ Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})${teamName ? ` [
   Agent Basis (commission earned): $${agentBasis}
   Split: Agent ${basisPct != null ? basisPct + '%' : '?'}${teamLeadPct != null ? ` | Team Lead ${teamLeadPct}%` : ''} | Brokerage ${brokerageSplitPct != null ? brokerageSplitPct + '%' : '?'}
   Agent Gross: $${a.agent_gross || 0} | Brokerage Split $: $${brokerageSplit} | Agent Net: $${a.agent_net || 0} | Payment: ${a.payment_status || 'pending'}
+  Debts Deducted: $${a.debts_deducted || 0} (reduces agent_net, NOT part of the split)
   Processing Fee: $${a.processing_fee || 0} | Coaching Fee: $${a.coaching_fee || 0}
   BTSA: $${a.btsa_amount || 0}
   Team Lead Commission: $${a.team_lead_commission || 0}
@@ -249,6 +250,15 @@ Rules:
 ${context}
 
 Checklist item definitions for context:
+
+COMMISSION MATH FORMULA (use this exactly - do not invent your own reconciliation):
+- The split reconciles at the GROSS level: agent_gross + brokerage_split = office_gross. Check this. Debts, fees, and deductions are NOT part of this equation.
+- amount_1099 = agent_gross + btsa_amount - processing_fee - coaching_fee - other_fees
+- agent_net = amount_1099 - debts_deducted
+- debts_deducted (monthly brokerage fees, owed balances, etc.) reduce what the agent is PAID. They are NOT part of the split and must NOT be added back when checking that the split reconciles to office gross. A monthly brokerage fee deduction is expected and correct, never an error.
+- team_lead_commission on a primary agent row is informational only - never a deduction from that agent.
+- Only flag a commission discrepancy if agent_gross + brokerage_split does not equal office_gross (allowing a few cents of rounding). Do not flag just because agent_net is lower than agent_gross - that is the deductions working as intended.
+
 - "Pay Other Agent" = pay a co-op brokerage or external referral agent on the other side of the deal (NOT CRC agents). Check if any external agents/brokerages are listed under EXTERNAL AGENTS TO PAY.
 - TEAM SPLIT NOTE: An agent with role "team_lead" receives a carved-out portion of the deal but does NOT pay another team lead fee. The "Team Lead Commission" shown on a primary agent row is informational only - it tracks what the team lead earns from that deal, not an additional deduction from the team lead themselves. Do not flag a team lead agent for "paying a team lead" - that is expected behavior, not an error.
 - "Deposit Check" = verify a check has been received and deposited from the client/title company. Amount should match Office Gross.
