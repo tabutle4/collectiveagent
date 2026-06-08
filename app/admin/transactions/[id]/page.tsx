@@ -570,6 +570,28 @@ function ComplianceDocumentsTab({
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
   const [markingComplete, setMarkingComplete] = useState(false)
+  const [docContactSuggestions, setDocContactSuggestions] = useState<any[]>([])
+  const [savingDocContact, setSavingDocContact] = useState<number | null>(null)
+
+  const saveDocContact = async (contact: any, index: number) => {
+    setSavingDocContact(index)
+    try {
+      await fetch(`/api/admin/transactions/${transactionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_contact', contact: {
+          contact_type: contact.contact_type || 'other',
+          name: contact.name || null,
+          email: contact.email ? [contact.email] : null,
+          phone: contact.phone ? [contact.phone] : null,
+          company: contact.company || null,
+          notes: contact.notes || null,
+        }}),
+      })
+      setDocContactSuggestions(prev => prev.filter((_, i) => i !== index))
+    } catch { /* best-effort */ }
+    finally { setSavingDocContact(null) }
+  }
 
   const handleMarkComplete = async () => {
     setMarkingComplete(true)
@@ -705,28 +727,17 @@ function ComplianceDocumentsTab({
           if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
             setTxFieldsPreview(extractData.transaction_fields)
           }
-          // If Claude found contact-type fields, surface them as contact suggestions
-          if (onContactSuggestions && extractData.transaction_fields) {
-            const f = extractData.transaction_fields
-            const CONTACT_MAP: { nameKey: string; emailKey?: string; type: string }[] = [
-              { nameKey: 'seller_name', emailKey: 'seller_email', type: 'seller' },
-              { nameKey: 'tenant_name', type: 'tenant' },
-              { nameKey: 'payer_name', emailKey: 'payer_email', type: 'title_company' },
-            ]
-            const found: any[] = []
-            for (const { nameKey, emailKey, type } of CONTACT_MAP) {
-              if (f[nameKey]) {
-                found.push({
-                  contact_type: type,
-                  name: f[nameKey],
-                  email: (emailKey && f[emailKey]) ? f[emailKey] : null,
-                  phone: null,
-                  company: null,
-                  notes: 'Found in uploaded document',
-                })
-              }
-            }
-            if (found.length > 0) onContactSuggestions(found)
+          // If Claude found contacts in the doc, surface them as suggestions
+          if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
+            const found = extractData.contacts.map((c: any) => ({
+              ...c,
+              notes: 'Found in uploaded document',
+            }))
+            onContactSuggestions(found)
+            setDocContactSuggestions(prev => {
+              const existingNames = new Set(prev.map((c: any) => c.name))
+              return [...prev, ...found.filter((c: any) => !existingNames.has(c.name))]
+            })
           }
         }
       } catch { /* best-effort */ }
@@ -924,6 +935,39 @@ function ComplianceDocumentsTab({
           <AlertCircle size={13} className="text-red-600 mt-0.5 shrink-0" />
           <p className="text-xs text-red-700 flex-1">{error}</p>
           <button onClick={() => setError(null)}><X size={11} className="text-red-400" /></button>
+        </div>
+      )}
+
+      {docContactSuggestions.length > 0 && (
+        <div className="container-card border border-luxury-accent/30 bg-amber-50 mb-3">
+          <p className="text-xs font-semibold text-luxury-gray-1 mb-2 flex items-center gap-1.5">
+            <span className="text-base leading-none">&#10024;</span>
+            Claude found people in this document
+          </p>
+          <div className="space-y-2 mb-2">
+            {docContactSuggestions.map((c: any, i: number) => (
+              <div key={i} className="flex items-start justify-between gap-2 p-2 bg-white rounded border border-luxury-gray-5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-luxury-gray-1">{c.name || 'Unknown'}</p>
+                  <p className="text-[10px] text-luxury-gray-3">
+                    {c.contact_type?.replace(/_/g, ' ')}
+                    {c.email ? ` · ${c.email}` : ''}
+                    {c.phone ? ` · ${c.phone}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => saveDocContact(c, i)}
+                  disabled={savingDocContact === i}
+                  className="text-[10px] font-semibold px-2 py-1 bg-luxury-accent text-white rounded hover:bg-luxury-accent/90 shrink-0 disabled:opacity-50"
+                >
+                  {savingDocContact === i ? 'Saving...' : 'Add'}
+                </button>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setDocContactSuggestions([])} className="text-[10px] text-luxury-gray-3 hover:underline">
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -2613,6 +2657,28 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setSavingContact(false)
     }
+  }
+
+  const saveSuggestedContact = async (c: any, index: number) => {
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_contact', contact: {
+          contact_type: c.contact_type || 'other',
+          name: c.name || null,
+          email: c.email ? [c.email] : null,
+          phone: c.phone ? [c.phone] : null,
+          company: c.company || null,
+          notes: c.notes || null,
+        }}),
+      })
+      const result = await res.json()
+      if (result.contact) {
+        setContacts(prev => [...prev, result.contact])
+        setContactSuggestions(prev => prev.filter((_, i) => i !== index))
+      }
+    } catch { alert('Failed to save contact.') }
   }
 
   const deleteContact = async (contactId: string) => {
@@ -4528,18 +4594,7 @@ export default function AdminTransactionDetailPage() {
                           </p>
                         </div>
                         <button
-                          onClick={() => {
-                            setContactForm({
-                              contact_type: c.contact_type || '',
-                              contact_type_other: '',
-                              name: c.name || '',
-                              phone: c.phone || '',
-                              email: c.email || '',
-                              company: c.company || '',
-                              notes: c.notes || '',
-                            })
-                            setContactModal({ open: true, editing: null })
-                          }}
+                          onClick={() => saveSuggestedContact(c, i)}
                           className="text-[10px] font-semibold px-2 py-1 bg-luxury-accent text-white rounded hover:bg-luxury-accent/90 shrink-0"
                         >
                           Add

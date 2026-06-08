@@ -86,6 +86,15 @@ export async function POST(request: NextRequest) {
     "seller_email": "<seller or landlord email if visible, else null>",
     "listing_price": <number or null - asking price or monthly rent from a listing agreement>
   },
+  "contacts": [
+    {
+      "contact_type": "<one of: buyer, seller, tenant, landlord, title_company, title_officer, lender, loan_officer, attorney, inspector, appraiser, cooperating_agent, property_manager, hoa, other>",
+      "name": "<full name or company name>",
+      "email": "<email address if visible, else null>",
+      "phone": "<phone number if visible, else null>",
+      "company": "<company name if person belongs to one and it differs from name, else null>"
+    }
+  ],
   "page_contents": [
     {
       "page": <page number 1-indexed>,
@@ -106,6 +115,8 @@ Rules:
 - payer_name: the "TO" or bill-to party on invoices; the title company on HUD/settlement statements.
 - Common document types: purchase contract (has sales_price, closing_date), lease agreement (has monthly_rent, lease_term, move_in_date), commission invoice (has commission_amount, payer_name, tenant_name), settlement statement (has sales_price, commission_amount, closing_date), listing agreement (has listing_price as the asking price/rent, seller_name as the landlord/seller, seller_email, property_address, agent_name).
 - For listing agreements: seller_name = the landlord or seller party, listing_price = the asking monthly rent or sales price listed in the agreement.
+- contacts: list every non-agent party visible in this document (buyers, sellers, tenants, landlords, title company, title officer, lenders, loan officers, attorneys, inspectors, appraisers, cooperating agents, property managers, HOA contacts). Do NOT include the CRC listing/buyer agent - only the other parties. Use null for any field not clearly visible. Return an empty array if no contacts are found.
+- contacts contact_type: use "title_company" for the company (e.g. "First American Title"), "title_officer" for the individual officer. Use "loan_officer" for the individual lender contact, "lender" for the lending institution. Use "cooperating_agent" for the agent on the other side of the deal. Use "landlord" when the seller is a landlord on a lease.
 - page_contents: list every distinct document or form found in this file with its starting page number. For a single-page file return one entry. For a packet list each form separately. If page numbers cannot be determined return an empty array.${slotListText}`
 
     const messageContent: any[] = []
@@ -139,7 +150,7 @@ Rules:
     const text = data.content?.[0]?.text?.trim() || '{}'
     const clean = text.replace(/```json|```/g, '').trim()
 
-    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any>; page_contents?: any[] } = {}
+    let parsed: { summary?: string; matched_slot_ids?: string[]; transaction_fields?: Record<string, any>; contacts?: any[]; page_contents?: any[] } = {}
     try { parsed = JSON.parse(clean) } catch { /* best-effort */ }
 
     // Validate suggested IDs against the real list to prevent hallucination
@@ -165,10 +176,25 @@ Rules:
       if (rawFields[f] != null && typeof rawFields[f] === 'number' && rawFields[f] > 0) transaction_fields[f] = rawFields[f]
     }
 
+    // Validate contacts
+    const VALID_CONTACT_TYPES = new Set(['buyer', 'seller', 'tenant', 'landlord', 'title_company', 'title_officer', 'lender', 'loan_officer', 'attorney', 'inspector', 'appraiser', 'cooperating_agent', 'property_manager', 'hoa', 'other'])
+    const contacts = Array.isArray(parsed.contacts)
+      ? parsed.contacts
+          .filter((c: any) => c && c.name && typeof c.name === 'string')
+          .map((c: any) => ({
+            contact_type: VALID_CONTACT_TYPES.has(c.contact_type) ? c.contact_type : 'other',
+            name: String(c.name).trim(),
+            email: c.email && typeof c.email === 'string' ? c.email.trim() : null,
+            phone: c.phone && typeof c.phone === 'string' ? c.phone.trim() : null,
+            company: c.company && typeof c.company === 'string' ? c.company.trim() : null,
+          }))
+      : []
+
     return NextResponse.json({
       summary: parsed.summary || null,
       suggested_slots,
       transaction_fields: Object.keys(transaction_fields).length > 0 ? transaction_fields : null,
+      contacts: contacts.length > 0 ? contacts : null,
       page_contents,
     })
   } catch (err: any) {
