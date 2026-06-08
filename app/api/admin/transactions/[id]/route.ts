@@ -1200,10 +1200,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .select('checklist_item_id, completed_by, completed_at, notes, auto_verified')
         .eq('transaction_id', id)
 
+      // Pick the checklist template by deal type: leases use the 'payouts'
+      // (Commission Check Processing) template, sales use the 'cda' (CDA Checklist)
+      // template. Both exist in checklist_templates with applies_to lease/sale.
+      const checklistSlug = txnIsLease ? 'payouts' : 'cda'
       const { data: template } = await supabase
         .from('checklist_templates')
         .select('id')
-        .eq('slug', 'payouts')
+        .eq('slug', checklistSlug)
         .single()
 
       let checklistItems: any[] = []

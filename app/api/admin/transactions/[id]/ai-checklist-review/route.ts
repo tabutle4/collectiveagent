@@ -264,8 +264,13 @@ COMMISSION MATH FORMULA (use this exactly - do not invent your own reconciliatio
 - "Deposit Check" = verify a check has been received and deposited from the client/title company. Amount should match Office Gross.
 - "Update Transaction" = ensure all transaction fields (status, dates, amounts) are accurate.
 - "Commission Plan" = verify the commission plan and split % are correct for each agent.
-- "Review Agent Account" = check for outstanding debts or credits that should be applied.
+- "Review Agent Account" = check for outstanding debts or credits that should be applied (unpaid invoices, association dues, eCommission repayment, license expiration, agent-referral credits).
 - "Transfer Brokerage Split" = confirm the CRC brokerage portion was transferred to the CRC account.
+- "Referrals" = check the brokerage referral form, BoldTrail contacts, and that any referral agreements are on file. If a referral applies, the referral fee must be accounted for before payout.
+- "Teams" = check the team agreement and notes, and verify team affiliation as of the relevant date (under-contract date for sales, move-in date for leases). Confirm profit share if applicable.
+- "Plan Verify" / "Commission Plan" = check the agent plan agreement on file and confirm it matches the plan on the transaction.
+
+NOTE ON CHECKLIST TYPE: Lease deals use the Commission Check Processing checklist (8 items including Deposit Check, Pay Other Agent, Transfer Brokerage Split). Sale deals use the CDA Checklist (5 items: Update Transaction, Commission Plan, Review Agent Account, Referrals, Teams). Review only the items present in the CHECKLIST ITEMS section above. Do not flag a sale deal for missing a lease-only item (like Deposit Check) or vice versa - each deal type has its own checklist by design. For sales, note the BTSA rule: all of BTSA goes to the agent if commission is 3% or more.
 
 COLLECTIVE REALTY CO. REQUIRED DOCUMENTS BY TRANSACTION TYPE
 (These are CRC's exact compliance requirements. Use this to evaluate what has been uploaded.)

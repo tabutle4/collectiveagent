@@ -4204,6 +4204,140 @@ export default function AdminTransactionDetailPage() {
                 </div>
               )}
 
+                  {/* Checklist */}
+                  {checklist.length > 0 && (
+                    <div className="container-card">
+                      <button
+                        className="flex items-center justify-between w-full mb-3"
+                        onClick={() => setChecklistExpanded(p => !p)}
+                      >
+                        <span className="section-title">
+                          Checklist ({completedCount}/{checklist.length})
+                        </span>
+                        {checklistExpanded ? (
+                          <ChevronUp size={14} className="text-luxury-gray-3" />
+                        ) : (
+                          <ChevronDown size={14} className="text-luxury-gray-3" />
+                        )}
+                      </button>
+
+                      {/* AI Review panel */}
+                      <div className="mb-3">
+                        <button
+                          onClick={runAiChecklistReview}
+                          disabled={aiReviewLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-luxury-accent/40 text-luxury-accent text-xs font-medium hover:bg-luxury-accent/5 transition-colors disabled:opacity-50"
+                        >
+                          {aiReviewLoading ? (
+                            <>
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent animate-pulse" />
+                              Reviewing...
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-base leading-none">&#10024;</span>
+                              Review Checklist with AI
+                            </>
+                          )}
+                        </button>
+
+                        {aiReviewError && (
+                          <p className="mt-2 text-xs text-red-500 text-center">{aiReviewError}</p>
+                        )}
+
+                        {aiReview && (
+                          <div className="mt-3 space-y-2">
+                            {/* Overall summary */}
+                            <div className={`p-3 rounded-lg border text-xs ${aiReview.ready_to_pay ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold">
+                                  {aiReview.ready_to_pay ? 'Looks good to pay' : 'Items need attention'}
+                                </span>
+                              </div>
+                              <p>{aiReview.overall}</p>
+                            </div>
+
+                            {/* Critical flags */}
+                            {aiReview.flags && aiReview.flags.length > 0 && (
+                              <div className="p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-xs">
+                                <p className="font-semibold mb-1">Flags</p>
+                                <ul className="space-y-1">
+                                  {aiReview.flags.map((flag: string, i: number) => (
+                                    <li key={i} className="flex items-start gap-1.5">
+                                      <span className="mt-0.5 shrink-0">&#9679;</span>
+                                      <span>{flag}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Per-item notes */}
+                            <div className="space-y-1.5">
+                              {aiReview.items.map((item: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className={`p-2.5 rounded-lg border text-xs ${
+                                    item.status === 'ok'
+                                      ? 'bg-green-50/60 border-green-200/60 text-green-800'
+                                      : item.status === 'flagged'
+                                        ? 'bg-red-50 border-red-200 text-red-800'
+                                        : item.status === 'missing'
+                                          ? 'bg-orange-50 border-orange-200 text-orange-800'
+                                          : 'bg-amber-50/60 border-amber-200/60 text-amber-800'
+                                  }`}
+                                >
+                                  <p className="font-semibold mb-0.5">{item.label}</p>
+                                  <p className="opacity-90">{item.note}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {checklistExpanded && (
+                        <div className="space-y-1.5">
+                          {checklist.map((item: any) => (
+                            <div
+                              key={item.id}
+                              className={`flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-colors ${item.completion ? 'bg-green-50/50' : 'hover:bg-luxury-light'}`}
+                              onClick={() => toggleChecklist(item.id, !!item.completion)}
+                            >
+                              <div
+                                className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}
+                              >
+                                {item.completion && <Check size={10} className="text-white" />}
+                              </div>
+                              <div className="flex-1">
+                                <p
+                                  className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}
+                                >
+                                  {item.label}
+                                </p>
+                                {item.description && (
+                                  <p className="text-xs text-luxury-gray-3 mt-0.5">
+                                    {item.description}
+                                  </p>
+                                )}
+                                {item.section && (
+                                  <p className="text-xs text-luxury-gray-4 mt-0.5">
+                                    {item.section}
+                                  </p>
+                                )}
+                              </div>
+                              {item.completion && (
+                                <p className="text-xs text-luxury-gray-3 shrink-0">
+                                  {fmtDate(item.completion.completed_at)}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
               {/* Checks exist */}
               {checks.length > 0 && (
                 <>
@@ -4728,139 +4862,6 @@ export default function AdminTransactionDetailPage() {
                     </button>
                   </div>
 
-                  {/* Checklist */}
-                  {checklist.length > 0 && (
-                    <div className="container-card">
-                      <button
-                        className="flex items-center justify-between w-full mb-3"
-                        onClick={() => setChecklistExpanded(p => !p)}
-                      >
-                        <span className="section-title">
-                          Checklist ({completedCount}/{checklist.length})
-                        </span>
-                        {checklistExpanded ? (
-                          <ChevronUp size={14} className="text-luxury-gray-3" />
-                        ) : (
-                          <ChevronDown size={14} className="text-luxury-gray-3" />
-                        )}
-                      </button>
-
-                      {/* AI Review panel */}
-                      <div className="mb-3">
-                        <button
-                          onClick={runAiChecklistReview}
-                          disabled={aiReviewLoading}
-                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-luxury-accent/40 text-luxury-accent text-xs font-medium hover:bg-luxury-accent/5 transition-colors disabled:opacity-50"
-                        >
-                          {aiReviewLoading ? (
-                            <>
-                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-luxury-accent animate-pulse" />
-                              Reviewing...
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-base leading-none">&#10024;</span>
-                              Review Checklist with AI
-                            </>
-                          )}
-                        </button>
-
-                        {aiReviewError && (
-                          <p className="mt-2 text-xs text-red-500 text-center">{aiReviewError}</p>
-                        )}
-
-                        {aiReview && (
-                          <div className="mt-3 space-y-2">
-                            {/* Overall summary */}
-                            <div className={`p-3 rounded-lg border text-xs ${aiReview.ready_to_pay ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold">
-                                  {aiReview.ready_to_pay ? 'Looks good to pay' : 'Items need attention'}
-                                </span>
-                              </div>
-                              <p>{aiReview.overall}</p>
-                            </div>
-
-                            {/* Critical flags */}
-                            {aiReview.flags && aiReview.flags.length > 0 && (
-                              <div className="p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 text-xs">
-                                <p className="font-semibold mb-1">Flags</p>
-                                <ul className="space-y-1">
-                                  {aiReview.flags.map((flag: string, i: number) => (
-                                    <li key={i} className="flex items-start gap-1.5">
-                                      <span className="mt-0.5 shrink-0">&#9679;</span>
-                                      <span>{flag}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            {/* Per-item notes */}
-                            <div className="space-y-1.5">
-                              {aiReview.items.map((item: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className={`p-2.5 rounded-lg border text-xs ${
-                                    item.status === 'ok'
-                                      ? 'bg-green-50/60 border-green-200/60 text-green-800'
-                                      : item.status === 'flagged'
-                                        ? 'bg-red-50 border-red-200 text-red-800'
-                                        : item.status === 'missing'
-                                          ? 'bg-orange-50 border-orange-200 text-orange-800'
-                                          : 'bg-amber-50/60 border-amber-200/60 text-amber-800'
-                                  }`}
-                                >
-                                  <p className="font-semibold mb-0.5">{item.label}</p>
-                                  <p className="opacity-90">{item.note}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {checklistExpanded && (
-                        <div className="space-y-1.5">
-                          {checklist.map((item: any) => (
-                            <div
-                              key={item.id}
-                              className={`flex items-start gap-2.5 p-2.5 rounded-lg cursor-pointer transition-colors ${item.completion ? 'bg-green-50/50' : 'hover:bg-luxury-light'}`}
-                              onClick={() => toggleChecklist(item.id, !!item.completion)}
-                            >
-                              <div
-                                className={`w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center border transition-colors ${item.completion ? 'bg-green-500 border-green-500' : 'border-luxury-gray-4 bg-white'}`}
-                              >
-                                {item.completion && <Check size={10} className="text-white" />}
-                              </div>
-                              <div className="flex-1">
-                                <p
-                                  className={`text-xs font-medium ${item.completion ? 'line-through text-luxury-gray-3' : 'text-luxury-gray-1'}`}
-                                >
-                                  {item.label}
-                                </p>
-                                {item.description && (
-                                  <p className="text-xs text-luxury-gray-3 mt-0.5">
-                                    {item.description}
-                                  </p>
-                                )}
-                                {item.section && (
-                                  <p className="text-xs text-luxury-gray-4 mt-0.5">
-                                    {item.section}
-                                  </p>
-                                )}
-                              </div>
-                              {item.completion && (
-                                <p className="text-xs text-luxury-gray-3 shrink-0">
-                                  {fmtDate(item.completion.completed_at)}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </>
               )}
             </div>
