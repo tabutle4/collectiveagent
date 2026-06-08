@@ -559,6 +559,7 @@ function ComplianceDocumentsTab({
   onContactSuggestions?: (contacts: any[]) => void
 }) {
   const [docsData, setDocsData] = useState<{
+    transaction: { id: string; transaction_type: string | null; property_address: string | null; compliance_status: string | null }
     required_docs: any[]
     uploaded_docs: any[]
   } | null>(null)
@@ -581,7 +582,7 @@ function ComplianceDocumentsTab({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setSendResult('File marked complete. Compliance date set on all cleared checks.')
+      setSendResult('File marked complete. Compliance date set on all checks.')
       await load()
     } catch (err: any) {
       setError(err.message)
@@ -1085,14 +1086,14 @@ function ComplianceDocumentsTab({
         <div className="border-t border-luxury-gray-5 mt-3 pt-3">
           <button
             onClick={handleMarkComplete}
-            disabled={markingComplete}
+            disabled={markingComplete || docsData?.transaction?.compliance_status === 'complete'}
             className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg border border-green-600 text-green-700 text-xs font-semibold hover:bg-green-50 transition-colors disabled:opacity-50"
           >
             <CheckCircle size={13} />
-            {markingComplete ? 'Marking...' : 'Mark File Complete'}
+            {markingComplete ? 'Marking...' : docsData?.transaction?.compliance_status === 'complete' ? 'File Complete' : 'Mark File Complete'}
           </button>
           <p className="text-[10px] text-luxury-gray-3 text-center mt-1.5">
-            Sets compliance status to Complete and stamps today as the compliance date on all cleared checks.
+            Sets compliance status to Complete and stamps today as the compliance date on all checks.
           </p>
         </div>
       </div>

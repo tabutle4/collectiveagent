@@ -55,7 +55,7 @@ export async function GET(
   try {
     const { data: txn } = await supabase
       .from('transactions')
-      .select('id, transaction_type, property_address')
+      .select('id, transaction_type, property_address, compliance_status')
       .eq('id', id)
       .single()
 
@@ -375,12 +375,11 @@ export async function POST(
         .update({ compliance_status: 'complete', updated_at: new Date().toISOString() })
         .eq('id', id)
 
-      // Set compliance_complete_date on all cleared checks that don't have one yet
+      // Set compliance_complete_date on all checks for this transaction that don't have one yet
       await supabase
         .from('checks_received')
         .update({ compliance_complete_date: today, updated_at: new Date().toISOString() })
         .eq('transaction_id', id)
-        .not('cleared_date', 'is', null)
         .is('compliance_complete_date', null)
 
       return NextResponse.json({ success: true, compliance_status: 'complete', compliance_complete_date: today })
