@@ -45,7 +45,7 @@ export async function POST(
       const licenseExpiringSoon = expDate ? (expDate.getTime() - today.getTime()) < 60 * 24 * 60 * 60 * 1000 : false // 60 days
 
       const basisPct = a.split_percentage || a.basis_percentage || null
-      const agentBasis = parseFloat(a.agent_basis || 0)
+      const agentBasis = parseFloat(a.agent_basis || 0) || parseFloat(a.agent_gross || 0)
       const brokerageSplit = parseFloat(a.brokerage_split || 0)
       return `
 Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})
