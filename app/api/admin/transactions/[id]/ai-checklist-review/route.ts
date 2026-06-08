@@ -45,14 +45,18 @@ export async function POST(
       const licenseExpiringSoon = expDate ? (expDate.getTime() - today.getTime()) < 60 * 24 * 60 * 60 * 1000 : false // 60 days
 
       const basisPct = a.split_percentage || a.basis_percentage || null
+      const brokerageSplitPct = a.brokerage_split_percentage != null ? a.brokerage_split_percentage : (basisPct != null ? 100 - basisPct : null)
+      const teamLeadPct = a.team_lead_percentage || null
       const agentBasis = parseFloat(a.agent_basis || 0) || parseFloat(a.agent_gross || 0)
       const brokerageSplit = parseFloat(a.brokerage_split || 0)
+      const teamMembership = a.team_membership
+      const teamName = teamMembership?.team?.team_name || null
       return `
-Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})
+Agent: ${name} (role: ${a.agent_role}, side: ${a.side || 'N/A'})${teamName ? ` [Team: ${teamName}]` : ''}
   Commission Plan: ${plan}
   Agent Basis (commission earned): $${agentBasis}
-  Agent Split %: ${basisPct != null ? basisPct + '%' : 'see plan'}
-  Agent Gross: $${a.agent_gross || 0} | Brokerage Split: $${brokerageSplit} | Agent Net: $${a.agent_net || 0} | Payment: ${a.payment_status || 'pending'}
+  Split: Agent ${basisPct != null ? basisPct + '%' : '?'}${teamLeadPct != null ? ` | Team Lead ${teamLeadPct}%` : ''} | Brokerage ${brokerageSplitPct != null ? brokerageSplitPct + '%' : '?'}
+  Agent Gross: $${a.agent_gross || 0} | Brokerage Split $: $${brokerageSplit} | Agent Net: $${a.agent_net || 0} | Payment: ${a.payment_status || 'pending'}
   Processing Fee: $${a.processing_fee || 0} | Coaching Fee: $${a.coaching_fee || 0}
   BTSA: $${a.btsa_amount || 0}
   Team Lead Commission: $${a.team_lead_commission || 0}

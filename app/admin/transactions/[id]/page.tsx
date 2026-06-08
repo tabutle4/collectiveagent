@@ -619,6 +619,7 @@ function ComplianceDocumentsTab({
   const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
   const [viewingDocId, setViewingDocId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
+  const [selectedTxFields, setSelectedTxFields] = useState<Set<string>>(new Set())
 
   const load = async () => {
     setLoading(true)
@@ -726,6 +727,8 @@ function ComplianceDocumentsTab({
           // If Claude found transaction fields in the doc, offer to fill them
           if (extractData.transaction_fields && Object.keys(extractData.transaction_fields).length > 0) {
             setTxFieldsPreview(extractData.transaction_fields)
+            const CONTACT_FIELDS = ['tenant_name', 'agent_name', 'payer_name', 'payer_email', 'seller_name', 'seller_email']
+            setSelectedTxFields(new Set(Object.keys(extractData.transaction_fields).filter(k => !CONTACT_FIELDS.includes(k))))
           }
           // If Claude found contacts in the doc, surface them as suggestions
           if (onContactSuggestions && extractData.contacts && extractData.contacts.length > 0) {
@@ -1014,10 +1017,20 @@ function ComplianceDocumentsTab({
               return (
                 <>
                   {txnEntries.map(([key, val]) => (
-                    <div key={key} className="flex items-center gap-2 text-[11px]">
-                      <span className="text-luxury-gray-3 w-44 shrink-0">{FIELD_LABELS[key] || key.replace(/_/g, ' ')}</span>
+                    <label key={key} className="flex items-center gap-2 text-[11px] cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={selectedTxFields.has(key)}
+                        onChange={e => setSelectedTxFields(prev => {
+                          const next = new Set(prev)
+                          e.target.checked ? next.add(key) : next.delete(key)
+                          return next
+                        })}
+                        className="accent-luxury-accent"
+                      />
+                      <span className="text-luxury-gray-3 w-40 shrink-0">{FIELD_LABELS[key] || key.replace(/_/g, ' ')}</span>
                       <span className="font-semibold text-luxury-gray-1">{String(val)}</span>
-                    </div>
+                    </label>
                   ))}
                   {contactEntries.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-luxury-gray-5">
@@ -1040,16 +1053,17 @@ function ComplianceDocumentsTab({
                 if (!onFillTransactionFields) return
                 setApplyingFields(true)
                 try {
-                  await onFillTransactionFields(txFieldsPreview)
+                  const filtered = Object.fromEntries(Object.entries(txFieldsPreview).filter(([k]) => selectedTxFields.has(k)))
+                  if (Object.keys(filtered).length > 0) await onFillTransactionFields(filtered)
                   setTxFieldsPreview(null)
                 } finally {
                   setApplyingFields(false)
                 }
               }}
-              disabled={applyingFields || !onFillTransactionFields}
+              disabled={applyingFields || !onFillTransactionFields || selectedTxFields.size === 0}
               className="text-[11px] font-semibold px-3 py-1.5 bg-luxury-accent text-white rounded hover:bg-luxury-accent/90 disabled:opacity-50"
             >
-              {applyingFields ? 'Applying...' : 'Apply to Transaction'}
+              {applyingFields ? 'Applying...' : `Apply ${selectedTxFields.size} field${selectedTxFields.size !== 1 ? 's' : ''}`}
             </button>
             <button
               onClick={() => setTxFieldsPreview(null)}
