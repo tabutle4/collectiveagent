@@ -551,12 +551,14 @@ function ComplianceDocumentsTab({
   oneDriveFolderUrl,
   onFillTransactionFields,
   onContactSuggestions,
+  onMarkComplete,
 }: {
   transactionId: string
   transactionAddress: string
   oneDriveFolderUrl?: string | null
   onFillTransactionFields?: (fields: Record<string, any>) => void
   onContactSuggestions?: (contacts: any[]) => void
+  onMarkComplete?: () => void
 }) {
   const [docsData, setDocsData] = useState<{
     transaction: { id: string; transaction_type: string | null; property_address: string | null; compliance_status: string | null }
@@ -619,6 +621,7 @@ function ComplianceDocumentsTab({
       if (!res.ok) throw new Error(data.error)
       setSendResult('File marked complete. Compliance date set on all checks.')
       await load()
+      onMarkComplete?.()
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -629,6 +632,9 @@ function ComplianceDocumentsTab({
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [assigningDocId, setAssigningDocId] = useState<string | null>(null)
   const [assignSelected, setAssignSelected] = useState<string[]>([])
+  // Slot editor for a doc already linked to a slot (change slot or add to more slots)
+  const [editingSlotsDocId, setEditingSlotsDocId] = useState<string | null>(null)
+  const [editSlotSelected, setEditSlotSelected] = useState<string[]>([])
   const [txFieldsPreview, setTxFieldsPreview] = useState<Record<string, any> | null>(null)
   const [viewingDocId, setViewingDocId] = useState<string | null>(null)
   const [applyingFields, setApplyingFields] = useState(false)
@@ -701,6 +707,48 @@ function ComplianceDocumentsTab({
     }
   }
 
+  // Upload a doc to OneDrive's Documents folder. Files over 4MB go direct to
+  // OneDrive via a resumable session (bypasses Vercel's 4.5MB body limit, which
+  // returns a non-JSON "Request Entity Too Large" error). Smaller files use the
+  // standard upload-image route which also runs AI naming server-side.
+  const uploadDocToOneDrive = async (namedFile: File): Promise<string> => {
+    const LARGE = 4 * 1024 * 1024
+    if (namedFile.size > LARGE) {
+      const sessionRes = await fetch('/api/uploads/create-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: namedFile.name,
+          file_size: namedFile.size,
+          content_type: namedFile.type || 'application/pdf',
+          transaction_id: transactionId,
+        }),
+      })
+      const sessionData = await sessionRes.json()
+      if (!sessionRes.ok) throw new Error(sessionData.error || 'Failed to create upload session')
+      const putRes = await fetch(sessionData.upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': namedFile.type || 'application/pdf',
+          'Content-Range': `bytes 0-${namedFile.size - 1}/${namedFile.size}`,
+          'Content-Length': String(namedFile.size),
+        },
+        body: namedFile,
+      })
+      if (!putRes.ok) throw new Error(`OneDrive upload failed: ${putRes.status}`)
+      const item = await putRes.json()
+      return item.webUrl
+    }
+    const fd = new FormData()
+    fd.append('file', namedFile)
+    fd.append('transaction_id', transactionId)
+    fd.append('subfolder', 'Documents')
+    const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
+    const uploadData = await uploadRes.json()
+    if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
+    return uploadData.url
+  }
+
   const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
@@ -712,14 +760,7 @@ function ComplianceDocumentsTab({
         ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
         : file
 
-      const fd = new FormData()
-      fd.append('file', namedFile)
-      fd.append('transaction_id', transactionId)
-      fd.append('subfolder', 'Documents')
-      const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
-      const oneDriveUrl = uploadData.url
+      const oneDriveUrl = await uploadDocToOneDrive(namedFile)
 
       // AI doc read: get summary + suggested required-doc slot assignments
       let aiSummary: string | null = null
@@ -793,14 +834,7 @@ function ComplianceDocumentsTab({
         ? new File([file], `${labelPart} - ${date}.${ext}`, { type: file.type })
         : file
 
-      const fd = new FormData()
-      fd.append('file', namedFile)
-      fd.append('transaction_id', transactionId)
-      fd.append('subfolder', 'Documents')
-      const uploadRes = await fetch('/api/checks/upload-image', { method: 'POST', body: fd })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed')
-      const oneDriveUrl = uploadData.url
+      const oneDriveUrl = await uploadDocToOneDrive(namedFile)
 
       let aiSummary: string | null = null
       try {
@@ -840,6 +874,40 @@ function ComplianceDocumentsTab({
     try {
       for (const slotId of requiredDocIds) {
         await postAction('assign', { document_id: docId, required_document_id: slotId })
+      }
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Update the slots a doc is linked to. currentSlotId is the doc's existing slot.
+  // The first selected slot moves the doc in place (reassign); any additional
+  // selected slots create sibling records (assign). This lets one file satisfy
+  // multiple required-document slots, and lets the slot be changed after upload.
+  // alreadyLinked are slots that already have a record for this file - skip those
+  // to avoid creating duplicate sibling records.
+  const handleEditSlots = async (
+    docId: string,
+    currentSlotId: string | null,
+    selected: string[],
+    alreadyLinked: string[],
+  ) => {
+    try {
+      if (selected.length === 0) {
+        // Unlink entirely: move to no slot
+        await postAction('reassign', { document_id: docId, required_document_id: null })
+      } else {
+        const [primary, ...extras] = selected
+        // Move the doc itself to the first selected slot only if it changed
+        if (primary !== currentSlotId) {
+          await postAction('reassign', { document_id: docId, required_document_id: primary })
+        }
+        // Add sibling records only for slots not already linked to this file
+        for (const slotId of extras) {
+          if (alreadyLinked.includes(slotId)) continue
+          await postAction('assign', { document_id: docId, required_document_id: slotId })
+        }
       }
       await load()
     } catch (err: any) {
@@ -1386,6 +1454,18 @@ function ComplianceDocumentsTab({
                               onChange={e => e.target.files?.[0] && handleReplace(e.target.files[0], latest.id, rd.id, rd.name)} />
                           </label>
                           <button
+                            onClick={() => {
+                              setEditingSlotsDocId(editingSlotsDocId === latest.id ? null : latest.id)
+                              setEditSlotSelected(
+                                uploadedDocs.filter(d => d.file_url === latest.file_url && d.required_document_id).map(d => d.required_document_id)
+                              )
+                            }}
+                            className="text-[11px] px-2.5 py-1 text-luxury-gray-3 border border-luxury-gray-5 rounded hover:bg-luxury-light transition-colors"
+                            title="Change or add slots for this document"
+                          >
+                            Slots
+                          </button>
+                          <button
                             onClick={() => deleteDoc(latest.id)}
                             disabled={!!actionLoading}
                             className="text-[11px] px-2.5 py-1 text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50 flex items-center gap-1"
@@ -1393,6 +1473,48 @@ function ComplianceDocumentsTab({
                           >
                             <Trash2 size={10} />
                           </button>
+                        </div>
+                      )}
+                      {editingSlotsDocId === latest.id && (
+                        <div className="mt-2 border border-luxury-gray-5 rounded p-2 bg-luxury-light">
+                          <p className="text-[10px] text-luxury-gray-3 mb-1.5 font-semibold">Assign this file to slot(s):</p>
+                          <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
+                            {requiredDocs.map(slot => (
+                              <label key={slot.id} className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editSlotSelected.includes(slot.id)}
+                                  onChange={e => setEditSlotSelected(prev =>
+                                    e.target.checked ? [...prev, slot.id] : prev.filter(sid => sid !== slot.id)
+                                  )}
+                                  className="accent-luxury-accent"
+                                />
+                                <span className="text-[10px] text-luxury-gray-1">{slot.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="flex gap-1.5">
+                            <button
+                              disabled={!!actionLoading}
+                              onClick={async () => {
+                                const alreadyLinked = uploadedDocs
+                                  .filter(d => d.file_url === latest.file_url && d.required_document_id)
+                                  .map(d => d.required_document_id)
+                                await handleEditSlots(latest.id, rd.id, editSlotSelected, alreadyLinked)
+                                setEditingSlotsDocId(null)
+                                setEditSlotSelected([])
+                              }}
+                              className="text-[10px] px-2 py-1 bg-luxury-accent text-white rounded disabled:opacity-50 hover:bg-luxury-accent/90"
+                            >
+                              Save slots
+                            </button>
+                            <button
+                              onClick={() => { setEditingSlotsDocId(null); setEditSlotSelected([]) }}
+                              className="text-[10px] px-2 py-1 border border-luxury-gray-5 rounded text-luxury-gray-3 hover:bg-white"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4850,6 +4972,7 @@ export default function AdminTransactionDetailPage() {
               transactionId={id}
               transactionAddress={txn.property_address || ''}
               oneDriveFolderUrl={txn.onedrive_folder_url}
+              onMarkComplete={loadData}
               onContactSuggestions={(found) => {
                 setContactSuggestions(prev => {
                   const existingNames = new Set(prev.map((c: any) => c.name))

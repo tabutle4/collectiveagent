@@ -366,6 +366,27 @@ export async function POST(
       return NextResponse.json({ doc: data })
     }
 
+    // ── Reassign a doc to a different slot in place (move, not copy) ──────────
+    if (action === 'reassign') {
+      const { document_id, required_document_id } = body
+      if (!document_id) return NextResponse.json({ error: 'document_id required' }, { status: 400 })
+
+      const { data, error } = await supabase
+        .from('transaction_documents')
+        .update({
+          required_document_id: required_document_id || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', document_id)
+        .eq('transaction_id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      await syncComplianceStatus(id)
+      return NextResponse.json({ doc: data })
+    }
+
     // ── Mark file complete ───────────────────────────────────────────────────
     if (action === 'mark_complete') {
       const today = new Date().toISOString().split('T')[0]
