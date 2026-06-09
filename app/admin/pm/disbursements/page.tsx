@@ -151,6 +151,8 @@ export default function DisbursementsPage() {
     notes: '',
   })
   const [savingEdit, setSavingEdit] = useState(false)
+  // Two-step create modal: step 1 = pick type, step 2 = fill details
+  const [modalStep, setModalStep] = useState<1 | 2>(1)
 
   // Charged-basis monthly fees modal state. Opens via "Run Monthly
   // Charged Fees" button. Calls preview API first, shows table of unpaid
@@ -561,6 +563,7 @@ export default function DisbursementsPage() {
     setSelectedDeductionIds([])
     setTenantsForLandlord([])
     setHeldInTrust(null)
+    setModalStep(1)
     setShowCreateModal(true)
     loadLandlords()
   }
@@ -809,6 +812,17 @@ export default function DisbursementsPage() {
     } finally {
       setCreating(false)
     }
+  }
+
+  // Step-back handler: return to type picker and clear property-specific state
+  const handleBack = () => {
+    setModalStep(1)
+    setCreateForm(prev => ({ ...prev, property_id: '' }))
+    setPendingDeductions([])
+    setSelectedDeductionIds([])
+    setTenantsForLandlord([])
+    setHeldInTrust(null)
+    setReserveBalance(null)
   }
 
   const selectedLandlord = landlords.find(l => l.id === createForm.landlord_id)
@@ -1096,85 +1110,70 @@ export default function DisbursementsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-lg font-semibold text-luxury-gray-1">
-                {disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-luxury-gray-1">Create Disbursement</h2>
+                <p className="text-xs text-luxury-gray-3 mt-0.5">Step {modalStep} of 2</p>
+              </div>
               <button onClick={() => setShowCreateModal(false)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
                 <X size={20} />
               </button>
             </div>
 
+            {/* Step 1: pick disbursement type */}
+            {modalStep === 1 && (
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-luxury-gray-3">Select the type of disbursement to create.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { key: 'rent' as const, target: 'landlord' as const, label: 'Rent', description: 'Disburse monthly rent collected to the landlord' },
+                    { key: 'deposit' as const, target: 'landlord' as const, label: 'Deposit', description: 'Release security deposit funds to the landlord' },
+                    { key: 'reserve' as const, target: 'landlord' as const, label: 'Reserve Release', description: 'Release reserved funds back to the landlord' },
+                    { key: 'tenant' as const, target: 'tenant' as const, label: 'Tenant Refund', description: 'Refund deposit or overpayment to a tenant' },
+                  ]).map(opt => {
+                    const isSelected = opt.target === 'tenant'
+                      ? disbursementTarget === 'tenant'
+                      : disbursementTarget === 'landlord' && disbursementType === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          if (opt.target === 'tenant') {
+                            setDisbursementTarget('tenant')
+                          } else {
+                            setDisbursementTarget('landlord')
+                            setDisbursementType(opt.key as 'rent' | 'deposit' | 'reserve')
+                          }
+                          // Reset property whenever type changes
+                          setCreateForm(prev => ({ ...prev, property_id: '' }))
+                          setPendingDeductions([])
+                          setSelectedDeductionIds([])
+                          setTenantsForLandlord([])
+                          setHeldInTrust(null)
+                          setReserveBalance(null)
+                        }}
+                        className={`p-3 rounded border text-left transition-colors ${
+                          isSelected
+                            ? 'bg-luxury-accent text-white border-luxury-accent'
+                            : 'border-luxury-gray-5 hover:bg-luxury-light'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold">{opt.label}</p>
+                        <p className={`text-xs mt-1 ${isSelected ? 'text-white/80' : 'text-luxury-gray-3'}`}>{opt.description}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: disbursement details */}
+            {modalStep === 2 && (
             <div className="p-4 space-y-4">
               {loadingLandlords ? (
                 <div className="text-center py-4 text-luxury-gray-3">Loading landlords...</div>
               ) : (
                 <>
-                  {/* Target toggle: landlord (rent disbursement) or tenant (deposit refund) */}
-                  <div>
-                    <label className="field-label">Disburse to</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDisbursementTarget('landlord')}
-                        className={`px-3 py-2 rounded border text-sm ${
-                          disbursementTarget === 'landlord'
-                            ? 'bg-luxury-accent text-white border-luxury-accent'
-                            : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
-                        }`}
-                      >
-                        Landlord (rent)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDisbursementTarget('tenant')}
-                        className={`px-3 py-2 rounded border text-sm ${
-                          disbursementTarget === 'tenant'
-                            ? 'bg-luxury-accent text-white border-luxury-accent'
-                            : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
-                        }`}
-                      >
-                        Tenant (deposit refund)
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Disbursement type (landlord path only) */}
-                  {disbursementTarget === 'landlord' && (
-                    <div>
-                      <label className="field-label">Disbursement Type</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {([
-                          { key: 'rent', label: 'Rent' },
-                          { key: 'deposit', label: 'Deposit' },
-                          { key: 'reserve', label: 'Reserve' },
-                        ] as const).map(({ key, label }) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => {
-                              setDisbursementType(key)
-                              setCreateForm(prev => ({ ...prev, property_id: '' }))
-                              setPendingDeductions([])
-                              setSelectedDeductionIds([])
-                            }}
-                            className={`px-3 py-2 rounded border text-sm ${
-                              disbursementType === key
-                                ? 'bg-luxury-accent text-white border-luxury-accent'
-                                : 'border-luxury-gray-5 text-luxury-gray-2 hover:bg-luxury-light'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-xs text-luxury-gray-3 mt-1">
-                        {disbursementType === 'rent' && 'Properties where CRC collects rent.'}
-                        {disbursementType === 'deposit' && 'Properties where CRC holds the security deposit.'}
-                        {disbursementType === 'reserve' && 'Properties with a reserve balance.'}
-                      </p>
-                    </div>
-                  )}
-
                   {/* Landlord */}
                   <div>
                     <label className="field-label">Landlord</label>
@@ -1362,7 +1361,14 @@ export default function DisbursementsPage() {
                             const target = Number(ag.reserve_per_unit)
                             const current = reserveBalance ?? 0
                             const shortfall = Math.max(0, target - current)
-                            if (current >= target) return null
+                            if (current >= target) return (
+                              <div className="flex items-center gap-2 py-1">
+                                <CheckCircle size={14} className="text-green-700 flex-shrink-0" />
+                                <span className="text-sm text-green-700">
+                                  Reserve fully funded: {formatMoney(current)} held of {formatMoney(target)} target. No hold needed this period.
+                                </span>
+                              </div>
+                            )
                             return (
                               <div>
                                 <label className="field-label">
@@ -1632,33 +1638,48 @@ export default function DisbursementsPage() {
                 </>
               )}
             </div>
+            )} {/* end modalStep === 2 */}
 
+            {/* Footer: step-aware buttons */}
             <div className="flex justify-end gap-3 p-4 border-t">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="btn btn-secondary"
-                disabled={creating}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateDisbursement}
-                className="btn btn-primary"
-                disabled={
-                  creating ||
-                  !createForm.landlord_id ||
-                  !createForm.property_id ||
-                  (disbursementTarget === 'landlord'
-                    ? disbursementType === 'rent'
-                      ? !createForm.gross_rent || parseFloat(createForm.gross_rent) <= 0
-                      : disbursementType === 'deposit'
-                        ? !createForm.deposit_amount || parseFloat(createForm.deposit_amount) <= 0
-                        : false
-                    : !tenantForm.tenant_id || !tenantForm.amount || parseFloat(tenantForm.amount) <= 0)
-                }
-              >
-                {creating ? 'Creating...' : disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
-              </button>
+              {modalStep === 1 ? (
+                <>
+                  <button onClick={() => setShowCreateModal(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button onClick={() => setModalStep(2)} className="btn btn-primary">
+                    Next
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleBack}
+                    className="btn btn-secondary"
+                    disabled={creating}
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleCreateDisbursement}
+                    className="btn btn-primary"
+                    disabled={
+                      creating ||
+                      !createForm.landlord_id ||
+                      !createForm.property_id ||
+                      (disbursementTarget === 'landlord'
+                        ? disbursementType === 'rent'
+                          ? !createForm.gross_rent || parseFloat(createForm.gross_rent) <= 0
+                          : disbursementType === 'deposit'
+                            ? !createForm.deposit_amount || parseFloat(createForm.deposit_amount) <= 0
+                            : false
+                        : !tenantForm.tenant_id || !tenantForm.amount || parseFloat(tenantForm.amount) <= 0)
+                    }
+                  >
+                    {creating ? 'Creating...' : disbursementTarget === 'tenant' ? 'Create Tenant Disbursement' : 'Create Disbursement'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
