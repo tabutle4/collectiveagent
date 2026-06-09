@@ -44,7 +44,7 @@ const PUBLIC_PATHS = [
 ]
 
 // Paths accessible to all authenticated users regardless of role
-const SHARED_PATHS = ['/transactions', '/training-center', '/profile']
+const SHARED_PATHS = ['/transactions', '/training-center', '/profile', '/admin/checks']
 
 // Paths referral agents can access
 const REFERRAL_ALLOWED_PATHS = ['/agent/profile', '/agent/calendar', '/training-center', '/roster']

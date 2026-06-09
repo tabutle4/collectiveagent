@@ -36,6 +36,7 @@ import {
   Video,
   Sparkles,
   KeyRound,
+  Landmark,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -89,6 +90,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
         { href: '/admin/pm', label: 'Property Management', icon: Building2 },
+        { href: '/admin/checks', label: 'Checks', icon: Landmark },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser, disabled: true },
         { href: '/admin/documents', label: 'Documents', icon: FolderOpen, disabled: true },
       ],
@@ -167,6 +169,7 @@ const tcNavEntries: NavEntry[] = [
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
         { href: '/admin/pm', label: 'Property Management', icon: Building2 },
+        { href: '/admin/checks', label: 'Checks', icon: Landmark },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
         { href: '/admin/documents', label: 'Documents', icon: FolderOpen },
       ],
@@ -224,6 +227,7 @@ const supportNavEntries: NavEntry[] = [
       items: [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
         { href: '/admin/pm', label: 'Property Management', icon: Building2 },
+        { href: '/admin/checks', label: 'Checks', icon: Landmark },
         { href: '/admin/contacts', label: 'Contacts', icon: BookUser },
       ],
     },
@@ -275,6 +279,7 @@ const supportNavEntries: NavEntry[] = [
 const agentNav: NavItem[] = [
   { href: '/agent/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: Receipt },
+  { href: '/admin/checks', label: 'Checks', icon: Landmark },
   { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
