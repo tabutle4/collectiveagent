@@ -99,8 +99,8 @@ export default function StatementsListPage() {
           </p>
         </div>
       ) : (
-        <div className="container-card p-0 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="container-card p-0 overflow-x-auto">
+  <table className="w-full text-sm min-w-[800px]">
             <thead>
               <tr className="border-b border-luxury-gray-5 bg-luxury-light">
                 <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">Period</th>
