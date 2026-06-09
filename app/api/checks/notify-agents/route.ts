@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { sendMailAs } from '@/lib/microsoft-graph-mail'
-import { getEmailLayout, emailSection, emailButton, emailSignature } from '@/lib/email/layout'
+import { getEmailLayout, emailSection, emailSignature } from '@/lib/email/layout'
 
 const REPLY_TO = 'transactions@collectiverealtyco.com'
 
@@ -34,6 +34,14 @@ export async function POST(request: NextRequest) {
       .select('first_name, last_name, preferred_first_name, preferred_last_name, office_email, email')
       .eq('id', auth.user.id)
       .single()
+
+    // Fetch CC email from TC settings (default_reply_to = tcandcompliance@collectiverealtyco.com)
+    const { data: tcSettings } = await supabase
+      .from('tc_settings')
+      .select('default_reply_to')
+      .limit(1)
+      .maybeSingle()
+    const ccEmail: string | undefined = tcSettings?.default_reply_to || undefined
 
     const fromUpn = senderUser?.office_email || senderUser?.email || 'tarab@collectiverealtyco.com'
     const senderFirst = senderUser?.preferred_first_name || senderUser?.first_name || 'Tara'
@@ -125,7 +133,7 @@ export async function POST(request: NextRequest) {
         : ''
 
       const photoLink = check.check_image_url
-        ? emailButton('View Check Photo', check.check_image_url)
+        ? `<p style="margin:12px 0;"><a href="${check.check_image_url}" style="color:#C5A278;">View Check Photo</a></p>`
         : ''
 
       const introText = intro || `A check has been received for ${address}. Your commission is being processed.`
@@ -138,7 +146,7 @@ export async function POST(request: NextRequest) {
         ${clearSentence}
         ${photoLink}
         ${emailSection('What Happens Next', `<p>${nextStepsText}</p>`)}
-        ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}
+        <p style="margin:12px 0;"><a href="https://visit.collectiverealtyco.com/compliance" style="color:#C5A278;">View Compliance Process</a></p>
         ${savedSignatureHtml
           ? `<div style="margin-top:24px;">${savedSignatureHtml}</div>`
           : emailSignature(senderName, 'Operations Officer', fromUpn)}
@@ -155,6 +163,7 @@ export async function POST(request: NextRequest) {
           fromUpn: fromUpn,
           to: agentEmail,
           replyTo: REPLY_TO,
+          cc: ccEmail,
           subject,
           html,
         })

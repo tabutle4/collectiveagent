@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, ChevronDown, Loader2 } from 'lucide-react'
-import { getEmailLayout, emailSection, emailButton, emailSignature } from '@/lib/email/layout'
+import { getEmailLayout, emailSection, emailSignature } from '@/lib/email/layout'
 
 const ROLE_LABELS: Record<string, string> = {
   primary_agent:    'Primary Agent',
@@ -54,7 +54,7 @@ function buildPreviewHtml(opts: {
     : ''
 
   const photoLink = checkImageUrl
-    ? emailButton('View Check Photo', checkImageUrl)
+    ? `<p style="margin:12px 0;"><a href="${checkImageUrl}" style="color:#C5A278;">View Check Photo</a></p>`
     : ''
 
   const body = `
@@ -64,7 +64,7 @@ function buildPreviewHtml(opts: {
     ${clearSentence}
     ${photoLink}
     ${emailSection('What Happens Next', `<p>${nextStepsBody}</p>`)}
-    ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}
+    <p style="margin:12px 0;"><a href="https://visit.collectiverealtyco.com/compliance" style="color:#C5A278;">View Compliance Process</a></p>
     ${savedSigHtml
       ? `<div style="margin-top:24px;">${savedSigHtml}</div>`
       : emailSignature('Transactions Team', 'Operations', 'transactions@collectiverealtyco.com')}
@@ -287,6 +287,7 @@ export default function CheckNotifyModal({
               <div className="text-xs text-luxury-gray-3 mb-3 space-y-0.5">
                 <p><span className="font-medium text-luxury-gray-2">From:</span> Your @collectiverealtyco.com mailbox</p>
                 <p><span className="font-medium text-luxury-gray-2">To:</span> {previewAgent?.email}</p>
+                <p><span className="font-medium text-luxury-gray-2">CC:</span> office@collectiverealtyco.com</p>
                 <p><span className="font-medium text-luxury-gray-2">Subject:</span> Check Received - {address} - {previewAgent?.name}</p>
               </div>
               <div
