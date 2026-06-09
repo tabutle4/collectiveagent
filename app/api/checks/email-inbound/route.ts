@@ -66,11 +66,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No image attachment found' }, { status: 400 })
     }
 
-    // If no download_url in payload, fall back to SDK
+    // Webhook payload has attachment metadata but no download_url.
+    // Fetch it directly by ID from the Resend API.
     if (!imageAtt.download_url) {
-      const { data: sdkAtts } = await resend.emails.receiving.attachments.list({ emailId })
-      const sdkAtt = sdkAtts?.data?.find((a: any) => a.id === imageAtt.id || (a.content_type || '').startsWith('image/'))
-      if (!sdkAtt?.download_url) {
+      const { data: sdkAtt, error: sdkErr } = await resend.emails.receiving.attachments.get({
+        emailId,
+        id: imageAtt.id,
+      })
+      if (sdkErr || !sdkAtt?.download_url) {
+        console.error('SDK attachment fetch error:', sdkErr)
         return NextResponse.json({ error: 'No download URL for attachment' }, { status: 400 })
       }
       imageAtt.download_url = sdkAtt.download_url

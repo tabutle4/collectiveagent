@@ -106,11 +106,10 @@ export async function POST(request: NextRequest) {
       if (!isImage && !isPDF) continue
 
       try {
-        // If payload attachment has no download_url, fetch via SDK
+        // Webhook payload has attachment metadata but no download_url — fetch by ID.
         let downloadUrl: string = att.download_url
         if (!downloadUrl) {
-          const { data: sdkAtts } = await resend.emails.receiving.attachments.list({ emailId })
-          const sdkAtt = sdkAtts?.data?.find((s: any) => s.filename === att.filename || s.content_type === att.content_type)
+          const { data: sdkAtt } = await resend.emails.receiving.attachments.get({ emailId, id: att.id })
           if (!sdkAtt?.download_url) continue
           downloadUrl = sdkAtt.download_url
         }
