@@ -114,6 +114,7 @@ export default function CheckNotifyModal({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedSigHtml, setSavedSigHtml] = useState<string | null>(null)
+  const [ccEmail, setCcEmail] = useState<string>('')
 
   // Fetch sender's saved signature HTML on mount for preview
   useEffect(() => {
@@ -122,6 +123,12 @@ export default function CheckNotifyModal({
       .then(data => {
         const html = data?.signature?.html_content
         if (html) setSavedSigHtml(html)
+      })
+      .catch(() => {})
+    fetch('/api/admin/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.settings?.executive_email) setCcEmail(data.settings.executive_email)
       })
       .catch(() => {})
   }, [])
@@ -287,7 +294,7 @@ export default function CheckNotifyModal({
               <div className="text-xs text-luxury-gray-3 mb-3 space-y-0.5">
                 <p><span className="font-medium text-luxury-gray-2">From:</span> Your @collectiverealtyco.com mailbox</p>
                 <p><span className="font-medium text-luxury-gray-2">To:</span> {previewAgent?.email}</p>
-                <p><span className="font-medium text-luxury-gray-2">CC:</span> office@collectiverealtyco.com</p>
+                {ccEmail && <p><span className="font-medium text-luxury-gray-2">CC:</span> {ccEmail}</p>}
                 <p><span className="font-medium text-luxury-gray-2">Subject:</span> Check Received - {address} - {previewAgent?.name}</p>
               </div>
               <div

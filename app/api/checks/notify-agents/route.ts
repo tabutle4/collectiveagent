@@ -35,13 +35,13 @@ export async function POST(request: NextRequest) {
       .eq('id', auth.user.id)
       .single()
 
-    // Fetch CC email from TC settings (default_reply_to = tcandcompliance@collectiverealtyco.com)
-    const { data: tcSettings } = await supabase
-      .from('tc_settings')
-      .select('default_reply_to')
+    // Fetch CC email from company settings (executive_email)
+    const { data: settingsRow } = await supabase
+      .from('company_settings')
+      .select('executive_email')
       .limit(1)
       .maybeSingle()
-    const ccEmail: string | undefined = tcSettings?.default_reply_to || undefined
+    const ccEmail: string | undefined = settingsRow?.executive_email || undefined
 
     const fromUpn = senderUser?.office_email || senderUser?.email || 'tarab@collectiverealtyco.com'
     const senderFirst = senderUser?.preferred_first_name || senderUser?.first_name || 'Tara'
