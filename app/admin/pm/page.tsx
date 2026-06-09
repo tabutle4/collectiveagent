@@ -17,7 +17,7 @@ interface EnrichedProperty {
   monthlyRent: number | null
   leaseEnd: string | null
   lastNetDisbursed: number | null
-  heldInTrust: number
+  heldInTrust: number | null
 }
 
 interface DashboardStats {
@@ -137,7 +137,6 @@ export default function PMDashboardPage() {
         activeRepairs: repairsList.filter((r: any) => !['completed', 'cancelled'].includes(r.status)).length,
       })
 
-      // Recent landlords and tenants (5 most recent each)
       setRecentLandlords(
         [...landlordsList]
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -149,27 +148,11 @@ export default function PMDashboardPage() {
           .slice(0, 5)
       )
 
-      // Enriched properties (active only)
+      // Phase 1: render properties immediately with heldInTrust null
       // Properties API joins landlords and pm_leases[tenants] -- no extra lookups needed
       const activeProps = propertiesList.filter((p: any) => p.status === 'active')
 
-      // Batch held-in-trust calls in parallel
-      const trustResults = await Promise.all(
-        activeProps.map(async (p: any) => {
-          if (!p.landlord_id) return { propertyId: p.id, heldInTrust: 0 }
-          try {
-            const r = await fetch(`/api/pm/held-in-trust?landlord_id=${p.landlord_id}&property_id=${p.id}`)
-            const d = await r.json()
-            return { propertyId: p.id, heldInTrust: Number(d.heldInTrust ?? 0) }
-          } catch {
-            return { propertyId: p.id, heldInTrust: 0 }
-          }
-        })
-      )
-      const trustMap: Record<string, number> = {}
-      trustResults.forEach(t => { trustMap[t.propertyId] = t.heldInTrust })
-
-      const enriched: EnrichedProperty[] = activeProps.map((p: any) => {
+      setProperties(activeProps.map((p: any) => {
         const activeLease = (p.pm_leases || []).find((l: any) => l.status === 'active')
         const tenant = activeLease?.tenants
         const lastStatement = lastStatementByProperty[p.id]
@@ -190,14 +173,35 @@ export default function PMDashboardPage() {
           monthlyRent: activeLease ? Number(activeLease.monthly_rent) : null,
           leaseEnd: activeLease?.lease_end || null,
           lastNetDisbursed: lastStatement ? Number(lastStatement.total_net_disbursed) : null,
-          heldInTrust: trustMap[p.id] ?? 0,
+          heldInTrust: null,
         }
-      })
+      }))
 
-      setProperties(enriched)
+      setLoading(false) // page is visible -- trust loads in background below
+
+      // Phase 2: held-in-trust batch (activeProps still in scope, no re-fetch needed)
+      const trustResults = await Promise.all(
+        activeProps.map(async (p: any) => {
+          if (!p.landlord_id) return { propertyId: p.id, heldInTrust: 0 }
+          try {
+            const r = await fetch(`/api/pm/held-in-trust?landlord_id=${p.landlord_id}&property_id=${p.id}`)
+            const d = await r.json()
+            return { propertyId: p.id, heldInTrust: Number(d.heldInTrust ?? 0) }
+          } catch {
+            return { propertyId: p.id, heldInTrust: 0 }
+          }
+        })
+      )
+      const trustMap: Record<string, number> = {}
+      trustResults.forEach(t => { trustMap[t.propertyId] = t.heldInTrust })
+
+      setProperties(prev => prev.map(p => ({
+        ...p,
+        heldInTrust: trustMap[p.id] ?? 0,
+      })))
+
     } catch (err) {
       console.error('Error loading PM dashboard:', err)
-    } finally {
       setLoading(false)
     }
   }
@@ -283,7 +287,9 @@ export default function PMDashboardPage() {
                   </div>
                   <div>
                     <p className="text-xs text-luxury-gray-3">Held in Trust</p>
-                    <p className="text-xs font-medium text-luxury-gray-1">{formatCurrency(p.heldInTrust)}</p>
+                    <p className="text-xs font-medium text-luxury-gray-1">
+                      {p.heldInTrust !== null ? formatCurrency(p.heldInTrust) : '...'}
+                    </p>
                   </div>
                 </div>
               </Link>
