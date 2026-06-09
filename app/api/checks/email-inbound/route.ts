@@ -49,22 +49,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Check not found' }, { status: 404 })
     }
 
-    // Fetch attachment list from Resend API (webhook payload has metadata only)
-    const { data: attachments, error: attErr } = await resend.emails.receiving.attachments.list({
-      emailId,
-    })
+    // Attachment metadata is in the webhook payload's data.attachments array.
+    // Each entry has id, content_type, filename, download_url.
+    const attList: any[] = emailData.attachments || []
 
-    if (attErr || !attachments?.data?.length) {
-      console.log('No attachments for check email:', checkId)
+    if (!attList.length) {
+      console.log('No attachments in webhook payload for check:', checkId)
       return NextResponse.json({ error: 'No attachments found' }, { status: 400 })
     }
 
     // Take the first image attachment
-    const imageAtt = attachments.data.find((a: any) =>
+    const imageAtt = attList.find((a: any) =>
       (a.content_type || '').startsWith('image/')
     )
     if (!imageAtt) {
       return NextResponse.json({ error: 'No image attachment found' }, { status: 400 })
+    }
+
+    // If no download_url in payload, fall back to SDK
+    if (!imageAtt.download_url) {
+      const { data: sdkAtts } = await resend.emails.receiving.attachments.list({ emailId })
+      const sdkAtt = sdkAtts?.data?.find((a: any) => a.id === imageAtt.id || (a.content_type || '').startsWith('image/'))
+      if (!sdkAtt?.download_url) {
+        return NextResponse.json({ error: 'No download URL for attachment' }, { status: 400 })
+      }
+      imageAtt.download_url = sdkAtt.download_url
     }
 
     // Download the actual file content

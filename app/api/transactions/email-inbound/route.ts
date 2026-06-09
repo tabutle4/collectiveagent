@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
     const docsToCreate: any[] = []
 
     // 1. Fetch and upload any file attachments (images, PDFs)
-    const { data: attachments } = await resend.emails.receiving.attachments.list({ emailId })
-    const attList: any[] = attachments?.data || []
+    // Attachment metadata is in the webhook payload — use it directly.
+    const attList: any[] = emailData.attachments || []
 
     for (const att of attList) {
       const contentType: string = att.content_type || ''
@@ -106,7 +106,15 @@ export async function POST(request: NextRequest) {
       if (!isImage && !isPDF) continue
 
       try {
-        const dlRes = await fetch(att.download_url)
+        // If payload attachment has no download_url, fetch via SDK
+        let downloadUrl: string = att.download_url
+        if (!downloadUrl) {
+          const { data: sdkAtts } = await resend.emails.receiving.attachments.list({ emailId })
+          const sdkAtt = sdkAtts?.data?.find((s: any) => s.filename === att.filename || s.content_type === att.content_type)
+          if (!sdkAtt?.download_url) continue
+          downloadUrl = sdkAtt.download_url
+        }
+        const dlRes = await fetch(downloadUrl)
         if (!dlRes.ok) continue
         const fileBuffer = Buffer.from(await dlRes.arrayBuffer())
 
