@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}
         ${savedSignatureHtml
           ? `<div style="margin-top:24px;">${savedSignatureHtml}</div>`
-          : emailSignature(senderName, 'Collective Realty Co.', fromUpn)}
+          : emailSignature(senderName, 'Operations Officer', fromUpn)}
       `
 
       const html = getEmailLayout(body, {

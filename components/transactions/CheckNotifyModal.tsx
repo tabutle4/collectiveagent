@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, ChevronDown, Loader2 } from 'lucide-react'
 import { getEmailLayout, emailSection, emailButton, emailSignature } from '@/lib/email/layout'
 
@@ -45,8 +45,9 @@ function buildPreviewHtml(opts: {
   checkImageUrl: string | null
   intro: string
   nextStepsBody: string
+  savedSigHtml?: string | null
 }): string {
-  const { firstName, roleLabel, address, clearedDate, checkImageUrl, intro, nextStepsBody } = opts
+  const { firstName, roleLabel, address, clearedDate, checkImageUrl, intro, nextStepsBody, savedSigHtml } = opts
 
   const clearSentence = clearedDate
     ? `<p>The check is expected to clear on <strong>${fmtDate(clearedDate)}</strong>.</p>`
@@ -64,7 +65,9 @@ function buildPreviewHtml(opts: {
     ${photoLink}
     ${emailSection('What Happens Next', `<p>${nextStepsBody}</p>`)}
     ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}
-    ${emailSignature('Transactions Team', 'Collective Realty Co.', 'transactions@collectiverealtyco.com')}
+    ${savedSigHtml
+      ? `<div style="margin-top:24px;">${savedSigHtml}</div>`
+      : emailSignature('Transactions Team', 'Operations', 'transactions@collectiverealtyco.com')}
   `
 
   return getEmailLayout(body, {
@@ -110,6 +113,18 @@ export default function CheckNotifyModal({
   const [previewIndex, setPreviewIndex] = useState(0)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [savedSigHtml, setSavedSigHtml] = useState<string | null>(null)
+
+  // Fetch sender's saved signature HTML on mount for preview
+  useEffect(() => {
+    fetch('/api/email-signature?layout=classic')
+      .then(r => r.json())
+      .then(data => {
+        const html = data?.signature?.html_content
+        if (html) setSavedSigHtml(html)
+      })
+      .catch(() => {})
+  }, [])
 
   const selectedRecipients = recipients.filter(r => selected.has(r.id))
   const previewAgent = recipients[previewIndex]
@@ -123,6 +138,7 @@ export default function CheckNotifyModal({
         checkImageUrl,
         intro,
         nextStepsBody: nextSteps,
+        savedSigHtml,
       })
     : ''
 
