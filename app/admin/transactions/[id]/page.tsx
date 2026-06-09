@@ -35,6 +35,7 @@ import { computeCommission } from '@/lib/transactions/math'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
+import CheckNotifyModal from '@/components/transactions/CheckNotifyModal'
 import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagPanel'
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
@@ -1954,6 +1955,7 @@ export default function AdminTransactionDetailPage() {
   const [payoutBrokerages, setPayoutBrokerages] = useState<any[]>([])
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [checkNotifyModal, setCheckNotifyModal] = useState<{ checkId: string; check: any } | null>(null)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
   const [aiReview, setAiReview] = useState<{
     overall: string
@@ -2991,6 +2993,10 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setSendingEmail(false)
     }
+  }
+
+  const openCheckNotifyModal = (checkId: string, check: any) => {
+    setCheckNotifyModal({ checkId, check })
   }
 
   // ── Contact functions ─────────────────────────────────────────────────────────
@@ -4400,6 +4406,14 @@ export default function AdminTransactionDetailPage() {
                             }`}>
                               {check.status || 'received'}
                             </span>
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); openCheckNotifyModal(check.id, check) }}
+                              className="btn btn-secondary text-xs px-2 py-1"
+                              title="Email all agents on this transaction about this check"
+                            >
+                              Notify Agents
+                            </button>
                             {isExpanded ? (
                               <ChevronUp size={14} className="text-luxury-gray-3" />
                             ) : (
@@ -5833,6 +5847,26 @@ export default function AdminTransactionDetailPage() {
           userId={user?.id || ''}
           onClose={() => setShowCloseModal(false)}
           onClosed={() => { setShowCloseModal(false); loadData() }}
+        />
+      )}
+
+      {/* ── Check Notify Modal ──────────────────────────────────────────────── */}
+      {checkNotifyModal && (
+        <CheckNotifyModal
+          checkId={checkNotifyModal.checkId}
+          address={txn?.property_address || ''}
+          clearedDate={checkNotifyModal.check.cleared_date || null}
+          checkImageUrl={checkNotifyModal.check.check_image_url || null}
+          agents={agents}
+          onClose={() => setCheckNotifyModal(null)}
+          onSent={(sent, failed) => {
+            setCheckNotifyModal(null)
+            if (failed > 0) {
+              alert(`Sent ${sent} email${sent !== 1 ? 's' : ''}. ${failed} failed.`)
+            } else {
+              alert(`Check notification sent to ${sent} agent${sent !== 1 ? 's' : ''}.`)
+            }
+          }}
         />
       )}
 

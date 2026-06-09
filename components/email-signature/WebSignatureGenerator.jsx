@@ -1464,6 +1464,7 @@ export default function WebSignatureGenerator() {
           border_color: borderColor,
           show_border: showBorder,
           signature_type: signatureType,
+          html_content: generateSignature() || null,
         }),
       });
       const data = await res.json();

@@ -289,6 +289,7 @@ export async function POST(request: NextRequest) {
       border_color,
       show_border,
       signature_type,
+      html_content,
     } = body
 
     if (!layout || !VALID_LAYOUTS.includes(layout)) {
@@ -308,6 +309,7 @@ export async function POST(request: NextRequest) {
       border_color: border_color || '#000000',
       show_border: show_border !== false,
       signature_type: signature_type || 'with-photo',
+      html_content: html_content || null,
     }
 
     const { data, error } = await supabaseAdmin
