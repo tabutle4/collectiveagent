@@ -1,0 +1,105 @@
+// Shared Claude vision helper for check/payment document extraction.
+// Used by:
+//   - app/api/admin/transactions/ai-check-extract/route.ts (browser upload)
+//   - app/api/checks/email-inbound/route.ts (emailed check photo)
+
+export interface CheckExtractResult {
+  check_amount: number | null
+  check_from: string | null
+  check_number: string | null
+  check_date: string | null
+  cleared_date: string | null
+  payment_method: string
+  notes: string | null
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export function sniffMediaType(b: Uint8Array, fallback: string): string {
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+  if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return 'image/gif'
+  if (
+    b.length >= 12 &&
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) return 'image/webp'
+  if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf'
+  return fallback
+}
+
+const PROMPT = `You are reviewing a payment document from a real estate transaction. This could be a physical check, an eCheck, a Zelle screenshot, a bank deposit screenshot, or a Payload/ACH confirmation PDF.
+
+Extract the following fields and return ONLY valid JSON with no extra text:
+{
+  "check_amount": <number or null - the dollar amount paid>,
+  "check_from": <string or null - who sent/wrote the payment: person name, company name, or bank name>,
+  "check_number": <string or null - check number if present, or transaction/reference number for Zelle/ACH>,
+  "check_date": <string or null - YYYY-MM-DD - the date printed on the check (when the check was written)>,
+  "cleared_date": <string or null - YYYY-MM-DD - the date the check cleared or was deposited per the bank; use null if not visible>,
+  "payment_method": <"check" | "zelle" | "payload" | "ecommission" | "wire" - your best guess at what type of payment this is>,
+  "notes": <string or null - any other relevant info such as memo line, property address mentioned, or bank name>,
+  "confidence": <"high" | "medium" | "low" - how confident you are in the extracted data>
+}
+
+Rules:
+- check_amount must be a number (e.g. 4250.00), not a string
+- For Zelle screenshots: check_from is the sender name shown
+- For bank deposit screenshots: check_amount is the deposit total
+- For Payload PDFs: use "payload" as payment_method and the transaction ID as check_number
+- If a field is not visible or not applicable, use null
+- check_date is the date printed on the face of the check (when it was written)
+- cleared_date is the date the bank processed/cleared the check, if visible (e.g. on a deposit receipt or bank statement)
+- received_date is derived automatically from cleared_date by the app (day before cleared); do not return it
+- For Zelle/ACH/Payload: check_date is the transaction date shown
+- Return ONLY the JSON object, no markdown, no explanation`
+
+export async function extractCheckWithClaude(
+  fileBase64: string,
+  mediaType: string
+): Promise<CheckExtractResult> {
+  const isImage = mediaType.startsWith('image/')
+  const isPdf = mediaType === 'application/pdf'
+
+  const messageContent: any[] = []
+  if (isImage) {
+    messageContent.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } })
+  } else if (isPdf) {
+    messageContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } })
+  }
+  messageContent.push({ type: 'text', text: PROMPT })
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY!,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: messageContent }],
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(`Claude API error: ${response.status} ${JSON.stringify(err)}`)
+  }
+
+  const data = await response.json()
+  const text = data.content?.[0]?.text || '{}'
+  const clean = text.replace(/```json|```/g, '').trim()
+  const parsed = JSON.parse(clean)
+
+  return {
+    check_amount: typeof parsed.check_amount === 'number' ? parsed.check_amount : null,
+    check_from: parsed.check_from || null,
+    check_number: parsed.check_number ? String(parsed.check_number) : null,
+    check_date: parsed.check_date || null,
+    cleared_date: parsed.cleared_date || null,
+    payment_method: parsed.payment_method || 'check',
+    notes: parsed.notes || null,
+    confidence: parsed.confidence || 'medium',
+  }
+}

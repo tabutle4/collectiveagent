@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { graphClient } from '@/lib/microsoft-graph'
+import { extractDocWithClaude, sniffMediaType } from '@/lib/doc-extract'
 
 export const dynamic = 'force-dynamic'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Inbound email webhook for transaction documents.
 // Address format: txndoc+{transactionId}@coachingbrokeragetools.com
 //
 // Handles two cases:
-//   1. Image/PDF attachments — uploaded to OneDrive, stored as transaction_document
+//   1. Image/PDF attachments — uploaded to OneDrive, AI-reviewed, stored as transaction_document
 //   2. Dotloop/ZipForms/Drive links in body — stored as link-type transaction_document
-//
-// Webhook payload only contains metadata; body and attachments fetched via SDK.
 
 function stripReplyQuotes(text: string): string {
   const markers = [
@@ -36,6 +32,21 @@ function stripReplyQuotes(text: string): string {
 }
 
 const DOC_LINK_HOSTS = ['dotloop', 'zipforms', 'ziplogix', 'drive.google', 'sharepoint', 'onedrive', 'dropbox', 'docusign']
+
+async function fetchAttachmentDownloadUrl(emailId: string, att: any): Promise<string | null> {
+  if (att.download_url) return att.download_url
+  // Webhook payload has metadata but no download_url — fetch directly by ID
+  const attRes = await fetch(
+    `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`,
+    { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` } }
+  )
+  const attData = await attRes.json()
+  if (!attRes.ok || !attData?.download_url) {
+    console.error('Resend attachment fetch failed:', attRes.status, JSON.stringify(attData).substring(0, 200))
+    return null
+  }
+  return attData.download_url
+}
 
 export async function POST(request: NextRequest) {
   const expectedSecret = process.env.RESEND_INBOUND_SECRET
@@ -75,13 +86,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
-    // Fetch full email content from Resend (body, headers)
-    const { data: emailContent } = await resend.emails.receiving.get(emailId)
-    const rawText: string = (emailContent as any)?.text || (emailContent as any)?.plain_text || ''
+    // Fetch email body for link extraction
+    // Use Resend API directly (same full-access key)
+    let rawText = ''
+    try {
+      const emailRes = await fetch(
+        `https://api.resend.com/emails/receiving/${emailId}`,
+        { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` } }
+      )
+      if (emailRes.ok) {
+        const emailContent = await emailRes.json()
+        rawText = emailContent?.text || emailContent?.plain_text || ''
+      }
+    } catch { /* best-effort */ }
+
     const subject: string = emailData.subject || ''
     const fromRaw: string = emailData.from || ''
-
-    // Parse sender
     const senderEmail = fromRaw.replace(/.*<(.+)>/, '$1').trim() || fromRaw
     const { data: senderUser } = await supabase
       .from('users')
@@ -96,7 +116,6 @@ export async function POST(request: NextRequest) {
     const docsToCreate: any[] = []
 
     // 1. Fetch and upload any file attachments (images, PDFs)
-    // Attachment metadata is in the webhook payload — use it directly.
     const attList: any[] = emailData.attachments || []
 
     for (const att of attList) {
@@ -106,16 +125,15 @@ export async function POST(request: NextRequest) {
       if (!isImage && !isPDF) continue
 
       try {
-        // Webhook payload has attachment metadata but no download_url — fetch by ID.
-        let downloadUrl: string = att.download_url
-        if (!downloadUrl) {
-          const { data: sdkAtt } = await resend.emails.receiving.attachments.get({ emailId, id: att.id })
-          if (!sdkAtt?.download_url) continue
-          downloadUrl = sdkAtt.download_url
-        }
+        const downloadUrl = await fetchAttachmentDownloadUrl(emailId, att)
+        if (!downloadUrl) continue
+
         const dlRes = await fetch(downloadUrl)
         if (!dlRes.ok) continue
         const fileBuffer = Buffer.from(await dlRes.arrayBuffer())
+
+        const bytes = new Uint8Array(fileBuffer)
+        const realMediaType = sniffMediaType(bytes, contentType)
 
         const sanitizedAddress = (txn.property_address || 'Unknown')
           .replace(/[^a-zA-Z0-9\s-]/g, '')
@@ -127,15 +145,38 @@ export async function POST(request: NextRequest) {
 
         const { fileUrl } = await graphClient.uploadFileToFolder(folderPath, safeFileName, fileBuffer)
 
+        // Run AI doc extraction — best-effort, never blocks save
+        let aiSummary: string | null = null
+        let suggestedSlots: string[] = []
+        if (process.env.ANTHROPIC_API_KEY) {
+          try {
+            const fileBase64 = fileBuffer.toString('base64')
+            const result = await extractDocWithClaude(fileBase64, realMediaType, transactionId)
+            if (result.summary) {
+              aiSummary = JSON.stringify({
+                summary: result.summary,
+                page_contents: result.page_contents,
+                verification_checklist: result.verification_checklist,
+                commission_details: result.commission_details,
+              })
+            }
+            suggestedSlots = result.suggested_slots
+          } catch (aiErr: any) {
+            console.error('Doc AI extraction failed (non-fatal):', aiErr.message)
+          }
+        }
+
         docsToCreate.push({
           transaction_id: transactionId,
           uploaded_by: senderUser?.id || null,
           file_name: att.filename || subjectClean || `Email attachment from ${fromName}`,
           file_url: fileUrl,
-          file_type: contentType,
+          file_type: realMediaType,
           compliance_status: 'pending',
           compliance_notes: `Received via email from ${fromRaw}`.substring(0, 2000),
+          ai_review: aiSummary,
           version: 1,
+          _suggested_slots: suggestedSlots, // temp field for post-insert slot assignment
         })
       } catch (uploadErr: any) {
         console.error('Failed to upload attachment:', att.filename, uploadErr.message)
@@ -143,7 +184,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Extract any document share links from the body
-    const urlMatches = (rawText).match(/https?:\/\/[^\s<>"]+/g) || []
+    const urlMatches = rawText.match(/https?:\/\/[^\s<>"]+/g) || []
     const docLinks = urlMatches.filter((url: string) =>
       DOC_LINK_HOSTS.some(host => url.includes(host))
     )
@@ -158,11 +199,13 @@ export async function POST(request: NextRequest) {
         file_type: 'link/external',
         compliance_status: 'pending',
         compliance_notes: `Shared via email from ${fromRaw}\n\n${cleanText}`.substring(0, 2000),
+        ai_review: null,
         version: 1,
+        _suggested_slots: [],
       })
     }
 
-    // 3. If nothing else, store the email itself as a record
+    // 3. If nothing else, store the email itself
     if (docsToCreate.length === 0) {
       const emailSummary = [`From: ${fromRaw}`, `Subject: ${subject}`, '', cleanText || '(no body)'].join('\n')
       docsToCreate.push({
@@ -173,17 +216,47 @@ export async function POST(request: NextRequest) {
         file_type: 'message/email',
         compliance_status: 'pending',
         compliance_notes: emailSummary.substring(0, 2000),
+        ai_review: null,
         version: 1,
+        _suggested_slots: [],
       })
     }
 
-    const { error: insertError } = await supabase
+    // Insert docs — strip temp field first
+    const docsForInsert = docsToCreate.map(({ _suggested_slots, ...rest }) => rest)
+    const { data: insertedDocs, error: insertError } = await supabase
       .from('transaction_documents')
-      .insert(docsToCreate)
+      .insert(docsForInsert)
+      .select('id')
 
     if (insertError) {
       console.error('Failed to insert docs:', insertError)
       return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+    }
+
+    // Apply suggested slots to docs that have them (mirrors apply_ai_review action)
+    if (insertedDocs) {
+      for (let i = 0; i < insertedDocs.length; i++) {
+        const slots: string[] = docsToCreate[i]?._suggested_slots || []
+        const docId = insertedDocs[i]?.id
+        if (!docId || slots.length === 0) continue
+
+        // Update first slot in place
+        await supabase
+          .from('transaction_documents')
+          .update({ required_document_id: slots[0] })
+          .eq('id', docId)
+
+        // Extra slots become sibling rows
+        if (slots.length > 1) {
+          const sourceDoc = docsForInsert[i]
+          const siblings = slots.slice(1).map((slotId: string) => ({
+            ...sourceDoc,
+            required_document_id: slotId,
+          }))
+          await supabase.from('transaction_documents').insert(siblings)
+        }
+      }
     }
 
     console.log(`Saved ${docsToCreate.length} doc(s) for transaction ${transactionId}`)
