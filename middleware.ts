@@ -41,6 +41,7 @@ const PUBLIC_PATHS = [
   '/api/zoom/recording-complete',
   '/api/transactions/email-inbound',
   '/api/pm/email-webhook',
+  '/api/checks/email-inbound',
 ]
 
 // Paths accessible to all authenticated users regardless of role

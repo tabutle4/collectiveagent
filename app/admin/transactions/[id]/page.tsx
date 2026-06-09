@@ -4664,6 +4664,24 @@ export default function AdminTransactionDetailPage() {
                                 }}
                               />
                             </div>
+
+                            {/* Email check photo */}
+                            <div className="mt-2 p-2 bg-luxury-light rounded-lg border border-luxury-gray-5">
+                              <p className="text-[11px] text-luxury-gray-3 mb-1.5">
+                                Email a photo from your phone directly to this check:
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <code className="text-[10px] bg-white border border-luxury-gray-5 px-2 py-1 rounded font-mono text-luxury-gray-1 flex-1 truncate">
+                                  txncheck+{check.id}@coachingbrokeragetools.com
+                                </code>
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(`txncheck+${check.id}@coachingbrokeragetools.com`)}
+                                  className="text-[10px] text-luxury-accent hover:underline shrink-0"
+                                >
+                                  Copy
+                                </button>
+                              </div>
+                            </div>
                           </>
                         )}
                       </div>
