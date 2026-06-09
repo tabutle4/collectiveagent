@@ -67,17 +67,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Webhook payload has attachment metadata but no download_url.
-    // Fetch it directly by ID from the Resend API.
+    // Fetch it directly via the Resend API using the attachment and email IDs.
     if (!imageAtt.download_url) {
-      const { data: sdkAtt, error: sdkErr } = await resend.emails.receiving.attachments.get({
-        emailId,
-        id: imageAtt.id,
-      })
-      if (sdkErr || !sdkAtt?.download_url) {
-        console.error('SDK attachment fetch error:', sdkErr)
-        return NextResponse.json({ error: 'No download URL for attachment' }, { status: 400 })
+      const attRes = await fetch(
+        `https://api.resend.com/emails/receiving/${emailId}/attachments/${imageAtt.id}`,
+        { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` } }
+      )
+      const attData = await attRes.json()
+      console.log('Resend attachment fetch status:', attRes.status, JSON.stringify(attData).substring(0, 200))
+      if (!attRes.ok || !attData?.download_url) {
+        return NextResponse.json({ error: 'No download URL for attachment', detail: attData }, { status: 400 })
       }
-      imageAtt.download_url = sdkAtt.download_url
+      imageAtt.download_url = attData.download_url
     }
 
     // Download the actual file content
