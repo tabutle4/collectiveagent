@@ -1,26 +1,30 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
+import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
 
 // Types
 
-interface AgentRow { 
+interface AgentRow {
   id: string
   agent_id: string
+  agent_role: string
   name: string
   amount: number
   payment_status: string | null
   payment_date: string | null
+  is_lease: boolean
 }
-interface ExternalRow { 
+interface ExternalRow {
   id: string
   name: string
   amount: number
   payment_status: string | null
   payment_date: string | null
+  is_lease: boolean
 }
 
 interface PayoutRow {
@@ -535,7 +539,22 @@ export default function PayoutsReportPage() {
   const [newAmt, setNewAmt] = useState('')
   const [addingExp, setAddingExp] = useState(false)
 
-  // Mark Paid Modal
+  // Mark Paid Panel Modal (agent/external)
+  const [agentMarkPaid, setAgentMarkPaid] = useState<{
+    transactionId: string
+    tia: { id: string; agent_id: string; agent_role: string; agent_net: number; transaction_type?: string }
+    name: string
+    isLease: boolean
+  } | null>(null)
+  const [externalMarkPaid, setExternalMarkPaid] = useState<{
+    externalId: string; name: string; amount: number; isLease: boolean
+  } | null>(null)
+  const [externalMarkPaidDate, setExternalMarkPaidDate] = useState('')
+  const [externalMarkPaidMethod, setExternalMarkPaidMethod] = useState('ACH')
+  const [externalMarkPaidRef, setExternalMarkPaidRef] = useState('')
+  const [externalSaving, setExternalSaving] = useState(false)
+
+  // Mark Paid Modal (PM fee / landlord)
   const [markPaidType, setMarkPaidType] = useState<'pm_fee' | 'landlord' | null>(null)
   const [markPaidItem, setMarkPaidItem] = useState<PMFee | LandlordPayout | null>(null)
   const [markPaidDate, setMarkPaidDate] = useState('')
@@ -637,53 +656,57 @@ export default function PayoutsReportPage() {
     }
   }
 
-  const markAgentPaid = async (tiaId: string, checkId: string) => {
-    // Optimistic update
-    setRows(prev => prev.map(r => 
-      r.check_id === checkId 
-        ? { 
-            ...r, 
-            agents: r.agents.map(a => 
-              a.id === tiaId ? { ...a, payment_status: 'paid', payment_date: new Date().toISOString().split('T')[0] } : a
-            )
-          } 
-        : r
-    ))
-    
-    try {
-      const res = await fetch('/api/admin/payouts-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark_agent_paid', tia_id: tiaId }),
-      })
-      if (!res.ok) load()
-    } catch {
-      load()
-    }
+  const openAgentMarkPaid = (tiaId: string, checkId: string) => {
+    const row = rows.find(r => r.check_id === checkId)
+    if (!row?.transaction_id) return
+    const agent = row.agents.find(a => a.id === tiaId)
+    if (!agent) return
+    setAgentMarkPaid({
+      transactionId: row.transaction_id,
+      tia: {
+        id: agent.id,
+        agent_id: agent.agent_id,
+        agent_role: agent.agent_role,
+        agent_net: agent.amount,
+      },
+      name: agent.name,
+      isLease: agent.is_lease,
+    })
   }
 
-  const markExternalPaid = async (externalId: string, checkId: string) => {
-    // Optimistic update
-    setRows(prev => prev.map(r => 
-      r.check_id === checkId 
-        ? { 
-            ...r, 
-            externals: r.externals.map(e => 
-              e.id === externalId ? { ...e, payment_status: 'paid', payment_date: new Date().toISOString().split('T')[0] } : e
-            )
-          } 
-        : r
-    ))
-    
+  const openExternalMarkPaid = (externalId: string, checkId: string) => {
+    const row = rows.find(r => r.check_id === checkId)
+    if (!row) return
+    const ext = row.externals.find(e => e.id === externalId)
+    if (!ext) return
+    setExternalMarkPaid({ externalId, name: ext.name, amount: ext.amount, isLease: ext.is_lease })
+    setExternalMarkPaidDate(new Date().toISOString().split('T')[0])
+    setExternalMarkPaidMethod('ACH')
+    setExternalMarkPaidRef('')
+  }
+
+  const handleExternalMarkPaid = async () => {
+    if (!externalMarkPaid || !externalMarkPaidDate) return
+    setExternalSaving(true)
     try {
       const res = await fetch('/api/admin/payouts-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark_external_paid', external_id: externalId }),
+        body: JSON.stringify({
+          action: 'mark_external_paid',
+          external_id: externalMarkPaid.externalId,
+          payment_date: externalMarkPaidDate,
+          payment_method: externalMarkPaidMethod,
+          payment_reference: externalMarkPaidRef || null,
+        }),
       })
-      if (!res.ok) load()
-    } catch {
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed') }
+      setExternalMarkPaid(null)
       load()
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark paid')
+    } finally {
+      setExternalSaving(false)
     }
   }
 
@@ -770,8 +793,8 @@ export default function PayoutsReportPage() {
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={markAgentPaid} onMarkExternalPaid={markExternalPaid} />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={markAgentPaid} onMarkExternalPaid={markExternalPaid} />
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
         </div>
 
         {/* Landlord Disbursements */}
@@ -1014,7 +1037,59 @@ export default function PayoutsReportPage() {
 
       </div>
 
-      {/* Mark Paid Modal */}
+      {/* Agent Mark Paid Modal */}
+      {agentMarkPaid && (
+        <MarkPaidPanelModal
+          transactionId={agentMarkPaid.transactionId}
+          tia={agentMarkPaid.tia}
+          isLease={agentMarkPaid.isLease}
+          label={agentMarkPaid.name}
+          onClose={() => setAgentMarkPaid(null)}
+          onMarked={() => { setAgentMarkPaid(null); load() }}
+        />
+      )}
+
+      {/* External Mark Paid Modal */}
+      {externalMarkPaid && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-gray-5">
+              <div>
+                <h2 className="text-sm font-semibold text-luxury-gray-1">Mark External Paid</h2>
+                <p className="text-xs text-luxury-gray-3 mt-0.5">{externalMarkPaid.name} &middot; {externalMarkPaid.amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</p>
+              </div>
+              <button onClick={() => setExternalMarkPaid(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1"><X size={16} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Payment date *</label>
+                  <input type="date" className="input-luxury text-xs" value={externalMarkPaidDate} onChange={e => setExternalMarkPaidDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="field-label">Method</label>
+                  <select className="select-luxury text-xs" value={externalMarkPaidMethod} onChange={e => setExternalMarkPaidMethod(e.target.value)}>
+                    <option value="ACH">ACH</option>
+                    <option value="Check">Check</option>
+                    <option value="Zelle">Zelle</option>
+                    <option value="Wire">Wire</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="field-label">Reference</label>
+                  <input type="text" className="input-luxury text-xs" value={externalMarkPaidRef} onChange={e => setExternalMarkPaidRef(e.target.value)} placeholder="Optional" />
+                </div>
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-3">
+              <button onClick={() => setExternalMarkPaid(null)} disabled={externalSaving} className="btn btn-secondary text-xs flex-1">Cancel</button>
+              <button onClick={handleExternalMarkPaid} disabled={externalSaving || !externalMarkPaidDate} className="btn btn-primary text-xs flex-1">{externalSaving ? 'Saving...' : 'Confirm Paid'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark Paid Modal (PM fee / landlord) */}
       {markPaidItem && markPaidType && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">

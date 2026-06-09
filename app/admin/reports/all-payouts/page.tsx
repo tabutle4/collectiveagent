@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Search, X, ExternalLink, CheckCircle, Loader2 } from 'lucide-react'
+import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
 
 interface PayoutRow {
   id: string
@@ -17,6 +18,8 @@ interface PayoutRow {
   payment_date: string | null
   payment_method: string
   transaction_id: string | null
+  agent_id: string | null
+  is_lease: boolean
 }
 
 interface PendingByType {
@@ -50,7 +53,15 @@ export default function AllPayoutsPage() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
 
-  // Mark paid modal
+  // Agent mark paid modal (MarkPaidPanelModal)
+  const [agentMarkPaid, setAgentMarkPaid] = useState<{
+    transactionId: string
+    tia: { id: string; agent_id: string; agent_role: string; agent_net: number }
+    name: string
+    isLease: boolean
+  } | null>(null)
+
+  // Mark paid modal (PM fee / landlord)
   const [markPaidModal, setMarkPaidModal] = useState<{ row: PayoutRow } | null>(null)
   const [markPaidDate, setMarkPaidDate] = useState('')
   const [markPaidMethod, setMarkPaidMethod] = useState('ach')
@@ -105,8 +116,11 @@ export default function AllPayoutsPage() {
   }
 
   const getStatusBadge = (status: string, row: PayoutRow) => {
-    const canMarkPaid = status === 'pending' && (row.type === 'pm_fee' || row.type === 'landlord')
-    
+    const canMarkPaid = status === 'pending' && (
+      row.type === 'pm_fee' || row.type === 'landlord' ||
+      row.type === 'agent' || row.type === 'external'
+    )
+
     if (status === 'paid') {
       return <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-0.5 rounded"><CheckCircle size={12} /> Paid</span>
     }
@@ -115,9 +129,28 @@ export default function AllPayoutsPage() {
         return (
           <button
             onClick={() => {
-              setMarkPaidModal({ row })
-              setMarkPaidDate(new Date().toISOString().split('T')[0])
-              setMarkPaidMethod(row.payment_method || 'ach')
+              if (row.type === 'agent' && row.transaction_id && row.agent_id) {
+                setAgentMarkPaid({
+                  transactionId: row.transaction_id,
+                  tia: {
+                    id: row.id,
+                    agent_id: row.agent_id,
+                    agent_role: row.payee_type || 'primary_agent',
+                    agent_net: row.amount,
+                  },
+                  name: row.payee,
+                  isLease: row.is_lease,
+                })
+              } else if (row.type === 'external' && row.transaction_id) {
+                // External: use the existing simple mark paid modal, routed through payouts-report API
+                setMarkPaidModal({ row })
+                setMarkPaidDate(new Date().toISOString().split('T')[0])
+                setMarkPaidMethod(row.payment_method || 'ach')
+              } else {
+                setMarkPaidModal({ row })
+                setMarkPaidDate(new Date().toISOString().split('T')[0])
+                setMarkPaidMethod(row.payment_method || 'ach')
+              }
             }}
             className="badge badge-warning cursor-pointer hover:opacity-70"
           >
@@ -152,28 +185,39 @@ export default function AllPayoutsPage() {
     setMarkPaidSaving(true)
     try {
       const { row } = markPaidModal
-      let endpoint = ''
-      if (row.type === 'pm_fee') {
-        endpoint = `/api/pm/fee-payouts/${row.id}`
-      } else if (row.type === 'landlord') {
-        endpoint = `/api/pm/disbursements/${row.id}`
+      let res: Response
+
+      if (row.type === 'external') {
+        res = await fetch('/api/admin/payouts-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'mark_external_paid',
+            external_id: row.id,
+            payment_date: markPaidDate,
+            payment_method: markPaidMethod,
+          }),
+        })
+      } else {
+        const endpoint = row.type === 'pm_fee'
+          ? `/api/pm/fee-payouts/${row.id}`
+          : `/api/pm/disbursements/${row.id}`
+        res = await fetch(endpoint, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_status: 'paid',
+            payment_date: markPaidDate,
+            payment_method: markPaidMethod,
+          }),
+        })
       }
-      
-      const res = await fetch(endpoint, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payment_status: 'paid',
-          payment_date: markPaidDate,
-          payment_method: markPaidMethod,
-        }),
-      })
-      
+
       if (!res.ok) {
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Failed to update')
       }
-      
+
       setMarkPaidModal(null)
       loadData()
     } catch (err: any) {
@@ -403,7 +447,19 @@ export default function AllPayoutsPage() {
         </div>
       </div>
 
-      {/* Mark Paid Modal */}
+      {/* Agent Mark Paid Modal */}
+      {agentMarkPaid && (
+        <MarkPaidPanelModal
+          transactionId={agentMarkPaid.transactionId}
+          tia={agentMarkPaid.tia}
+          isLease={agentMarkPaid.isLease}
+          label={agentMarkPaid.name}
+          onClose={() => setAgentMarkPaid(null)}
+          onMarked={() => { setAgentMarkPaid(null); loadData() }}
+        />
+      )}
+
+      {/* Mark Paid Modal (external / PM fee / landlord) */}
       {markPaidModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">

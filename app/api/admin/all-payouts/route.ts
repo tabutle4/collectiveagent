@@ -62,6 +62,8 @@ interface PayoutRow {
   payment_date: string | null
   payment_method: string
   transaction_id: string | null
+  agent_id: string | null
+  is_lease: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -170,6 +172,8 @@ export async function GET(request: NextRequest) {
         payment_date:     a.payment_date || closedDate,
         payment_method:   a.payment_method || (lease ? 'ach' : 'wire'),
         transaction_id:   a.transaction_id,
+        agent_id:         a.agent_id || null,
+        is_lease:         lease,
       }
     })
 
@@ -190,6 +194,8 @@ export async function GET(request: NextRequest) {
         payment_date:     e.payment_date || closedDate,
         payment_method:   e.payment_method || (lease ? 'ach' : 'wire'),
         transaction_id:   e.transaction_id,
+        agent_id:         null,
+        is_lease:         lease,
       }
     })
 
@@ -228,6 +234,8 @@ export async function GET(request: NextRequest) {
         payment_date:     p.payment_date || periodToDate(periodM, periodY),
         payment_method:   p.payment_method || 'ach',
         transaction_id:   null,
+        agent_id:         null,
+        is_lease:         false,
       }
     })
 
@@ -255,6 +263,8 @@ export async function GET(request: NextRequest) {
         payment_date:     d.payment_date || periodToDate(periodM, periodY),
         payment_method:   d.payment_method || 'ach',
         transaction_id:   null,
+        agent_id:         null,
+        is_lease:         false,
       }
     })
 
@@ -274,6 +284,8 @@ export async function GET(request: NextRequest) {
         payment_date:     t.closed_date || null,
         payment_method:   'retained',
         transaction_id:   t.id,
+        agent_id:         null,
+        is_lease:         false,
       }
     })
 

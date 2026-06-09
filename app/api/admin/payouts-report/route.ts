@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
+
+function isLeaseType(t: string | null): boolean {
+  if (!t) return false
+  if (t === 'lease') return true
+  return isLeaseTransactionType(t)
+}
 
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -147,6 +154,9 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => roleOrder(a.agent_role) - roleOrder(b.agent_role))
       const externals = externalBrokerages.filter(e => e.transaction_id === check.transaction_id)
 
+      const txnType = txn?.transaction_type || null
+      const isLease = isLeaseType(txnType)
+
       const agentRows = agents.map(a => {
         const baseNet = parseFloat(a.agent_net || 0)
         // Apply staged debts/credits only when the TIA is not yet paid.
@@ -157,19 +167,24 @@ export async function GET(request: NextRequest) {
           amount = baseNet - staged.debts + staged.credits
         }
         return {
+          id: a.id,
           agent_id: a.agent_id,
+          agent_role: a.agent_role,
           name: agentNames[a.agent_id] || 'Unknown',
           amount,
           payment_status: a.payment_status,
           payment_date: a.payment_date,
+          is_lease: isLease,
         }
       })
 
       const externalRows = externals.map(e => ({
+        id: e.id,
         name: e.agent_name || e.brokerage_name || 'External',
         amount: e.commission_amount || 0,
         payment_status: e.payment_status,
         payment_date: e.payment_date,
+        is_lease: isLease,
       }))
 
       const address = check.property_address || txn?.property_address || 'Unknown'
@@ -348,13 +363,34 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// Update compliance status for a specific check
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_checks')
   if (auth.error) return auth.error
 
   try {
-    const { check_id, compliance_status } = await request.json()
+    const body = await request.json()
+    const { action } = body
+
+    // Mark external brokerage paid (agent mark-paid goes through /api/admin/transactions/[id])
+    if (action === 'mark_external_paid') {
+      const { external_id, payment_date, payment_method, payment_reference } = body
+      if (!external_id) return NextResponse.json({ error: 'external_id required' }, { status: 400 })
+      if (!payment_date) return NextResponse.json({ error: 'payment_date required' }, { status: 400 })
+      const { error } = await supabaseAdmin
+        .from('transaction_external_brokerages')
+        .update({
+          payment_status: 'paid',
+          payment_date,
+          payment_method: payment_method || null,
+          payment_reference: payment_reference || null,
+        })
+        .eq('id', external_id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
+    // Update compliance status for a specific check (original behavior)
+    const { check_id, compliance_status } = body
 
     if (!check_id) {
       return NextResponse.json({ error: 'check_id is required' }, { status: 400 })

@@ -21,11 +21,13 @@ const fmt$ = (n: any): string =>
 export default function MarkPaidPanel({
   transactionId,
   tia,
+  isLease,
   onCancel,
   onMarked,
 }: {
   transactionId: string
   tia: any
+  isLease?: boolean
   onCancel: () => void
   onMarked: () => void
 }) {
@@ -37,7 +39,7 @@ export default function MarkPaidPanel({
   const [fundingSource, setFundingSource] = useState('CRC')
   const [debts, setDebts] = useState<any[]>([])
   const [selectedDebts, setSelectedDebts] = useState<Record<string, boolean>>({})
-  const [countsProgress, setCountsProgress] = useState(true)
+  const [countsProgress, setCountsProgress] = useState(() => isLease !== true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -211,8 +213,7 @@ export default function MarkPaidPanel({
         </div>
       </div>
 
-      {tia.agent_role === 'primary_agent' ||
-      tia.agent_role === 'listing_agent' ? (
+      {(tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') && (
         <label className="flex items-center gap-2 mt-3 text-xs">
           <input
             type="checkbox"
@@ -220,10 +221,10 @@ export default function MarkPaidPanel({
             onChange={(e) => setCountsProgress(e.target.checked)}
           />
           <span className="text-luxury-gray-2">
-            Counts toward agent's cap progress
+            Counts toward 5-deal / cap progress
           </span>
         </label>
-      ) : null}
+      )}
 
       {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
 

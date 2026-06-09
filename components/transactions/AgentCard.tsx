@@ -489,6 +489,7 @@ export default function AgentCard({
         <MarkPaidPanel
           transactionId={transactionId}
           tia={{ ...tia, transaction_type: transaction?.transaction_type }}
+          isLease={isLease}
           onCancel={() => setShowMarkPaid(false)}
           onMarked={() => {
             setShowMarkPaid(false)
