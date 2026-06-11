@@ -192,6 +192,28 @@ function LocationDisplay({ location }: { location: string }) {
   return <span className="text-xs text-luxury-gray-2">{location}</span>
 }
 
+// Parse time from Graph dateTime string (already in Chicago time via Prefer header)
+// to avoid browser timezone conversion artifacts.
+function formatSeriesTime(startIso: string, endIso: string): string {
+  const parseHM = (iso: string) => {
+    const t = iso.split('T')[1] || ''
+    const [h, m] = t.split(':').map(Number)
+    return { h: h || 0, m: m || 0 }
+  }
+  const fmt = (h: number, m: number, showPeriod: boolean) => {
+    const period = h >= 12 ? 'PM' : 'AM'
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
+    const minStr = m === 0 ? '' : `:${String(m).padStart(2, '0')}`
+    return showPeriod ? `${h12}${minStr} ${period}` : `${h12}${minStr}`
+  }
+  const { h: sh, m: sm } = parseHM(startIso)
+  const { h: eh, m: em } = parseHM(endIso)
+  const samePeriod = (sh >= 12) === (eh >= 12)
+  return samePeriod
+    ? `${fmt(sh, sm, false)} - ${fmt(eh, em, true)}`
+    : `${fmt(sh, sm, true)} - ${fmt(eh, em, true)}`
+}
+
 export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [today] = useState(new Date())
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -205,6 +227,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [activeTab, setActiveTab] = useState<'calendar' | 'schedule'>('calendar')
   const [selectedDay, setSelectedDay] = useState<{ day: number; events: any[] } | null>(null)
   const [outlookTipOpen, setOutlookTipOpen] = useState(false)
+  const [seriesTimeMap, setSeriesTimeMap] = useState<Record<string, string>>({})
   const [form, setForm] = useState({
     title: '',
     date: '',
@@ -218,6 +241,26 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   useEffect(() => {
     loadEvents()
   }, [currentDate])
+
+  useEffect(() => {
+    loadSeriesData()
+  }, [])
+
+  const loadSeriesData = async () => {
+    try {
+      const res = await fetch('/api/calendar/events?series=true')
+      const data = await res.json()
+      const map: Record<string, string> = {}
+      for (const s of (data.series || [])) {
+        if (s.subject && s.start?.dateTime && s.end?.dateTime) {
+          map[s.subject] = formatSeriesTime(s.start.dateTime, s.end.dateTime)
+        }
+      }
+      setSeriesTimeMap(map)
+    } catch {
+      // silent fail — schedule tab falls back to hardcoded times
+    }
+  }
 
   const loadEvents = async () => {
     setLoading(true)
@@ -657,7 +700,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                         {session.day}
                       </span>
                       <span className="text-xs text-luxury-gray-3 whitespace-nowrap">
-                        {session.time}
+                        {seriesTimeMap[session.title] || session.time}
                       </span>
                     </div>
                     {session.highlight && (
@@ -696,7 +739,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                       {session.day}
                     </span>
                     <span className="text-xs text-luxury-gray-3 whitespace-nowrap">
-                      {session.time}
+                      {seriesTimeMap[session.title] || session.time}
                     </span>
                   </div>
                   <p className="text-xs font-semibold text-luxury-gray-1 mb-0.5">{session.title}</p>

@@ -20,6 +20,27 @@ export async function GET(request: NextRequest) {
     const end =
       searchParams.get('end') || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
 
+    // Series masters branch — returns recurring event templates for the Schedule tab
+    if (searchParams.get('series') === 'true') {
+      const seriesUrl = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events?$select=subject,start,end,type&$top=100`
+      const seriesRes = await fetch(seriesUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Prefer: 'outlook.timezone="America/Chicago"',
+        },
+      })
+      const seriesData = await seriesRes.json()
+      if (!seriesRes.ok) {
+        console.error('Calendar GET series - error:', JSON.stringify(seriesData))
+        return NextResponse.json(
+          { error: seriesData.error?.message || 'Failed to fetch series' },
+          { status: 500 }
+        )
+      }
+      const masters = (seriesData.value || []).filter((e: any) => e.type === 'seriesMaster')
+      return NextResponse.json({ series: masters })
+    }
+
     const url = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`
     console.log('Calendar GET - fetching:', url)
 
