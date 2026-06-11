@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { X, Search, Plus, Upload, Loader2, ArrowLeft, AlertTriangle, Check } from 'lucide-react'
+import { X, Search, Plus, Upload, Loader2, ArrowLeft, AlertTriangle, Check, Mail, Copy } from 'lucide-react'
 import CheckFieldsForm, { type CheckFieldsValue } from './CheckFieldsForm'
 import CheckNotifyModal from './CheckNotifyModal'
 import NewTransactionModal from './NewTransactionModal'
@@ -57,6 +57,12 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
   const [checkImageUrl, setCheckImageUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const [emailMode, setEmailMode] = useState(false)
+  const [emailAddress, setEmailAddress] = useState<string | null>(null)
+  const [polling, setPolling] = useState(false)
+  const [pollTimedOut, setPollTimedOut] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const [fields, setFields] = useState<CheckFieldsValue>({
     payment_method: 'check',
@@ -208,6 +214,66 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
     setCheckId(data.check.id)
     return data.check.id
   }, [selectedTxn, checkId])
+
+  const startEmailMode = useCallback(async () => {
+    if (!selectedTxn) return
+    setUploadError(null)
+    try {
+      const cid = await ensureCheck()
+      if (!cid) throw new Error('Could not start email upload')
+      setEmailAddress(`txncheck+${cid}@coachingbrokeragetools.com`)
+      setEmailMode(true)
+      setPollTimedOut(false)
+      setPolling(true)
+    } catch (err: any) {
+      setUploadError(err.message || 'Could not start email upload')
+    }
+  }, [selectedTxn, ensureCheck])
+
+  useEffect(() => {
+    if (!polling || !checkId || !selectedTxn) return
+    let cancelled = false
+    const started = Date.now()
+    const POLL_MS = 4000
+    const TIMEOUT_MS = 5 * 60 * 1000
+
+    const tick = async () => {
+      if (cancelled) return
+      if (Date.now() - started > TIMEOUT_MS) {
+        setPolling(false)
+        setPollTimedOut(true)
+        return
+      }
+      try {
+        const res = await fetch(`/api/admin/transactions/${selectedTxn.id}`)
+        const data = await res.json()
+        const found = (data.checks || []).find((c: any) => c.id === checkId)
+        if (found && found.check_image_url) {
+          setCheckImageUrl(found.check_image_url)
+          setFields(prev => ({
+            ...prev,
+            check_amount: found.check_amount ?? prev.check_amount,
+            check_from: found.check_from || prev.check_from,
+            check_number: found.check_number || prev.check_number,
+            check_date: found.check_date || prev.check_date,
+            payment_method: found.payment_method || prev.payment_method,
+            received_date: found.received_date || prev.received_date,
+            deposited_date: found.deposited_date || prev.deposited_date,
+            cleared_date: found.cleared_date || prev.cleared_date,
+            status: found.status || prev.status,
+            notes: found.notes || prev.notes,
+            check_image_url: found.check_image_url,
+          } as CheckFieldsValue))
+          setPolling(false)
+          setStep('confirm')
+        }
+      } catch { /* keep polling */ }
+    }
+
+    const interval = setInterval(tick, POLL_MS)
+    tick()
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [polling, checkId, selectedTxn])
 
   const saveCheck = useCallback(async (): Promise<boolean> => {
     if (!selectedTxn) return false
@@ -399,28 +465,79 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
               <div className="text-xs text-luxury-gray-3 bg-luxury-gray-5/40 rounded-lg px-3 py-2 mb-3">
                 {selectedTxn.property_address || selectedTxn.client_name}
               </div>
-              <label
-                className="block border border-dashed border-luxury-gray-4 rounded-lg px-5 py-8 text-center cursor-pointer hover:bg-luxury-gray-5/30"
-              >
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
-                />
-                {uploading ? (
-                  <div className="flex items-center justify-center gap-2 text-sm text-luxury-gray-2">
-                    <Loader2 size={18} className="animate-spin" /> Uploading and reading check...
+
+              {!emailMode ? (
+                <>
+                  <label
+                    className="block border border-dashed border-luxury-gray-4 rounded-lg px-5 py-8 text-center cursor-pointer hover:bg-luxury-gray-5/30"
+                  >
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
+                    />
+                    {uploading ? (
+                      <div className="flex items-center justify-center gap-2 text-sm text-luxury-gray-2">
+                        <Loader2 size={18} className="animate-spin" /> Uploading and reading check...
+                      </div>
+                    ) : (
+                      <>
+                        <Upload size={24} className="mx-auto text-luxury-gray-3" />
+                        <div className="text-sm text-luxury-gray-2 mt-2">Drop check photo or PDF here, or click to browse</div>
+                        <div className="text-xs text-luxury-gray-3 mt-1">Images or PDF, up to 10MB. AI pre-fills the next step.</div>
+                      </>
+                    )}
+                  </label>
+                  {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
+
+                  <div className="flex items-center gap-2 my-3 text-xs text-luxury-gray-3">
+                    <div className="flex-1 border-t border-luxury-gray-5" />
+                    <span>or</span>
+                    <div className="flex-1 border-t border-luxury-gray-5" />
                   </div>
-                ) : (
-                  <>
-                    <Upload size={24} className="mx-auto text-luxury-gray-3" />
-                    <div className="text-sm text-luxury-gray-2 mt-2">Drop check photo or PDF here, or click to browse</div>
-                    <div className="text-xs text-luxury-gray-3 mt-1">Images or PDF, up to 10MB. AI pre-fills the next step.</div>
-                  </>
-                )}
-              </label>
-              {uploadError && <div className="text-xs text-red-600 mt-2">{uploadError}</div>}
+
+                  <button
+                    type="button"
+                    onClick={startEmailMode}
+                    className="w-full btn btn-secondary text-sm flex items-center justify-center gap-1.5"
+                  >
+                    <Mail size={14} /> Email the check instead
+                  </button>
+                </>
+              ) : (
+                <div className="border border-luxury-gray-5 rounded-lg p-4">
+                  <div className="text-sm text-luxury-gray-1 font-medium mb-1">Email the check to this address</div>
+                  <div className="text-xs text-luxury-gray-3 mb-3">We will watch for it and fill in the details automatically.</div>
+                  <div className="flex items-center gap-2 bg-luxury-gray-5/40 rounded-lg px-3 py-2 mb-3">
+                    <span className="text-xs text-luxury-gray-1 break-all flex-1">{emailAddress}</span>
+                    <button
+                      type="button"
+                      onClick={() => { if (emailAddress) { navigator.clipboard.writeText(emailAddress); setCopied(true); setTimeout(() => setCopied(false), 1500) } }}
+                      className="text-xs text-luxury-accent flex items-center gap-1 flex-shrink-0"
+                    >
+                      <Copy size={12} /> {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  {polling && (
+                    <div className="flex items-center gap-2 text-xs text-luxury-gray-2">
+                      <Loader2 size={14} className="animate-spin" /> Waiting for the emailed check to arrive...
+                    </div>
+                  )}
+                  {pollTimedOut && (
+                    <div className="text-xs text-luxury-gray-3">
+                      Still waiting. The email may take a moment, or you can upload the file directly.
+                      <button
+                        type="button"
+                        onClick={() => { setEmailMode(false); setPollTimedOut(false) }}
+                        className="text-luxury-accent ml-1"
+                      >
+                        Switch to file upload
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center justify-between mt-5">
                 <button type="button" onClick={() => setStep('transaction')} className="btn btn-secondary text-sm flex items-center gap-1">
