@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, X, ExternalLink, Image, Loader2 } from 'lucide-react'
+import { Search, X, ExternalLink, Image, Loader2, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
+import AddCheckModal from '@/components/transactions/AddCheckModal'
 
 interface AgentRow {
   agent_id: string
@@ -67,7 +68,9 @@ const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
 
 export default function ChecksPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
+
+  const [showAddCheck, setShowAddCheck] = useState(false)
 
   const [checks, setChecks] = useState<CheckRow[]>([])
   const [total, setTotal] = useState(0)
@@ -133,7 +136,18 @@ export default function ChecksPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="page-title">CHECKS</h1>
-          <span className="text-xs text-luxury-gray-3">{total} result{total !== 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-luxury-gray-3">{total} result{total !== 1 ? 's' : ''}</span>
+            {hasPermission('can_manage_checks') && (
+              <button
+                type="button"
+                onClick={() => setShowAddCheck(true)}
+                className="btn btn-primary text-sm flex items-center gap-1.5"
+              >
+                <Plus size={14} /> Add Check
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -260,6 +274,13 @@ export default function ChecksPage() {
         </div>
 
       </div>
+
+      {showAddCheck && (
+        <AddCheckModal
+          onClose={() => setShowAddCheck(false)}
+          onSaved={() => { setShowAddCheck(false); load() }}
+        />
+      )}
     </div>
   )
 }

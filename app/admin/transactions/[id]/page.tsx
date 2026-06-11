@@ -4539,18 +4539,14 @@ export default function AdminTransactionDetailPage() {
                               </div>
                               <div>
                                 <label className="field-label">Funds Status</label>
-                                <select
-                                  className="select-luxury text-xs"
-                                  value={checkEdit.status || 'received'}
-                                  onChange={e => {
-                                    updateCheckField(check.id, 'status', e.target.value)
-                                    updateCheck(check.id, { status: e.target.value })
-                                  }}
-                                >
-                                  <option value="received">Received</option>
-                                  <option value="deposited">Deposited</option>
-                                  <option value="cleared">Cleared</option>
-                                </select>
+                                <div className="input-luxury text-xs flex items-center" title="Set automatically from the dates above">
+                                  <span className={`font-medium capitalize ${
+                                    check.status === 'cleared' ? 'text-green-600' :
+                                    check.status === 'deposited' ? 'text-blue-600' : 'text-amber-600'
+                                  }`}>
+                                    {check.status || 'received'}
+                                  </span>
+                                </div>
                               </div>
                               <div>
                                 <label className="field-label">Compliance Status</label>
@@ -4579,12 +4575,12 @@ export default function AdminTransactionDetailPage() {
                               </div>
                             </div>
 
-                            {/* CRC Transferred toggle */}
+                            {/* Payment Processed toggle */}
                             <div className="flex items-center justify-between inner-card mb-3">
                               <div>
-                                <p className="text-xs font-semibold text-luxury-gray-1">CRC Transferred</p>
+                                <p className="text-xs font-semibold text-luxury-gray-1">Payment Processed</p>
                                 <p className="text-xs text-luxury-gray-3">
-                                  Brokerage portion moved to CRC account
+                                  Moves to Recently Paid until marked paid
                                 </p>
                               </div>
                               <button
