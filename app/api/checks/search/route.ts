@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
           status,
           submitted_by,
           transaction_contacts ( id, contact_type, name, email, company ),
-          transaction_internal_agents ( id, agent_id, agent_role,
+          transaction_internal_agents ( id, agent_id, agent_role, payment_status,
             users!transaction_internal_agents_agent_id_fkey (
               id, first_name, last_name, preferred_first_name, preferred_last_name
             )
@@ -151,6 +151,12 @@ export async function GET(request: NextRequest) {
         company: c.company,
       }))
 
+      const tiaRows = txn?.transaction_internal_agents || []
+      const paidTotal = tiaRows.length
+      const paidCount = tiaRows.filter((a: any) => a.payment_status === 'paid').length
+      const selfTia = tiaRows.find((a: any) => a.agent_id === auth.user.id)
+      const paidSelf = selfTia ? selfTia.payment_status === 'paid' : false
+
       return {
         id: r.id,
         transaction_id: r.transaction_id,
@@ -169,6 +175,9 @@ export async function GET(request: NextRequest) {
         payment_method: r.payment_method,
         agents_paid: r.agents_paid,
         crc_transferred: r.crc_transferred,
+        paid_self: paidSelf,
+        paid_count: paidCount,
+        paid_total: paidTotal,
         compliance_complete_date: r.compliance_complete_date,
         notes: r.notes,
         agents,

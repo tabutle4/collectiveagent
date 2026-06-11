@@ -38,6 +38,9 @@ interface CheckRow {
   payment_method: string | null
   agents_paid: boolean
   crc_transferred: boolean
+  paid_self: boolean
+  paid_count: number
+  paid_total: number
   compliance_complete_date: string | null
   notes: string | null
   agents: AgentRow[]
@@ -64,13 +67,20 @@ function statusBadge(status: string) {
   )
 }
 
-function paidBadge(agentsPaid: boolean, crcTransferred: boolean) {
+function paidBadge(c: CheckRow, isAdmin: boolean) {
+  if (isAdmin) {
+    const allPaid = c.paid_total > 0 && c.paid_count === c.paid_total
+    const cls = allPaid ? 'text-green-700 bg-green-50' : 'text-luxury-gray-3 bg-luxury-gray-5/50'
+    return (
+      <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{c.paid_count}/{c.paid_total} paid</span>
+    )
+  }
   let label = 'No'
   let cls = 'text-luxury-gray-3 bg-luxury-gray-5/50'
-  if (agentsPaid) {
+  if (c.paid_self) {
     label = 'Yes'
     cls = 'text-green-700 bg-green-50'
-  } else if (crcTransferred) {
+  } else if (c.crc_transferred) {
     label = 'Pending'
     cls = 'text-amber-700 bg-amber-50'
   }
@@ -329,7 +339,7 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         </td>
       )}
       <td className="py-2 px-2">{statusBadge(c.status)}</td>
-      <td className="py-2 px-2">{paidBadge(c.agents_paid, c.crc_transferred)}</td>
+      <td className="py-2 px-2">{paidBadge(c, isAdmin)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.received_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.cleared_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
@@ -383,7 +393,7 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
 
       <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         {statusBadge(c.status)}
-        {paidBadge(c.agents_paid, c.crc_transferred)}
+        {paidBadge(c, isAdmin)}
         {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
         {c.payment_method && <span className="text-xs text-luxury-gray-3 capitalize">{c.payment_method}</span>}
       </div>
