@@ -64,6 +64,21 @@ function statusBadge(status: string) {
   )
 }
 
+function paidBadge(agentsPaid: boolean, crcTransferred: boolean) {
+  let label = 'No'
+  let cls = 'text-luxury-gray-3 bg-luxury-gray-5/50'
+  if (agentsPaid) {
+    label = 'Yes'
+    cls = 'text-green-700 bg-green-50'
+  } else if (crcTransferred) {
+    label = 'Pending'
+    cls = 'text-amber-700 bg-amber-50'
+  }
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{label}</span>
+  )
+}
+
 const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
 
 export default function ChecksPage() {
@@ -254,6 +269,7 @@ export default function ChecksPage() {
                         <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">CRC</th>
                       )}
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Status</th>
+                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Paid</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Received</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Cleared</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Agent(s)</th>
@@ -313,6 +329,7 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         </td>
       )}
       <td className="py-2 px-2">{statusBadge(c.status)}</td>
+      <td className="py-2 px-2">{paidBadge(c.agents_paid, c.crc_transferred)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.received_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.cleared_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
@@ -366,6 +383,7 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
 
       <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         {statusBadge(c.status)}
+        {paidBadge(c.agents_paid, c.crc_transferred)}
         {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
         {c.payment_method && <span className="text-xs text-luxury-gray-3 capitalize">{c.payment_method}</span>}
       </div>
