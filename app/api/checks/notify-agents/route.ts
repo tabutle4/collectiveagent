@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
         ${clearSentence}
         ${photoLink}
         ${emailSection('What Happens Next', `<p>${nextStepsText}</p>`)}
+        <p style="margin:12px 0;"><a href="https://agent.collectiverealtyco.com/admin/checks" style="color:#C5A278;">View My Checks</a></p>
         <p style="margin:12px 0;"><a href="https://visit.collectiverealtyco.com/compliance" style="color:#C5A278;">View Compliance Process</a></p>
         ${savedSignatureHtml
           ? `<div style="margin-top:24px;">${savedSignatureHtml}</div>`
