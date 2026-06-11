@@ -393,7 +393,6 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
 
       <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         {statusBadge(c.status)}
-        {paidBadge(c, isAdmin)}
         {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
         {c.payment_method && <span className="text-xs text-luxury-gray-3 capitalize">{c.payment_method}</span>}
       </div>
@@ -402,6 +401,10 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         <div className="flex items-center justify-between text-xs">
           <span className="text-luxury-gray-3">Received</span>
           <span className="text-luxury-gray-2">{fmtDate(c.received_date)}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-luxury-gray-3">Paid</span>
+          {paidBadge(c, isAdmin)}
         </div>
         {c.cleared_date && (
           <div className="flex items-center justify-between text-xs">
