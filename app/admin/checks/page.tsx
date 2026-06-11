@@ -282,10 +282,12 @@ export default function ChecksPage() {
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Paid</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Received</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Cleared</th>
-                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Agent(s)</th>
+                      {isAdmin && (
+                        <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Agent(s)</th>
+                      )}
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Contacts</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Photo</th>
-                      <th className="pb-2 px-2"></th>
+                      {isAdmin && <th className="pb-2 px-2"></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -342,9 +344,11 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
       <td className="py-2 px-2">{paidBadge(c, isAdmin)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.received_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.cleared_date)}</td>
-      <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
-        <span className="truncate block">{agentNames}</span>
-      </td>
+      {isAdmin && (
+        <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
+          <span className="truncate block">{agentNames}</span>
+        </td>
+      )}
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
         <span className="truncate block">{contactSummary}</span>
       </td>
@@ -357,13 +361,15 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
           <span className="text-luxury-gray-5">-</span>
         )}
       </td>
-      <td className="py-2 px-2">
-        {txnHref && (
-          <Link href={txnHref} className="text-luxury-accent hover:opacity-70">
-            <ExternalLink size={13} />
-          </Link>
-        )}
-      </td>
+      {isAdmin && (
+        <td className="py-2 px-2">
+          {txnHref && (
+            <Link href={txnHref} className="text-luxury-accent hover:opacity-70">
+              <ExternalLink size={13} />
+            </Link>
+          )}
+        </td>
+      )}
     </tr>
   )
 }
@@ -393,8 +399,8 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
 
       <div className="px-4 pb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         {statusBadge(c.status)}
-        {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
         {c.payment_method && <span className="text-xs text-luxury-gray-3 capitalize">{c.payment_method}</span>}
+        {c.check_number && <span className="text-xs text-luxury-gray-3">#{c.check_number}</span>}
       </div>
 
       <div className="border-t border-luxury-gray-5/40 px-4 py-2 space-y-0.5">
@@ -402,17 +408,17 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
           <span className="text-luxury-gray-3">Received</span>
           <span className="text-luxury-gray-2">{fmtDate(c.received_date)}</span>
         </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-luxury-gray-3">Paid</span>
-          {paidBadge(c, isAdmin)}
-        </div>
         {c.cleared_date && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-luxury-gray-3">Cleared</span>
             <span className="text-luxury-gray-2">{fmtDate(c.cleared_date)}</span>
           </div>
         )}
-        {agentNames && (
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-luxury-gray-3">Paid</span>
+          {paidBadge(c, isAdmin)}
+        </div>
+        {isAdmin && agentNames && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-luxury-gray-3">Agent</span>
             <span className="text-luxury-gray-2 truncate max-w-[180px]">{agentNames}</span>
@@ -435,7 +441,7 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
           )}
           {c.notes && <span className="text-xs text-luxury-gray-3 italic truncate max-w-[160px]">{c.notes}</span>}
         </div>
-        {txnHref && (
+        {isAdmin && txnHref && (
           <Link href={txnHref} className="text-luxury-accent hover:opacity-70 flex items-center gap-1 text-xs">
             <ExternalLink size={12} /> Transaction
           </Link>
