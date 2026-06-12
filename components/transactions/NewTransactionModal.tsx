@@ -9,6 +9,7 @@ interface NewTransactionModalProps {
   onClose: () => void
   canAssignAgent?: boolean
   agents?: { id: string; preferred_first_name?: string; preferred_last_name?: string; first_name?: string; last_name?: string; email?: string }[]
+  onCreated?: (transaction: any) => void
 }
 
 const STATUS_OPTIONS = [
@@ -28,6 +29,7 @@ export default function NewTransactionModal({
   onClose,
   canAssignAgent = false,
   agents = [],
+  onCreated,
 }: NewTransactionModalProps) {
   const router = useRouter()
   const [propertyAddress, setPropertyAddress] = useState('')
@@ -73,6 +75,11 @@ export default function NewTransactionModal({
       const data = await res.json()
       const newId = data.transaction?.id
       if (!newId) throw new Error('No transaction id returned')
+
+      if (onCreated) {
+        onCreated(data.transaction)
+        return
+      }
 
       router.push(canAssignAgent ? `/admin/transactions/${newId}` : `/transactions/${newId}`)
     } catch (e: any) {

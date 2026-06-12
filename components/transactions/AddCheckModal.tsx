@@ -329,6 +329,18 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
         onClose={() => setShowCreate(false)}
         canAssignAgent={true}
         agents={agents}
+        onCreated={(t) => {
+          setSelectedTxn({
+            id: t.id,
+            property_address: t.property_address ?? null,
+            client_name: t.client_name ?? null,
+            status: t.status ?? null,
+            transaction_type: t.transaction_type ?? null,
+            submitted_by: t.submitted_by ?? null,
+          })
+          setShowCreate(false)
+          setStep('upload')
+        }}
       />
     )
   }
