@@ -287,7 +287,7 @@ export default function ChecksPage() {
                       )}
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Contacts</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Photo</th>
-                      {isAdmin && <th className="pb-2 px-2"></th>}
+                      {isAdmin && <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Deal</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -432,20 +432,22 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         )}
       </div>
 
-      <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="border-t border-luxury-gray-5/40 px-4 py-2 space-y-1.5">
+        {c.notes && (
+          <p className="text-xs text-luxury-gray-3 italic">{c.notes}</p>
+        )}
+        <div className="flex items-center justify-between">
           {c.check_image_url && (
             <a href={c.check_image_url} target="_blank" rel="noopener noreferrer" className="text-xs text-luxury-accent flex items-center gap-1">
               <Image size={12} /> Photo
             </a>
           )}
-          {c.notes && <span className="text-xs text-luxury-gray-3 italic truncate max-w-[160px]">{c.notes}</span>}
+          {isAdmin && txnHref && (
+            <Link href={txnHref} className="text-luxury-accent hover:opacity-70 flex items-center gap-1 text-xs ml-auto">
+              <ExternalLink size={12} /> Deal
+            </Link>
+          )}
         </div>
-        {isAdmin && txnHref && (
-          <Link href={txnHref} className="text-luxury-accent hover:opacity-70 flex items-center gap-1 text-xs">
-            <ExternalLink size={12} /> Transaction
-          </Link>
-        )}
       </div>
     </div>
   )
