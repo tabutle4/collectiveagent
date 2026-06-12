@@ -152,15 +152,12 @@ async function computeCommissionBreakdown(args: {
     .is('end_date', null)
     .maybeSingle()
 
-  let teamLeadId: string | null = null
+  let teamLeadIds: string[] = []
   let teamSplits: any[] = []
   if (membership?.team) {
     const teamRow: any = Array.isArray(membership.team) ? membership.team[0] : membership.team
-    // Teams may have multiple active leads (co-leads). The split architecture
-    // supports only one team_lead_pct payout, so pick the oldest active lead
-    // as the primary recipient of team_lead_commission. Sort by effective_date
-    // first (oldest = original lead), then created_at as a tiebreaker.
-    // (team_leads uses start_date, not effective_date)
+    // Fetch all active co-leads. The total team_lead_pct payout is split
+    // equally among them; each gets their own TIA row.
     const { data: leads } = await supabase
       .from('team_leads')
       .select('agent_id, start_date, created_at')
@@ -168,7 +165,7 @@ async function computeCommissionBreakdown(args: {
       .is('end_date', null)
       .order('start_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
-    teamLeadId = leads?.[0]?.agent_id || null
+    teamLeadIds = (leads || []).map((l: any) => l.agent_id).filter(Boolean)
 
     const { data: splits } = await supabase
       .from('team_agreement_splits')
@@ -201,7 +198,7 @@ async function computeCommissionBreakdown(args: {
 
   // If on a team AND a matching team split exists, OVERRIDE with team splits.
   // The team split determines all three percentages (agent/TL/firm).
-  if (membership && teamSplits.length > 0 && teamLeadId) {
+  if (membership && teamSplits.length > 0 && teamLeadIds.length > 0) {
     const planType = isLease
       ? 'leases'
       : planCode.toLowerCase().includes('85') ||
@@ -215,7 +212,7 @@ async function computeCommissionBreakdown(args: {
     const bucket = getLeadSourceBucket(
       leadSource,
       referredAgentId ?? null,
-      teamLeadId
+      teamLeadIds[0] ?? null
     )
 
     const match =
@@ -292,7 +289,7 @@ async function computeCommissionBreakdown(args: {
     agentGross,
     brokerageSplit,
     teamLeadPayout,
-    teamLeadId: onTeamWithSplit ? teamLeadId : null,
+    teamLeadIds: onTeamWithSplit ? teamLeadIds : [],
     momentumPartnerId,
     momentumPartnerPct,
     momentumPartnerPayout,
@@ -631,56 +628,71 @@ async function cascadePrimarySplit(args: {
     }
   }
 
-  // Team lead row upsert
-  if (breakdown.teamLeadId && breakdown.teamLeadPayout > 0) {
-    const { data: existingTl } = await supabase
+  // Team lead rows upsert - one TIA row per active co-lead, each receiving
+  // an equal share of the total team_lead_pct payout.
+  if (breakdown.teamLeadIds.length > 0 && breakdown.teamLeadPayout > 0) {
+    const perLeadAmount = Math.round((breakdown.teamLeadPayout / breakdown.teamLeadIds.length) * 100) / 100
+    const perLeadPct = Math.round((breakdown.teamLeadPct / breakdown.teamLeadIds.length) * 100) / 100
+    for (const tlAgentId of breakdown.teamLeadIds) {
+      const { data: existingTl } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, payment_status')
+        .eq('transaction_id', transactionId)
+        .eq('agent_role', 'team_lead')
+        .eq('source_tia_id', internalAgentId)
+        .eq('agent_id', tlAgentId)
+        .maybeSingle()
+      const tlFields = await buildLinkedRowFields(
+        tlAgentId,
+        perLeadAmount,
+        perLeadPct,
+        commissionAmount
+      )
+      if (existingTl && existingTl.payment_status !== 'paid') {
+        await supabase
+          .from('transaction_internal_agents')
+          .update({ ...tlFields, side: primaryTia.side ?? null, updated_at: new Date().toISOString() })
+          .eq('id', existingTl.id)
+      } else if (!existingTl) {
+        await supabase.from('transaction_internal_agents').insert({
+          transaction_id: transactionId,
+          agent_id: tlAgentId,
+          agent_role: 'team_lead',
+          side: primaryTia.side ?? null,
+          payment_status: 'pending',
+          funding_source: 'crc',
+          source_tia_id: internalAgentId,
+          ...tlFields,
+        })
+      }
+    }
+    // Remove any stale TL rows for this primary whose agent_id is no longer
+    // an active lead (e.g. a lead was removed from the team).
+    const { data: allTlRows } = await supabase
       .from('transaction_internal_agents')
-      .select('id, payment_status')
+      .select('id, agent_id, payment_status')
       .eq('transaction_id', transactionId)
       .eq('agent_role', 'team_lead')
       .eq('source_tia_id', internalAgentId)
-      .maybeSingle()
-    const tlAmount = Math.round(breakdown.teamLeadPayout * 100) / 100
-    const tlFields = await buildLinkedRowFields(
-      breakdown.teamLeadId,
-      tlAmount,
-      breakdown.teamLeadPct,
-      commissionAmount
-    )
-    if (existingTl && existingTl.payment_status !== 'paid') {
-      await supabase
-        .from('transaction_internal_agents')
-        .update({ ...tlFields, side: primaryTia.side ?? null, updated_at: new Date().toISOString() })
-        .eq('id', existingTl.id)
-    } else if (!existingTl) {
-      await supabase.from('transaction_internal_agents').insert({
-        transaction_id: transactionId,
-        agent_id: breakdown.teamLeadId,
-        agent_role: 'team_lead',
-        side: primaryTia.side ?? null,
-        payment_status: 'pending',
-        funding_source: 'crc',
-        source_tia_id: internalAgentId,
-        ...tlFields,
-      })
+    for (const row of allTlRows || []) {
+      if (!breakdown.teamLeadIds.includes(row.agent_id) && row.payment_status !== 'paid') {
+        await supabase.from('transaction_internal_agents').delete().eq('id', row.id)
+      }
     }
   } else {
-    // Remove stale TL if not paid
-    const { data: staleTl } = await supabase
+    // No TL payout this round - remove all stale TL rows for this primary
+    const { data: allTlRows } = await supabase
       .from('transaction_internal_agents')
       .select('id, payment_status')
       .eq('transaction_id', transactionId)
       .eq('agent_role', 'team_lead')
       .eq('source_tia_id', internalAgentId)
-      .maybeSingle()
-    if (staleTl && staleTl.payment_status !== 'paid') {
-      await supabase
-        .from('transaction_internal_agents')
-        .delete()
-        .eq('id', staleTl.id)
+    for (const row of allTlRows || []) {
+      if (row.payment_status !== 'paid') {
+        await supabase.from('transaction_internal_agents').delete().eq('id', row.id)
+      }
     }
   }
-
   // Momentum partner row upsert
   if (breakdown.momentumPartnerId && breakdown.momentumPartnerPayout > 0) {
     const { data: existingMp } = await supabase
@@ -2510,72 +2522,86 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         }
       }
 
-      // Upsert team_lead row - keyed by source_tia_id so each primary gets its
-      // own dedicated TL row. On re-apply, we find the existing row by
-      // source_tia_id and update it; we never blow away TL rows from other
-      // contributing primaries.
-      let teamLeadTiaId: string | null = null
-      if (breakdown.teamLeadId && breakdown.teamLeadPayout > 0) {
-        const { data: existingTl } = await supabase
+      // Upsert team_lead rows - one per active co-lead, each receiving an equal
+      // share of the total team_lead_pct payout. Keyed by (source_tia_id, agent_id)
+      // so re-applying a split updates existing rows without touching rows from
+      // other contributing primaries.
+      const teamLeadTiaIds: string[] = []
+      if (breakdown.teamLeadIds.length > 0 && breakdown.teamLeadPayout > 0) {
+        const perLeadAmount = Math.round((breakdown.teamLeadPayout / breakdown.teamLeadIds.length) * 100) / 100
+        const perLeadPct = Math.round((breakdown.teamLeadPct / breakdown.teamLeadIds.length) * 100) / 100
+        for (const tlAgentId of breakdown.teamLeadIds) {
+          const { data: existingTl } = await supabase
+            .from('transaction_internal_agents')
+            .select('id, payment_status')
+            .eq('transaction_id', id)
+            .eq('agent_role', 'team_lead')
+            .eq('source_tia_id', internal_agent_id)
+            .eq('agent_id', tlAgentId)
+            .maybeSingle()
+
+          const tlFields = await buildLinkedRowFields(
+            tlAgentId,
+            perLeadAmount,
+            perLeadPct,
+            commAmt,
+          )
+
+          if (existingTl) {
+            teamLeadTiaIds.push(existingTl.id)
+            if (existingTl.payment_status !== 'paid') {
+              const { error: tlUpdErr } = await supabase
+                .from('transaction_internal_agents')
+                .update({ ...tlFields, side: primaryTia.side ?? null, updated_at: new Date().toISOString() })
+                .eq('id', existingTl.id)
+              if (tlUpdErr) throw tlUpdErr
+            }
+          } else {
+            const { data: newTl, error: tlInsErr } = await supabase
+              .from('transaction_internal_agents')
+              .insert({
+                transaction_id: id,
+                agent_id: tlAgentId,
+                agent_role: 'team_lead',
+                side: primaryTia.side ?? null,
+                payment_status: 'pending',
+                funding_source: 'crc',
+                source_tia_id: internal_agent_id,
+                ...tlFields,
+              })
+              .select('id')
+              .single()
+            if (tlInsErr) throw tlInsErr
+            teamLeadTiaIds.push(newTl.id)
+          }
+        }
+        // Remove stale TL rows for leads no longer active on this team
+        const { data: allTlRows } = await supabase
           .from('transaction_internal_agents')
-          .select('id, payment_status')
+          .select('id, agent_id, payment_status')
           .eq('transaction_id', id)
           .eq('agent_role', 'team_lead')
           .eq('source_tia_id', internal_agent_id)
-          .maybeSingle()
-
-        const tlAmount = Math.round(breakdown.teamLeadPayout * 100) / 100
-        const tlFields = await buildLinkedRowFields(
-          breakdown.teamLeadId,
-          tlAmount,
-          breakdown.teamLeadPct,
-          commAmt,
-        )
-
-        if (existingTl) {
-          teamLeadTiaId = existingTl.id
-          if (existingTl.payment_status !== 'paid') {
-            const { error: tlUpdErr } = await supabase
-              .from('transaction_internal_agents')
-              .update({ ...tlFields, side: primaryTia.side ?? null, updated_at: new Date().toISOString() })
-              .eq('id', existingTl.id)
-            if (tlUpdErr) throw tlUpdErr
+        for (const row of allTlRows || []) {
+          if (!breakdown.teamLeadIds.includes(row.agent_id) && row.payment_status !== 'paid') {
+            await supabase.from('transaction_internal_agents').delete().eq('id', row.id)
           }
-        } else {
-          const { data: newTl, error: tlInsErr } = await supabase
-            .from('transaction_internal_agents')
-            .insert({
-              transaction_id: id,
-              agent_id: breakdown.teamLeadId,
-              agent_role: 'team_lead',
-              side: primaryTia.side ?? null,
-              payment_status: 'pending',
-              funding_source: 'crc',
-              source_tia_id: internal_agent_id,
-              ...tlFields,
-            })
-            .select('id')
-            .single()
-          if (tlInsErr) throw tlInsErr
-          teamLeadTiaId = newTl.id
         }
       } else {
-        // No TL payout this round - if a stale TL row exists tied to this
-        // primary from a prior apply, clean it up (unless paid).
-        const { data: staleTl } = await supabase
+        // No TL payout this round - remove all stale TL rows for this primary
+        const { data: allTlRows } = await supabase
           .from('transaction_internal_agents')
           .select('id, payment_status')
           .eq('transaction_id', id)
           .eq('agent_role', 'team_lead')
           .eq('source_tia_id', internal_agent_id)
-          .maybeSingle()
-        if (staleTl && staleTl.payment_status !== 'paid') {
-          await supabase
-            .from('transaction_internal_agents')
-            .delete()
-            .eq('id', staleTl.id)
+        for (const row of allTlRows || []) {
+          if (row.payment_status !== 'paid') {
+            await supabase.from('transaction_internal_agents').delete().eq('id', row.id)
+          }
         }
       }
+
 
       // Upsert momentum_partner row - same provenance pattern
       let momentumTiaId: string | null = null
@@ -2650,7 +2676,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         success: true,
         breakdown,
         primary_tia_id: internal_agent_id,
-        team_lead_tia_id: teamLeadTiaId,
+        team_lead_tia_ids: teamLeadTiaIds,
         momentum_partner_tia_id: momentumTiaId,
       })
     }

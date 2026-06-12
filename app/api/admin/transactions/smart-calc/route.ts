@@ -58,8 +58,7 @@ export async function GET(request: NextRequest) {
         if (membership && membership.team) {
           const team = Array.isArray(membership.team) ? membership.team[0] : membership.team
 
-          // Teams may have multiple active leads (co-leads). Architecture pays
-          // ONE team_lead per primary, so pick the oldest active lead.
+          // Fetch all active co-leads. Payout is split equally among them.
           const { data: teamLeadCandidates } = await supabase
             .from('team_leads')
             .select(`
@@ -72,23 +71,24 @@ export async function GET(request: NextRequest) {
             .is('end_date', null)
             .order('start_date', { ascending: true, nullsFirst: false })
             .order('created_at', { ascending: true })
-          const teamLeadRecord = teamLeadCandidates?.[0] || null
+          const allTeamLeads = (teamLeadCandidates || []).map((r: any) => ({
+            agent_id: r.agent_id,
+            agent: Array.isArray(r.agent) ? r.agent[0] : r.agent,
+          }))
+          const primaryLead = allTeamLeads[0] || null
 
           const { data: splits } = await supabase
             .from('team_agreement_splits')
             .select('id, plan_type, lead_source, agent_pct, team_lead_pct, firm_pct')
             .eq('agreement_id', membership.id)
 
-          const teamLeadAgent = teamLeadRecord?.agent
-            ? (Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent)
-            : null
-
           teamMembership = {
             ...membership,
             team: {
               ...team,
-              team_lead_id: teamLeadRecord?.agent_id || null,
-              team_lead: teamLeadAgent,
+              team_lead_id: primaryLead?.agent_id || null,
+              team_lead: primaryLead?.agent || null,
+              all_team_leads: allTeamLeads,
             },
             splits: splits || [],
           }
@@ -222,8 +222,7 @@ export async function POST(request: NextRequest) {
     if (membershipData && membershipData.team) {
       const team = Array.isArray(membershipData.team) ? membershipData.team[0] : membershipData.team
 
-      // Teams may have multiple active leads (co-leads). Architecture pays
-      // ONE team_lead per primary, so pick the oldest active lead.
+      // Fetch all active co-leads. Payout is split equally among them.
       const { data: teamLeadCandidates } = await supabase
         .from('team_leads')
         .select(`
@@ -236,11 +235,11 @@ export async function POST(request: NextRequest) {
         .is('end_date', null)
         .order('start_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true })
-      const teamLeadRecord = teamLeadCandidates?.[0] || null
-
-      const teamLeadAgent = teamLeadRecord?.agent
-        ? (Array.isArray(teamLeadRecord.agent) ? teamLeadRecord.agent[0] : teamLeadRecord.agent)
-        : null
+      const allTeamLeads = (teamLeadCandidates || []).map((r: any) => ({
+        agent_id: r.agent_id,
+        agent: Array.isArray(r.agent) ? r.agent[0] : r.agent,
+      }))
+      const primaryLead = allTeamLeads[0] || null
 
       const { data: splits } = await supabase
         .from('team_agreement_splits')
@@ -252,8 +251,9 @@ export async function POST(request: NextRequest) {
         ...membershipData,
         team: {
           ...team,
-          team_lead_id: teamLeadRecord?.agent_id || null,
-          team_lead: teamLeadAgent,
+          team_lead_id: primaryLead?.agent_id || null,
+          team_lead: primaryLead?.agent || null,
+          all_team_leads: allTeamLeads,
         },
       }
     }
@@ -368,8 +368,11 @@ export async function POST(request: NextRequest) {
       team_lead_pct: teamLeadPct,
       team_lead_payout: teamLeadPayout,
       team_lead_id: teamMembership?.team?.team_lead_id || null,
-      team_lead_name: teamMembership?.team?.team_lead
-        ? `${teamMembership.team.team_lead.preferred_first_name || teamMembership.team.team_lead.first_name} ${teamMembership.team.team_lead.preferred_last_name || teamMembership.team.team_lead.last_name}`.trim()
+      team_lead_name: teamMembership?.team?.all_team_leads?.length
+        ? teamMembership.team.all_team_leads.map((l: any) => {
+            const a = l.agent
+            return a ? `${a.preferred_first_name || a.first_name} ${a.preferred_last_name || a.last_name}`.trim() : ''
+          }).filter(Boolean).join(', ')
         : null,
       momentum_partner_pct: momentumPartnerPct,
       momentum_partner_payout: momentumPartnerPayout,
