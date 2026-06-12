@@ -67,25 +67,11 @@ function statusBadge(status: string) {
   )
 }
 
-function paidBadge(c: CheckRow, isAdmin: boolean) {
-  if (isAdmin) {
-    const allPaid = c.paid_total > 0 && c.paid_count === c.paid_total
-    const cls = allPaid ? 'text-green-700 bg-green-50' : 'text-luxury-gray-3 bg-luxury-gray-5/50'
-    return (
-      <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{c.paid_count}/{c.paid_total} paid</span>
-    )
-  }
-  let label = 'No'
-  let cls = 'text-luxury-gray-3 bg-luxury-gray-5/50'
-  if (c.paid_self) {
-    label = 'Yes'
-    cls = 'text-green-700 bg-green-50'
-  } else if (c.crc_transferred) {
-    label = 'Pending'
-    cls = 'text-amber-700 bg-amber-50'
-  }
+function paidBadge(c: CheckRow) {
+  const allPaid = c.paid_total > 0 && c.paid_count === c.paid_total
+  const cls = allPaid ? 'text-green-700 bg-green-50' : 'text-luxury-gray-3 bg-luxury-gray-5/50'
   return (
-    <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{label}</span>
+    <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{c.paid_count}/{c.paid_total} paid</span>
   )
 }
 
@@ -341,7 +327,7 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         </td>
       )}
       <td className="py-2 px-2">{statusBadge(c.status)}</td>
-      <td className="py-2 px-2">{paidBadge(c, isAdmin)}</td>
+      <td className="py-2 px-2">{paidBadge(c)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.received_date)}</td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(c.cleared_date)}</td>
       {isAdmin && (
@@ -416,7 +402,7 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
         )}
         <div className="flex items-center justify-between text-xs">
           <span className="text-luxury-gray-3">Paid</span>
-          {paidBadge(c, isAdmin)}
+          {paidBadge(c)}
         </div>
         {isAdmin && agentNames && (
           <div className="flex items-center justify-between text-xs">

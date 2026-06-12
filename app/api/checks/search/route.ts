@@ -179,7 +179,10 @@ export async function GET(request: NextRequest) {
         company: c.company,
       }))
 
-      const tiaRows = txn?.transaction_internal_agents || []
+      const allTiaRows = txn?.transaction_internal_agents || []
+      const tiaRows = isAdmin
+        ? allTiaRows
+        : allTiaRows.filter((a: any) => a.agent_id === auth.user.id)
       const paidTotal = tiaRows.length
       const paidCount = tiaRows.filter((a: any) => a.payment_status === 'paid').length
       const selfTia = tiaRows.find((a: any) => a.agent_id === auth.user.id)
