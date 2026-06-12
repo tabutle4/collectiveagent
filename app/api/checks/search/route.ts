@@ -86,6 +86,34 @@ export async function GET(request: NextRequest) {
 
     let results = rows || []
 
+    // Self-heal stale check status. The DB trigger derive_check_status only
+    // runs on INSERT/UPDATE, so a check saved with a future cleared_date stays
+    // 'deposited' even after that date passes. Recompute from dates here so the
+    // page is always correct, and write back any corrections so the stored
+    // value (read by reports etc.) stays accurate too.
+    const today = new Date().toISOString().split('T')[0]
+    const deriveStatus = (depositedDate: string | null, clearedDate: string | null): string => {
+      if (clearedDate && clearedDate <= today) return 'cleared'
+      if (depositedDate) return 'deposited'
+      return 'received'
+    }
+    const staleIds: string[] = []
+    for (const r of results) {
+      const derived = deriveStatus((r as any).deposited_date, (r as any).cleared_date)
+      if (derived !== (r as any).status) {
+        ;(r as any).status = derived
+        if (derived === 'cleared') staleIds.push((r as any).id)
+      }
+    }
+    if (staleIds.length > 0) {
+      // Best-effort write-back; never block the response on it.
+      supabaseAdmin
+        .from('checks_received')
+        .update({ status: 'cleared' })
+        .in('id', staleIds)
+        .then(() => {}, () => {})
+    }
+
     // Agent filter: keep only checks tied to transactions where agent is an internal agent
     if (!isAdmin) {
       results = results.filter(r => {
