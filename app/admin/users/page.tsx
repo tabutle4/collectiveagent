@@ -56,6 +56,18 @@ export default function AdminUsersPage() {
     return (user.role || 'agent').toLowerCase()
   }
 
+  const getPlanLabel = (user: any): string => {
+    const raw = (user.commission_plan || '').toLowerCase().replace(/-/g, '_')
+    if (!raw) return ''
+    if (raw.includes('new') || raw === '70_30_new') return 'New Agent 70/30'
+    if (raw.includes('no_cap') || raw === '85_15_no_cap') return 'No Cap 85/15'
+    if (raw.includes('cap') || raw === '70_30_cap') return 'Cap 70/30'
+    if (raw.includes('lease') || raw === '85_15_lease') return 'Apt & Lease'
+    if (raw.includes('broker')) return 'Broker 100'
+    if (raw.startsWith('custom')) return user.commission_plan || 'Custom'
+    return user.commission_plan || ''
+  }
+
   const getAdditionalRoles = (user: any): string => {
     if (!user.additional_roles) return ''
     return user.additional_roles
@@ -133,6 +145,10 @@ export default function AdminUsersPage() {
         case 'role':
           aValue = getDisplayRole(a).toLowerCase()
           bValue = getDisplayRole(b).toLowerCase()
+          break
+        case 'commission_plan':
+          aValue = getPlanLabel(a).toLowerCase()
+          bValue = getPlanLabel(b).toLowerCase()
           break
         case 'team_name':
           aValue = (a.team_name || '').toLowerCase()
@@ -223,6 +239,7 @@ export default function AdminUsersPage() {
       'Email': user.email || '',
       'Office': user.office || '',
       'Role': getDisplayRole(user),
+      'Commission Plan': getPlanLabel(user),
       'Additional Roles': getAdditionalRoles(user) || '',
       'Team': user.team_name || '',
       'Phone': user.personal_phone || '',
@@ -243,6 +260,7 @@ export default function AdminUsersPage() {
       { wch: 30 }, // Email
       { wch: 12 }, // Office
       { wch: 12 }, // Role
+      { wch: 18 }, // Commission Plan
       { wch: 15 }, // Additional Roles
       { wch: 20 }, // Team
       { wch: 15 }, // Phone
@@ -273,6 +291,7 @@ export default function AdminUsersPage() {
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.email}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.office || ''}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getDisplayRole(user)}</td>
+        <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getPlanLabel(user)}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${getAdditionalRoles(user) || ''}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.team_name || ''}</td>
         <td style="padding:6px 5px;border-bottom:1px solid #eee;font-size:10px;">${user.personal_phone || ''}</td>
@@ -302,7 +321,7 @@ export default function AdminUsersPage() {
       @media print{body{padding:15px;} @page{size:landscape;margin:0.4in;}}</style></head>
       <body><h1>Collective Realty Co. Agent Roster</h1>
       <p class="subtitle">${filteredAndSortedUsers.length} agents | ${filterDesc} | ${new Date().toLocaleDateString()}</p>
-      <table><thead><tr><th></th><th>Agent Name</th><th>Email</th><th>Office</th><th>Role</th><th>Add'l Roles</th><th>Team</th><th>Phone</th><th>Birthday</th><th>Social</th><th>Division</th></tr></thead>
+      <table><thead><tr><th></th><th>Agent Name</th><th>Email</th><th>Office</th><th>Role</th><th>Plan</th><th>Add'l Roles</th><th>Team</th><th>Phone</th><th>Birthday</th><th>Social</th><th>Division</th></tr></thead>
       <tbody>${tableRows}</tbody></table></body></html>`)
     printWindow.document.close()
     printWindow.onload = () => printWindow.print()
@@ -411,6 +430,7 @@ export default function AdminUsersPage() {
                     <SortHeader field="email">Email</SortHeader>
                     <SortHeader field="office">Office</SortHeader>
                     <SortHeader field="role">Role</SortHeader>
+                    <SortHeader field="commission_plan">Plan</SortHeader>
                     <SortHeader field="team_name">Team</SortHeader>
                     <SortHeader field="status">Status</SortHeader>
                     <SortHeader field="created_at">Created</SortHeader>
@@ -454,6 +474,9 @@ export default function AdminUsersPage() {
                         <span className="text-xs text-luxury-gray-2 capitalize">
                           {getDisplayRole(user)}
                         </span>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-luxury-gray-2">
+                        {getPlanLabel(user)}
                       </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2">
                         {user.team_name || ''}
@@ -511,6 +534,7 @@ export default function AdminUsersPage() {
                         <p>{user.email}</p>
                         <p className="capitalize">
                           {getDisplayRole(user)}
+                          {getPlanLabel(user) ? ` · ${getPlanLabel(user)}` : ''}
                           {user.office ? ` · ${user.office}` : ''}
                           {user.team_name ? ` · ${user.team_name}` : ''}
                         </p>

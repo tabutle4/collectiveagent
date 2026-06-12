@@ -1191,6 +1191,12 @@ export default function ProfilePage({
                         </button>
                       )}
                     </div>
+                    {teamData?.team_lead && !user.is_team_lead && (
+                      <p className="text-xs text-luxury-gray-3 -mt-1 pb-1">
+                        Lead: {teamData.team_lead.preferred_first_name || teamData.team_lead.first_name}{' '}
+                        {teamData.team_lead.preferred_last_name || teamData.team_lead.last_name}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-luxury-gray-3 mb-1 block">Division(s)</label>
@@ -1521,6 +1527,12 @@ export default function ProfilePage({
                         </button>
                       )}
                     </div>
+                    {teamData?.team_lead && !user.is_team_lead && (
+                      <p className="text-xs text-luxury-gray-3 mt-1">
+                        Lead: {teamData.team_lead.preferred_first_name || teamData.team_lead.first_name}{' '}
+                        {teamData.team_lead.preferred_last_name || teamData.team_lead.last_name}
+                      </p>
+                    )}
                   </div>
                   <div className="inner-card">
                     <p className="text-xs text-luxury-gray-3 mb-1">Division(s)</p>
