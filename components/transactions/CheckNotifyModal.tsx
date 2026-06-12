@@ -64,6 +64,7 @@ function buildPreviewHtml(opts: {
     ${clearSentence}
     ${photoLink}
     ${emailSection('What Happens Next', `<p>${nextStepsBody}</p>`)}
+    <p style="margin:12px 0;"><a href="https://agent.collectiverealtyco.com/admin/checks" style="color:#C5A278;">View My Checks</a></p>
     <p style="margin:12px 0;"><a href="https://visit.collectiverealtyco.com/compliance" style="color:#C5A278;">View Compliance Process</a></p>
     ${savedSigHtml
       ? `<div style="margin-top:24px;">${savedSigHtml}</div>`

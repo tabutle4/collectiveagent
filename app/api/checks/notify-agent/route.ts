@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         'What Happens Next',
         `<p>Commission payments are processed within 10-14 business days from receiving completed compliance and check. This often happens faster, but the guarantee per your agent agreement is 30 days.</p>`
       )}
+      ${emailButton('View My Checks', 'https://agent.collectiverealtyco.com/admin/checks')}
       ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}
       <p style="font-size:13px;color:#888;">Questions? Reply to this email or contact transactions@collectiverealtyco.com</p>`,
       { title: 'Check Received', subtitle: address, preheader: `Your check for ${address} is being processed` }
