@@ -102,6 +102,28 @@ async function uploadToOneDrive(
   }
 
   const driveItem = await uploadRes.json()
+
+  // Create an "anyone with the link" sharing link so agents and contacts
+  // can view check images without needing an M365 account or explicit access.
+  // Falls back to webUrl if the tenant has anonymous sharing disabled.
+  const shareRes = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(oneDriveUser)}/drive/items/${driveItem.id}/createLink`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'view', scope: 'anonymous' }),
+    }
+  )
+
+  if (shareRes.ok) {
+    const shareData = await shareRes.json()
+    const shareUrl = shareData.link?.webUrl
+    if (shareUrl) return shareUrl
+  }
+
   return driveItem.webUrl
 }
 
