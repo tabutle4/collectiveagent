@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const from   = searchParams.get('from') || ''
     const to     = searchParams.get('to') || ''
     const dateField = searchParams.get('date_field') || 'received_date'
+    const paidFilter = searchParams.get('paid') || ''
 
     const userRole = (auth.user.role || '').toLowerCase()
     const isAdmin = ADMIN_ROLES.includes(userRole)
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .order('received_date', { ascending: false })
-      .limit(200)
+      .limit(5000)
 
     // Agent filter: only checks where they are an internal agent on the transaction
     if (!isAdmin) {
@@ -216,7 +217,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ checks: shaped, total: shaped.length })
+    let finalShaped = shaped
+    if (paidFilter === 'paid') {
+      finalShaped = shaped.filter(c => c.paid_total > 0 && c.paid_count === c.paid_total)
+    } else if (paidFilter === 'pending') {
+      finalShaped = shaped.filter(c => c.crc_transferred && c.paid_count < c.paid_total)
+    } else if (paidFilter === 'unpaid') {
+      finalShaped = shaped.filter(c => c.paid_count === 0)
+    }
+
+    return NextResponse.json({ checks: finalShaped, total: finalShaped.length })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

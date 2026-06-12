@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, X, ExternalLink, Image, Loader2, Plus } from 'lucide-react'
+import { Search, X, ExternalLink, Image, Loader2, Plus, Download } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 import AddCheckModal from '@/components/transactions/AddCheckModal'
 
@@ -91,9 +91,12 @@ export default function ChecksPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [methodFilter, setMethodFilter] = useState('')
+  const [paidFilter, setPaidFilter] = useState('')
   const [dateField, setDateField] = useState('received_date')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [sortKey, setSortKey] = useState('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const isAdmin = user ? ADMIN_ROLES.includes((user.role || '').toLowerCase()) : false
 
@@ -104,6 +107,7 @@ export default function ChecksPage() {
       if (search)       params.set('search', search)
       if (statusFilter) params.set('status', statusFilter)
       if (methodFilter) params.set('method', methodFilter)
+      if (paidFilter)   params.set('paid', paidFilter)
       if (dateField)    params.set('date_field', dateField)
       if (fromDate)     params.set('from', fromDate)
       if (toDate)       params.set('to', toDate)
@@ -121,7 +125,7 @@ export default function ChecksPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, methodFilter, dateField, fromDate, toDate, router])
+  }, [search, statusFilter, methodFilter, paidFilter, dateField, fromDate, toDate, router])
 
   // Debounce
   useEffect(() => {
@@ -133,12 +137,73 @@ export default function ChecksPage() {
     setSearch('')
     setStatusFilter('')
     setMethodFilter('')
+    setPaidFilter('')
     setDateField('received_date')
     setFromDate('')
     setToDate('')
   }
 
-  const hasFilters = search || statusFilter || methodFilter || fromDate || toDate
+  const hasFilters = search || statusFilter || methodFilter || paidFilter || fromDate || toDate
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedChecks = (() => {
+    if (!sortKey) return checks
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...checks].sort((a: any, b: any) => {
+      let av = a[sortKey]
+      let bv = b[sortKey]
+      if (sortKey === 'paid') { av = a.paid_count; bv = b.paid_count }
+      if (av == null) return 1
+      if (bv == null) return -1
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+      return String(av).localeCompare(String(bv)) * dir
+    })
+  })()
+
+  const exportCsv = () => {
+    // Exports exactly what is currently loaded and visible. The API already
+    // scopes results to the viewer (agents only receive their own checks), so
+    // an agent export can only ever contain their own data.
+    const cols = [
+      ['property_address', 'Property'],
+      ['check_from', 'Payer'],
+      ['check_number', 'Check #'],
+      ['check_amount', 'Amount'],
+      ['status', 'Status'],
+      ['received_date', 'Received'],
+      ['cleared_date', 'Cleared'],
+    ]
+    const headerRow = cols.map(c => c[1])
+    if (isAdmin) headerRow.push('Brokerage', 'Paid')
+    const escape = (v: any) => {
+      const str = v == null ? '' : String(v)
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+    }
+    const lines = [headerRow.join(',')]
+    for (const c of sortedChecks as any[]) {
+      const row = cols.map(col => escape(c[col[0]]))
+      if (isAdmin) {
+        row.push(escape(c.brokerage_amount))
+        row.push(escape(`${c.paid_count}/${c.paid_total} paid`))
+      }
+      lines.push(row.join(','))
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `checks-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="min-h-screen bg-luxury-cream">
@@ -158,6 +223,14 @@ export default function ChecksPage() {
                 <Plus size={14} /> Add Check
               </button>
             )}
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={checks.length === 0}
+              className="btn btn-secondary text-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Download size={14} /> Export
+            </button>
           </div>
         </div>
 
@@ -200,6 +273,17 @@ export default function ChecksPage() {
                 <option value="zelle">Zelle</option>
                 <option value="payload">Payload</option>
                 <option value="ecommission">eCommission</option>
+              </select>
+            </div>
+
+            {/* Paid */}
+            <div className="w-32">
+              <label className="field-label">Paid</label>
+              <select value={paidFilter} onChange={e => setPaidFilter(e.target.value)} className="select-luxury w-full">
+                <option value="">All</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="unpaid">Unpaid</option>
               </select>
             </div>
 
@@ -247,7 +331,7 @@ export default function ChecksPage() {
             <>
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
-                {checks.map(c => (
+                {sortedChecks.map(c => (
                   <MobileCard key={c.id} check={c} isAdmin={isAdmin} />
                 ))}
               </div>
@@ -260,14 +344,14 @@ export default function ChecksPage() {
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Property</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Payer</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Check #</th>
-                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">Amount</th>
+                      <th onClick={() => toggleSort('check_amount')} className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right cursor-pointer select-none hover:text-luxury-gray-1">Amount</th>
                       {isAdmin && (
                         <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-right">CRC</th>
                       )}
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Status</th>
-                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Paid</th>
-                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Received</th>
-                      <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Cleared</th>
+                      <th onClick={() => toggleSort('paid')} className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1">Paid</th>
+                      <th onClick={() => toggleSort('received_date')} className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1">Received</th>
+                      <th onClick={() => toggleSort('cleared_date')} className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1">Cleared</th>
                       {isAdmin && (
                         <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Agent(s)</th>
                       )}
@@ -277,7 +361,7 @@ export default function ChecksPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {checks.map(c => (
+                    {sortedChecks.map(c => (
                       <DesktopRow key={c.id} check={c} isAdmin={isAdmin} />
                     ))}
                   </tbody>
