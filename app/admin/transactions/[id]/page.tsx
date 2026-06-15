@@ -2506,6 +2506,12 @@ export default function AdminTransactionDetailPage() {
         ...prev,
         [checkId]: { ...prev[checkId], ...updates },
       }))
+
+      // When check_amount is saved the route auto-populates base commission
+      // and recomputes office_gross. Reload so the commission tab picks it up.
+      if ('check_amount' in updates && (parseFloat(updates.check_amount) || 0) > 0) {
+        loadData()
+      }
     } finally {
       setSaving(false)
     }

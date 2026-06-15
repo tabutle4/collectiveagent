@@ -1605,6 +1605,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
         .eq('id', check_id)
       if (error) throw error
+
+      // When check_amount is saved, auto-populate base commission on the
+      // correct side if not already set, then recompute gross/office_net.
+      if ('check_amount' in cleanUpdates) {
+        const amount = parseFloat(cleanUpdates.check_amount) || 0
+        if (amount > 0) {
+          const { data: txn } = await supabase
+            .from('transactions')
+            .select('transaction_type, listing_base_commission, buying_base_commission')
+            .eq('id', id)
+            .single()
+
+          if (txn) {
+            const txnType = (txn.transaction_type || '').toLowerCase()
+            let impliedSide: 'listing' | 'buying' | null = null
+            if (txnType.includes('landlord') || txnType.includes('seller')) impliedSide = 'listing'
+            else if (txnType.includes('tenant') || txnType.includes('buyer')) impliedSide = 'buying'
+
+            if (impliedSide) {
+              const baseField = impliedSide === 'listing' ? 'listing_base_commission' : 'buying_base_commission'
+              const sideField = impliedSide === 'listing' ? 'listing_side_commission' : 'buying_side_commission'
+              const existingBase = parseFloat((txn as any)[baseField] ?? 0) || 0
+              if (existingBase === 0) {
+                await supabase
+                  .from('transactions')
+                  .update({
+                    [baseField]: amount,
+                    [sideField]: amount,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', id)
+                await recomputeGrossAndOffice(id)
+              }
+            }
+          }
+        }
+      }
+
       return NextResponse.json({ success: true })
     }
 
