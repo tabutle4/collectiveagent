@@ -1996,6 +1996,26 @@ export default function AdminTransactionDetailPage() {
     error: null,
   })
 
+  const [additionalCompModal, setAdditionalCompModal] = useState<{
+    open: boolean
+    forAgent: any | null
+    type: 'btsa' | 'additional_commission'
+    amount: string
+    fees: string
+    debt: string
+    saving: boolean
+    error: string | null
+  }>({
+    open: false,
+    forAgent: null,
+    type: 'btsa',
+    amount: '',
+    fees: '',
+    debt: '',
+    saving: false,
+    error: null,
+  })
+
   // Mark Paid modal state
   // Debt/credit selection lives on the per-card billing panel (billingApplied
   // state). The modal only collects payment metadata.
@@ -2193,7 +2213,11 @@ export default function AdminTransactionDetailPage() {
       // Linked / carve-out rows (referral_agent, team_lead, momentum_partner)
       // are entered manually. Auto-applying smart-calc results to them would
       // overwrite their hand-entered basis and split. (Phase 2.7 fix.)
+      // Also skip rows where uses_canonical_math is explicitly false -- these
+      // are special rows (e.g. additional comp payouts) where agent_net is set
+      // directly and must not be overwritten by the formula cascade.
       if (!['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role)) return
+      if (a.uses_canonical_math === false) return
 
       const hasValues = parseFloat(a.agent_gross || 0) > 0
       const alreadyApplied = autoCalcApplied.has(a.id)
@@ -2570,6 +2594,72 @@ export default function AdminTransactionDetailPage() {
       }))
     } catch {
       alert('Failed to delete check')
+    }
+  }
+
+  // ── Additional Comp modal handlers ─────────────────────────────────────────
+  const openAdditionalCompModal = (agent: any) => {
+    setAdditionalCompModal({
+      open: true,
+      forAgent: agent,
+      type: 'btsa',
+      amount: '',
+      fees: '',
+      debt: '',
+      saving: false,
+      error: null,
+    })
+  }
+
+  const closeAdditionalCompModal = () => {
+    setAdditionalCompModal(prev => ({ ...prev, open: false }))
+  }
+
+  const submitAdditionalComp = async () => {
+    const a = additionalCompModal.forAgent
+    const amount = parseFloat(additionalCompModal.amount)
+    if (!amount || amount <= 0) {
+      setAdditionalCompModal(prev => ({ ...prev, error: 'Enter an amount.' }))
+      return
+    }
+    const fees = parseFloat(additionalCompModal.fees || '0') || 0
+    const debt = parseFloat(additionalCompModal.debt || '0') || 0
+    const splitPct = parseFloat(a.split_percentage || 85)
+    const type = additionalCompModal.type
+
+    // Gross to agent: BTSA = full amount, Additional Commission = amount x split%
+    const agentGross = type === 'btsa' ? amount : Math.round(amount * splitPct / 100 * 100) / 100
+    // amount_1099 = agent_gross - fees (no gross on co_agent row so agent_gross is the base)
+    const amount1099 = Math.round((agentGross - fees) * 100) / 100
+    // agent_net = amount_1099 - debt
+    const agentNet = Math.round((amount1099 - debt) * 100) / 100
+
+    setAdditionalCompModal(prev => ({ ...prev, saving: true, error: null }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_additional_comp',
+          primary_tia_id: a.id,
+          comp_type: type,
+          amount,
+          amount_1099: amount1099,
+          agent_net: agentNet,
+          side: a.side || null,
+          commission_plan: a.commission_plan || '',
+          funding_source: a.funding_source || 'crc',
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setAdditionalCompModal(prev => ({ ...prev, saving: false, error: d.error || 'Failed to save.' }))
+        return
+      }
+      setAdditionalCompModal({ open: false, forAgent: null, type: 'btsa', amount: '', fees: '', debt: '', saving: false, error: null })
+      await loadData()
+    } catch (e: any) {
+      setAdditionalCompModal(prev => ({ ...prev, saving: false, error: e.message || 'Failed to save.' }))
     }
   }
 
@@ -4121,8 +4211,10 @@ export default function AdminTransactionDetailPage() {
                                   fee structure (basis minus retainer_fee = net) and don't use the
                                   commission cascade. Without this guard, clicking Recalculate
                                   on a retainer applies the commission plan split and corrupts
-                                  amount_1099_reportable and agent_gross. */}
-                              {!isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && a.installment_kind !== 'retainer' && (
+                                  amount_1099_reportable and agent_gross.
+                                  Also excluded for additional comp payout rows (uses_canonical_math=false)
+                                  where agent_net is set directly and must not be overwritten. */}
+                              {!isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && a.installment_kind !== 'retainer' && a.uses_canonical_math !== false && (
                                 <button
                                   onClick={() => recalculateRow(a)}
                                   disabled={recalcRowId === a.id}
@@ -4163,6 +4255,15 @@ export default function AdminTransactionDetailPage() {
                                   className="btn-primary text-xs px-3 py-1"
                                 >
                                   Mark Paid
+                                </button>
+                              )}
+                              {isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
+                                <button
+                                  onClick={() => openAdditionalCompModal(a)}
+                                  className="btn btn-secondary text-xs px-2 py-1"
+                                  title="Add additional compensation for this agent on top of what was already paid"
+                                >
+                                  + Additional Comp
                                 </button>
                               )}
                             </div>
@@ -6043,6 +6144,129 @@ export default function AdminTransactionDetailPage() {
           </div>
         </div>
       )}
+
+      {additionalCompModal.open && additionalCompModal.forAgent && (() => {
+        const a = additionalCompModal.forAgent
+        const amount = parseFloat(additionalCompModal.amount || '0') || 0
+        const fees = parseFloat(additionalCompModal.fees || '0') || 0
+        const debt = parseFloat(additionalCompModal.debt || '0') || 0
+        const splitPct = parseFloat(a.split_percentage || 85)
+        const isBtsa = additionalCompModal.type === 'btsa'
+        const agentGross = isBtsa ? amount : Math.round(amount * splitPct / 100 * 100) / 100
+        const amount1099 = Math.round((agentGross - fees) * 100) / 100
+        const agentNet = Math.round((amount1099 - debt) * 100) / 100
+        const name = fmtName(a.user)
+        const sideLabel = a.side === 'seller' || a.side === 'landlord' ? 'listing' : 'buying'
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={closeAdditionalCompModal}>
+            <div className="bg-white rounded-lg max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+              <h2 className="text-base font-semibold text-luxury-gray-1 mb-1">Additional Compensation</h2>
+              <p className="text-xs text-luxury-gray-3 mb-4">For {name}. Updates the primary row and creates a new unpaid payout row.</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="field-label">Type</label>
+                  <div className="flex gap-3 mt-1">
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="radio"
+                        name="comp_type"
+                        checked={additionalCompModal.type === 'btsa'}
+                        onChange={() => setAdditionalCompModal(prev => ({ ...prev, type: 'btsa', error: null }))}
+                      />
+                      BTSA
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="radio"
+                        name="comp_type"
+                        checked={additionalCompModal.type === 'additional_commission'}
+                        onChange={() => setAdditionalCompModal(prev => ({ ...prev, type: 'additional_commission', error: null }))}
+                      />
+                      Additional Commission
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-luxury-gray-3 mt-1">
+                    {isBtsa
+                      ? `Full amount goes to agent. Added to primary row as BTSA. No split applied.`
+                      : `Agent split (${splitPct}%) applied. Added to transaction income on ${sideLabel} side.`}
+                  </p>
+                </div>
+                <div>
+                  <label className="field-label">Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-luxury text-sm"
+                    value={additionalCompModal.amount}
+                    onChange={e => setAdditionalCompModal(prev => ({ ...prev, amount: e.target.value, error: null }))}
+                    placeholder="0.00"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-luxury-gray-3 mt-0.5">
+                    {isBtsa ? 'Amount received for this agent' : 'Gross amount brokerage received'}
+                  </p>
+                </div>
+                <div>
+                  <label className="field-label">Fees (optional)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-luxury text-sm"
+                    value={additionalCompModal.fees}
+                    onChange={e => setAdditionalCompModal(prev => ({ ...prev, fees: e.target.value, error: null }))}
+                    placeholder="0.00"
+                  />
+                  <p className="text-[10px] text-luxury-gray-3 mt-0.5">Reduces both 1099 and payout (processing, coaching, other).</p>
+                </div>
+                <div>
+                  <label className="field-label">Debt deduction (optional)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-luxury text-sm"
+                    value={additionalCompModal.debt}
+                    onChange={e => setAdditionalCompModal(prev => ({ ...prev, debt: e.target.value, error: null }))}
+                    placeholder="0.00"
+                  />
+                  <p className="text-[10px] text-luxury-gray-3 mt-0.5">Reduces payout only, not 1099.</p>
+                </div>
+                {amount > 0 && (
+                  <div className="inner-card text-xs space-y-1">
+                    <p className="text-[10px] font-semibold text-luxury-gray-2 mb-1">Preview</p>
+                    <div className="flex justify-between"><span className="text-luxury-gray-3">Amount</span><span>{fmt$(amount)}</span></div>
+                    {!isBtsa && (
+                      <div className="flex justify-between"><span className="text-luxury-gray-3">Agent split ({splitPct}%)</span><span>{fmt$(agentGross)}</span></div>
+                    )}
+                    {fees > 0 && (
+                      <div className="flex justify-between"><span className="text-luxury-gray-3">- Fees</span><span className="text-red-500">-{fmt$(fees)}</span></div>
+                    )}
+                    <div className="flex justify-between pt-1 border-t border-luxury-gray-5/30 mt-1">
+                      <span className="text-luxury-gray-3">1099</span><span>{fmt$(amount1099)}</span>
+                    </div>
+                    {debt > 0 && (
+                      <div className="flex justify-between"><span className="text-luxury-gray-3">- Debt</span><span className="text-red-500">-{fmt$(debt)}</span></div>
+                    )}
+                    <div className="flex justify-between font-semibold pt-1 border-t border-luxury-gray-5/30 mt-1">
+                      <span>Agent gets</span><span className="text-luxury-accent">{fmt$(agentNet)}</span>
+                    </div>
+                    <div className="flex justify-between text-luxury-gray-3 pt-1 border-t border-luxury-gray-5/30 mt-1">
+                      <span>Primary row</span>
+                      <span>{isBtsa ? `+${fmt$(amount)} BTSA` : `+${fmt$(amount)} to ${sideLabel} side income`}</span>
+                    </div>
+                  </div>
+                )}
+                {additionalCompModal.error && <p className="text-xs text-red-600">{additionalCompModal.error}</p>}
+              </div>
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={closeAdditionalCompModal} disabled={additionalCompModal.saving} className="btn btn-secondary text-xs px-3 py-1.5">Cancel</button>
+                <button onClick={submitAdditionalComp} disabled={additionalCompModal.saving || !additionalCompModal.amount} className="btn btn-primary text-xs px-3 py-1.5 disabled:opacity-50">
+                  {additionalCompModal.saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {showAddAgentModal && (
         <AddAgentModal

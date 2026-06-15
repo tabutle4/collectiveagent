@@ -1669,6 +1669,117 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
+    // ── Additional Compensation ──────────────────────────────────────────────
+    // Creates a co_agent payout row for the additional amount and updates the
+    // primary TIA (btsa_amount for BTSA, or transaction_additional_income for
+    // Additional Commission). Primary agent_net is NOT changed -- only btsa/1099
+    // and gross_commission update. The co_agent row carries agent_net only.
+    if (action === 'add_additional_comp') {
+      const { primary_tia_id, comp_type, amount, amount_1099, agent_net, side, commission_plan, funding_source } = body
+      if (!primary_tia_id) return NextResponse.json({ error: 'primary_tia_id required' }, { status: 400 })
+      if (!amount || parseFloat(amount) <= 0) return NextResponse.json({ error: 'amount required' }, { status: 400 })
+      if (!['btsa', 'additional_commission'].includes(comp_type)) return NextResponse.json({ error: 'invalid comp_type' }, { status: 400 })
+
+      const amt = parseFloat(amount)
+      const agentNetAmt = parseFloat(agent_net) || 0
+      const amount1099Amt = parseFloat(amount_1099) || agentNetAmt // fallback to agentNet if not provided
+
+      // Fetch primary TIA to get agent_id and current btsa_amount
+      const { data: primaryTia } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, agent_id, btsa_amount, amount_1099_reportable, payment_status')
+        .eq('id', primary_tia_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!primaryTia) return NextResponse.json({ error: 'Primary TIA not found' }, { status: 404 })
+
+      if (comp_type === 'btsa') {
+        // Add to primary TIA btsa_amount only. amount_1099_reportable and agent_net
+        // stay frozen on the primary row. The co_agent row carries the additional
+        // 1099 and payout, keeping both types consistent.
+        const currentBtsa = parseFloat(String(primaryTia.btsa_amount ?? 0)) || 0
+        const newBtsa = Math.round((currentBtsa + amt) * 100) / 100
+
+        // Bypass locked check -- deliberate additional comp on paid row.
+        // Only update btsa_amount -- amount_1099_reportable and agent_net stay
+        // frozen. The co_agent row carries the additional 1099 and payout.
+        await supabase
+          .from('transaction_internal_agents')
+          .update({
+            btsa_amount: newBtsa,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', primary_tia_id)
+
+        await recomputeGrossAndOffice(id)
+      } else {
+        // Additional Commission: write to transaction_additional_income
+        const txnType = (await supabase.from('transactions').select('transaction_type').eq('id', id).single()).data?.transaction_type || ''
+        const txnTypeLower = txnType.toLowerCase()
+        let impliedSide: 'listing' | 'buying' = 'buying'
+        if (txnTypeLower.includes('landlord') || txnTypeLower.includes('seller')) impliedSide = 'listing'
+
+        const sideToUse = side
+          ? ((side === 'seller' || side === 'landlord') ? 'listing' : 'buying')
+          : impliedSide
+
+        await supabase
+          .from('transaction_additional_income')
+          .insert({ transaction_id: id, side: sideToUse, label: 'Additional Commission', amount: amt })
+
+        // recomputeSide updates base+side commission and calls recomputeGrossAndOffice
+        const baseField = sideToUse === 'listing' ? 'listing_base_commission' : 'buying_base_commission'
+        const sideField = sideToUse === 'listing' ? 'listing_side_commission' : 'buying_side_commission'
+        const { data: txnCurrent } = await supabase
+          .from('transactions')
+          .select(`${baseField}, ${sideField}`)
+          .eq('id', id)
+          .single()
+        const currentBase = parseFloat(String((txnCurrent as any)?.[baseField] ?? 0)) || 0
+        const additionalRows = await supabase
+          .from('transaction_additional_income')
+          .select('amount')
+          .eq('transaction_id', id)
+          .eq('side', sideToUse)
+        const additionalTotal = (additionalRows.data || []).reduce((s: number, r: any) => s + (parseFloat(r.amount) || 0), 0)
+        const newSideTotal = currentBase + additionalTotal
+        await supabase.from('transactions').update({
+          [sideField]: newSideTotal,
+          updated_at: new Date().toISOString(),
+        }).eq('id', id)
+        await recomputeGrossAndOffice(id)
+      }
+
+      // Create co_agent payout row with agent_net only -- no gross, no fees, no 1099
+      const { data: newTia, error: tiaError } = await supabase
+        .from('transaction_internal_agents')
+        .insert({
+          transaction_id: id,
+          agent_id: primaryTia.agent_id,
+          agent_role: 'co_agent',
+          side: side || null,
+          commission_plan: commission_plan || '',
+          funding_source: funding_source || 'crc',
+          payment_status: 'pending',
+          counts_toward_progress: false,
+          units: 0,
+          agent_gross: 0,
+          brokerage_split: 0,
+          processing_fee: 0,
+          coaching_fee: 0,
+          other_fees: 0,
+          agent_net: agentNetAmt,
+          amount_1099_reportable: amount1099Amt, // no gross on this row; 1099 = gross - fees
+          uses_canonical_math: false, // do not recompute from formula
+        })
+        .select('id')
+        .single()
+      if (tiaError) throw tiaError
+
+      await recomputeOfficeNet(id)
+      return NextResponse.json({ success: true, tia_id: newTia.id })
+    }
+
     // ── Delete check ────────────────────────────────────────────────────────
     if (action === 'delete_check') {
       const { check_id } = body
@@ -2180,7 +2291,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // commission-bearing role. Derives basis from the agent's side commission
       // (when known) or falls back to office_gross. Skipped silently if no
       // basis available - admin can click Recalculate later.
-      if (data && ['primary_agent', 'listing_agent', 'co_agent'].includes(data.agent_role)) {
+      if (data && ['primary_agent', 'listing_agent', 'co_agent'].includes(data.agent_role) && !agent.skip_auto_stamp) {
         const { data: txn } = await supabase
           .from('transactions')
           .select('listing_side_commission, buying_side_commission, office_gross, status')
