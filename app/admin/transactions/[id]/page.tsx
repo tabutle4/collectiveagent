@@ -184,6 +184,7 @@ function EditableFieldRow({
   type = 'text',
   options,
   onSave,
+  isCurrency = false,
 }: {
   label: string
   value: string | number | null | undefined
@@ -191,6 +192,7 @@ function EditableFieldRow({
   type?: 'text' | 'date' | 'select' | 'number'
   options?: { value: string; label: string }[]
   onSave: (field: string, value: string | number | null) => void
+  isCurrency?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [localValue, setLocalValue] = useState(value ?? '')
@@ -213,7 +215,9 @@ function EditableFieldRow({
     ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : type === 'select' && options
       ? options.find(o => o.value === value)?.label || value
-      : value
+      : isCurrency && value != null && value !== ''
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(Number(value))
+        : value
 
   return (
     <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30 last:border-0 group">
@@ -2364,7 +2368,11 @@ export default function AdminTransactionDetailPage() {
         const d = await res.json()
         setAdditionalIncome(prev => [...prev, d.row])
         setIncomeForm(prev => ({ ...prev, [side]: { label: '', amount: '' } }))
-        loadData()
+        // Re-fetch transaction to get updated side/gross totals without clearing additionalIncome state
+        fetch(`/api/admin/transactions/${id}`, { cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(json => { if (json) setData(json) })
+          .catch(() => {})
       }
     } finally {
       setAddingIncome(prev => ({ ...prev, [side]: false }))
@@ -2378,7 +2386,11 @@ export default function AdminTransactionDetailPage() {
       body: JSON.stringify({ row_id: rowId }),
     })
     setAdditionalIncome(prev => prev.filter((r: any) => r.id !== rowId))
-    loadData()
+    // Re-fetch transaction to get updated side/gross totals without clearing additionalIncome state
+    fetch(`/api/admin/transactions/${id}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (json) setData(json) })
+      .catch(() => {})
   }
 
   const sendDocument = async (tiaId: string, emailType: 'statement' | 'cda') => {
@@ -3600,6 +3612,7 @@ export default function AdminTransactionDetailPage() {
                         value={txn.monthly_rent}
                         field="monthly_rent"
                         type="number"
+                        isCurrency
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
@@ -3614,6 +3627,7 @@ export default function AdminTransactionDetailPage() {
                         value={txn.sales_volume}
                         field="sales_volume"
                         type="number"
+                        isCurrency
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
@@ -3638,6 +3652,7 @@ export default function AdminTransactionDetailPage() {
                         value={txn.sales_price}
                         field="sales_price"
                         type="number"
+                        isCurrency
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
@@ -3645,6 +3660,7 @@ export default function AdminTransactionDetailPage() {
                         value={txn.sales_volume}
                         field="sales_volume"
                         type="number"
+                        isCurrency
                         onSave={(f, v) => updateTransaction({ [f]: v })}
                       />
                       <EditableFieldRow
@@ -3686,6 +3702,7 @@ export default function AdminTransactionDetailPage() {
                             value={txn.listing_base_commission ?? txn.listing_side_commission}
                             field="listing_base_commission"
                             type="number"
+                            isCurrency
                             onSave={(_f, v) => saveBaseCommission('listing', String(v ?? ''))}
                           />
                         </div>
@@ -3740,6 +3757,7 @@ export default function AdminTransactionDetailPage() {
                             value={txn.buying_base_commission ?? txn.buying_side_commission}
                             field="buying_base_commission"
                             type="number"
+                            isCurrency
                             onSave={(_f, v) => saveBaseCommission('buying', String(v ?? ''))}
                           />
                         </div>
@@ -5376,14 +5394,14 @@ export default function AdminTransactionDetailPage() {
                     {a.agent_id && monthlyFeeBalances[a.agent_id] && monthlyFeeBalances[a.agent_id].count > 0 && (
                       <div className="mt-2 p-2 bg-red-50 border border-red-100 rounded text-xs">
                         <p className="font-semibold text-red-700 mb-1">
-                          Unpaid Monthly Fees: ${monthlyFeeBalances[a.agent_id].total.toFixed(2)}
+                          Unpaid Monthly Fees: {fmt$(monthlyFeeBalances[a.agent_id].total)}
                           {' '}({monthlyFeeBalances[a.agent_id].count})
                         </p>
                         <div className="space-y-0.5">
                           {monthlyFeeBalances[a.agent_id].invoices.map((inv: any) => (
                             <div key={inv.id} className="flex justify-between text-red-700">
                               <span className="truncate pr-2">{inv.description}</span>
-                              <span className="flex-shrink-0">${Number(inv.amount_due).toFixed(2)}</span>
+                              <span className="flex-shrink-0">{fmt$(inv.amount_due)}</span>
                             </div>
                           ))}
                         </div>
