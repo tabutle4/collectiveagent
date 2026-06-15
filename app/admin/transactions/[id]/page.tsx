@@ -2153,11 +2153,15 @@ export default function AdminTransactionDetailPage() {
       .then(d => setContacts(d.contacts || []))
       .catch(() => {})
       .finally(() => setLoadingContacts(false))
+    }, [activeTab, id])
+
+  useEffect(() => {
+    if (!id) return
     fetch(`/api/admin/transactions/${id}/additional-income`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : { rows: [] })
       .then(d => setAdditionalIncome(d.rows || []))
       .catch(() => {})
-  }, [activeTab, id])
+  }, [id])
 
   // Fetch smart calc reference data on mount
   useEffect(() => {
