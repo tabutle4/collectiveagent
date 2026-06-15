@@ -37,7 +37,7 @@ interface AddAgentModalProps {
 export default function AddAgentModal({
   transactionId,
   transaction,
-  existingAgents,
+  existingAgents: _existingAgents,
   onClose,
   onAdded,
 }: AddAgentModalProps) {
@@ -76,18 +76,14 @@ export default function AddAgentModal({
   }, [role, transaction?.transaction_type, transaction?.other_side_transaction_type, isIntermediary])
 
   // Filter excludes anyone already on this txn (no duplicates)
-  const existingAgentIds = useMemo(
-    () => new Set((existingAgents || []).map(a => a.agent_id)),
-    [existingAgents]
-  )
   const filtered = useMemo(() => {
     const term = searchText.trim().toLowerCase()
-    const list = allUsers.filter(u => !existingAgentIds.has(u.id))
+    const list = allUsers
     if (!term) return list.slice(0, 12)
     return list
       .filter(u => fmtName(u).toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term))
       .slice(0, 25)
-  }, [allUsers, searchText, existingAgentIds])
+  }, [allUsers, searchText])
 
   const submit = async () => {
     if (!selectedUser) { setError('Pick an agent'); return }

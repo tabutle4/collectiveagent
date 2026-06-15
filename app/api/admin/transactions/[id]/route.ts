@@ -1631,6 +1631,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: true })
     }
 
+    // ── Delete check ────────────────────────────────────────────────────────
+    if (action === 'delete_check') {
+      const { check_id } = body
+      if (!check_id) return NextResponse.json({ error: 'check_id required' }, { status: 400 })
+      // Delete check_payouts first (may not cascade)
+      await supabase.from('check_payouts').delete().eq('check_id', check_id)
+      const { error } = await supabase.from('checks_received').delete().eq('id', check_id).eq('transaction_id', id)
+      if (error) throw error
+      return NextResponse.json({ success: true })
+    }
+
     // ── Payout CRUD ──────────────────────────────────────────────────────────
     if (action === 'add_payout') {
       const { payout } = body

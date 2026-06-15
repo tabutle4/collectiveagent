@@ -2550,6 +2550,23 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  const deleteCheck = async (checkId: string) => {
+    if (!confirm('Delete this check and all its payouts? This cannot be undone.')) return
+    try {
+      await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete_check', check_id: checkId }),
+      })
+      setData((prev: any) => ({
+        ...prev,
+        checks: (prev.checks || []).filter((c: any) => c.id !== checkId),
+      }))
+    } catch {
+      alert('Failed to delete check')
+    }
+  }
+
   // ── Retainer modal handlers ────────────────────────────────────────────────
   const openRetainerModal = (agent: any) => {
     setRetainerModal({
@@ -4273,56 +4290,57 @@ export default function AdminTransactionDetailPage() {
                               </button>
                             </div>
                           )}
+
+                          {/* Statement & CDA buttons -- per agent card */}
+                          {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && (
+                            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
+                              <button
+                                onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
+                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                              >
+                                <FileText size={12} />
+                                Statement
+                              </button>
+                              <button
+                                onClick={() => window.open(`/api/admin/transactions/${id}/cda/${a.id}`, '_blank')}
+                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                              >
+                                <FileText size={12} />
+                                CDA
+                              </button>
+                              {userPermissions.includes('can_generate_cda') && (
+                                <>
+                                  <button
+                                    onClick={() => sendDocument(a.id, 'statement')}
+                                    disabled={sendingDoc === a.id + 'statement'}
+                                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    <Send size={12} />
+                                    {sendingDoc === a.id + 'statement' ? 'Sending...' : a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
+                                  </button>
+                                  <button
+                                    onClick={() => sendDocument(a.id, 'cda')}
+                                    disabled={sendingDoc === a.id + 'cda'}
+                                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                                  >
+                                    <Send size={12} />
+                                    {sendingDoc === a.id + 'cda' ? 'Sending...' : 'Send CDA'}
+                                  </button>
+                                </>
+                              )}
+                              {a.agent_statement_sent_date && (
+                                <span className="text-xs text-luxury-gray-3 self-center">
+                                  Sent {new Date(a.agent_statement_sent_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 )}
 
-                {/* Statement & CDA buttons -- per agent */}
-                {agents.filter((a: any) => a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent').map((a: any) => (
-                  <div key={a.id + '_docs'} className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
-                    <button
-                      onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
-                      className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
-                    >
-                      <FileText size={12} />
-                      Statement
-                    </button>
-                    <button
-                      onClick={() => window.open(`/api/admin/transactions/${id}/cda/${a.id}`, '_blank')}
-                      className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
-                    >
-                      <FileText size={12} />
-                      CDA
-                    </button>
-                    {userPermissions.includes('can_generate_cda') && (
-                      <>
-                        <button
-                          onClick={() => sendDocument(a.id, 'statement')}
-                          disabled={sendingDoc === a.id + 'statement'}
-                          className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                        >
-                          <Send size={12} />
-                          {sendingDoc === a.id + 'statement' ? 'Sending...' : a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
-                        </button>
-                        <button
-                          onClick={() => sendDocument(a.id, 'cda')}
-                          disabled={sendingDoc === a.id + 'cda'}
-                          className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                        >
-                          <Send size={12} />
-                          {sendingDoc === a.id + 'cda' ? 'Sending...' : 'Send CDA'}
-                        </button>
-                      </>
-                    )}
-                    {a.agent_statement_sent_date && (
-                      <span className="text-xs text-luxury-gray-3 self-center">
-                        Sent {new Date(a.agent_statement_sent_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -4435,6 +4453,14 @@ export default function AdminTransactionDetailPage() {
                               title="Email all agents on this transaction about this check"
                             >
                               Notify Agents
+                            </button>
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); deleteCheck(check.id) }}
+                              className="text-luxury-gray-3 hover:text-red-500 transition-colors"
+                              title="Delete check"
+                            >
+                              <Trash2 size={14} />
                             </button>
                             {isExpanded ? (
                               <ChevronUp size={14} className="text-luxury-gray-3" />
