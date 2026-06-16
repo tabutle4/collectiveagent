@@ -490,7 +490,6 @@ export const buildRosterHtml = ({
     '            border-radius: 50%;',
     '            background-color: #f3f4f6;',
     '            border: 2px solid #e5e7eb;',
-    '            display: inline-block;',
     '        }'
   )
   parts.push('        .font-medium {', '            font-weight: 500;', '        }')
@@ -740,7 +739,6 @@ export const buildRosterHtml = ({
     '            border-radius: 50%;',
     '            background-color: #f3f4f6;',
     '            border: 2px solid #e5e7eb;',
-    '            display: inline-block;',
     '            margin: 0 auto;',
     '        }'
   )
