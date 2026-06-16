@@ -45,7 +45,7 @@ Help the user refine the title, suggest topics, or recommend a folder. Keep resp
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: isJsonRequest ? 300 : 500,
       system: isJsonRequest
         ? system + '\n\nIMPORTANT: Your response must be ONLY valid JSON. No preamble, no explanation, no markdown code blocks. Just the raw JSON object.'
