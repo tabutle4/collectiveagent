@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
           .in('transaction_id', txnIds),
         supabaseAdmin
           .from('transactions')
-          .select('id, property_address, compliance_status, transaction_type')
+          .select('id, property_address, compliance_status, transaction_type, office_net')
           .in('id', txnIds),
       ])
       internalAgents = agentsRes.data || []
@@ -139,6 +139,24 @@ export async function GET(request: NextRequest) {
     // Build txn lookup
     const txnMap = Object.fromEntries(transactions.map(t => [t.id, t]))
 
+    // Multi-check support: office net and payouts belong to the transaction, not
+    // to each check. Pick one anchor check per transaction (earliest received,
+    // then lowest id) to carry them. Sibling checks of the same transaction show
+    // as funding only, so nothing double counts on the report.
+    const txnCheckGroups: Record<string, any[]> = {}
+    for (const c of allChecks) {
+      if (!c.transaction_id) continue
+      ;(txnCheckGroups[c.transaction_id] ||= []).push(c)
+    }
+    const anchorCheckId: Record<string, string> = {}
+    for (const [txnId, group] of Object.entries(txnCheckGroups)) {
+      const ordered = [...group].sort((a, b) =>
+        (a.received_date || '9999-12-31').localeCompare(b.received_date || '9999-12-31') ||
+        String(a.id).localeCompare(String(b.id))
+      )
+      anchorCheckId[txnId] = ordered[0].id
+    }
+
     // Role sort priority — primary agent first
     const ROLE_PRIORITY: Record<string, number> = {
       primary_agent: 0, listing_agent: 1, co_agent: 2,
@@ -149,10 +167,15 @@ export async function GET(request: NextRequest) {
     // Assemble rows
     const rows = allChecks.map(check => {
       const txn = check.transaction_id ? txnMap[check.transaction_id] : null
-      const agents = internalAgents
-        .filter(a => a.transaction_id === check.transaction_id)
-        .sort((a, b) => roleOrder(a.agent_role) - roleOrder(b.agent_role))
-      const externals = externalBrokerages.filter(e => e.transaction_id === check.transaction_id)
+      const isAnchor = !check.transaction_id || anchorCheckId[check.transaction_id] === check.id
+      const agents = (check.transaction_id && isAnchor)
+        ? internalAgents
+            .filter(a => a.transaction_id === check.transaction_id)
+            .sort((a, b) => roleOrder(a.agent_role) - roleOrder(b.agent_role))
+        : []
+      const externals = (check.transaction_id && isAnchor)
+        ? externalBrokerages.filter(e => e.transaction_id === check.transaction_id)
+        : []
 
       const txnType = txn?.transaction_type || null
       const isLease = isLeaseType(txnType)
@@ -197,7 +220,12 @@ export async function GET(request: NextRequest) {
         check_id: check.id,
         transaction_id: check.transaction_id,
         address,
-        crc_amount: check.brokerage_amount || 0,
+        // office net for commission deals; hand-entered amount for retainers and
+        // other transactions with no commission math (office_net null)
+        crc_amount: check.transaction_id
+          ? (isAnchor ? (txn?.office_net != null ? Number(txn.office_net) : (check.brokerage_amount || 0)) : 0)
+          : (check.brokerage_amount || 0),
+        is_anchor: isAnchor,
         check_amount: check.check_amount,
         agents: agentRows,
         externals: externalRows,

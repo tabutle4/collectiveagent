@@ -44,6 +44,7 @@ interface PayoutRow {
   agents_paid: boolean
   status: string
   notes: string | null
+  is_anchor?: boolean
 }
 
 interface Expense { id: string; description: string; amount: number | null }
@@ -148,6 +149,24 @@ function unpaidAgents(row: PayoutRow): AgentRow[] {
 // Get only unpaid externals for display
 function unpaidExternals(row: PayoutRow): ExternalRow[] {
   return row.externals.filter(e => e.payment_status !== 'paid')
+}
+
+// Keep all checks of one transaction together, anchor check first, while
+// preserving the order the rows were already sorted in. Single-check deals are
+// one-row groups, so nothing changes for them.
+function groupByTransaction(rows: PayoutRow[]): PayoutRow[] {
+  const keyOf = (r: PayoutRow) => r.transaction_id || `c:${r.check_id}`
+  const seen = new Set<string>()
+  const out: PayoutRow[] = []
+  for (const r of rows) {
+    const key = keyOf(r)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const group = rows.filter(x => keyOf(x) === key)
+    group.sort((a, b) => (b.is_anchor ? 1 : 0) - (a.is_anchor ? 1 : 0))
+    out.push(...group)
+  }
+  return out
 }
 
 // Mobile card - clean stacked layout
@@ -419,7 +438,9 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
     return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
   })
 
-  const displayRows = sortKey ? sortedRows : rows
+  const orderedRows = sortKey ? sortedRows : rows
+  const displayRows = groupByTransaction(orderedRows)
+  const txnCount = new Set(rows.map(r => r.transaction_id || `c:${r.check_id}`)).size
   const checkTotal = rows.reduce((s, r) => s + r.check_amount, 0)
   const crcTotal  = rows.reduce((s, r) => s + r.crc_amount, 0)
   const agentTot  = rows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
@@ -455,7 +476,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
             )}
             {rows.length > 0 && (
               <div className="container-card rounded-lg flex items-center justify-between px-4 py-2 mt-1">
-                <span className="text-xs font-semibold text-luxury-gray-1">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</span>
+                <span className="text-xs font-semibold text-luxury-gray-1">{txnCount} transaction{txnCount !== 1 ? 's' : ''}</span>
                 <span className="text-xs font-semibold text-luxury-accent">{fmt(agentTot)}</span>
               </div>
             )}
@@ -510,7 +531,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '-'}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(extTot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(agentTot)}</td>
-                    <td colSpan={6} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{rows.length} transaction{rows.length !== 1 ? 's' : ''}</td>
+                    <td colSpan={6} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{txnCount} transaction{txnCount !== 1 ? 's' : ''}</td>
                   </tr>
                 </tfoot>
               )}
@@ -1160,4 +1181,5 @@ export default function PayoutsReportPage() {
     </div>
   )
 }
+
 
