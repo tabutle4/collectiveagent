@@ -79,6 +79,15 @@ const fmt = (n: number) =>
 const fmtDate = (d: string | null) =>
   d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '-'
 
+// Cleared dates: green when the check has cleared (date is today or earlier),
+// red when it has not cleared yet (date is in the future). No date stays neutral.
+// Mirrors the not-cleared rule in app/api/admin/payouts-report/route.ts (cleared_date > today).
+const clearedDateClass = (d: string | null): string => {
+  if (!d) return 'text-luxury-gray-3'
+  const today = new Date().toISOString().split('T')[0]
+  return d > today ? 'text-red-500' : 'text-green-700'
+}
+
 function complianceLabel(status: string): { label: string; cls: string } {
   const map: Record<string, { label: string; cls: string }> = {
     complete:      { label: 'complete',      cls: 'text-green-700' },
@@ -235,7 +244,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
       <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           {dateVal && (
-            <span className="text-xs text-luxury-gray-3 tabular-nums">{fmtDate(dateVal)}</span>
+            <span className={`text-xs tabular-nums ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</span>
           )}
           {onUpdateCompliance ? (
             <select
@@ -352,7 +361,7 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
       <td className="py-2 px-2 text-xs text-luxury-gray-2 max-w-[120px]">
         <span className="truncate block">{agentNames(row) || '-'}</span>
       </td>
-      <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(dateVal)}</td>
+      <td className={`py-2 px-2 text-xs whitespace-nowrap ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         {onUpdateCompliance ? (
           <select
@@ -1151,3 +1160,4 @@ export default function PayoutsReportPage() {
     </div>
   )
 }
+
