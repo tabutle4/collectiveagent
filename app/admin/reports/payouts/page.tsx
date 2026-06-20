@@ -617,8 +617,19 @@ export default function PayoutsReportPage() {
 
   useEffect(() => { if (user) load() }, [user, load])
 
-  const paidRows = rows.filter(r => r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
-  const holdRows = rows.filter(r => !r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
+  // A funding-only sibling check (not the anchor) carries no payouts of its own.
+  // Once its deal is fully paid the anchor drops out of the active tables, so
+  // drop the sibling with it instead of leaving an orphaned funding row.
+  const settledTxnIds = new Set(
+    rows
+      .filter(r => r.is_anchor && r.agents.length > 0 && r.agents.every(a => a.payment_status === 'paid'))
+      .map(r => r.transaction_id)
+  )
+  const isSettledSibling = (r: PayoutRow) =>
+    r.is_anchor === false && settledTxnIds.has(r.transaction_id)
+
+  const paidRows = rows.filter(r => !isSettledSibling(r) && r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
+  const holdRows = rows.filter(r => !isSettledSibling(r) && !r.crc_transferred && !r.agents_paid && !allAgentsPaid(r))
 
   const paidAgentTotal   = paidRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
   const holdAgentTotal   = holdRows.reduce((s, r) => s + unpaidAgentTotal(r), 0)
