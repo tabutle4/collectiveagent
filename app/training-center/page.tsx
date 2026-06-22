@@ -45,7 +45,7 @@ const QUICK_LINKS = [
   {
     label: 'W-9 Form',
     shortLabel: 'W-9',
-    href: `${SHAREPOINT_BASE}/Agent%20Resources/Forms/AllItems.aspx?id=%2Fsites%2Fagenttrainingcenter%2FAgent%20Resources%2FForms%2FW%2D9%20%28Collective%20Realty%20Co%29%2Epdf`,
+    href: 'https://collectiverealtyco.sharepoint.com/:b:/s/agenttrainingcenter/IQCxpuc8KpA_T5Epu4nwhSaPAZA1oOFjDEzqf1fI7MYIKcs?e=DZmiH4',
     icon: FilePlus,
   },
   {
