@@ -3098,9 +3098,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // pay it directly and get double-collected. Non-fatal if Payload fails.
       if (rec.record_type !== 'credit' && rec.notes) {
         const notesStr = String(rec.notes)
-        const invoiceMatch =
-          notesStr.match(/Payload invoice:\s*([A-Za-z0-9_-]+)/) ||
-          notesStr.match(/payload_invoice_id:([^\s,|]+)/)
+        const invoiceMatch = notesStr.match(/payload[ _]invoice(?:[ _]id)?:\s*([A-Za-z0-9_-]+)/i)
         if (invoiceMatch) {
           const invoiceId = invoiceMatch[1].trim()
           const payloadAuth = () =>
@@ -3379,9 +3377,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // line item so the agent can still pay it directly if the offset is removed.
       if (rec.notes) {
         const notesStr = String(rec.notes)
-        const invoiceMatch =
-          notesStr.match(/payload_invoice_id:([^\s,|]+)/) ||
-          notesStr.match(/Payload invoice:\s*([A-Za-z0-9_-]+)/)
+        const invoiceMatch = notesStr.match(/payload[ _]invoice(?:[ _]id)?:\s*([A-Za-z0-9_-]+)/i)
         if (invoiceMatch) {
           const invoiceId = invoiceMatch[1]
           const payloadAuth = () =>
