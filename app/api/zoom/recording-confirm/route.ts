@@ -29,9 +29,12 @@ async function getZoomAccessToken(): Promise<string | null> {
 
 async function deleteZoomRecording(meetingId: string, recordingId: string | null, zoomToken: string): Promise<void> {
   try {
+    const encoded = encodeURIComponent(meetingId)
+    const encodedMeetingId = (meetingId.startsWith('/') || meetingId.includes('//'))
+      ? encodeURIComponent(encoded) : encoded
     const url = recordingId
-      ? `https://api.zoom.us/v2/meetings/${meetingId}/recordings/${recordingId}`
-      : `https://api.zoom.us/v2/meetings/${meetingId}/recordings`
+      ? `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings/${recordingId}`
+      : `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`
     await fetch(url, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${zoomToken}` },
