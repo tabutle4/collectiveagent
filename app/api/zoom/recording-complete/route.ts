@@ -404,6 +404,7 @@ export async function POST(req: NextRequest) {
         meeting_id: meetingUuid || null,
         start_time: segmentStartTime,
         mp4_download_url: mp4File.download_url,
+        zoom_recording_id: mp4File.id || null,
         mp4_file_size: fileSize,
         zoom_token: zoomToken,
         suggested_title: segmentTitle,

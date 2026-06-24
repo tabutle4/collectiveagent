@@ -27,9 +27,12 @@ async function getZoomAccessToken(): Promise<string | null> {
   } catch { return null }
 }
 
-async function deleteZoomRecording(meetingId: string, zoomToken: string): Promise<void> {
+async function deleteZoomRecording(meetingId: string, recordingId: string | null, zoomToken: string): Promise<void> {
   try {
-    await fetch(`https://api.zoom.us/v2/meetings/${meetingId}/recordings`, {
+    const url = recordingId
+      ? `https://api.zoom.us/v2/meetings/${meetingId}/recordings/${recordingId}`
+      : `https://api.zoom.us/v2/meetings/${meetingId}/recordings`
+    await fetch(url, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${zoomToken}` },
     })
@@ -306,7 +309,7 @@ export async function POST(req: NextRequest) {
     // Delete from Zoom now that transcript/summary are safely stored in DB
     if (job.meeting_id) {
       const zoomToken = await getZoomAccessToken()
-      if (zoomToken) await deleteZoomRecording(job.meeting_id, zoomToken)
+      if (zoomToken) await deleteZoomRecording(job.meeting_id, job.zoom_recording_id ?? null, zoomToken)
     }
 
     // Set description on the SharePoint file if provided
