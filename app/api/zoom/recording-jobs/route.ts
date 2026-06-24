@@ -23,12 +23,15 @@ async function getZoomAccessToken(): Promise<string | null> {
   } catch { return null }
 }
 
-async function deleteZoomRecording(meetingId: string, zoomToken: string): Promise<void> {
+async function deleteZoomRecording(meetingId: string, recordingId: string | null, zoomToken: string): Promise<void> {
   try {
     const encoded = encodeURIComponent(meetingId)
     const encodedMeetingId = (meetingId.startsWith('/') || meetingId.includes('//'))
       ? encodeURIComponent(encoded) : encoded
-    await fetch(`https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`, {
+    const url = recordingId
+      ? `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings/${recordingId}`
+      : `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`
+    await fetch(url, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${zoomToken}` },
     })
@@ -95,7 +98,7 @@ export async function DELETE(req: NextRequest) {
   // Fetch job to get Zoom and OneDrive references before deleting
   const { data: job } = await supabaseAdmin
     .from('zoom_recording_jobs')
-    .select('meeting_id, onedrive_item_id, status')
+    .select('meeting_id, onedrive_item_id, status, zoom_recording_id')
     .eq('id', id)
     .single()
 
@@ -103,7 +106,7 @@ export async function DELETE(req: NextRequest) {
     // Delete from Zoom (only if not already uploaded — confirm route deletes after upload)
     if (job.status !== 'uploaded' && job.meeting_id) {
       const zoomToken = await getZoomAccessToken()
-      if (zoomToken) await deleteZoomRecording(job.meeting_id, zoomToken)
+      if (zoomToken) await deleteZoomRecording(job.meeting_id, job.zoom_recording_id ?? null, zoomToken)
     }
 
     // Delete OneDrive temp file if it exists (pending/processing jobs that were staged)
