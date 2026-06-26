@@ -391,6 +391,11 @@ function generateStatementHTML(data: Record<string, any>): string {
         </div>
         <span style="font-weight: 500;">- ${data.total_deductions}</span>
       </div>
+      ${data.has_reserve ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Reserve Replenishment <span style="color: #999; font-size: 9px; margin-left: 6px;">held in trust</span></span>
+        <span style="font-weight: 500;">- ${data.reserve_held}</span>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
         <span style="font-weight: 600;">Net Remaining</span>
         <span style="font-weight: 600; color: #C5A278;">${data.has_net_disbursed ? data.total_net_disbursed : data.pending_rent_net}</span>
