@@ -37,7 +37,7 @@ export async function PUT(
 
     // SELECT current row first — all fields needed as fallbacks for Outlook PATCH
     const { data: current, error: fetchErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select('id,outlook_event_id,recurrence_type,recurrence_day,start_time,end_time,display_title,active,description,platform,audience,host,image_url')
       .eq('id', id)
       .single()
@@ -45,10 +45,11 @@ export async function PUT(
     if (fetchErr || !current) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    const row = current as any
 
     // Update DB
     const { error: updateErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .update({
         ...(section !== undefined && { section }),
         ...(display_title !== undefined && { display_title }),
@@ -76,7 +77,7 @@ export async function PUT(
         { status: isDuplicate ? 409 : 500 }
       )
     }
-    const effectiveOutlookId = outlook_event_id ?? current.outlook_event_id
+    const effectiveOutlookId = outlook_event_id ?? row.outlook_event_id
     // Only sync to Outlook if at least one Outlook-relevant field is in the request body
     const outlookFieldsChanged = [
       'display_title', 'start_time', 'end_time', 'recurrence_type',
@@ -89,16 +90,16 @@ export async function PUT(
     if (effectiveOutlookId && outlookFieldsChanged) {
       try {
         const token = await getGraphToken()
-        const newTitle       = display_title    ?? current.display_title
-        const newStart       = start_time       ?? current.start_time
-        const newEnd         = end_time         ?? current.end_time
-        const newRecType     = recurrence_type  ?? current.recurrence_type
-        const newRecDay      = recurrence_day   ?? current.recurrence_day
-        const newDescription = description      ?? current.description
-        const newAudience    = audience         ?? current.audience
-        const newHost        = host !== undefined ? (host || null) : current.host
-        const newPlatform    = platform         ?? current.platform
-        const newImageUrl    = image_url !== undefined ? (image_url || null) : current.image_url
+        const newTitle       = display_title    ?? row.display_title
+        const newStart       = start_time       ?? row.start_time
+        const newEnd         = end_time         ?? row.end_time
+        const newRecType     = recurrence_type  ?? row.recurrence_type
+        const newRecDay      = recurrence_day   ?? row.recurrence_day
+        const newDescription = description      ?? row.description
+        const newAudience    = audience         ?? row.audience
+        const newHost        = host !== undefined ? (host || null) : row.host
+        const newPlatform    = platform         ?? row.platform
+        const newImageUrl    = image_url !== undefined ? (image_url || null) : row.image_url
 
         const eventBody = buildEventBody({
           description: newDescription,
@@ -109,8 +110,8 @@ export async function PUT(
 
         // Only rebuild recurrence if day/type changed
         const recurrenceChanged =
-          (recurrence_type !== undefined && recurrence_type !== current.recurrence_type) ||
-          (recurrence_day  !== undefined && recurrence_day  !== current.recurrence_day)
+          (recurrence_type !== undefined && recurrence_type !== row.recurrence_type) ||
+          (recurrence_day  !== undefined && recurrence_day  !== row.recurrence_day)
 
         const patchPayload: any = {
           subject:  newTitle,
@@ -158,8 +159,8 @@ export async function PUT(
     }
 
     const dayChanged =
-      recurrence_type !== undefined && recurrence_type !== current.recurrence_type ||
-      recurrence_day  !== undefined && recurrence_day  !== current.recurrence_day
+      recurrence_type !== undefined && recurrence_type !== row.recurrence_type ||
+      recurrence_day  !== undefined && recurrence_day  !== row.recurrence_day
 
     return NextResponse.json({
       success:        true,
@@ -190,7 +191,7 @@ export async function DELETE(
 
     // SELECT before UPDATE
     const { data: current, error: fetchErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select('id,outlook_event_id,display_title,active')
       .eq('id', id)
       .single()
@@ -198,10 +199,11 @@ export async function DELETE(
     if (fetchErr || !current) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    const deleteRow = current as any
 
     // Deactivate in DB
     const { error: updateErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .update({ active: false, updated_at: new Date().toISOString() })
       .eq('id', id)
 
@@ -214,11 +216,11 @@ export async function DELETE(
     let outlookCancelled = false
     let outlookError: string | null = null
 
-    if (cancelOutlook && current.outlook_event_id) {
+    if (cancelOutlook && deleteRow.outlook_event_id) {
       try {
         const token = await getGraphToken()
         const res = await fetch(
-          `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${current.outlook_event_id}?sendCancellations=false`,
+          `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${deleteRow.outlook_event_id}?sendCancellations=false`,
           {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
@@ -228,7 +230,7 @@ export async function DELETE(
           outlookCancelled = true
           // Clear the outlook_event_id now that the event is gone
           await supabaseAdmin
-            .from('coaching_schedule_sessions')
+            .from('coaching_schedule_sessions' as any)
             .update({ outlook_event_id: null })
             .eq('id', id)
         } else {

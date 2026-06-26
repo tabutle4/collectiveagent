@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest) {
   try {
     // 1. Fetch all active sessions from DB
     const { data: sessions, error } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select(
         'id,section,display_title,outlook_event_id,recurrence_type,recurrence_day,' +
         'start_time,end_time,description,platform,audience,host,highlight,image_url,active'
@@ -27,7 +27,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load schedule' }, { status: 500 })
     }
 
-    const rows = sessions || []
+    const rows = (sessions || []) as any[]
 
     // 2. Build set of outlook_event_ids that need live time from Graph
     const linkedIds = rows

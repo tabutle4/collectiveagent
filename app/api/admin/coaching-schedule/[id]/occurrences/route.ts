@@ -18,7 +18,7 @@ export async function GET(
     const { id } = await params
 
     const { data: session, error: fetchErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select('id,display_title,outlook_event_id')
       .eq('id', id)
       .single()
@@ -26,17 +26,18 @@ export async function GET(
     if (fetchErr || !session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    const sess = session as any
 
-    if (!session.outlook_event_id) {
+    if (!sess.outlook_event_id) {
       return NextResponse.json({ occurrences: [], message: 'No Outlook event linked' })
     }
 
     const token = await getGraphToken()
     const startDateTime = new Date().toISOString()
-    const endDateTime   = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString() // 6 months
+    const endDateTime   = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
 
     const url =
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${session.outlook_event_id}/instances` +
+      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${sess.outlook_event_id}/instances` +
       `?startDateTime=${startDateTime}&endDateTime=${endDateTime}` +
       `&$select=id,subject,start,end,body,attendees,location&$top=12`
 
@@ -98,7 +99,7 @@ export async function PATCH(
     }
 
     const { data: session, error: fetchErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select('id,outlook_event_id,display_title,platform')
       .eq('id', id)
       .single()
@@ -106,8 +107,9 @@ export async function PATCH(
     if (fetchErr || !session) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
+    const patchSess = session as any
 
-    if (!session.outlook_event_id) {
+    if (!patchSess.outlook_event_id) {
       return NextResponse.json({ error: 'No Outlook event linked to this session' }, { status: 400 })
     }
 

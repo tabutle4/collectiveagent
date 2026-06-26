@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { data: sessions, error } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .select(
         'id,section,display_title,outlook_event_id,recurrence_type,recurrence_day,' +
         'start_time,end_time,description,platform,audience,host,highlight,image_url,active,created_at'
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load sessions' }, { status: 500 })
     }
 
-    const rows = sessions || []
+    const rows = (sessions || []) as any[]
 
     // Fetch live Graph times for linked sessions
     const linkedIds = rows.map(s => s.outlook_event_id).filter(Boolean) as string[]
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
 
     // Insert into DB
     const { data: inserted, error: insertErr } = await supabaseAdmin
-      .from('coaching_schedule_sessions')
+      .from('coaching_schedule_sessions' as any)
       .insert({
         section,
         display_title,
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      id: inserted.id,
+      id: (inserted as any).id,
       outlook_event_id: outlookEventId,
       outlook_created: !!outlookEventId && !existingOutlookId,
     })
