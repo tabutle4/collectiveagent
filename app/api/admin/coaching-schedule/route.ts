@@ -54,7 +54,9 @@ export async function GET(request: NextRequest) {
       })
       if (res.ok) {
         const data = await res.json()
-        outlookSeries = (data.value || []).filter((e: any) => e.type === 'seriesMaster')
+        outlookSeries = (data.value || []).filter((e: any) =>
+          e.type === 'seriesMaster' || e.type === 'singleInstance'
+        )
         for (const m of outlookSeries) {
           if (linkedIds.includes(m.id)) {
             graphTimeMap[m.id] = {

@@ -657,7 +657,11 @@ export default function CoachingSchedulePage() {
                   }}
                   className="input-luxury"
                 >
-                  <option value="">-- Not linked (Outlook event will be created) --</option>
+                  <option value="">
+                    {seriesOptions.length === 0
+                      ? '-- No Outlook events found (leave blank to create one) --'
+                      : '-- Leave blank to create a new Outlook event --'}
+                  </option>
                   {seriesOptions.map(o => (
                     <option key={o.id} value={o.id}>
                       {o.subject} ({formatTimeDisplay(o.start, o.end)})

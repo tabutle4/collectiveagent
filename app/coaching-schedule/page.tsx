@@ -55,6 +55,32 @@ export default function CoachingSchedulePage() {
             loading={loading}
             showMoreInfo={false}
           />
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 py-4">
+            <a
+              href="https://visit.collectiverealtyco.com/calendars"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-luxury-accent text-xs font-semibold hover:underline"
+            >
+              Subscribe to Calendar
+            </a>
+            <a
+              href="https://visit.collectiverealtyco.com/training"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-luxury-accent text-xs font-semibold hover:underline"
+            >
+              Zoom Link
+            </a>
+            <a
+              href="https://agent.collectiverealtyco.com/training-center"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-luxury-accent text-xs font-semibold hover:underline"
+            >
+              Session Recordings
+            </a>
+          </div>
         </div>
       </div>
 
