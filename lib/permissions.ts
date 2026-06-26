@@ -106,6 +106,7 @@ export type PermissionCode =
   // Calendar (existing in DB)
   | 'can_view_calendar'
   | 'can_manage_calendar'
+  | 'can_add_calendar_guests'
   // Training Center
   | 'can_view_training_center'
   // Property Management
@@ -326,6 +327,7 @@ export async function getPermissionsObject(
     'can_manage_team_agreements',
     // Calendar
     'can_manage_calendar',
+    'can_add_calendar_guests',
     // Training Center
     'can_view_training_center',
     // Property Management

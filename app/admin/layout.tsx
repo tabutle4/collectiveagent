@@ -33,6 +33,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   '/admin/recordings': 'can_manage_recordings',
   '/admin/insights': 'can_view_insights',
   '/admin/coaching-access': 'can_manage_agents',
+  '/admin/coaching-schedule': 'can_manage_calendar',
+  '/admin/coaching-guests': 'can_add_calendar_guests',
 }
 
 function AccessDenied() {

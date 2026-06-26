@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock, Video, ExternalLink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, MapPin, FileText, Clock, ExternalLink } from 'lucide-react'
+import ScheduleGrid from '@/components/schedule/ScheduleGrid'
+import type { ScheduleSession } from '@/lib/schedule-utils'
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const MONTHS = [
@@ -22,109 +24,6 @@ const MONTHS = [
 type CalendarPageProps = {
   isAdmin?: boolean
 }
-
-const COACHING_SESSIONS = [
-  {
-    day: 'Tuesdays',
-    time: '12 – 1 PM',
-    title: 'Industry Intelligence & Market Mastery Meeting',
-    description:
-      'Stay ahead with market data, industry news, and trends to position yourself as a market expert.',
-    platform: 'In Person & Zoom',
-    audience: 'All Agents',
-    highlight: false,
-  },
-  {
-    day: 'Tuesdays',
-    time: '1 – 2 PM',
-    title: 'Next Level Lead Gen & Marketing Coaching',
-    description:
-      'Build a consistent pipeline with lead generation strategies, marketing tactics, and accountability.',
-    platform: 'In Person & Zoom',
-    audience: 'All Agents',
-    highlight: false,
-  },
-  {
-    day: 'Wednesdays',
-    time: '10 – 11 AM',
-    title: 'New Agent Coaching Circle',
-    description:
-      'For agents in onboarding or working toward their first 5 deals. Tackle your checklist, answer questions, and troubleshoot roadblocks together.',
-    platform: 'In Person & Zoom',
-    audience: 'New Agents',
-    highlight: true,
-  },
-  {
-    day: 'Thursdays',
-    time: '10 – 11 AM',
-    title: 'Convert & Close Coaching',
-    description:
-      'Turn leads into clients and contracts into closings. Scripts, objection handling, and real-world scenarios.',
-    platform: 'In Person & Zoom',
-    audience: 'All Agents',
-    highlight: false,
-  },
-  {
-    day: 'Thursdays',
-    time: '11 AM – 12 PM',
-    title: 'Seasoned Agent Coaching Circle',
-    description:
-      'For producing agents focused on scaling, sustaining momentum, and growing their business.',
-    platform: 'In Person & Zoom',
-    audience: 'Experienced Agents',
-    highlight: true,
-  },
-]
-
-const DIVISION_SESSIONS = [
-  {
-    day: 'Last Wednesdays',
-    time: '12 – 1 PM',
-    title: 'Monthly Apartment Locator Q&A',
-    host: 'Maureen Eno',
-    description: 'Live Q&A on lease transactions and apartment locator best practices.',
-    platform: 'Zoom',
-    audience: 'All Agents',
-  },
-  {
-    day: 'Wednesdays – Weekly',
-    time: '1 – 2 PM',
-    title: 'Collective Access Division Coaching – Dallas',
-    host: 'Terraneka Hill',
-    description:
-      'Sharpen buyer qualification, lending conversations, community targeting, and accountability to drive consistent closings.',
-    platform: 'Zoom',
-    audience: 'All Agents',
-  },
-  {
-    day: 'Last Thursdays',
-    time: '12 – 1 PM',
-    title: 'Monthly Lease Training',
-    host: 'Briana Thomas',
-    description: 'Hands-on training to build and grow your apartment locator business.',
-    platform: 'Zoom',
-    audience: 'All Agents',
-  },
-  {
-    day: 'Fridays – Weekly',
-    time: '1 – 2 PM',
-    title: 'Collective Access Division Coaching – Houston',
-    host: 'Eric Roberts',
-    description:
-      'Sharpen buyer qualification, lending conversations, community targeting, and accountability to drive consistent closings.',
-    platform: 'Zoom',
-    audience: 'All Agents',
-  },
-  {
-    day: '2nd & 4th Fridays',
-    time: '11 AM – 12 PM',
-    title: 'Navigating the Training Center, Compliance & Onboarding',
-    host: null,
-    description: "Get your questions answered and ensure you're fully set up for success.",
-    platform: 'Microsoft Teams',
-    audience: 'Onboarding Agents · All Agents Welcome',
-  },
-]
 
 // Extract URL from text if present (handles URLs with or without protocol)
 function extractUrl(text: string | null | undefined): { url: string; href: string } | null {
@@ -192,28 +91,6 @@ function LocationDisplay({ location }: { location: string }) {
   return <span className="text-xs text-luxury-gray-2">{location}</span>
 }
 
-// Parse time from Graph dateTime string (already in Chicago time via Prefer header)
-// to avoid browser timezone conversion artifacts.
-function formatSeriesTime(startIso: string, endIso: string): string {
-  const parseHM = (iso: string) => {
-    const t = iso.split('T')[1] || ''
-    const [h, m] = t.split(':').map(Number)
-    return { h: h || 0, m: m || 0 }
-  }
-  const fmt = (h: number, m: number, showPeriod: boolean) => {
-    const period = h >= 12 ? 'PM' : 'AM'
-    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-    const minStr = m === 0 ? '' : `:${String(m).padStart(2, '0')}`
-    return showPeriod ? `${h12}${minStr} ${period}` : `${h12}${minStr}`
-  }
-  const { h: sh, m: sm } = parseHM(startIso)
-  const { h: eh, m: em } = parseHM(endIso)
-  const samePeriod = (sh >= 12) === (eh >= 12)
-  return samePeriod
-    ? `${fmt(sh, sm, false)} - ${fmt(eh, em, true)}`
-    : `${fmt(sh, sm, true)} - ${fmt(eh, em, true)}`
-}
-
 export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [today] = useState(new Date())
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -227,7 +104,9 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   const [activeTab, setActiveTab] = useState<'calendar' | 'schedule'>('calendar')
   const [selectedDay, setSelectedDay] = useState<{ day: number; events: any[] } | null>(null)
   const [outlookTipOpen, setOutlookTipOpen] = useState(false)
-  const [seriesTimeMap, setSeriesTimeMap] = useState<Record<string, string>>({})
+  const [coachingSessions, setCoachingSessions] = useState<ScheduleSession[]>([])
+  const [divisionSessions, setDivisionSessions] = useState<ScheduleSession[]>([])
+  const [scheduleLoading, setScheduleLoading] = useState(true)
   const [form, setForm] = useState({
     title: '',
     date: '',
@@ -243,22 +122,21 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   }, [currentDate])
 
   useEffect(() => {
-    loadSeriesData()
+    loadSchedule()
   }, [])
 
-  const loadSeriesData = async () => {
+  const loadSchedule = async () => {
+    setScheduleLoading(true)
     try {
-      const res = await fetch('/api/calendar/events?series=true')
+      const res  = await fetch('/api/public/coaching-schedule')
       const data = await res.json()
-      const map: Record<string, string> = {}
-      for (const s of (data.series || [])) {
-        if (s.subject && s.start?.dateTime && s.end?.dateTime) {
-          map[s.subject] = formatSeriesTime(s.start.dateTime, s.end.dateTime)
-        }
-      }
-      setSeriesTimeMap(map)
+      const all: ScheduleSession[] = data.sessions || []
+      setCoachingSessions(all.filter(s => s.section === 'coaching'))
+      setDivisionSessions(all.filter(s => s.section === 'division'))
     } catch {
-      // silent fail — schedule tab falls back to hardcoded times
+      // silent fail — schedule tab shows empty state
+    } finally {
+      setScheduleLoading(false)
     }
   }
 
@@ -661,108 +539,11 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
 
       {/* ─── COACHING & TRAINING TAB ─── */}
       {activeTab === 'schedule' && (
-        <div className="space-y-4">
-          <div className="container-card border-l-2 border-luxury-accent">
-            <p className="text-xs text-luxury-gray-2 leading-relaxed">
-              In-person attendance is strongly encouraged. Come with questions, laptops, phones,
-              wins, and challenges to share. Sessions start promptly.
-            </p>
-            <div className="flex flex-wrap gap-3 mt-2">
-              <a
-                href="https://visit.collectiverealtyco.com/training"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-luxury-accent font-semibold hover:underline"
-              >
-                Zoom Link
-              </a>
-              <a
-                href="https://agent.collectiverealtyco.com/training-center"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-luxury-accent font-semibold hover:underline"
-              >
-                Session Recordings
-              </a>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-              Coaching Sessions
-            </p>
-            <div className="space-y-2">
-              {COACHING_SESSIONS.map((session, i) => (
-                <div key={i} className="inner-card">
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className="text-xs font-semibold text-luxury-accent whitespace-nowrap">
-                        {session.day}
-                      </span>
-                      <span className="text-xs text-luxury-gray-3 whitespace-nowrap">
-                        {seriesTimeMap[session.title] || session.time}
-                      </span>
-                    </div>
-                    {session.highlight && (
-                      <span className="text-xs bg-luxury-accent/10 text-luxury-accent rounded-full px-2 py-0.5 font-medium flex-shrink-0">
-                        {session.audience}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-semibold text-luxury-gray-1 mb-0.5">{session.title}</p>
-                  <p className="text-xs text-luxury-gray-3 leading-relaxed mb-2">
-                    {session.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-luxury-gray-3">
-                      <Video size={11} />
-                      <span className="text-xs">{session.platform}</span>
-                    </div>
-                    {!session.highlight && (
-                      <span className="text-xs text-luxury-gray-3">{session.audience}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
-              Division & Training Sessions
-            </p>
-            <div className="space-y-2">
-              {DIVISION_SESSIONS.map((session, i) => (
-                <div key={i} className="inner-card">
-                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                    <span className="text-xs font-semibold text-luxury-accent whitespace-nowrap">
-                      {session.day}
-                    </span>
-                    <span className="text-xs text-luxury-gray-3 whitespace-nowrap">
-                      {seriesTimeMap[session.title] || session.time}
-                    </span>
-                  </div>
-                  <p className="text-xs font-semibold text-luxury-gray-1 mb-0.5">{session.title}</p>
-                  {session.host && (
-                    <p className="text-xs text-luxury-gray-3 mb-0.5">with {session.host}</p>
-                  )}
-                  <p className="text-xs text-luxury-gray-3 leading-relaxed mb-2">
-                    {session.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-luxury-gray-3">
-                      <Video size={11} />
-                      <span className="text-xs">{session.platform}</span>
-                    </div>
-                    <span className="text-xs text-luxury-gray-3 text-right ml-2">
-                      {session.audience}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ScheduleGrid
+          coachingSessions={coachingSessions}
+          divisionSessions={divisionSessions}
+          loading={scheduleLoading}
+        />
       )}
 
       {/* ─── Day events drawer ─── */}

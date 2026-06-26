@@ -42,6 +42,8 @@ const PUBLIC_PATHS = [
   '/api/transactions/email-inbound',
   '/api/pm/email-webhook',
   '/api/checks/email-inbound',
+  '/coaching-schedule',
+  '/api/public',
 ]
 
 // Paths accessible to all authenticated users regardless of role

@@ -37,6 +37,7 @@ import {
   Sparkles,
   KeyRound,
   Landmark,
+  Mic,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -150,6 +151,7 @@ const adminNavEntries: NavEntry[] = [
       label: 'Settings',
       items: [
         { href: '/admin/settings', label: 'Settings', icon: Settings },
+        { href: '/admin/coaching-schedule', label: 'Coaching Schedule', icon: CalendarDays },
         { href: '/admin/coaching-access', label: 'Coaching Access', icon: KeyRound },
         { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
       ],
@@ -210,6 +212,7 @@ const tcNavEntries: NavEntry[] = [
       items: [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
+        { href: '/admin/coaching-guests', label: 'Guest Sessions', icon: Mic },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
         { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
       ],
@@ -268,6 +271,7 @@ const supportNavEntries: NavEntry[] = [
       items: [
         { href: '/training-center', label: 'Training Center', icon: BookOpen },
         { href: '/admin/calendar', label: 'Coaching Calendar', icon: CalendarDays },
+        { href: '/admin/coaching-guests', label: 'Guest Sessions', icon: Mic },
         { href: '/admin/email-signature', label: 'Email Signature', icon: Mail },
         { href: '/admin/email-signature-status', label: 'Signature Adoption', icon: BarChart3 },
       ],
