@@ -176,6 +176,13 @@ export async function GET(
           amount: Number(d.other_deductions),
         })
       }
+      // Reserve replenishment withheld from this disbursement
+      if (Number(d.reserve_amount) > 0) {
+        deductionLines.push({
+          label: 'Reserve Replenishment',
+          amount: Number(d.reserve_amount),
+        })
+      }
     }
 
     // Pending deposit returns: deposit disbursements that are pending/processing
@@ -386,16 +393,11 @@ function generateStatementHTML(data: Record<string, any>): string {
           <span>Deductions</span>
           ${(data.deduction_lines as any[]).length > 0 ? `
           <div style="color: #999; font-size: 9px; margin-top: 2px;">
-            ${(data.deduction_lines as any[]).map((d: any) => `${d.label} (${fmt$(d.amount)})`).join(' · ')}
+            ${(data.deduction_lines as any[]).map((d: any) => `<div>${d.label} (${fmt$(d.amount)})</div>`).join('')}
           </div>` : `<span style="color: #999; font-size: 9px; margin-left: 6px;">repairs, HOA, etc.</span>`}
         </div>
         <span style="font-weight: 500;">- ${data.total_deductions}</span>
       </div>
-      ${data.has_reserve ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Reserve Replenishment <span style="color: #999; font-size: 9px; margin-left: 6px;">held in trust</span></span>
-        <span style="font-weight: 500;">- ${data.reserve_held}</span>
-      </div>` : ''}
       <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
         <span style="font-weight: 600;">Net Remaining</span>
         <span style="font-weight: 600; color: #C5A278;">${data.has_net_disbursed ? data.total_net_disbursed : data.pending_rent_net}</span>
