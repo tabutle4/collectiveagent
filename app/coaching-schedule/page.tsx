@@ -49,16 +49,11 @@ export default function CoachingSchedulePage() {
         }}
       >
         <div className="max-w-5xl mx-auto px-4">
-          <div className="mb-6">
-            <h1 className="page-title mb-1">Coaching Brokerage Calendar</h1>
-            <p className="text-luxury-gray-3 text-sm">
-              Weekly and monthly sessions open to all Collective Realty Co. agents.
-            </p>
-          </div>
           <ScheduleGrid
             coachingSessions={coachingSessions}
             divisionSessions={divisionSessions}
             loading={loading}
+            showMoreInfo={false}
           />
         </div>
       </div>

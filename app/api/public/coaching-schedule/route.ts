@@ -68,7 +68,10 @@ export async function GET(_request: NextRequest) {
       }
     }
 
-    // 4. Merge and shape response
+    const DAY_ORDER: Record<string, number> = {
+      monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4,
+    }
+
     const shaped = rows.map(s => {
       const live = s.outlook_event_id ? graphTimeMap[s.outlook_event_id] : null
       const startTime = live?.startTime || s.start_time
@@ -94,6 +97,11 @@ export async function GET(_request: NextRequest) {
         day_label:        getDayLabel(s.recurrence_type, s.recurrence_day),
         time_display:     formatTimeDisplay(startTime, endTime),
       }
+    }).sort((a, b) => {
+      if (a.section !== b.section) return a.section === 'coaching' ? -1 : 1
+      const dayDiff = (DAY_ORDER[a.recurrence_day] ?? 5) - (DAY_ORDER[b.recurrence_day] ?? 5)
+      if (dayDiff !== 0) return dayDiff
+      return a.start_time.localeCompare(b.start_time)
     })
 
     return NextResponse.json({ sessions: shaped })
