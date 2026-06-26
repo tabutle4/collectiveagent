@@ -81,6 +81,7 @@ export default function CoachingSchedulePage() {
   const [saving, setSaving]               = useState(false)
   const [error, setError]                 = useState('')
   const [toast, setToast]                 = useState('')
+  const [autoLinking, setAutoLinking]     = useState(false)
 
   // Add / Edit modal
   const [modalOpen, setModalOpen]   = useState(false)
@@ -106,6 +107,26 @@ export default function CoachingSchedulePage() {
   const [occError, setOccError]                           = useState('')
 
   useEffect(() => { loadSessions() }, [])
+
+  async function autoLink() {
+    setAutoLinking(true)
+    try {
+      const res = await fetch('/api/admin/coaching-schedule/auto-link', { method: 'POST' })
+      const d   = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Auto-link failed')
+      const msg = [
+        d.linked.length    ? `Linked: ${d.linked.join(' | ')}` : '',
+        d.unlinked.length  ? `No match found: ${d.unlinked.join(', ')}` : '',
+        d.alreadyLinked.length ? `Already linked: ${d.alreadyLinked.join(', ')}` : '',
+      ].filter(Boolean).join('\n')
+      showToast(msg || 'Done.')
+      loadSessions()
+    } catch (e: any) {
+      showToast(`Auto-link failed: ${e.message}`)
+    } finally {
+      setAutoLinking(false)
+    }
+  }
 
   // ── Data loading ────────────────────────────────────────────────────────
 
@@ -333,10 +354,21 @@ export default function CoachingSchedulePage() {
             Manage sessions, sync with Outlook, and update guest info for specific dates.
           </p>
         </div>
-        <button onClick={openAdd} className="btn-primary rounded flex items-center gap-2 px-4 py-2 text-sm shrink-0">
-          <Plus size={14} />
-          Add Session
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={autoLink}
+            disabled={autoLinking}
+            className="btn-secondary rounded flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
+            title="Match sessions to Outlook events by title"
+          >
+            <Link2 size={14} />
+            {autoLinking ? 'Linking...' : 'Auto-link Outlook'}
+          </button>
+          <button onClick={openAdd} className="btn-primary rounded flex items-center gap-2 px-4 py-2 text-sm shrink-0">
+            <Plus size={14} />
+            Add Session
+          </button>
+        </div>
       </div>
 
       {toast && (
