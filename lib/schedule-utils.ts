@@ -19,7 +19,7 @@ export const RECURRENCE_DAYS = [
   { value: 'friday',    label: 'Friday' },
 ]
 
-/** Generate the human-readable day label shown on the schedule grid. */
+/** Human-readable day label shown on the schedule grid. */
 export function getDayLabel(recurrenceType: string, recurrenceDay: string): string {
   const plural: Record<string, string> = {
     monday: 'Mondays', tuesday: 'Tuesdays', wednesday: 'Wednesdays',
@@ -35,6 +35,20 @@ export function getDayLabel(recurrenceType: string, recurrenceDay: string): stri
     case 'monthly-fourth': return `4th ${day}`
     case 'monthly-last':   return `Last ${day}`
     default:               return day
+  }
+}
+
+/** Human-readable recurrence label for the Outlook event body. */
+export function getRecurrenceLabel(recurrenceType: string): string {
+  switch (recurrenceType) {
+    case 'weekly':          return 'Weekly'
+    case 'biweekly':        return 'Every other week (2nd & 4th)'
+    case 'monthly-first':   return 'Monthly – 1st'
+    case 'monthly-second':  return 'Monthly – 2nd'
+    case 'monthly-third':   return 'Monthly – 3rd'
+    case 'monthly-fourth':  return 'Monthly – 4th'
+    case 'monthly-last':    return 'Monthly – Last'
+    default:                return 'Weekly'
   }
 }
 
@@ -61,48 +75,118 @@ export function formatTimeDisplay(startTime: string, endTime: string): string {
 /** Parse a Graph dateTime string (Chicago-local, no offset) into HH:MM. */
 export function graphDateTimeToHHMM(dateTime: string): string {
   const t = (dateTime || '').split('T')[1] || ''
-  return t.slice(0, 5) // "HH:MM"
+  return t.slice(0, 5)
+}
+
+/** Render platform with Zoom URL appended when applicable. */
+function renderPlatform(platform: string): string {
+  const lower = platform.toLowerCase()
+  if (lower.includes('zoom') && !platform.includes('http')) {
+    return `${platform}: <a href="https://visit.collectiverealtyco.com/training" style="color:#0066cc;">visit.collectiverealtyco.com/training</a>`
+  }
+  return platform
+}
+
+/** Render description — if it is a URL, wrap as a hyperlink. */
+function renderDescription(description: string): string {
+  if (/^https?:\/\//.test(description.trim())) {
+    return `<a href="${description.trim()}" style="color:#0066cc;">${description.trim()}</a>`
+  }
+  return description.replace(/\n/g, '<br>')
+}
+
+export interface EventBodyParams {
+  displayTitle: string
+  dayLabel: string
+  timeDisplay: string
+  recurrenceLabel: string
+  platform: string
+  audience: string
+  host: string | null
+  description: string
+  imageUrl: string | null
 }
 
 /**
- * Build the HTML event body we write to Outlook.
- * Agents see this when they open a coaching session in their calendar.
+ * Build the full HTML event body written to Outlook for a coaching session.
+ * Matches the structured bullet format agents expect.
  */
-export function buildEventBody(params: {
-  description: string
-  audience: string
-  host: string | null
-  imageUrl: string | null
-}): string {
-  const lines: string[] = []
-  if (params.description) {
-    lines.push(`<p style="margin:0 0 12px;">${params.description.replace(/\n/g, '<br>')}</p>`)
+export function buildEventBody(params: EventBodyParams): string {
+  const { displayTitle, dayLabel, timeDisplay, recurrenceLabel, platform, audience, host, description, imageUrl } = params
+
+  const bullets: string[] = [
+    `<li style="margin-bottom:6px;"><strong>Day:</strong> ${dayLabel}</li>`,
+    `<li style="margin-bottom:6px;"><strong>Time:</strong> ${timeDisplay}</li>`,
+    `<li style="margin-bottom:6px;"><strong>Recurrence:</strong> ${recurrenceLabel}</li>`,
+    `<li style="margin-bottom:6px;"><strong>Platform:</strong> ${renderPlatform(platform)}</li>`,
+    `<li style="margin-bottom:6px;"><strong>Audience:</strong> ${audience}</li>`,
+  ]
+  if (host) {
+    bullets.push(`<li style="margin-bottom:6px;"><strong>Host:</strong> ${host}</li>`)
   }
-  lines.push('<hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">')
-  if (params.audience) {
-    lines.push(`<p style="margin:0 0 6px;"><strong>Audience:</strong> ${params.audience}</p>`)
+  if (description) {
+    bullets.push(`<li style="margin-bottom:6px;"><strong>Description:</strong> ${renderDescription(description)}</li>`)
   }
-  if (params.host) {
-    lines.push(`<p style="margin:0 0 6px;"><strong>Host:</strong> ${params.host}</p>`)
-  }
-  if (params.imageUrl) {
+
+  const lines: string[] = [
+    `<h2 style="margin:0 0 14px;font-size:18px;font-weight:700;font-family:sans-serif;">${displayTitle}</h2>`,
+    `<ul style="margin:0 0 16px;padding-left:22px;font-family:sans-serif;font-size:14px;line-height:1.6;">${bullets.join('\n')}</ul>`,
+  ]
+
+  if (imageUrl) {
     lines.push(
-      `<p style="margin:16px 0 0;"><img src="${params.imageUrl}" ` +
+      `<p style="margin:16px 0;"><img src="${imageUrl}" ` +
       `alt="Session photo" style="max-width:480px;width:100%;height:auto;border-radius:6px;" /></p>`
     )
   }
+
   lines.push(
-    '<p style="margin:16px 0 0;font-size:12px;color:#888;">' +
+    '<p style="margin:20px 0 0;font-size:12px;color:#888;font-family:sans-serif;">' +
     'Recordings available in the ' +
-    '<a href="https://agent.collectiverealtyco.com/training-center">Training Center</a>.' +
+    '<a href="https://agent.collectiverealtyco.com/training-center" style="color:#0066cc;">Training Center</a>.' +
     '</p>'
   )
+
+  return lines.join('\n')
+}
+
+/**
+ * Build the occurrence body: guest info above, full session body below.
+ * Used when Leah adds a guest speaker to a specific date.
+ */
+export function buildOccurrenceBody(params: {
+  guestName: string
+  guestCompany: string
+  topic: string
+  food: string
+  sessionBody: string
+}): string {
+  const { guestName, guestCompany, topic, food, sessionBody } = params
+  const lines: string[] = []
+
+  const hasGuest = guestName || guestCompany || topic || food
+  if (hasGuest) {
+    if (guestName) {
+      lines.push(`<h3 style="margin:0 0 4px;font-size:16px;font-weight:700;font-family:sans-serif;">${guestName}</h3>`)
+    }
+    if (guestCompany) {
+      lines.push(`<p style="margin:0 0 10px;color:#555;font-family:sans-serif;">${guestCompany}</p>`)
+    }
+    if (topic) {
+      lines.push(`<p style="margin:0 0 6px;font-family:sans-serif;"><strong>Topic:</strong> ${topic}</p>`)
+    }
+    if (food) {
+      lines.push(`<p style="margin:0 0 6px;font-family:sans-serif;"><strong>Food:</strong> ${food}</p>`)
+    }
+    lines.push('<hr style="border:none;border-top:1px solid #ccc;margin:20px 0;" />')
+  }
+
+  lines.push(sessionBody)
   return lines.join('\n')
 }
 
 /**
  * Build the Microsoft Graph recurrence object for a new recurring event.
- * startDate must be a YYYY-MM-DD string of the first occurrence (or any valid future date).
  */
 export function buildGraphRecurrence(
   recurrenceType: string,
@@ -110,25 +194,13 @@ export function buildGraphRecurrence(
   startDate: string
 ): object {
   const weeklyPattern = (interval: number) => ({
-    pattern: {
-      type: 'weekly',
-      interval,
-      daysOfWeek: [recurrenceDay],
-      firstDayOfWeek: 'sunday',
-    },
-    range: { type: 'noEnd', startDate },
+    pattern: { type: 'weekly', interval, daysOfWeek: [recurrenceDay], firstDayOfWeek: 'sunday' },
+    range:   { type: 'noEnd', startDate },
   })
-
   const relativeMonthly = (index: string) => ({
-    pattern: {
-      type: 'relativeMonthly',
-      interval: 1,
-      daysOfWeek: [recurrenceDay],
-      index,
-    },
-    range: { type: 'noEnd', startDate },
+    pattern: { type: 'relativeMonthly', interval: 1, daysOfWeek: [recurrenceDay], index },
+    range:   { type: 'noEnd', startDate },
   })
-
   switch (recurrenceType) {
     case 'weekly':          return weeklyPattern(1)
     case 'biweekly':        return weeklyPattern(2)
@@ -141,10 +213,7 @@ export function buildGraphRecurrence(
   }
 }
 
-/**
- * Given a recurrenceDay string, return the next calendar date for that day of week
- * starting from today (or today if it matches), as YYYY-MM-DD.
- */
+/** Next calendar date for a given day of week, as YYYY-MM-DD. */
 export function nextDateForDay(recurrenceDay: string): string {
   const dayIndex: Record<string, number> = {
     sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
@@ -174,7 +243,6 @@ export interface ScheduleSession {
   highlight: boolean
   image_url: string | null
   active: boolean
-  // Computed display fields (added by API)
   day_label: string
   time_display: string
 }

@@ -9,6 +9,7 @@ import {
   buildEventBody,
   buildGraphRecurrence,
   nextDateForDay,
+  getRecurrenceLabel,
 } from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
@@ -164,22 +165,30 @@ export async function POST(request: NextRequest) {
     // Create Outlook event if no existing event was linked
     if (!outlookEventId) {
       try {
-        const token = await getGraphToken()
-        const startDate = nextDateForDay(recurrence_day)
-        const eventBody = buildEventBody({ description, audience, host, imageUrl: image_url || null })
+        const token      = await getGraphToken()
+        const startDate  = nextDateForDay(recurrence_day)
+        const dayLabel   = getDayLabel(recurrence_type, recurrence_day)
+        const timeDisp   = formatTimeDisplay(start_time, end_time)
+        const recLabel   = getRecurrenceLabel(recurrence_type)
         const recurrence = buildGraphRecurrence(recurrence_type, recurrence_day, startDate)
+
+        const eventBody = buildEventBody({
+          displayTitle:    display_title,
+          dayLabel,
+          timeDisplay:     timeDisp,
+          recurrenceLabel: recLabel,
+          platform:        platform || '',
+          audience:        audience || '',
+          host:            host || null,
+          description:     description || '',
+          imageUrl:        image_url || null,
+        })
 
         const eventPayload = {
           subject: display_title,
-          body: { contentType: 'html', content: eventBody },
-          start: {
-            dateTime: `${startDate}T${start_time}:00`,
-            timeZone: 'America/Chicago',
-          },
-          end: {
-            dateTime: `${startDate}T${end_time}:00`,
-            timeZone: 'America/Chicago',
-          },
+          body:    { contentType: 'html', content: eventBody },
+          start:   { dateTime: `${startDate}T${start_time}:00`, timeZone: 'America/Chicago' },
+          end:     { dateTime: `${startDate}T${end_time}:00`,   timeZone: 'America/Chicago' },
           location: { displayName: platform || '' },
           recurrence,
         }

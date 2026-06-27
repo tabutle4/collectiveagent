@@ -227,9 +227,9 @@ export default function CoachingSchedulePage() {
       if (!res.ok) throw new Error(d.error || 'Save failed')
 
       let msg = editingId ? 'Session updated.' : 'Session created.'
-      if (d.day_changed) msg += ' Day changed - remember to update the recurrence in Outlook too.'
+      if (d.day_changed) msg += ' Day changed - update recurrence in Outlook too.'
       if (d.outlook_synced) msg += ' Outlook synced.'
-      if (d.outlook_error) msg += ` Outlook sync failed: ${d.outlook_error}`
+      if (d.outlook_error) msg += ` OUTLOOK ERROR: ${d.outlook_error}`
 
       showToast(msg)
       closeModal()

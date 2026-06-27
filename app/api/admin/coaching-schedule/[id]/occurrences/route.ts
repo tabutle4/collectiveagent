@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAnyPermission } from '@/lib/api-auth'
-import { getGraphToken } from '@/lib/microsoft-graph'
+import {
+  buildEventBody,
+  buildOccurrenceBody,
+  getDayLabel,
+  formatTimeDisplay,
+  getRecurrenceLabel,
+} from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 
@@ -100,7 +106,7 @@ export async function PATCH(
 
     const { data: session, error: fetchErr } = await supabaseAdmin
       .from('coaching_schedule_sessions' as any)
-      .select('id,outlook_event_id,display_title,platform')
+      .select('id,outlook_event_id,display_title,platform,description,audience,host,image_url,recurrence_type,recurrence_day,start_time,end_time')
       .eq('id', id)
       .single()
 
@@ -141,32 +147,30 @@ export async function PATCH(
       }
     }
 
-    // Build the occurrence body
-    const bodyLines: string[] = []
-    if (guestName || guestCompany) {
-      bodyLines.push(
-        `<p style="margin:0 0 4px;font-size:15px;font-weight:600;">${guestName || ''}</p>`
-      )
-      if (guestCompany) {
-        bodyLines.push(`<p style="margin:0 0 12px;color:#555;">${guestCompany}</p>`)
-      }
-      bodyLines.push('<hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">')
-    }
-    if (topic) {
-      bodyLines.push(`<p style="margin:0 0 8px;"><strong>Topic:</strong> ${topic}</p>`)
-    }
-    if (food) {
-      bodyLines.push(`<p style="margin:0 0 8px;"><strong>Food:</strong> ${food}</p>`)
-    }
-    bodyLines.push(
-      '<p style="margin:16px 0 0;font-size:12px;color:#888;">' +
-      'Recordings available in the ' +
-      '<a href="https://agent.collectiverealtyco.com/training-center">Training Center</a>.' +
-      '</p>'
-    )
+    // Build full session body (same as what the series master has)
+    const sessionBody = buildEventBody({
+      displayTitle:    patchSess.display_title,
+      dayLabel:        getDayLabel(patchSess.recurrence_type, patchSess.recurrence_day),
+      timeDisplay:     formatTimeDisplay(patchSess.start_time, patchSess.end_time),
+      recurrenceLabel: getRecurrenceLabel(patchSess.recurrence_type),
+      platform:        patchSess.platform || '',
+      audience:        patchSess.audience || '',
+      host:            patchSess.host || null,
+      description:     patchSess.description || '',
+      imageUrl:        patchSess.image_url || null,
+    })
+
+    // Guest info goes above the session body
+    const occurrenceBodyHtml = buildOccurrenceBody({
+      guestName:   guestName  || '',
+      guestCompany: guestCompany || '',
+      topic:       topic || '',
+      food:        food  || '',
+      sessionBody,
+    })
 
     const patchPayload: any = {
-      body: { contentType: 'html', content: bodyLines.join('\n') },
+      body: { contentType: 'html', content: occurrenceBodyHtml },
       attendees,
     }
 

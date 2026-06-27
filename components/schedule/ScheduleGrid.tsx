@@ -38,6 +38,23 @@ function DataCell({ alt, border = true, children }: {
   )
 }
 
+function DescriptionDisplay({ description }: { description: string }) {
+  if (/^https?:\/\//.test((description || '').trim())) {
+    return (
+      <a href={description.trim()} target="_blank" rel="noopener noreferrer"
+        className="text-luxury-accent text-[10px] hover:underline break-all inline-flex items-center gap-0.5">
+        More about this session
+        <ExternalLink size={9} className="shrink-0" />
+      </a>
+    )
+  }
+  return (
+    <span className="text-luxury-gray-4 text-[10px] leading-relaxed block break-words line-clamp-5">
+      {description}
+    </span>
+  )
+}
+
 function PlatformDisplay({ platform }: { platform: string }) {
   const urlMatch = platform.match(/https?:\/\/[^\s<>"{}|\\^`[\];,]+/i)
   if (urlMatch) {
@@ -137,9 +154,7 @@ function SessionGrid({ sectionLabel, sessions }: { sectionLabel: string; session
             <LabelCell>Descriptions</LabelCell>
             {sessions.map((s, i) => (
               <DataCell key={i} alt={true}>
-                <span className="text-luxury-gray-4 text-[10px] leading-relaxed block break-words line-clamp-5">
-                  {s.description}
-                </span>
+                <DescriptionDisplay description={s.description} />
               </DataCell>
             ))}
 

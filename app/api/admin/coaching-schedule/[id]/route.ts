@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { getGraphToken } from '@/lib/microsoft-graph'
-import { buildEventBody, buildGraphRecurrence, nextDateForDay } from '@/lib/schedule-utils'
+import {
+  buildEventBody,
+  buildGraphRecurrence,
+  nextDateForDay,
+  getDayLabel,
+  formatTimeDisplay,
+  getRecurrenceLabel,
+} from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 
@@ -101,23 +108,32 @@ export async function PUT(
         const newPlatform    = platform         ?? row.platform
         const newImageUrl    = image_url !== undefined ? (image_url || null) : row.image_url
 
-        const eventBody = buildEventBody({
-          description: newDescription,
-          audience:    newAudience,
-          host:        newHost,
-          imageUrl:    newImageUrl,
-        })
+        const dayLabel        = getDayLabel(newRecType, newRecDay)
+        const timeDisplay     = formatTimeDisplay(newStart, newEnd)
+        const recurrenceLabel = getRecurrenceLabel(newRecType)
 
-        // Only rebuild recurrence if day/type changed
-        const recurrenceChanged =
-          (recurrence_type !== undefined && recurrence_type !== row.recurrence_type) ||
-          (recurrence_day  !== undefined && recurrence_day  !== row.recurrence_day)
+        const eventBody = buildEventBody({
+          displayTitle:    newTitle,
+          dayLabel,
+          timeDisplay,
+          recurrenceLabel,
+          platform:        newPlatform,
+          audience:        newAudience,
+          host:            newHost,
+          description:     newDescription,
+          imageUrl:        newImageUrl,
+        })
 
         const patchPayload: any = {
           subject:  newTitle,
           body:     { contentType: 'html', content: eventBody },
           location: { displayName: newPlatform },
         }
+
+        // Only rebuild recurrence if day/type changed
+        const recurrenceChanged =
+          (recurrence_type !== undefined && recurrence_type !== row.recurrence_type) ||
+          (recurrence_day  !== undefined && recurrence_day  !== row.recurrence_day)
 
         // Time change — use a fixed date for start/end on the series master
         const startDate = nextDateForDay(newRecDay)
