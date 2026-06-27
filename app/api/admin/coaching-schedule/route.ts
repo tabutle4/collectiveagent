@@ -10,6 +10,7 @@ import {
   buildGraphRecurrence,
   nextDateForDay,
   getRecurrenceLabel,
+  parseLocations,
 } from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
       end_time,
       description,
       platform,
+      event_location,
       audience,
       host,
       highlight,
@@ -189,7 +191,8 @@ export async function POST(request: NextRequest) {
           body:    { contentType: 'html', content: eventBody },
           start:   { dateTime: `${startDate}T${start_time}:00`, timeZone: 'America/Chicago' },
           end:     { dateTime: `${startDate}T${end_time}:00`,   timeZone: 'America/Chicago' },
-          location: { displayName: platform || '' },
+          location:  { displayName: event_location || '' },
+          locations: parseLocations(event_location || ''),
           recurrence,
         }
 
@@ -230,6 +233,7 @@ export async function POST(request: NextRequest) {
         end_time,
         description: description || '',
         platform: platform || '',
+        event_location: event_location || '',
         audience: audience || '',
         host: host || null,
         highlight: highlight ?? false,

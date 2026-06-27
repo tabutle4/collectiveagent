@@ -246,3 +246,17 @@ export interface ScheduleSession {
   day_label: string
   time_display: string
 }
+
+/**
+ * Parse a semicolon-separated location string into a Graph API locations array.
+ * "13201 Northwest Fwy; visit.collectiverealtyco.com/training"
+ * → [{ displayName: '13201 Northwest Fwy' }, { displayName: 'visit...' }]
+ */
+export function parseLocations(eventLocation: string): { displayName: string }[] {
+  if (!eventLocation.trim()) return []
+  return eventLocation
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(displayName => ({ displayName }))
+}

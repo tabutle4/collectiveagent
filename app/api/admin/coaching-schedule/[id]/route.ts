@@ -9,6 +9,7 @@ import {
   getDayLabel,
   formatTimeDisplay,
   getRecurrenceLabel,
+  parseLocations,
 } from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
@@ -35,6 +36,7 @@ export async function PUT(
       end_time,
       description,
       platform,
+      event_location,
       audience,
       host,
       highlight,
@@ -45,7 +47,7 @@ export async function PUT(
     // SELECT current row first — all fields needed as fallbacks for Outlook PATCH
     const { data: current, error: fetchErr } = await supabaseAdmin
       .from('coaching_schedule_sessions' as any)
-      .select('id,outlook_event_id,recurrence_type,recurrence_day,start_time,end_time,display_title,active,description,platform,audience,host,image_url')
+      .select('id,outlook_event_id,recurrence_type,recurrence_day,start_time,end_time,display_title,active,description,platform,event_location,audience,host,image_url')
       .eq('id', id)
       .single()
 
@@ -67,6 +69,7 @@ export async function PUT(
         ...(end_time !== undefined && { end_time }),
         ...(description !== undefined && { description }),
         ...(platform !== undefined && { platform }),
+        ...(event_location !== undefined && { event_location }),
         ...(audience !== undefined && { audience }),
         ...(host !== undefined && { host: host || null }),
         ...(highlight !== undefined && { highlight }),
@@ -88,7 +91,8 @@ export async function PUT(
     // Only sync to Outlook if at least one Outlook-relevant field is in the request body
     const outlookFieldsChanged = [
       'display_title', 'start_time', 'end_time', 'recurrence_type',
-      'recurrence_day', 'description', 'platform', 'audience', 'host', 'image_url',
+      'recurrence_day', 'description', 'platform', 'event_location',
+      'audience', 'host', 'image_url',
     ].some(f => body[f] !== undefined)
 
     let outlookSynced = false
@@ -105,7 +109,8 @@ export async function PUT(
         const newDescription = description      ?? row.description
         const newAudience    = audience         ?? row.audience
         const newHost        = host !== undefined ? (host || null) : row.host
-        const newPlatform    = platform         ?? row.platform
+        const newPlatform     = platform         ?? row.platform
+        const newEventLocation = event_location !== undefined ? event_location : (row.event_location || '')
         const newImageUrl    = image_url !== undefined ? (image_url || null) : row.image_url
 
         const dayLabel        = getDayLabel(newRecType, newRecDay)
@@ -127,7 +132,8 @@ export async function PUT(
         const patchPayload: any = {
           subject:  newTitle,
           body:     { contentType: 'html', content: eventBody },
-          location: { displayName: newPlatform },
+          location: { displayName: newEventLocation },
+          locations: parseLocations(newEventLocation),
         }
 
         // Only rebuild recurrence if day/type changed

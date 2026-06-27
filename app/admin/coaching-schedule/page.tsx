@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Link2, AlertTriangle,
-  ChevronDown, ChevronUp, Upload, X, Calendar, Users, Mic, Clock,
-  RefreshCw, CheckCircle,
+  Upload, X, Calendar, Users, Mic,
+  CheckCircle,
 } from 'lucide-react'
 import { RECURRENCE_TYPES, RECURRENCE_DAYS, getDayLabel, formatTimeDisplay } from '@/lib/schedule-utils'
 
@@ -21,6 +21,7 @@ interface Session {
   end_time: string
   description: string
   platform: string
+  event_location: string
   audience: string
   host: string | null
   highlight: boolean
@@ -57,6 +58,9 @@ const BLANK_FORM = {
   end_time:        '13:00',
   description:     '',
   platform:        '',
+  event_location:  '',
+  location_physical: '',
+  location_online:   '',
   audience:        '',
   host:            '',
   highlight:       false,
@@ -167,6 +171,9 @@ export default function CoachingSchedulePage() {
       end_time:         s.end_time,
       description:      s.description,
       platform:         s.platform,
+      event_location:   s.event_location || '',
+      location_physical: (s.event_location || '').split(';')[0]?.trim() || '',
+      location_online:   (s.event_location || '').split(';')[1]?.trim() || '',
       audience:         s.audience,
       host:             s.host || '',
       highlight:        s.highlight,
@@ -214,7 +221,9 @@ export default function CoachingSchedulePage() {
     setError('')
     try {
       const imageUrl = await uploadImageIfNeeded()
-      const payload  = { ...form, image_url: imageUrl, host: form.host || null }
+      const combinedLocation = [form.location_physical, form.location_online]
+        .map(s => s.trim()).filter(Boolean).join('; ')
+      const payload  = { ...form, image_url: imageUrl, host: form.host || null, event_location: combinedLocation }
 
       const url    = editingId ? `/api/admin/coaching-schedule/${editingId}` : '/api/admin/coaching-schedule'
       const method = editingId ? 'PUT' : 'POST'
@@ -618,6 +627,33 @@ export default function CoachingSchedulePage() {
                   />
                 </div>
               </div>
+
+              {/* Outlook Location */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="field-label">Physical Location</label>
+                  <input
+                    type="text"
+                    value={form.location_physical}
+                    onChange={e => setForm(f => ({ ...f, location_physical: e.target.value }))}
+                    placeholder="13201 Northwest Fwy Ste 450 Houston TX"
+                    className="input-luxury"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Online Link</label>
+                  <input
+                    type="text"
+                    value={form.location_online}
+                    onChange={e => setForm(f => ({ ...f, location_online: e.target.value }))}
+                    placeholder="visit.collectiverealtyco.com/training"
+                    className="input-luxury"
+                  />
+                </div>
+              </div>
+              <p className="text-luxury-gray-3 text-xs -mt-2">
+                These set the location fields in the Outlook calendar invite. Fill one or both.
+              </p>
 
               {/* Host */}
               <div>
