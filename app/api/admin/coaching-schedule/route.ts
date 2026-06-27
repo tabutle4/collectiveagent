@@ -43,9 +43,12 @@ export async function GET(request: NextRequest) {
 
     try {
       const token = await getGraphToken()
+      const start = new Date().toISOString()
+      const end   = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
       const url =
-        `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events` +
-        `?$select=id,subject,start,end,type&$top=100`
+        `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView` +
+        `?startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}` +
+        `&$select=id,subject,type,seriesMasterId,start,end&$top=300`
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -54,14 +57,25 @@ export async function GET(request: NextRequest) {
       })
       if (res.ok) {
         const data = await res.json()
-        outlookSeries = (data.value || []).filter((e: any) =>
-          e.type === 'seriesMaster' || e.type === 'singleInstance'
-        )
+        // Deduplicate by seriesMasterId (recurring) or id (single instance)
+        const eventMap = new Map<string, any>()
+        for (const event of (data.value || [])) {
+          const effectiveId = event.seriesMasterId || event.id
+          if (!eventMap.has(effectiveId)) {
+            eventMap.set(effectiveId, {
+              id:      effectiveId,
+              subject: event.subject || '',
+              start:   graphDateTimeToHHMM(event.start?.dateTime || ''),
+              end:     graphDateTimeToHHMM(event.end?.dateTime   || ''),
+            })
+          }
+        }
+        outlookSeries = Array.from(eventMap.values())
         for (const m of outlookSeries) {
           if (linkedIds.includes(m.id)) {
             graphTimeMap[m.id] = {
-              startTime: graphDateTimeToHHMM(m.start?.dateTime || ''),
-              endTime:   graphDateTimeToHHMM(m.end?.dateTime || ''),
+              startTime: m.start,
+              endTime:   m.end,
               subject:   m.subject || '',
             }
           }
@@ -102,12 +116,12 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // Also return list of all series masters for the "link" dropdown
+    // Return all deduplicated Outlook events for the link dropdown
     const seriesOptions = outlookSeries.map(e => ({
       id:      e.id,
       subject: e.subject,
-      start:   graphDateTimeToHHMM(e.start?.dateTime || ''),
-      end:     graphDateTimeToHHMM(e.end?.dateTime || ''),
+      start:   e.start,
+      end:     e.end,
     }))
 
     return NextResponse.json({ sessions: shaped, seriesOptions })

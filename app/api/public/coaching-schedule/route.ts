@@ -40,9 +40,12 @@ export async function GET(_request: NextRequest) {
     if (linkedIds.length > 0) {
       try {
         const token = await getGraphToken()
+        const start = new Date().toISOString()
+        const end   = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
         const url =
-          `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events` +
-          `?$select=id,subject,start,end,type&$top=100`
+          `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView` +
+          `?startDateTime=${encodeURIComponent(start)}&endDateTime=${encodeURIComponent(end)}` +
+          `&$select=id,subject,seriesMasterId,start,end&$top=300`
         const res = await fetch(url, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -51,19 +54,18 @@ export async function GET(_request: NextRequest) {
         })
         if (res.ok) {
           const data = await res.json()
-          const masters: any[] = (data.value || []).filter((e: any) => e.type === 'seriesMaster')
-          for (const m of masters) {
-            if (linkedIds.includes(m.id)) {
-              graphTimeMap[m.id] = {
-                startTime: graphDateTimeToHHMM(m.start?.dateTime || ''),
-                endTime:   graphDateTimeToHHMM(m.end?.dateTime || ''),
-                subject:   m.subject || '',
+          for (const event of (data.value || [])) {
+            const effectiveId = event.seriesMasterId || event.id
+            if (linkedIds.includes(effectiveId) && !graphTimeMap[effectiveId]) {
+              graphTimeMap[effectiveId] = {
+                startTime: graphDateTimeToHHMM(event.start?.dateTime || ''),
+                endTime:   graphDateTimeToHHMM(event.end?.dateTime   || ''),
+                subject:   event.subject || '',
               }
             }
           }
         }
       } catch (graphErr) {
-        // Graph unavailable — fall back to DB times silently
         console.error('coaching-schedule GET - Graph error (non-fatal):', graphErr)
       }
     }
