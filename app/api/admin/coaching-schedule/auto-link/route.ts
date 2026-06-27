@@ -34,8 +34,9 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
+      console.error('auto-link Graph error:', res.status, JSON.stringify(err))
       return NextResponse.json(
-        { error: `Graph error: ${err?.error?.message || res.status}` },
+        { error: `Graph error ${res.status}: ${err?.error?.message || JSON.stringify(err)}` },
         { status: 500 }
       )
     }
