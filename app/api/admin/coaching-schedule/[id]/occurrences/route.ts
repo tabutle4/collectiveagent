@@ -43,10 +43,12 @@ export async function GET(
     const startDateTime = new Date().toISOString()
     const endDateTime   = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()
 
+    // /events/{id}/instances is blocked by tenant policy.
+    // Use calendarView and filter by seriesMasterId — same approach as auto-link.
     const url =
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${sess.outlook_event_id}/instances` +
-      `?startDateTime=${startDateTime}&endDateTime=${endDateTime}` +
-      `&$select=id,subject,start,end,body,attendees,location&$top=12`
+      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView` +
+      `?startDateTime=${encodeURIComponent(startDateTime)}&endDateTime=${encodeURIComponent(endDateTime)}` +
+      `&$select=id,subject,start,end,body,attendees,location,seriesMasterId&$top=100`
 
     const res = await fetch(url, {
       headers: {
@@ -65,19 +67,24 @@ export async function GET(
     }
 
     const data = await res.json()
-    const occurrences = (data.value || []).map((o: any) => ({
-      id:         o.id,
-      subject:    o.subject,
-      start:      o.start?.dateTime,
-      end:        o.end?.dateTime,
-      location:   o.location?.displayName || '',
-      body:       o.body?.content || '',
-      attendees:  (o.attendees || []).map((a: any) => ({
-        name:    a.emailAddress?.name || '',
-        email:   a.emailAddress?.address || '',
-        type:    a.type,
-      })),
-    }))
+
+    // Filter to only occurrences belonging to this series master
+    const occurrences = (data.value || [])
+      .filter((o: any) => o.seriesMasterId === sess.outlook_event_id)
+      .slice(0, 12)
+      .map((o: any) => ({
+        id:        o.id,
+        subject:   o.subject,
+        start:     o.start?.dateTime,
+        end:       o.end?.dateTime,
+        location:  o.location?.displayName || '',
+        body:      o.body?.content || '',
+        attendees: (o.attendees || []).map((a: any) => ({
+          name:  a.emailAddress?.name  || '',
+          email: a.emailAddress?.address || '',
+          type:  a.type,
+        })),
+      }))
 
     return NextResponse.json({ occurrences })
   } catch (err: any) {
@@ -122,31 +129,12 @@ export async function PATCH(
 
     const token = await getGraphToken()
 
-    // Fetch current occurrence to get existing attendees
-    const currentRes = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${occurrenceId}` +
-      `?$select=attendees`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    const currentData = currentRes.ok ? await currentRes.json() : { attendees: [] }
-    const existingAttendees: any[] = currentData.attendees || []
-
-    // Build updated attendees: keep existing, add guest if email provided and not already there
-    let attendees = [...existingAttendees]
-    if (guestEmail) {
-      const alreadyAdded = attendees.some(
-        a => a.emailAddress?.address?.toLowerCase() === guestEmail.toLowerCase()
-      )
-      if (!alreadyAdded) {
-        attendees.push({
-          emailAddress: {
-            address: guestEmail,
-            name: guestName || guestEmail,
-          },
-          type: 'required',
-        })
-      }
-    }
+    // Build attendees from form only.
+    // Group members receive the event through group membership, not explicit attendees.
+    // The guest is the only person who needs to be explicitly listed.
+    const attendees: any[] = guestEmail
+      ? [{ emailAddress: { address: guestEmail, name: guestName || guestEmail }, type: 'required' }]
+      : []
 
     // Build full session body (same as what the series master has)
     const sessionBody = buildEventBody({
@@ -171,8 +159,9 @@ export async function PATCH(
     })
 
     const patchPayload: any = {
+      subject: `Guest Presenter \u2013 ${patchSess.display_title}`,
       body: { contentType: 'html', content: occurrenceBodyHtml },
-      attendees,
+      ...(attendees.length > 0 && { attendees }),
     }
 
     const patchRes = await fetch(

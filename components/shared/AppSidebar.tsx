@@ -152,6 +152,7 @@ const adminNavEntries: NavEntry[] = [
       items: [
         { href: '/admin/settings', label: 'Settings', icon: Settings },
         { href: '/admin/coaching-schedule', label: 'Coaching Schedule', icon: CalendarDays },
+        { href: '/admin/coaching-guests', label: 'Guest Sessions', icon: Mic },
         { href: '/admin/coaching-access', label: 'Coaching Access', icon: KeyRound },
         { href: '/admin/recordings', label: 'Zoom Recordings', icon: Video },
       ],

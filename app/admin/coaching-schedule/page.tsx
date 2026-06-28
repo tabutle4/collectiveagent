@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import {
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Link2, AlertTriangle,
-  Upload, X, Calendar, Users, Mic,
+  Upload, X,
   RefreshCw, CheckCircle,
 } from 'lucide-react'
 import { RECURRENCE_TYPES, RECURRENCE_DAYS, getDayLabel, formatTimeDisplay } from '@/lib/schedule-utils'
@@ -40,15 +40,6 @@ interface SeriesOption {
   end: string
 }
 
-interface Occurrence {
-  id: string
-  subject: string
-  start: string
-  end: string
-  location: string
-  attendees: { name: string; email: string; type: string }[]
-}
-
 const BLANK_FORM = {
   section:         'coaching' as 'coaching' | 'division',
   display_title:   '',
@@ -66,14 +57,6 @@ const BLANK_FORM = {
   highlight:       false,
   image_url:       '',
   outlook_event_id: '',
-}
-
-const BLANK_OCCURRENCE_FORM = {
-  guestName:    '',
-  guestCompany: '',
-  guestEmail:   '',
-  topic:        '',
-  food:         '',
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
@@ -95,21 +78,11 @@ export default function CoachingSchedulePage() {
   const [imageFile, setImageFile]   = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
-
+  const fileRef    = useRef<HTMLInputElement>(null)
   // Delete confirm
   const [deleteTarget, setDeleteTarget]       = useState<Session | null>(null)
   const [cancelOutlook, setCancelOutlook]     = useState(false)
   const [deleting, setDeleting]               = useState(false)
-
-  // Occurrence panel
-  const [occurrenceSessionId, setOccurrenceSessionId]     = useState<string | null>(null)
-  const [occurrences, setOccurrences]                     = useState<Occurrence[]>([])
-  const [occLoading, setOccLoading]                       = useState(false)
-  const [occurrenceModal, setOccurrenceModal]             = useState<Occurrence | null>(null)
-  const [occForm, setOccForm]                             = useState({ ...BLANK_OCCURRENCE_FORM })
-  const [occSaving, setOccSaving]                         = useState(false)
-  const [occError, setOccError]                           = useState('')
 
   useEffect(() => { loadSessions() }, [])
 
@@ -309,51 +282,6 @@ export default function CoachingSchedulePage() {
     }
   }
 
-  // ── Occurrences ──────────────────────────────────────────────────────────
-
-  async function openOccurrences(s: Session) {
-    setOccurrenceSessionId(s.id)
-    setOccurrences([])
-    setOccLoading(true)
-    try {
-      const res = await fetch(`/api/admin/coaching-schedule/${s.id}/occurrences`)
-      const d   = await res.json()
-      setOccurrences(d.occurrences || [])
-    } catch {
-      setOccurrences([])
-    } finally {
-      setOccLoading(false)
-    }
-  }
-
-  function openOccurrenceModal(o: Occurrence) {
-    setOccurrenceModal(o)
-    setOccForm({ ...BLANK_OCCURRENCE_FORM })
-    setOccError('')
-  }
-
-  async function saveOccurrence() {
-    if (!occurrenceModal || !occurrenceSessionId) return
-    setOccSaving(true)
-    setOccError('')
-    try {
-      const res = await fetch(`/api/admin/coaching-schedule/${occurrenceSessionId}/occurrences`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ occurrenceId: occurrenceModal.id, ...occForm }),
-      })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error || 'Update failed')
-      showToast('Session date updated in Outlook.')
-      setOccurrenceModal(null)
-      openOccurrences({ id: occurrenceSessionId } as Session)
-    } catch (e: any) {
-      setOccError(e.message)
-    } finally {
-      setOccSaving(false)
-    }
-  }
-
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   function showToast(msg: string) {
@@ -361,15 +289,8 @@ export default function CoachingSchedulePage() {
     setTimeout(() => setToast(''), 5000)
   }
 
-  function formatOccDate(iso: string) {
-    if (!iso) return ''
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-  }
-
   const coaching  = sessions.filter(s => s.section === 'coaching')
   const division  = sessions.filter(s => s.section === 'division')
-  const sessionById = sessions.find(s => s.id === occurrenceSessionId)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -380,7 +301,7 @@ export default function CoachingSchedulePage() {
         <div>
           <h1 className="page-title mb-1">Coaching Schedule</h1>
           <p className="text-luxury-gray-3 text-sm">
-            Manage sessions, sync with Outlook, and update guest info for specific dates.
+            Manage sessions, link to Outlook, and sync descriptions across all recurring events.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -426,8 +347,6 @@ export default function CoachingSchedulePage() {
             onEdit={openEdit}
             onToggle={toggleActive}
             onDelete={s => { setDeleteTarget(s); setCancelOutlook(false) }}
-            onOccurrences={openOccurrences}
-            activeOccurrenceId={occurrenceSessionId}
           />
           <SessionSection
             label="Division & Training Sessions"
@@ -435,61 +354,8 @@ export default function CoachingSchedulePage() {
             onEdit={openEdit}
             onToggle={toggleActive}
             onDelete={s => { setDeleteTarget(s); setCancelOutlook(false) }}
-            onOccurrences={openOccurrences}
-            activeOccurrenceId={occurrenceSessionId}
           />
         </>
-      )}
-
-      {/* ── Occurrences panel ─────────────────────────────────────────── */}
-      {occurrenceSessionId && (
-        <div className="container-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-luxury-gray-2 font-semibold text-sm">
-                Upcoming Dates{sessionById ? ` - ${sessionById.display_title}` : ''}
-              </p>
-              <p className="text-luxury-gray-3 text-xs mt-0.5">
-                Click a date to add a guest speaker, topic, or food info.
-              </p>
-            </div>
-            <button
-              onClick={() => setOccurrenceSessionId(null)}
-              className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          {occLoading ? (
-            <p className="text-luxury-gray-3 text-xs">Loading upcoming dates...</p>
-          ) : occurrences.length === 0 ? (
-            <p className="text-luxury-gray-3 text-xs">No upcoming occurrences found. Make sure an Outlook event is linked.</p>
-          ) : (
-            <div className="space-y-2">
-              {occurrences.map(o => (
-                <button
-                  key={o.id}
-                  onClick={() => openOccurrenceModal(o)}
-                  className="w-full text-left inner-card hover:bg-luxury-dark-3/30 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-luxury-gray-1 text-sm font-medium">{formatOccDate(o.start)}</p>
-                      <p className="text-luxury-gray-3 text-xs mt-0.5">{o.location || 'No location set'}</p>
-                    </div>
-                    {o.attendees.filter(a => a.type === 'required').length > 0 && (
-                      <div className="flex items-center gap-1 text-luxury-accent text-xs">
-                        <Users size={11} />
-                        <span>Guest added</span>
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       )}
 
       {/* ── Add/Edit modal ─────────────────────────────────────────────── */}
@@ -832,96 +698,6 @@ export default function CoachingSchedulePage() {
           </div>
         </div>
       )}
-
-      {/* ── Occurrence detail modal ───────────────────────────────────── */}
-      {occurrenceModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-xl border border-luxury-gray-5/30 shadow-xl w-full max-w-md">
-            <div style={{ height: '2px', backgroundColor: '#C5A278', borderRadius: '12px 12px 0 0' }} />
-            <div className="p-6 space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-luxury-gray-1 font-semibold text-sm">Update Date Details</p>
-                  <p className="text-luxury-gray-3 text-xs mt-0.5">{formatOccDate(occurrenceModal.start)}</p>
-                </div>
-                <button onClick={() => setOccurrenceModal(null)} className="text-luxury-gray-3 hover:text-luxury-gray-1">
-                  <X size={16} />
-                </button>
-              </div>
-
-              {occError && (
-                <div className="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded text-sm">{occError}</div>
-              )}
-
-              <div className="space-y-3">
-                <div>
-                  <label className="field-label flex items-center gap-1.5"><Mic size={11} />Guest Speaker Name</label>
-                  <input
-                    type="text"
-                    value={occForm.guestName}
-                    onChange={e => setOccForm(f => ({ ...f, guestName: e.target.value }))}
-                    placeholder="e.g. Waseem Bari"
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Guest Company / Title</label>
-                  <input
-                    type="text"
-                    value={occForm.guestCompany}
-                    onChange={e => setOccForm(f => ({ ...f, guestCompany: e.target.value }))}
-                    placeholder="e.g. Jetmo"
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="field-label flex items-center gap-1.5">
-                    <Users size={11} />Guest Email (adds them to the invite)
-                  </label>
-                  <input
-                    type="email"
-                    value={occForm.guestEmail}
-                    onChange={e => setOccForm(f => ({ ...f, guestEmail: e.target.value }))}
-                    placeholder="guest@company.com"
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Topic</label>
-                  <input
-                    type="text"
-                    value={occForm.topic}
-                    onChange={e => setOccForm(f => ({ ...f, topic: e.target.value }))}
-                    placeholder='e.g. P&I loans 3.5% down, 640 score'
-                    className="input-luxury"
-                  />
-                </div>
-                <div>
-                  <label className="field-label">Food / Refreshments</label>
-                  <input
-                    type="text"
-                    value={occForm.food}
-                    onChange={e => setOccForm(f => ({ ...f, food: e.target.value }))}
-                    placeholder="e.g. Lunch is provided"
-                    className="input-luxury"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2 border-t border-luxury-gray-5/20">
-                <button onClick={() => setOccurrenceModal(null)} className="btn-secondary rounded px-4 py-2 text-sm">Cancel</button>
-                <button
-                  onClick={saveOccurrence}
-                  disabled={occSaving}
-                  className="btn-primary rounded px-5 py-2 text-sm disabled:opacity-50"
-                >
-                  {occSaving ? 'Saving...' : 'Update Outlook Invite'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -934,16 +710,12 @@ function SessionSection({
   onEdit,
   onToggle,
   onDelete,
-  onOccurrences,
-  activeOccurrenceId,
 }: {
   label: string
   sessions: Session[]
   onEdit: (s: Session) => void
   onToggle: (s: Session) => void
   onDelete: (s: Session) => void
-  onOccurrences: (s: Session) => void
-  activeOccurrenceId: string | null
 }) {
   return (
     <div className="container-card p-5">
@@ -990,15 +762,6 @@ function SessionSection({
                     className="p-1.5 text-luxury-gray-3 hover:text-luxury-accent transition-colors"
                   >
                     {s.active ? <ToggleRight size={16} className="text-green-500" /> : <ToggleLeft size={16} />}
-                  </button>
-
-                  {/* Upcoming dates */}
-                  <button
-                    onClick={() => onOccurrences(s)}
-                    title="Manage upcoming dates"
-                    className={`p-1.5 transition-colors ${activeOccurrenceId === s.id ? 'text-luxury-accent' : 'text-luxury-gray-3 hover:text-luxury-accent'}`}
-                  >
-                    <Calendar size={15} />
                   </button>
 
                   {/* Edit */}
