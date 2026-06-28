@@ -17,10 +17,11 @@ import {
   Trash2,
   Check,
   X,
-  ShieldCheck
+  ShieldCheck,
+  Mic,
 } from 'lucide-react'
 
-type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'plans' | 'fees' | 'rules'
+type Tab = 'brokerage' | 'offices' | 'standard' | 'referral' | 'coaching' | 'plans' | 'fees' | 'rules'
 
 interface CompanySettings {
   // Brokerage
@@ -123,6 +124,7 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'offices', label: 'Office Locations', icon: Building2 },
   { id: 'standard', label: 'Standard Agent', icon: Users },
   { id: 'referral', label: 'Referral Agent', icon: Users },
+  { id: 'coaching', label: 'Coaching', icon: Mic },
   { id: 'plans', label: 'Commission Plans', icon: DollarSign },
   { id: 'fees', label: 'Processing Fees', icon: DollarSign },
   { id: 'rules', label: 'Commission Rules', icon: Settings2 },
@@ -928,80 +930,87 @@ export default function SettingsPage() {
               </div>
             )}
 
+            {/* Coaching */}
+            {activeTab === 'coaching' && settings && (
+              <div className="space-y-6">
+                <div className="container-card p-5">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Zoom Links</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Agent Coaching Link</label>
+                      <input
+                        type="text"
+                        value={settings?.coaching_zoom_link || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_zoom_link: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="https://visit.collectiverealtyco.com/training"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Coaching Client Link</label>
+                      <input
+                        type="text"
+                        value={settings?.coaching_client_zoom_link || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_client_zoom_link: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="https://convert.coachingbrokerage.com/zoom"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="container-card p-5">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">The Coaching Brokerage</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Brand Name</label>
+                      <input
+                        type="text"
+                        value={settings?.coaching_brokerage_name || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_brokerage_name: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="The Coaching Brokerage"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Email</label>
+                      <input
+                        type="email"
+                        value={settings?.coaching_brokerage_email || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_brokerage_email: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="info@coachingbrokerage.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Address</label>
+                      <input
+                        type="text"
+                        value={settings?.coaching_brokerage_address || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_brokerage_address: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="2300 Valley View Ln, Ste 518, Irving, TX 75062"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Website</label>
+                      <input
+                        type="text"
+                        value={settings?.coaching_brokerage_website || ''}
+                        onChange={e => setSettings({ ...settings!, coaching_brokerage_website: e.target.value })}
+                        className="input-luxury w-full"
+                        placeholder="https://coachingbrokerage.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Commission Plans */}
             {activeTab === 'plans' && (
               <div className="container-card">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="section-title">Coaching</h2>
-                  <div className="container-card p-5 mb-6">
-                    <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Zoom Links</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="field-label">Agent Coaching Link</label>
-                        <input
-                          type="text"
-                          value={settings?.coaching_zoom_link || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_zoom_link: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="visit.collectiverealtyco.com/training"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Coaching Client Link</label>
-                        <input
-                          type="text"
-                          value={settings?.coaching_client_zoom_link || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_client_zoom_link: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="convert.coachingbrokerage.com/zoom"
-                        />
-                      </div>
-                    </div>
-                    <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">The Coaching Brokerage</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="field-label">Brand Name</label>
-                        <input
-                          type="text"
-                          value={settings?.coaching_brokerage_name || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_brokerage_name: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="The Coaching Brokerage"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Email</label>
-                        <input
-                          type="email"
-                          value={settings?.coaching_brokerage_email || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_brokerage_email: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="info@coachingbrokerage.com"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Address</label>
-                        <input
-                          type="text"
-                          value={settings?.coaching_brokerage_address || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_brokerage_address: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="2300 Valley View Ln, Ste 518, Irving, TX 75062"
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Website</label>
-                        <input
-                          type="text"
-                          value={settings?.coaching_brokerage_website || ''}
-                          onChange={e => setSettings({ ...settings!, coaching_brokerage_website: e.target.value })}
-                          className="input-luxury w-full"
-                          placeholder="coachingbrokerage.com"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
                   <h2 className="section-title">Commission Plans</h2>
                   <button
                     onClick={() => setEditingPlan({
