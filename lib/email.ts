@@ -138,7 +138,7 @@ export async function sendProspectWelcomeEmail(prospect: {
         <h2 class="section-title">Weekly Coaching & Training</h2>
         <p style="text-align: center; color: #666; font-size: 15px; margin: 0 0 20px 0;">At Collective Realty Co., you'll have access to weekly coaching sessions, market updates, and hands-on support to help you close more deals and grow your business.</p>
         <div style="text-align: center; margin: 20px 0;">
-          <a href="https://collectiverealtyco.com/coaching" class="btn btn-black">View Coaching Calendar</a>
+          <a href="https://agent.collectiverealtyco.com/coaching-schedule" class="btn btn-black">View Coaching Calendar</a>
         </div>
       </div>
     `
