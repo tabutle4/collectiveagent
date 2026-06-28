@@ -8,7 +8,7 @@ const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 // ── POST /api/admin/coaching-guests/create-event ──────────────────────────
 // Creates a one-off (non-recurring) Outlook event for a guest session.
 // Used when: (a) regular session was canceled, (b) no session at that time.
-// Title is always "Guest Presenter — [title]"
+// Title is always "Guest Presenter – [title]"
 
 export async function POST(request: NextRequest) {
   const auth = await requireAnyPermission(request, ['can_manage_calendar', 'can_add_calendar_guests'])
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       date,        // "2026-07-01"
       startTime,   // "12:00"
       endTime,     // "13:00"
-      title,       // session title or custom — we prefix with "Guest Presenter — "
+      title,       // session title or custom – we prefix with "Guest Presenter – "
       guestName,
       guestCompany,
       guestEmail,

@@ -188,7 +188,7 @@ export default function CoachingGuestsPage() {
           </div>
         )}
 
-        {/* Event Title — always editable, always shown once resolved */}
+        {/* Event Title – always editable, always shown once resolved */}
         {(resolved || resolving) && (
           <div>
             <label className="field-label">Event Title</label>
@@ -214,7 +214,7 @@ export default function CoachingGuestsPage() {
           </div>
         )}
 
-        {/* Guest fields — shown once resolved */}
+        {/* Guest fields – shown once resolved */}
         {resolved && !resolving && (
           <>
             {error && (

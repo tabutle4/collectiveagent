@@ -109,7 +109,7 @@ function SessionGrid({ sectionLabel, sessions }: { sectionLabel: string; session
         </h2>
       </div>
 
-      {/* Scrollable grid — smooth on iOS too */}
+      {/* Scrollable grid – smooth on iOS too */}
       <div className="relative">
         <div
           className="overflow-x-auto"
@@ -187,7 +187,7 @@ function SessionGrid({ sectionLabel, sessions }: { sectionLabel: string; session
 
           </div>
         </div>
-        {/* Fade gradient — hints at horizontal scroll on mobile */}
+        {/* Fade gradient – hints at horizontal scroll on mobile */}
         <div className="absolute top-0 right-0 bottom-0 w-6 bg-gradient-to-l from-luxury-dark-1/40 to-transparent pointer-events-none sm:hidden" />
       </div>
     </div>

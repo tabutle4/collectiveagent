@@ -1,5 +1,5 @@
 // lib/schedule-utils.ts
-// Shared utilities for coaching schedule — used by API routes and components.
+// Shared utilities for coaching schedule – used by API routes and components.
 
 export const RECURRENCE_TYPES = [
   { value: 'weekly',         label: 'Every week' },
@@ -87,7 +87,7 @@ function renderPlatform(platform: string): string {
   return platform
 }
 
-/** Render description — if it is a URL, wrap as a hyperlink. */
+/** Render description – if it is a URL, wrap as a hyperlink. */
 function renderDescription(description: string): string {
   if (/^https?:\/\//.test(description.trim())) {
     return `<a href="${description.trim()}" style="color:#0066cc;">More about this session</a>`
