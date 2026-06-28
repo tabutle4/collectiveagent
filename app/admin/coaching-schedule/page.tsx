@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import {
   Plus, Edit2, Trash2, ToggleLeft, ToggleRight, Link2, AlertTriangle,
   Upload, X, Calendar, Users, Mic,
-  CheckCircle,
+  RefreshCw, CheckCircle,
 } from 'lucide-react'
 import { RECURRENCE_TYPES, RECURRENCE_DAYS, getDayLabel, formatTimeDisplay } from '@/lib/schedule-utils'
 
@@ -86,6 +86,7 @@ export default function CoachingSchedulePage() {
   const [error, setError]                 = useState('')
   const [toast, setToast]                 = useState('')
   const [autoLinking, setAutoLinking]     = useState(false)
+  const [syncing, setSyncing]             = useState(false)
 
   // Add / Edit modal
   const [modalOpen, setModalOpen]   = useState(false)
@@ -129,6 +130,25 @@ export default function CoachingSchedulePage() {
       showToast(`Auto-link failed: ${e.message}`)
     } finally {
       setAutoLinking(false)
+    }
+  }
+
+  async function syncAll() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/admin/coaching-schedule/sync-all', { method: 'POST' })
+      const d   = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Sync failed')
+      const msg = [
+        d.synced.length ? `Synced: ${d.synced.join(', ')}` : '',
+        d.failed.length ? `Failed: ${d.failed.map((f: any) => `${f.title} (${f.error})`).join(', ')}` : '',
+        d.skipped       ? d.skipped : '',
+      ].filter(Boolean).join('\n')
+      showToast(msg || 'All sessions synced to Outlook.')
+    } catch (e: any) {
+      showToast(`Sync failed: ${e.message}`)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -364,6 +384,15 @@ export default function CoachingSchedulePage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={syncAll}
+            disabled={syncing}
+            className="btn-secondary rounded flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
+            title="Push current descriptions, audience, host, and images to all linked Outlook events"
+          >
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing...' : 'Sync All to Outlook'}
+          </button>
           <button
             onClick={autoLink}
             disabled={autoLinking}
