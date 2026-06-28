@@ -129,11 +129,24 @@ export async function PUT(
           imageUrl:        newImageUrl,
         })
 
+        const titleChanged    = newTitle !== row.display_title
+        const locationChanged = newEventLocation !== (row.event_location || '')
+        const timeChanged     = newStart !== row.start_time || newEnd !== row.end_time
+
+        // Body always syncs silently (body changes do not trigger Outlook notifications).
+        // Location and time are only sent when changed — those fields DO trigger notifications,
+        // which is acceptable since they represent real schedule changes agents should know about.
         const patchPayload: any = {
-          subject:  newTitle,
-          body:     { contentType: 'html', content: eventBody },
-          location: { displayName: newEventLocation },
-          locations: parseLocations(newEventLocation),
+          body: { contentType: 'html', content: eventBody },
+        }
+
+        if (titleChanged) {
+          patchPayload.subject = newTitle
+        }
+
+        if (locationChanged) {
+          patchPayload.location  = { displayName: newEventLocation }
+          patchPayload.locations = parseLocations(newEventLocation)
         }
 
         // Only rebuild recurrence if day/type changed
@@ -141,19 +154,13 @@ export async function PUT(
           (recurrence_type !== undefined && recurrence_type !== row.recurrence_type) ||
           (recurrence_day  !== undefined && recurrence_day  !== row.recurrence_day)
 
-        // Time change — use a fixed date for start/end on the series master
-        const startDate = nextDateForDay(newRecDay)
-        patchPayload.start = {
-          dateTime: `${startDate}T${newStart}:00`,
-          timeZone: 'America/Chicago',
-        }
-        patchPayload.end = {
-          dateTime: `${startDate}T${newEnd}:00`,
-          timeZone: 'America/Chicago',
-        }
-
-        if (recurrenceChanged) {
-          patchPayload.recurrence = buildGraphRecurrence(newRecType, newRecDay, startDate)
+        if (timeChanged || recurrenceChanged) {
+          const startDate = nextDateForDay(newRecDay)
+          patchPayload.start = { dateTime: `${startDate}T${newStart}:00`, timeZone: 'America/Chicago' }
+          patchPayload.end   = { dateTime: `${startDate}T${newEnd}:00`,   timeZone: 'America/Chicago' }
+          if (recurrenceChanged) {
+            patchPayload.recurrence = buildGraphRecurrence(newRecType, newRecDay, startDate)
+          }
         }
 
         const res = await fetch(
@@ -163,6 +170,7 @@ export async function PUT(
             headers: {
               Authorization: `Bearer ${token}`,
               'Content-Type': 'application/json',
+              Prefer: 'outlook.timezone="America/Chicago", outlook.no-updates',
             },
             body: JSON.stringify(patchPayload),
           }

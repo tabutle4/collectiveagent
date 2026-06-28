@@ -54,11 +54,11 @@ function DescriptionDisplay({ description }: { description: string }) {
 
   return (
     <div>
-      <span className={`text-luxury-gray-4 text-[10px] leading-relaxed block break-words${
+      <div className={`text-luxury-gray-4 text-[10px] leading-relaxed break-words${
         expanded ? '' : ' line-clamp-3 md:line-clamp-none'
       }`}>
         {description}
-      </span>
+      </div>
       <button
         onClick={() => setExpanded(e => !e)}
         className="text-luxury-accent text-[10px] mt-0.5 hover:underline md:hidden block"
