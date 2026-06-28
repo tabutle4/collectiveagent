@@ -90,7 +90,7 @@ function renderPlatform(platform: string): string {
 /** Render description — if it is a URL, wrap as a hyperlink. */
 function renderDescription(description: string): string {
   if (/^https?:\/\//.test(description.trim())) {
-    return `<a href="${description.trim()}" style="color:#0066cc;">${description.trim()}</a>`
+    return `<a href="${description.trim()}" style="color:#0066cc;">More about this session</a>`
   }
   return description.replace(/\n/g, '<br>')
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import type { ScheduleSession } from '@/lib/schedule-utils'
 
@@ -39,6 +40,8 @@ function DataCell({ alt, border = true, children }: {
 }
 
 function DescriptionDisplay({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false)
+
   if (/^https?:\/\//.test((description || '').trim())) {
     return (
       <a href={description.trim()} target="_blank" rel="noopener noreferrer"
@@ -48,10 +51,21 @@ function DescriptionDisplay({ description }: { description: string }) {
       </a>
     )
   }
+
   return (
-    <span className="text-luxury-gray-4 text-[10px] leading-relaxed block break-words line-clamp-5">
-      {description}
-    </span>
+    <div>
+      <span className={`text-luxury-gray-4 text-[10px] leading-relaxed block break-words${
+        expanded ? '' : ' line-clamp-3 md:line-clamp-none'
+      }`}>
+        {description}
+      </span>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="text-luxury-accent text-[10px] mt-0.5 hover:underline md:hidden block"
+      >
+        {expanded ? 'View less' : 'View more'}
+      </button>
+    </div>
   )
 }
 
