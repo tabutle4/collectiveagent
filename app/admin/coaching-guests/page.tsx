@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Mic, Users, AlertTriangle, CheckCircle, Plus, Loader2 } from 'lucide-react'
+import { Mic, Users, AlertTriangle, CheckCircle, Plus, Loader2, MapPin, Link } from 'lucide-react'
+
+const HOUSTON = '13201 Northwest Fwy, Ste 450, Houston, TX 77040'
+const DALLAS  = '2300 Valley View Ln, Ste 518, Irving, TX 75062'
 
 type ResolveStatus = 'active' | 'canceled' | 'no_session' | 'no_outlook_link'
 
@@ -30,21 +33,35 @@ function formatDateLabel(date: string) {
 }
 
 export default function CoachingGuestsPage() {
-  const [date,        setDate]        = useState(todayString())
-  const [time,        setTime]        = useState('12:00')
-  const [resolving,   setResolving]   = useState(false)
-  const [resolved,    setResolved]    = useState<ResolveResult | null>(null)
-  const [title,       setTitle]       = useState('')
-  const [endTime,     setEndTime]     = useState('')
-  const [guestName,   setGuestName]   = useState('')
-  const [guestCompany,setGuestCompany]= useState('')
-  const [guestEmail,  setGuestEmail]  = useState('')
-  const [topic,       setTopic]       = useState('')
-  const [food,        setFood]        = useState('')
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState('')
-  const [toast,       setToast]       = useState('')
+  const [date,            setDate]            = useState(todayString())
+  const [time,            setTime]            = useState('12:00')
+  const [resolving,       setResolving]       = useState(false)
+  const [resolved,        setResolved]        = useState<ResolveResult | null>(null)
+  const [title,           setTitle]           = useState('')
+  const [endTime,         setEndTime]         = useState('')
+  const [locationPhysical,setLocationPhysical]= useState('')
+  const [locationOnline,  setLocationOnline]  = useState('')
+  const [guestName,       setGuestName]       = useState('')
+  const [guestCompany,    setGuestCompany]    = useState('')
+  const [guestEmail,      setGuestEmail]      = useState('')
+  const [topic,           setTopic]           = useState('')
+  const [food,            setFood]            = useState('')
+  const [saving,          setSaving]          = useState(false)
+  const [error,           setError]           = useState('')
+  const [toast,           setToast]           = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Pre-populate join link from settings on mount
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.settings?.coaching_zoom_link) {
+          setLocationOnline(d.settings.coaching_zoom_link)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -75,8 +92,7 @@ export default function CoachingGuestsPage() {
         const d = await res.json()
         if (!res.ok) throw new Error(d.error || 'Failed to resolve')
         setResolved(d)
-        const sessionTitle = d.session?.display_title || ''
-        setTitle(`Guest Presenter \u2013 ${sessionTitle}`)
+        setTitle(`Guest Presenter \u2013 ${d.session?.display_title || ''}`)
         setEndTime(d.session?.end_time?.slice(0, 5) || addOneHour(time))
       } catch (e: any) {
         setError(e.message)
@@ -102,7 +118,10 @@ export default function CoachingGuestsPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               occurrenceId: resolved.occurrence_id,
+              date,
+              endTime,
               guestName, guestCompany, guestEmail, topic, food,
+              locationPhysical, locationOnline,
             }),
           }
         )
@@ -113,9 +132,12 @@ export default function CoachingGuestsPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            date, startTime: time, endTime: endTime || addOneHour(time),
+            date,
+            startTime: time,
+            endTime: endTime || addOneHour(time),
             title: title.replace(/^Guest Presenter \u2013 /, ''),
             guestName, guestCompany, guestEmail, topic, food,
+            locationPhysical, locationOnline,
           }),
         })
         const d = await res.json()
@@ -188,33 +210,35 @@ export default function CoachingGuestsPage() {
           </div>
         )}
 
-        {/* Event Title – always editable, always shown once resolved */}
+        {/* Title + End Time — shown once resolved */}
         {(resolved || resolving) && (
-          <div>
-            <label className="field-label">Event Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="Guest Presenter \u2013 Session Name"
-              className="input-luxury"
-              disabled={resolving}
-            />
-            <p className="text-luxury-gray-3 text-xs mt-1">
-              {formatDateLabel(date)}
-              {resolved?.status !== 'active' && endTime && (
-                <> &middot; ends <input
-                  type="time"
-                  value={endTime}
-                  onChange={e => setEndTime(e.target.value)}
-                  className="inline-block bg-transparent border-b border-luxury-gray-4 text-xs ml-1 w-20"
-                /></>
-              )}
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">Event Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder={`Guest Presenter \u2013 Session Name`}
+                className="input-luxury"
+                disabled={resolving}
+              />
+              <p className="text-luxury-gray-3 text-xs mt-1">{formatDateLabel(date)}</p>
+            </div>
+            <div>
+              <label className="field-label">End Time</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+                className="input-luxury"
+                disabled={resolving}
+              />
+            </div>
           </div>
         )}
 
-        {/* Guest fields – shown once resolved */}
+        {/* Guest fields — shown once resolved */}
         {resolved && !resolving && (
           <>
             {error && (
@@ -222,6 +246,66 @@ export default function CoachingGuestsPage() {
                 {error}
               </div>
             )}
+
+            {/* Location */}
+            <div>
+              <label className="field-label flex items-center gap-1.5">
+                <MapPin size={11} /> Location
+              </label>
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setLocationPhysical(HOUSTON)}
+                  className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                    locationPhysical === HOUSTON
+                      ? 'border-luxury-accent bg-luxury-accent/10 text-luxury-accent'
+                      : 'border-luxury-gray-5 text-luxury-gray-3 hover:border-luxury-accent hover:text-luxury-accent'
+                  }`}
+                >
+                  Houston Office
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocationPhysical(DALLAS)}
+                  className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                    locationPhysical === DALLAS
+                      ? 'border-luxury-accent bg-luxury-accent/10 text-luxury-accent'
+                      : 'border-luxury-gray-5 text-luxury-gray-3 hover:border-luxury-accent hover:text-luxury-accent'
+                  }`}
+                >
+                  Dallas Office
+                </button>
+                {locationPhysical && (
+                  <button
+                    type="button"
+                    onClick={() => setLocationPhysical('')}
+                    className="text-xs px-2 py-1.5 text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={locationPhysical}
+                onChange={e => setLocationPhysical(e.target.value)}
+                placeholder="Physical address (or leave blank)"
+                className="input-luxury"
+              />
+            </div>
+
+            <div>
+              <label className="field-label flex items-center gap-1.5">
+                <Link size={11} /> Join Link
+              </label>
+              <input
+                type="url"
+                value={locationOnline}
+                onChange={e => setLocationOnline(e.target.value)}
+                placeholder="https://zoom.us/j/... or Teams link"
+                className="input-luxury"
+              />
+            </div>
 
             <div>
               <label className="field-label flex items-center gap-1.5">

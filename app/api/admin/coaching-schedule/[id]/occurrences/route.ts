@@ -94,8 +94,8 @@ export async function GET(
 }
 
 // ── PATCH /api/admin/coaching-schedule/[id]/occurrences ───────────────────
-// Updates a specific occurrence with guest info, topic, and food details.
-// Body: { occurrenceId, guestName, guestCompany, guestEmail, topic, food }
+// Updates a specific occurrence with guest info, topic, food, end time, and location.
+// Body: { occurrenceId, date, endTime, guestName, guestCompany, guestEmail, topic, food, locationPhysical, locationOnline }
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -106,7 +106,7 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { occurrenceId, guestName, guestCompany, guestEmail, topic, food } = body
+    const { occurrenceId, date, endTime, guestName, guestCompany, guestEmail, topic, food, locationPhysical, locationOnline } = body
 
     if (!occurrenceId) {
       return NextResponse.json({ error: 'occurrenceId is required' }, { status: 400 })
@@ -163,6 +163,17 @@ export async function PATCH(
       body: { contentType: 'html', content: occurrenceBodyHtml },
       ...(attendees.length > 0 && { attendees }),
     }
+
+    // End time — only include if caller provided a specific date + time
+    if (date && endTime) {
+      patchPayload.end = { dateTime: `${date}T${endTime}:00`, timeZone: 'America/Chicago' }
+    }
+
+    // Location — build array from physical and/or online fields
+    const locations: { displayName: string }[] = []
+    if (locationPhysical?.trim()) locations.push({ displayName: locationPhysical.trim() })
+    if (locationOnline?.trim())   locations.push({ displayName: locationOnline.trim() })
+    if (locations.length > 0) patchPayload.locations = locations
 
     const patchRes = await fetch(
       `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${occurrenceId}`,

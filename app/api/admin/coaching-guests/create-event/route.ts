@@ -16,15 +16,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const {
-      date,        // "2026-07-01"
-      startTime,   // "12:00"
-      endTime,     // "13:00"
-      title,       // session title or custom – we prefix with "Guest Presenter – "
+      date,
+      startTime,
+      endTime,
+      title,
       guestName,
       guestCompany,
       guestEmail,
       topic,
       food,
+      locationPhysical,
+      locationOnline,
     } = await request.json()
 
     if (!date || !startTime || !endTime || !title) {
@@ -68,6 +70,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (attendees.length > 0) event.attendees = attendees
+
+    const locations: { displayName: string }[] = []
+    if (locationPhysical?.trim()) locations.push({ displayName: locationPhysical.trim() })
+    if (locationOnline?.trim())   locations.push({ displayName: locationOnline.trim() })
+    if (locations.length > 0) event.locations = locations
 
     const token = await getGraphToken()
     const res = await fetch(
