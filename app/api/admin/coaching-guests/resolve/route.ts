@@ -142,10 +142,25 @@ export async function POST(request: NextRequest) {
     const data = await res.json()
     const occurrences: any[] = data.value || []
 
-    // Find an occurrence for this session on this date
-    const occurrence = occurrences.find(
+    // Log for debugging — visible in Vercel function logs
+    console.log(`resolve POST - calendarView returned ${occurrences.length} events for ${date}`)
+    console.log('resolve POST - stored outlook_event_id:', matchingSession.outlook_event_id)
+    console.log('resolve POST - seriesMasterIds returned:', occurrences.map((o: any) => o.seriesMasterId).join(', '))
+
+    // First try: exact seriesMasterId match
+    let occurrence = occurrences.find(
       o => o.seriesMasterId === matchingSession.outlook_event_id
     )
+
+    // Second try: date-based match — catches seriesMasterId mismatch
+    if (!occurrence) {
+      occurrence = occurrences.find(
+        (o: any) => o.start?.dateTime?.slice(0, 10) === date && o.seriesMasterId
+      )
+      if (occurrence) {
+        console.log('resolve POST - matched by date fallback, seriesMasterId:', occurrence.seriesMasterId)
+      }
+    }
 
     if (occurrence) {
       if (occurrence.isCancelled) {
