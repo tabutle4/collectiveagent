@@ -106,7 +106,7 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { occurrenceId, date, endTime, guestName, guestCompany, guestEmail, topic, food, locationPhysical, locationOnline } = body
+    const { occurrenceId, date, endTime, isCanceled, guestName, guestCompany, guestEmail, topic, food, locationPhysical, locationOnline } = body
 
     if (!occurrenceId) {
       return NextResponse.json({ error: 'occurrenceId is required' }, { status: 400 })
@@ -162,6 +162,7 @@ export async function PATCH(
       subject: `Guest Presenter \u2013 ${patchSess.display_title}`,
       body: { contentType: 'html', content: occurrenceBodyHtml },
       ...(attendees.length > 0 && { attendees }),
+      ...(isCanceled && { isCancelled: false }),
     }
 
     // End time — only include if caller provided a specific date + time

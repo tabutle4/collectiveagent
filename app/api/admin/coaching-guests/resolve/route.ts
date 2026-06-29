@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     const url =
       `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/calendarView` +
       `?startDateTime=${encodeURIComponent(startDT)}&endDateTime=${encodeURIComponent(endDT)}` +
-      `&$select=id,subject,start,end,seriesMasterId&$top=50`
+      `&$select=id,subject,start,end,seriesMasterId,isCancelled&$top=50`
 
     const res = await fetch(url, {
       headers: {
@@ -148,6 +148,16 @@ export async function POST(request: NextRequest) {
     )
 
     if (occurrence) {
+      if (occurrence.isCancelled) {
+        return NextResponse.json({
+          status: 'canceled',
+          session: matchingSession,
+          occurrence_id: occurrence.id,
+          message: `The ${matchingSession.display_title} session appears to have been canceled on this date.`,
+          zoom_link: zoomLink,
+          session_join_link: sessionJoinLink(matchingSession),
+        })
+      }
       return NextResponse.json({
         status: 'active',
         session: matchingSession,
@@ -158,12 +168,12 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Session expected but not in Outlook — likely canceled
+    // Session expected but no occurrence found in Outlook at all
     return NextResponse.json({
-      status: 'canceled',
+      status: 'no_occurrence',
       session: matchingSession,
       occurrence_id: null,
-      message: `The ${matchingSession.display_title} session appears to have been canceled on this date.`,
+      message: `No occurrence found in Outlook for ${matchingSession.display_title} on this date.`,
       zoom_link: zoomLink,
       session_join_link: sessionJoinLink(matchingSession),
     })

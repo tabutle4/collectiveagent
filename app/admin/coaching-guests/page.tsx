@@ -6,7 +6,7 @@ import { Mic, Users, AlertTriangle, CheckCircle, Plus, Loader2, MapPin, Link } f
 const HOUSTON = '13201 Northwest Fwy, Ste 450, Houston, TX 77040'
 const DALLAS  = '2300 Valley View Ln, Ste 518, Irving, TX 75062'
 
-type ResolveStatus = 'active' | 'canceled' | 'no_session' | 'no_outlook_link'
+type ResolveStatus = 'active' | 'canceled' | 'no_session' | 'no_outlook_link' | 'no_occurrence'
 
 interface ResolveResult {
   status: ResolveStatus
@@ -101,7 +101,7 @@ export default function CoachingGuestsPage() {
     setSaving(true)
     setError('')
     try {
-      if (resolved.status === 'active' && resolved.occurrence_id) {
+      if (resolved.occurrence_id) {
         const res = await fetch(
           `/api/admin/coaching-schedule/${resolved.session!.id}/occurrences`,
           {
@@ -109,6 +109,7 @@ export default function CoachingGuestsPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               occurrenceId: resolved.occurrence_id,
+              isCanceled: resolved.status === 'canceled',
               date,
               endTime,
               guestName, guestCompany, guestEmail, topic, food,
@@ -134,7 +135,7 @@ export default function CoachingGuestsPage() {
         const d = await res.json()
         if (!res.ok) throw new Error(d.error || 'Failed to create event')
       }
-      showToast(`Outlook ${resolved.status === 'active' ? 'invite updated' : 'event created'}: ${title}`)
+      showToast(`Outlook ${resolved.occurrence_id ? 'invite updated' : 'event created'}: ${title}`)
       clearForm()
     } catch (e: any) {
       setError(e.message)
@@ -194,7 +195,7 @@ export default function CoachingGuestsPage() {
           </div>
         )}
 
-        {resolved && !resolving && (resolved.status === 'canceled' || resolved.status === 'no_session' || resolved.status === 'no_outlook_link') && (
+        {resolved && !resolving && (resolved.status === 'canceled' || resolved.status === 'no_session' || resolved.status === 'no_outlook_link' || resolved.status === 'no_occurrence') && (
           <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2.5 rounded text-xs">
             <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
             <span>{resolved.message}</span>
@@ -367,7 +368,7 @@ export default function CoachingGuestsPage() {
                 {saving ? 'Saving...' : (
                   <>
                     <Plus size={14} />
-                    {resolved.status === 'active' ? 'Update Outlook Invite' : 'Create Outlook Event'}
+                    {resolved.occurrence_id ? 'Update Outlook Invite' : 'Create Outlook Event'}
                   </>
                 )}
               </button>
