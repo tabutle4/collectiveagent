@@ -734,6 +734,16 @@ export default function LandlordDetailPage() {
   // applied to a future disbursement). Scoped landlord-wide; the property
   // column tells admin which property each deduction belongs to.
   const [pendingDeductions, setPendingDeductions] = useState<any[]>([])
+  const [recurringDeductions, setRecurringDeductions] = useState<any[]>([])
+  const [loadingRecurring, setLoadingRecurring] = useState(false)
+  const [showAddRecurringModal, setShowAddRecurringModal] = useState(false)
+  const [recurringForm, setRecurringForm] = useState({
+    property_id: '',
+    label: '',
+    amount: '',
+    recurring_start_date: '',
+    recurring_end_date: '',
+  })
   const [loadingDeductions, setLoadingDeductions] = useState(false)
   const [showAddDeductionModal, setShowAddDeductionModal] = useState(false)
   const [deductionForm, setDeductionForm] = useState({
@@ -816,6 +826,7 @@ export default function LandlordDetailPage() {
     if (activeTab === 'disbursements') {
       loadPendingDeductions()
       loadStatements()
+      loadRecurringDeductions()
     }
   }, [activeTab, landlordId])
 
@@ -863,12 +874,76 @@ export default function LandlordDetailPage() {
       )
       if (res.ok) {
         const data = await res.json()
-        setPendingDeductions(data.deductions || [])
+        setPendingDeductions((data.deductions || []).filter((d: any) => !d.is_recurring))
       }
     } catch (err) {
       console.error('Error loading pending deductions:', err)
     } finally {
       setLoadingDeductions(false)
+    }
+  }
+
+  const loadRecurringDeductions = async () => {
+    setLoadingRecurring(true)
+    try {
+      const res = await fetch(
+        `/api/pm/landlord-disbursement-deductions?landlord_id=${landlordId}&recurring=true`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setRecurringDeductions(data.deductions || [])
+      }
+    } catch (err) {
+      console.error('Error loading recurring deductions:', err)
+    } finally {
+      setLoadingRecurring(false)
+    }
+  }
+
+  const addRecurringDeduction = async () => {
+    if (!recurringForm.property_id || !recurringForm.label || !recurringForm.amount) {
+      alert('Property, label, and amount are required')
+      return
+    }
+    try {
+      const res = await fetch('/api/pm/landlord-disbursement-deductions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          landlord_id: landlordId,
+          property_id: recurringForm.property_id,
+          label: recurringForm.label,
+          amount: parseFloat(recurringForm.amount),
+          is_recurring: true,
+          recurring_start_date: recurringForm.recurring_start_date || null,
+          recurring_end_date: recurringForm.recurring_end_date || null,
+          sort_order: 0,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Failed to add'); return }
+      setShowAddRecurringModal(false)
+      setRecurringForm({ property_id: '', label: '', amount: '', recurring_start_date: '', recurring_end_date: '' })
+      loadRecurringDeductions()
+    } catch (err: any) {
+      alert(err.message || 'Failed to add')
+    }
+  }
+
+  const deleteRecurringDeduction = async (id: string) => {
+    if (!confirm('Delete this recurring deduction? It will no longer be applied to future disbursements.')) return
+    try {
+      const res = await fetch(`/api/pm/landlord-disbursement-deductions?id=${id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete')
+        return
+      }
+      loadRecurringDeductions()
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete')
     }
   }
 
@@ -1878,6 +1953,67 @@ export default function LandlordDetailPage() {
           {/* Disbursements Tab */}
           {activeTab === 'disbursements' && (
             <div>
+              {/* Recurring Deductions section */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+                    Recurring Deductions
+                  </h3>
+                  <button
+                    onClick={() => setShowAddRecurringModal(true)}
+                    className="btn btn-secondary text-xs flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add Recurring
+                  </button>
+                </div>
+
+                {loadingRecurring ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">Loading...</p>
+                ) : recurringDeductions.length === 0 ? (
+                  <p className="text-sm text-luxury-gray-3 text-center py-4">
+                    No recurring deductions. Add one to auto-apply it to every future disbursement.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {recurringDeductions.map((d: any) => (
+                      <div key={d.id} className="inner-card">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                                {d.label}
+                              </p>
+                              <span className="text-xs text-luxury-accent shrink-0">Monthly</span>
+                            </div>
+                            {d.managed_properties && (
+                              <p className="text-xs text-luxury-gray-2 truncate">
+                                {d.managed_properties.property_address}
+                                {d.managed_properties.unit ? ` ${d.managed_properties.unit}` : ''}
+                              </p>
+                            )}
+                            <p className="text-xs text-luxury-gray-3">
+                              {d.recurring_start_date ? `From ${formatDate(d.recurring_start_date)}` : 'No start date'}
+                              {d.recurring_end_date ? ` · Until ${formatDate(d.recurring_end_date)}` : ' · Ongoing'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-sm font-semibold text-luxury-gray-1">
+                              {formatCurrency(Number(d.amount))}
+                            </span>
+                            <button
+                              onClick={() => deleteRecurringDeduction(d.id)}
+                              className="text-luxury-gray-3 hover:text-red-600"
+                              title="Delete recurring deduction"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               {/* Pending Deductions sub-section. Sits below the
                   disbursements list. Pending = disbursement_id IS NULL,
                   i.e. waiting to be attached to a future disbursement. */}
@@ -2467,6 +2603,97 @@ export default function LandlordDetailPage() {
                   {savingDeduction ? 'Saving...' : 'Add Deduction'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddRecurringModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="container-card max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Add Recurring Deduction</h2>
+              <button onClick={() => setShowAddRecurringModal(false)}>
+                <X size={16} className="text-luxury-gray-3" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="field-label">Property</label>
+                <select
+                  className="input-luxury w-full"
+                  value={recurringForm.property_id}
+                  onChange={e => setRecurringForm(prev => ({ ...prev, property_id: e.target.value }))}
+                >
+                  <option value="">Select property</option>
+                  {properties.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.property_address}{p.unit ? ` ${p.unit}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Label</label>
+                <input
+                  type="text"
+                  className="input-luxury w-full"
+                  placeholder="e.g. Lawn Care"
+                  value={recurringForm.label}
+                  onChange={e => setRecurringForm(prev => ({ ...prev, label: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="field-label">Monthly Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-luxury w-full pl-7"
+                    placeholder="0.00"
+                    value={recurringForm.amount}
+                    onChange={e => setRecurringForm(prev => ({ ...prev, amount: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Start Date</label>
+                  <input
+                    type="date"
+                    className="input-luxury w-full"
+                    value={recurringForm.recurring_start_date}
+                    onChange={e => setRecurringForm(prev => ({ ...prev, recurring_start_date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">End Date <span className="font-normal text-luxury-gray-3">(optional)</span></label>
+                  <input
+                    type="date"
+                    className="input-luxury w-full"
+                    value={recurringForm.recurring_end_date}
+                    onChange={e => setRecurringForm(prev => ({ ...prev, recurring_end_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-luxury-gray-3">
+                This deduction will be automatically applied to every rent disbursement within the date range.
+              </p>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowAddRecurringModal(false)}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addRecurringDeduction}
+                className="btn btn-primary"
+              >
+                Add Recurring Deduction
+              </button>
             </div>
           </div>
         </div>

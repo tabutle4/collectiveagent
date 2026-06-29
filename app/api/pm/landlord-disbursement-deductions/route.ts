@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const landlordId = searchParams.get('landlord_id')
     const propertyId = searchParams.get('property_id')
     const pendingOnly = searchParams.get('pending') === 'true'
+    const recurringOnly = searchParams.get('recurring') === 'true'
     const disbursementId = searchParams.get('disbursement_id')
 
     let query = supabase
@@ -34,7 +35,8 @@ export async function GET(request: NextRequest) {
 
     if (landlordId) query = query.eq('landlord_id', landlordId)
     if (propertyId) query = query.eq('property_id', propertyId)
-    if (pendingOnly) query = query.is('disbursement_id', null)
+    if (pendingOnly) query = query.is('disbursement_id', null).eq('is_recurring', false)
+    if (recurringOnly) query = query.eq('is_recurring', true)
     if (disbursementId) query = query.eq('disbursement_id', disbursementId)
 
     const { data, error } = await query
@@ -71,6 +73,9 @@ export async function POST(request: NextRequest) {
       incurred_date,
       disbursement_id,
       sort_order,
+      is_recurring,
+      recurring_start_date,
+      recurring_end_date,
     } = body
 
     if (!landlord_id || !property_id || !label || amount == null) {
@@ -99,6 +104,9 @@ export async function POST(request: NextRequest) {
         applied_at: disbursement_id ? new Date().toISOString() : null,
         sort_order: sort_order ?? 0,
         created_by: auth.user.id,
+        is_recurring: is_recurring || false,
+        recurring_start_date: is_recurring ? (recurring_start_date || null) : null,
+        recurring_end_date: is_recurring ? (recurring_end_date || null) : null,
       })
       .select()
       .single()
@@ -108,6 +116,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, deduction })
   } catch (error: any) {
     console.error('Error creating disbursement deduction:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+// DELETE - Delete a deduction (only if not attached to a disbursement,
+// or if it is a recurring template)
+export async function DELETE(request: NextRequest) {
+  const auth = await requirePermission(request, 'can_manage_pm')
+  if (auth.error) return auth.error
+
+  try {
+    const supabase = createClient()
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    }
+
+    const { data: existing } = await supabase
+      .from('landlord_disbursement_deductions')
+      .select('id, disbursement_id, is_recurring')
+      .eq('id', id)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Deduction not found' }, { status: 404 })
+    }
+
+    if (existing.disbursement_id && !existing.is_recurring) {
+      return NextResponse.json(
+        { error: 'Cannot delete a deduction already applied to a disbursement' },
+        { status: 400 }
+      )
+    }
+
+    const { error } = await supabase
+      .from('landlord_disbursement_deductions')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Error deleting deduction:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

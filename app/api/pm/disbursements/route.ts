@@ -91,9 +91,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Auto-attach recurring deductions for this property/period.
+    // These are rows where is_recurring = true and the period falls within
+    // their start/end date range and they haven't already been attached
+    // to a disbursement for this period.
+    let recurringDeductionIds: string[] = []
+    let recurringLineItemTotal = 0
+
+    if (!isDeposit && !isReserve) {
+      // Period start/end for range check
+      const periodStart = new Date(period_year, period_month - 1, 1).toISOString().split('T')[0]
+      const periodEnd = new Date(period_year, period_month, 0).toISOString().split('T')[0]
+
+      const { data: recurringRows } = await supabase
+        .from('landlord_disbursement_deductions')
+        .select('id, amount')
+        .eq('property_id', property_id)
+        .eq('is_recurring', true)
+        .is('disbursement_id', null)
+        .lte('recurring_start_date', periodEnd)
+        .or(`recurring_end_date.is.null,recurring_end_date.gte.${periodStart}`)
+
+      if (recurringRows && recurringRows.length > 0) {
+        recurringDeductionIds = recurringRows.map((r: any) => r.id)
+        recurringLineItemTotal = recurringRows.reduce(
+          (sum: number, r: any) => sum + Number(r.amount || 0), 0
+        )
+      }
+    }
+
+    // Combine manual + recurring deduction totals for net calculation
+    const allLineItemTotal = lineItemTotal + recurringLineItemTotal
+
     const netAmount = (isDeposit || isReserve)
       ? depositAmt
-      : Number(gross_rent) - mgmtFee - otherDed - lineItemTotal - reserveAmt
+      : Number(gross_rent) - mgmtFee - otherDed - allLineItemTotal - reserveAmt
 
     if (netAmount < 0) {
       return NextResponse.json(
@@ -223,6 +255,36 @@ export async function POST(request: NextRequest) {
           { error: 'Failed to attach deductions. Please try again.' },
           { status: 500 }
         )
+      }
+    }
+
+    // Attach recurring deductions — create new deduction rows for each
+    // recurring template and attach them to this disbursement. The source
+    // row (is_recurring=true, disbursement_id=null) stays untouched as a
+    // template; we insert a new applied row for this month.
+    if (recurringDeductionIds.length > 0) {
+      const { data: recurringRows } = await supabase
+        .from('landlord_disbursement_deductions')
+        .select('label, description, amount, sort_order')
+        .in('id', recurringDeductionIds)
+
+      if (recurringRows && recurringRows.length > 0) {
+        const newRows = recurringRows.map((r: any) => ({
+          landlord_id,
+          property_id,
+          label: r.label,
+          description: r.description || null,
+          amount: r.amount,
+          sort_order: r.sort_order ?? 0,
+          disbursement_id: disbursement.id,
+          applied_at: new Date().toISOString(),
+          is_recurring: false,
+          created_by: auth.user.id,
+        }))
+
+        await supabase
+          .from('landlord_disbursement_deductions')
+          .insert(newRows)
       }
     }
 
