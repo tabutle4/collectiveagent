@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     response_type: 'code',
     redirect_uri: REDIRECT_URI,
     response_mode: 'query',
-    scope: 'openid profile email',
+    scope: 'openid profile email offline_access Calendars.ReadWrite Group.ReadWrite.All User.ReadBasic.All Mail.Send',
     state,
   })
 

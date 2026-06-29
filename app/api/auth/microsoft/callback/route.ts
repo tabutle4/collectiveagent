@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { createSessionToken, getSessionCookieOptions } from '@/lib/session'
 import { randomUUID } from 'crypto'
 import { SESSION_DURATION_MS, ADMIN_ROLES } from '@/lib/constants'
+import { encryptMsToken } from '@/lib/microsoft-graph'
 
 const CLIENT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ID
 const CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
@@ -66,22 +67,37 @@ export async function GET(request: NextRequest) {
     const idToken = tokens.id_token
     const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString())
 
+    // oid is the stable Microsoft identity — email can change in Entra
+    const oid = payload.oid as string | undefined
     const microsoftEmail = payload.email || payload.preferred_username
 
     if (!microsoftEmail) {
       throw new Error('No email in Microsoft token')
     }
 
-    // Look up user in your Supabase users table
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select(
-        'id, email, role, is_active, status, first_name, last_name, preferred_first_name, preferred_last_name'
-      )
-      .eq('email', microsoftEmail.toLowerCase())
-      .single()
+    const userSelect = 'id, email, role, is_active, status, first_name, last_name, preferred_first_name, preferred_last_name, ms_oid'
 
-    if (userError || !user) {
+    // Look up by oid first (stable), fall back to email for existing users
+    let user: any = null
+    if (oid) {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select(userSelect)
+        .eq('ms_oid', oid)
+        .maybeSingle()
+      user = data
+    }
+
+    if (!user) {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select(userSelect)
+        .eq('email', microsoftEmail.toLowerCase())
+        .maybeSingle()
+      user = data
+    }
+
+    if (!user) {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/auth/login?error=not_authorized`
       )
@@ -92,6 +108,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_APP_URL}/auth/login?error=account_inactive`
       )
+    }
+
+    // Store encrypted refresh token for delegated Graph operations (e.g. group calendar writes)
+    // Requires MS_TOKEN_ENCRYPTION_KEY env var. Silently skips if key not set.
+    if (tokens.refresh_token && process.env.MS_TOKEN_ENCRYPTION_KEY) {
+      try {
+        const updates: Record<string, string> = {
+          ms_refresh_token: encryptMsToken(tokens.refresh_token),
+        }
+        // Backfill ms_oid if not already stored (stable Microsoft identity key)
+        if (oid && !user.ms_oid) {
+          updates.ms_oid = oid
+        }
+        await supabaseAdmin
+          .from('users')
+          .update(updates)
+          .eq('id', user.id)
+      } catch (e) {
+        console.error('Microsoft callback - failed to store refresh token / ms_oid:', e)
+        // Non-fatal: session creation continues
+      }
+    } else if (oid && !user.ms_oid) {
+      // Backfill ms_oid even if no encryption key is set
+      supabaseAdmin
+        .from('users')
+        .update({ ms_oid: oid })
+        .eq('id', user.id)
+        .then(({ error }) => {
+          if (error) console.error('Microsoft callback - failed to backfill ms_oid:', error)
+        })
     }
 
     // Create session

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAnyPermission } from '@/lib/api-auth'
-import { getGraphToken } from '@/lib/microsoft-graph'
+import { getDelegatedTokenForUser } from '@/lib/microsoft-graph'
 import { buildOccurrenceBody, buildEventBody } from '@/lib/schedule-utils'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     if (locationOnline?.trim())   locations.push({ displayName: locationOnline.trim() })
     if (locations.length > 0) event.locations = locations
 
-    const token = await getGraphToken()
+    const token = await getDelegatedTokenForUser(auth.user.id)
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events`,
       {

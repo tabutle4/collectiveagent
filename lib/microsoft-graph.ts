@@ -1,5 +1,7 @@
 import { Client } from '@microsoft/microsoft-graph-client'
 import 'isomorphic-fetch'
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+import { supabaseAdmin } from '@/lib/supabase'
 
 interface GraphConfig {
   clientId: string
@@ -66,6 +68,96 @@ export async function getGraphToken(): Promise<string> {
   // Subtract 5 minutes so we rotate before the token actually expires.
   graphTokenExpiry = Date.now() + (data.expires_in - 300) * 1000
   return token
+}
+
+// ── Delegated token via stored refresh token ──────────────────────────────
+// Used for operations requiring a real group member (e.g. creating new events
+// in a Microsoft 365 group calendar). The refresh token is stored encrypted
+// in users.ms_refresh_token, written at Microsoft OAuth login time.
+// Requires MS_TOKEN_ENCRYPTION_KEY env var (64-char hex, 32 bytes).
+
+function encryptToken(plaintext: string): string {
+  const key = Buffer.from(process.env.MS_TOKEN_ENCRYPTION_KEY!, 'hex')
+  const iv = randomBytes(16)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  const authTag = cipher.getAuthTag()
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`
+}
+
+export function encryptMsToken(plaintext: string): string {
+  return encryptToken(plaintext)
+}
+
+function decryptToken(stored: string): string {
+  const key = Buffer.from(process.env.MS_TOKEN_ENCRYPTION_KEY!, 'hex')
+  const [ivHex, authTagHex, encryptedHex] = stored.split(':')
+  const iv = Buffer.from(ivHex, 'hex')
+  const authTag = Buffer.from(authTagHex, 'hex')
+  const encrypted = Buffer.from(encryptedHex, 'hex')
+  const decipher = createDecipheriv('aes-256-gcm', key, iv)
+  decipher.setAuthTag(authTag)
+  return decipher.update(encrypted, undefined, 'utf8') + decipher.final('utf8')
+}
+
+export async function getDelegatedTokenForUser(userId: string): Promise<string> {
+  const { data: user } = await supabaseAdmin
+    .from('users')
+    .select('ms_refresh_token')
+    .eq('id', userId)
+    .single()
+
+  if (!user?.ms_refresh_token) {
+    throw new Error('No Microsoft refresh token on file. Please log out and log back in.')
+  }
+
+  const refreshToken = decryptToken(user.ms_refresh_token)
+
+  const tenantId     = process.env.MICROSOFT_TENANT_ID
+  const clientId     = process.env.MICROSOFT_CLIENT_ID
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET
+
+  if (!tenantId || !clientId || !clientSecret) {
+    throw new Error('Microsoft Graph is not configured')
+  }
+
+  const response = await fetch(
+    `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id:     clientId,
+        client_secret: clientSecret,
+        grant_type:    'refresh_token',
+        refresh_token: refreshToken,
+        scope:         'https://graph.microsoft.com/.default offline_access',
+      }).toString(),
+    }
+  )
+
+  if (!response.ok) {
+    const err = await response.text()
+    console.error('getDelegatedTokenForUser - token refresh failed:', err)
+    throw new Error('Microsoft session expired. Please log out and log back in.')
+  }
+
+  const tokens = await response.json()
+
+  // Rotate: Microsoft issues a new refresh token on every use — must store it.
+  // If storage fails, throw now rather than silently losing the token and failing next use.
+  if (tokens.refresh_token) {
+    const { error: rotateErr } = await supabaseAdmin
+      .from('users')
+      .update({ ms_refresh_token: encryptToken(tokens.refresh_token) })
+      .eq('id', userId)
+    if (rotateErr) {
+      console.error('getDelegatedTokenForUser - failed to store rotated token:', rotateErr)
+      throw new Error('Failed to save refreshed token. Please log out and log in again.')
+    }
+  }
+
+  return tokens.access_token as string
 }
 
 class MicrosoftGraphClient {
