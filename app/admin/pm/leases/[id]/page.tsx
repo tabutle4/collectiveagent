@@ -130,7 +130,11 @@ export default function LeaseDetailPage({ params }: { params: Promise<{ id: stri
       // Invoices come back nested under the lease via the Supabase join
       // (lease.tenant_invoices), not as a top-level data.invoices field.
       // Reading data.invoices left this empty even when invoices existed.
-      setInvoices(data.lease?.tenant_invoices || [])
+      setInvoices((data.lease?.tenant_invoices || []).slice().sort(
+  (a: any, b: any) => a.period_year !== b.period_year
+    ? a.period_year - b.period_year
+    : a.period_month - b.period_month
+))
 
       const l = data.lease
       setForm({
