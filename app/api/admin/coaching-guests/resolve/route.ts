@@ -168,7 +168,38 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Session expected but no occurrence found in Outlook at all
+    // Session expected but no occurrence found in calendarView.
+    // Deleted/canceled exceptions are not included in calendarView — try exceptionOccurrences.
+    const exceptUrl =
+      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${matchingSession.outlook_event_id}/exceptionOccurrences` +
+      `?$select=id,subject,start,isCancelled&$top=100`
+
+    const exceptRes = await fetch(exceptUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Prefer: 'outlook.timezone="America/Chicago"',
+      },
+    })
+
+    if (exceptRes.ok) {
+      const exceptData = await exceptRes.json()
+      const exceptions: any[] = exceptData.value || []
+      const matchingException = exceptions.find(
+        (o: any) => o.start?.dateTime?.slice(0, 10) === date
+      )
+      if (matchingException) {
+        return NextResponse.json({
+          status: 'canceled',
+          session: matchingSession,
+          occurrence_id: matchingException.id,
+          message: `The ${matchingSession.display_title} session appears to have been canceled on this date.`,
+          zoom_link: zoomLink,
+          session_join_link: sessionJoinLink(matchingSession),
+        })
+      }
+    }
+
+    // No occurrence found in calendarView or exceptionOccurrences
     return NextResponse.json({
       status: 'no_occurrence',
       session: matchingSession,
