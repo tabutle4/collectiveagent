@@ -1027,7 +1027,11 @@ export default function LandlordDetailPage() {
         setLandlord(data.landlord)
         // Data is nested in landlord object from API
         setProperties(data.landlord.managed_properties || [])
-        setDisbursements(data.landlord.landlord_disbursements || [])
+        setDisbursements((data.landlord.landlord_disbursements || []).slice().sort(
+  (a: any, b: any) => a.period_year !== b.period_year
+    ? a.period_year - b.period_year
+    : a.period_month - b.period_month
+))
         // Keep all agreements, sorted newest first by commencement_date
         const allAgreements: Agreement[] = data.landlord.pm_agreements || []
         const sorted = [...allAgreements].sort((a, b) => {

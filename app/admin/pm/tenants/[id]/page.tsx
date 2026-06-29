@@ -80,7 +80,11 @@ export default function TenantDetailPage() {
       const data = await res.json()
       setTenant(data.tenant)
       setLeases(data.leases || [])
-      setInvoices(data.invoices || [])
+      setInvoices((data.invoices || []).slice().sort(
+  (a: any, b: any) => a.period_year !== b.period_year
+    ? a.period_year - b.period_year
+    : a.period_month - b.period_month
+))
       setForm(data.tenant)
     } catch (err) {
       console.error('Error loading tenant:', err)
