@@ -113,9 +113,14 @@ export async function getDelegatedTokenForUser(userId: string): Promise<string> 
 
   const refreshToken = decryptToken(user.ms_refresh_token)
 
-  const tenantId     = process.env.MICROSOFT_TENANT_ID
-  const clientId     = process.env.MICROSOFT_CLIENT_ID
-  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET
+  // Must use the SAME Entra app registration that issued the refresh token
+  // at login (AUTH_MICROSOFT_ENTRA_ID_*), not the separate app-only Graph
+  // client (MICROSOFT_CLIENT_ID) used by getGraphToken. A refresh token
+  // minted by one app registration cannot be redeemed by another's
+  // client_id/secret — Microsoft returns 401 invalid_client.
+  const tenantId     = process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER?.split('/')[3]
+  const clientId     = process.env.AUTH_MICROSOFT_ENTRA_ID_ID
+  const clientSecret = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
 
   if (!tenantId || !clientId || !clientSecret) {
     throw new Error('Microsoft Graph is not configured')
@@ -139,8 +144,8 @@ export async function getDelegatedTokenForUser(userId: string): Promise<string> 
   )
 
   if (!response.ok) {
-    const err = await response.text()
-    console.error('getDelegatedTokenForUser - token refresh failed:', err)
+    const err = await response.json().catch(() => ({}))
+    console.error('getDelegatedTokenForUser - refresh failed:', err.error, err.error_description)
     throw new Error('Microsoft session expired. Please log out and log back in.')
   }
 
