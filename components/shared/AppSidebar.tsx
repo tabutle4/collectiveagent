@@ -544,7 +544,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     }
 
     return (
-      <Link
+      <a
         key={item.href}
         href={item.href}
         className={`
@@ -569,7 +569,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
             Update
           </span>
         )}
-      </Link>
+      </a>
     )
   }
 
