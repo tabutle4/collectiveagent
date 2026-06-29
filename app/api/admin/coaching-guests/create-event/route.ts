@@ -65,8 +65,6 @@ export async function POST(request: NextRequest) {
       body: { contentType: 'html', content: bodyHtml },
       start: { dateTime: `${date}T${startTime}:00`, timeZone: 'America/Chicago' },
       end:   { dateTime: `${date}T${endTime}:00`,   timeZone: 'America/Chicago' },
-      isOnlineMeeting: true,
-      onlineMeetingProvider: 'teamsForBusiness',
     }
 
     if (attendees.length > 0) event.attendees = attendees
