@@ -51,18 +51,6 @@ export default function CoachingGuestsPage() {
   const [toast,           setToast]           = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Pre-populate join link from settings on mount
-  useEffect(() => {
-    fetch('/api/admin/settings')
-      .then(r => r.json())
-      .then(d => {
-        if (d.settings?.coaching_zoom_link) {
-          setLocationOnline(d.settings.coaching_zoom_link)
-        }
-      })
-      .catch(() => {})
-  }, [])
-
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 5000)
@@ -94,6 +82,7 @@ export default function CoachingGuestsPage() {
         setResolved(d)
         setTitle(`Guest Presenter \u2013 ${d.session?.display_title || ''}`)
         setEndTime(d.session?.end_time?.slice(0, 5) || addOneHour(time))
+        if (d.zoom_link && !locationOnline) setLocationOnline(d.zoom_link)
       } catch (e: any) {
         setError(e.message)
       } finally {
@@ -299,7 +288,7 @@ export default function CoachingGuestsPage() {
                 <Link size={11} /> Join Link
               </label>
               <input
-                type="url"
+                type="text"
                 value={locationOnline}
                 onChange={e => setLocationOnline(e.target.value)}
                 placeholder="https://zoom.us/j/... or Teams link"

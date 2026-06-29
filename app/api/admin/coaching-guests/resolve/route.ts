@@ -58,6 +58,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'date and time are required' }, { status: 400 })
     }
 
+    // Load zoom link from company settings
+    const { data: cs } = await supabaseAdmin
+      .from('company_settings')
+      .select('coaching_zoom_link')
+      .single()
+    const zoomLink = cs?.coaching_zoom_link || ''
+
     // Load all active sessions
     const { data: sessions, error: sessErr } = await supabaseAdmin
       .from('coaching_schedule_sessions' as any)
@@ -81,6 +88,7 @@ export async function POST(request: NextRequest) {
         session: null,
         occurrence_id: null,
         message: 'No sessions are scheduled at this time.',
+        zoom_link: zoomLink,
       })
     }
 
@@ -91,6 +99,7 @@ export async function POST(request: NextRequest) {
         session: matchingSession,
         occurrence_id: null,
         message: `${matchingSession.display_title} is not linked to Outlook.`,
+        zoom_link: zoomLink,
       })
     }
 
@@ -134,6 +143,7 @@ export async function POST(request: NextRequest) {
         session: matchingSession,
         occurrence_id: occurrence.id,
         message: null,
+        zoom_link: zoomLink,
       })
     }
 
@@ -143,6 +153,7 @@ export async function POST(request: NextRequest) {
       session: matchingSession,
       occurrence_id: null,
       message: `The ${matchingSession.display_title} session appears to have been canceled on this date.`,
+      zoom_link: zoomLink,
     })
 
   } catch (err: any) {
