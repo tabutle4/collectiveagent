@@ -131,7 +131,9 @@ export async function getDelegatedTokenForUser(userId: string): Promise<string> 
         client_secret: clientSecret,
         grant_type:    'refresh_token',
         refresh_token: refreshToken,
-        scope:         'https://graph.microsoft.com/.default offline_access',
+        // No scope param: Microsoft's .default scope cannot be combined with
+        // other scopes in one request. Omitting scope on a refresh grant
+        // returns access for whatever was originally consented to at login.
       }).toString(),
     }
   )
