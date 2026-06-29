@@ -65,10 +65,18 @@ export async function POST(request: NextRequest) {
       .single()
     const zoomLink = cs?.coaching_zoom_link || ''
 
+    // Extract URL from a session's event_location (semicolon-separated)
+    function sessionJoinLink(session: any): string {
+      if (!session?.event_location) return ''
+      const parts = (session.event_location as string).split(';').map((s: string) => s.trim()).filter(Boolean)
+      const url = parts.find((p: string) => p.startsWith('http'))
+      return url || ''
+    }
+
     // Load all active sessions
     const { data: sessions, error: sessErr } = await supabaseAdmin
       .from('coaching_schedule_sessions' as any)
-      .select('id,display_title,recurrence_type,recurrence_day,start_time,end_time,outlook_event_id,active')
+      .select('id,display_title,recurrence_type,recurrence_day,start_time,end_time,outlook_event_id,active,event_location')
       .eq('active', true)
 
     if (sessErr) throw sessErr
@@ -89,6 +97,7 @@ export async function POST(request: NextRequest) {
         occurrence_id: null,
         message: 'No sessions are scheduled at this time.',
         zoom_link: zoomLink,
+        session_join_link: sessionJoinLink(matchingSession),
       })
     }
 
@@ -100,6 +109,7 @@ export async function POST(request: NextRequest) {
         occurrence_id: null,
         message: `${matchingSession.display_title} is not linked to Outlook.`,
         zoom_link: zoomLink,
+        session_join_link: sessionJoinLink(matchingSession),
       })
     }
 
@@ -144,6 +154,7 @@ export async function POST(request: NextRequest) {
         occurrence_id: occurrence.id,
         message: null,
         zoom_link: zoomLink,
+        session_join_link: sessionJoinLink(matchingSession),
       })
     }
 
@@ -154,6 +165,7 @@ export async function POST(request: NextRequest) {
       occurrence_id: null,
       message: `The ${matchingSession.display_title} session appears to have been canceled on this date.`,
       zoom_link: zoomLink,
+      session_join_link: sessionJoinLink(matchingSession),
     })
 
   } catch (err: any) {

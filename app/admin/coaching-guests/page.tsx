@@ -82,7 +82,9 @@ export default function CoachingGuestsPage() {
         setResolved(d)
         setTitle(`Guest Presenter \u2013 ${d.session?.display_title || ''}`)
         setEndTime(d.session?.end_time?.slice(0, 5) || addOneHour(time))
-        if (d.zoom_link && !locationOnline) setLocationOnline(d.zoom_link)
+        if (!locationOnline) {
+          setLocationOnline(d.session_join_link || d.zoom_link || '')
+        }
       } catch (e: any) {
         setError(e.message)
       } finally {
