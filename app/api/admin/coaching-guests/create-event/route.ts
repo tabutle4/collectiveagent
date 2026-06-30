@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
       body: { contentType: 'html', content: bodyHtml },
       start: { dateTime: `${date}T${startTime}:00`, timeZone: 'America/Chicago' },
       end:   { dateTime: `${date}T${endTime}:00`,   timeZone: 'America/Chicago' },
+      // Explicitly null — Microsoft will never create a recurring series
+      recurrence: null,
     }
 
     if (attendees.length > 0) event.attendees = attendees

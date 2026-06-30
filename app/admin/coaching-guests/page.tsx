@@ -33,8 +33,8 @@ function formatDateLabel(date: string) {
 }
 
 export default function CoachingGuestsPage() {
-  const [date,            setDate]            = useState(todayString())
-  const [time,            setTime]            = useState('12:00')
+  const [date,            setDate]            = useState('')
+  const [time,            setTime]            = useState('')
   const [resolving,       setResolving]       = useState(false)
   const [resolved,        setResolved]        = useState<ResolveResult | null>(null)
   const [title,           setTitle]           = useState('')
@@ -49,7 +49,10 @@ export default function CoachingGuestsPage() {
   const [saving,          setSaving]          = useState(false)
   const [error,           setError]           = useState('')
   const [toast,           setToast]           = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Incremented on every resolve; stale responses are discarded when the
+  // counter has moved on before the response arrives.
+  const resolveIdRef = useRef(0)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -66,10 +69,13 @@ export default function CoachingGuestsPage() {
     if (!date || !time) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
+      resolveIdRef.current += 1
+      const thisId = resolveIdRef.current
       setResolving(true)
       setResolved(null)
       setTitle('')
       setEndTime('')
+      setLocationOnline('')
       clearForm()
       try {
         const res = await fetch('/api/admin/coaching-guests/resolve', {
@@ -78,17 +84,19 @@ export default function CoachingGuestsPage() {
           body: JSON.stringify({ date, time }),
         })
         const d = await res.json()
+        // Discard if a newer resolve has fired since this one was sent
+        if (resolveIdRef.current !== thisId) return
         if (!res.ok) throw new Error(d.error || 'Failed to resolve')
         setResolved(d)
         setTitle(`Guest Presenter \u2013 ${d.session?.display_title || ''}`)
         setEndTime(d.session?.end_time?.slice(0, 5) || addOneHour(time))
-        if (!locationOnline) {
-          setLocationOnline(d.session_join_link || d.zoom_link || '')
-        }
+        // Always set from the new session — never carry over a prior session's link
+        setLocationOnline(d.session_join_link || d.zoom_link || '')
       } catch (e: any) {
+        if (resolveIdRef.current !== thisId) return
         setError(e.message)
       } finally {
-        setResolving(false)
+        if (resolveIdRef.current === thisId) setResolving(false)
       }
     }, 400)
   }, [date, time])
@@ -97,6 +105,17 @@ export default function CoachingGuestsPage() {
     if (!resolved) return
     if (!title.trim()) { setError('Event title is required.'); return }
     if (!guestName.trim()) { setError('Guest name is required.'); return }
+
+    // Fix 4: Confirm exactly what will be sent to Outlook before anything fires
+    const confirmMsg = [
+      'Create Outlook event?',
+      '',
+      `Title:  ${title}`,
+      `Date:   ${formatDateLabel(date)}`,
+      `Guest:  ${guestName}`,
+      guestEmail ? `Email invite to: ${guestEmail}` : 'No guest email — group calendar only',
+    ].join('\n')
+    if (!window.confirm(confirmMsg)) return
 
     setSaving(true)
     setError('')
@@ -136,6 +155,8 @@ export default function CoachingGuestsPage() {
         if (!res.ok) throw new Error(d.error || 'Failed to create event')
       }
       showToast(`Outlook ${resolved.occurrence_id ? 'invite updated' : 'event created'}: ${title}`)
+      // Fix 5: Clear resolved so button is disabled — prevents accidental second submit
+      setResolved(null)
       clearForm()
     } catch (e: any) {
       setError(e.message)
