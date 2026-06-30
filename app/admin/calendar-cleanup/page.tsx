@@ -53,7 +53,7 @@ export default function CalendarCleanupPage() {
         <h1 className="page-title mb-1">Calendar Cleanup</h1>
         <p className="text-sm text-luxury-gray-3">
           {visible.length} Guest Presenter event{visible.length !== 1 ? 's' : ''} found.
-          Deleting sends a cancellation to any attendees.
+          Deleting removes attendees first so no cancellation emails go out.
         </p>
       </div>
 
@@ -74,7 +74,7 @@ export default function CalendarCleanupPage() {
             disabled={deleting === e.id}
             className="mt-2 px-3 py-1.5 text-xs rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
           >
-            {deleting === e.id ? 'Deleting...' : 'Delete + Send Cancellation'}
+            {deleting === e.id ? 'Deleting...' : 'Delete Quietly'}
           </button>
         </div>
       ))}
@@ -82,12 +82,12 @@ export default function CalendarCleanupPage() {
       {visible.length > 1 && (
         <button
           onClick={async () => {
-            if (!confirm(`Delete ALL ${visible.length} Guest Presenter events and send cancellations?`)) return
+            if (!confirm(`Quietly delete ALL ${visible.length} Guest Presenter events? No cancellation emails will go out.`)) return
             for (const e of visible) await del(e.id)
           }}
           className="px-4 py-2 text-sm rounded bg-red-700 text-white hover:bg-red-800"
         >
-          Delete All {visible.length} Events
+          Delete All {visible.length} Quietly
         </button>
       )}
 

@@ -52,10 +52,22 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const token = await getGraphToken()
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${encodeURIComponent(id)}`,
-      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-    )
+    const eventUrl = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${encodeURIComponent(id)}`
+
+    // Step 1: Strip all attendees silently before deleting.
+    // If attendees are still on the event when it's deleted, Microsoft
+    // automatically sends cancellation emails. Removing them first prevents that.
+    await fetch(eventUrl, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendees: [] }),
+    })
+
+    // Step 2: Delete the now-attendee-free event
+    const res = await fetch(eventUrl, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
     if (res.status === 204) return NextResponse.json({ success: true })
     const err = await res.json().catch(() => ({}))
     return NextResponse.json({ error: err }, { status: 500 })
