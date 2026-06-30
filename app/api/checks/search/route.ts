@@ -1,10 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows, type FetchAllRowsOptions } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
 const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+
+// Some contact fields (email, phone) are stored as jsonb and can come back as a
+// string, an array of strings, an object, or null. Flatten any of those shapes
+// into a single searchable string so the text filter never calls a string
+// method on a non-string (which would throw and 500 the whole request).
+function flattenSearchable(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return value.map(flattenSearchable).join(' ')
+  if (typeof value === 'object') return Object.values(value as Record<string, unknown>).map(flattenSearchable).join(' ')
+  return ''
+}
+
+// Build several searchable representations of a money value so a user can find
+// it however they type it: "1500", "1500.00", "1,500", "1,500.00". The check
+// amount is numeric and may arrive as a number or a string from the database.
+function amountTokens(value: unknown): string {
+  if (value == null || value === '') return ''
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.\-]/g, ''))
+  if (!Number.isFinite(n)) return ''
+  const fixed = n.toFixed(2)
+  const grouped = n.toLocaleString('en-US')
+  const groupedFixed = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return [String(n), fixed, grouped, groupedFixed].join(' ')
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request)
@@ -23,10 +49,11 @@ export async function GET(request: NextRequest) {
     const userRole = (auth.user.role || '').toLowerCase()
     const isAdmin = ADMIN_ROLES.includes(userRole)
 
-    // Build base query joining transaction and contacts
-    let query = supabaseAdmin
-      .from('checks_received')
-      .select(`
+    // Build base query joining transaction and contacts. fetchAllRows pages
+    // through in batches of 1000 so search covers the whole table, not just a
+    // capped slice. The nested select (the transactions embed) is passed
+    // straight through to PostgREST and works the same way under pagination.
+    const selectFields = `
         id,
         property_address,
         check_amount,
@@ -59,31 +86,26 @@ export async function GET(request: NextRequest) {
             )
           )
         )
-      `)
-      .order('received_date', { ascending: false })
-      .limit(5000)
+      `
 
-    // Agent filter: only checks where they are an internal agent on the transaction
-    if (!isAdmin) {
-      // We need to filter server-side after fetch since Supabase doesn't support
-      // nested join filters in a single query elegantly. Fetch with a reasonable
-      // limit and filter in JS below.
-    }
+    // Agent filter: only checks where they are an internal agent on the
+    // transaction. Supabase cannot filter on a nested join in one query, so we
+    // fetch and filter in JS below.
 
     // Date range filter
     const allowedDateFields = ['received_date', 'cleared_date', 'deposited_date', 'check_date']
     const safeField = allowedDateFields.includes(dateField) ? dateField : 'received_date'
-    if (from) query = query.gte(safeField, from)
-    if (to) query = query.lte(safeField, to)
 
-    // Status filter
-    if (status) query = query.eq('status', status)
+    const filters: NonNullable<FetchAllRowsOptions['filters']> = []
+    if (from) filters.push({ type: 'gte', column: safeField, value: from })
+    if (to) filters.push({ type: 'lte', column: safeField, value: to })
+    if (status) filters.push({ type: 'eq', column: 'status', value: status })
+    if (method) filters.push({ type: 'eq', column: 'payment_method', value: method })
 
-    // Payment method filter
-    if (method) query = query.eq('payment_method', method)
-
-    const { data: rows, error } = await query
-    if (error) throw error
+    const rows = await fetchAllRows<any>('checks_received', selectFields, {
+      filters,
+      orderBy: { column: 'received_date', ascending: false },
+    })
 
     let results = rows || []
 
@@ -128,16 +150,23 @@ export async function GET(request: NextRequest) {
     // Text search across: check_from, check_number, property_address,
     // agent names, contact names/email/company
     if (search) {
+      // Drop a leading currency symbol so "$1,500" matches the amount tokens.
+      // Commas are left intact so comma-containing addresses still match.
+      const searchNorm = search.replace(/\$/g, '')
       results = results.filter(r => {
         const txn = (r as any).transactions
         const contacts: string[] = []
 
         if (txn) {
-          // Contact names/email/company
+          // Contact names/email/company. email is jsonb, so flatten any
+          // string/array/object shape before lowercasing.
           for (const c of txn.transaction_contacts || []) {
-            if (c.name) contacts.push(c.name.toLowerCase())
-            if (c.email) contacts.push(c.email.toLowerCase())
-            if (c.company) contacts.push(c.company.toLowerCase())
+            const nm = flattenSearchable(c.name)
+            const em = flattenSearchable(c.email)
+            const co = flattenSearchable(c.company)
+            if (nm) contacts.push(nm.toLowerCase())
+            if (em) contacts.push(em.toLowerCase())
+            if (co) contacts.push(co.toLowerCase())
           }
           // Agent names
           for (const a of txn.transaction_internal_agents || []) {
@@ -155,10 +184,20 @@ export async function GET(request: NextRequest) {
           r.property_address || '',
           txn?.property_address || '',
           r.notes || '',
+          r.status || '',
+          r.payment_method || '',
+          r.received_date || '',
+          r.check_date || '',
+          r.deposited_date || '',
+          r.cleared_date || '',
+          r.compliance_complete_date || '',
+          txn?.transaction_type || '',
+          amountTokens(r.check_amount),
+          amountTokens(r.brokerage_amount),
           ...contacts,
         ].join(' ').toLowerCase()
 
-        return haystack.includes(search)
+        return haystack.includes(searchNorm)
       })
     }
 
