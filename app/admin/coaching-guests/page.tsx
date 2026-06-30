@@ -113,7 +113,7 @@ export default function CoachingGuestsPage() {
       `Title:  ${title}`,
       `Date:   ${formatDateLabel(date)}`,
       `Guest:  ${guestName}`,
-      guestEmail ? `Email invite to: ${guestEmail}` : 'No guest email — group calendar only',
+      guestEmail ? `Email invite to: ${guestEmail}` : 'No guest email. Group calendar only.',
     ].join('\n')
     if (!window.confirm(confirmMsg)) return
 
@@ -147,6 +147,7 @@ export default function CoachingGuestsPage() {
             startTime: time,
             endTime: endTime || addOneHour(time),
             title: title.replace(/^Guest Presenter \u2013 /, ''),
+            sessionId: resolved.session?.id || null,
             guestName, guestCompany, guestEmail, topic, food,
             locationPhysical, locationOnline,
           }),

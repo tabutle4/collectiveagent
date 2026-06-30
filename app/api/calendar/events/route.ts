@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/api-auth'
-import { getGraphToken } from '@/lib/microsoft-graph'
+import { getGraphToken, getDelegatedTokenForUser } from '@/lib/microsoft-graph'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 
@@ -127,15 +127,37 @@ export async function DELETE(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const token = await getGraphToken()
     const { searchParams } = new URL(request.url)
     const eventId = searchParams.get('eventId')
     if (!eventId) return NextResponse.json({ error: 'eventId required' }, { status: 400 })
 
-    const res = await fetch(
-      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${eventId}`,
-      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
-    )
+    const eventUrl = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${encodeURIComponent(eventId)}`
+
+    // Use delegated token — app-only token cannot delete group calendar events
+    const token = await getDelegatedTokenForUser(auth.user.id)
+
+    // Step 1: Strip attendees so no cancellation emails go out.
+    // If this fails, abort rather than deleting with attendees still attached
+    // since that would send the exact cancellation email this exists to prevent.
+    const patchRes = await fetch(eventUrl, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attendees: [] }),
+    })
+    if (!patchRes.ok) {
+      const err = await patchRes.json().catch(() => ({}))
+      console.error('calendar events DELETE - attendee strip failed:', err)
+      return NextResponse.json(
+        { error: 'Could not remove attendees before deleting. Event was not deleted to avoid sending a cancellation email. Try again.' },
+        { status: 500 }
+      )
+    }
+
+    // Step 2: Delete the now-attendee-free event
+    const res = await fetch(eventUrl, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
     if (!res.ok && res.status !== 204) {
       return NextResponse.json({ error: 'Failed to delete event' }, { status: 500 })
     }

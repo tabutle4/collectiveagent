@@ -115,12 +115,12 @@ export function buildEventBody(params: EventBodyParams): string {
   const { displayTitle, dayLabel, timeDisplay, recurrenceLabel, platform, audience, host, description, imageUrl } = params
 
   const bullets: string[] = [
-    `<li style="margin-bottom:6px;"><strong>Day:</strong> ${dayLabel}</li>`,
+    dayLabel ? `<li style="margin-bottom:6px;"><strong>Day:</strong> ${dayLabel}</li>` : '',
     `<li style="margin-bottom:6px;"><strong>Time:</strong> ${timeDisplay}</li>`,
     `<li style="margin-bottom:6px;"><strong>Recurrence:</strong> ${recurrenceLabel}</li>`,
     `<li style="margin-bottom:6px;"><strong>Platform:</strong> ${renderPlatform(platform)}</li>`,
-    `<li style="margin-bottom:6px;"><strong>Audience:</strong> ${audience}</li>`,
-  ]
+    audience ? `<li style="margin-bottom:6px;"><strong>Audience:</strong> ${audience}</li>` : '',
+  ].filter(Boolean)
   if (host) {
     bullets.push(`<li style="margin-bottom:6px;"><strong>Host:</strong> ${host}</li>`)
   }

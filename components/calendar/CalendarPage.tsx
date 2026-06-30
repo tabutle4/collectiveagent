@@ -277,7 +277,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
   }
 
   const deleteEvent = async (eventId: string) => {
-    if (!confirm('Delete this event?')) return
+    if (!confirm('Cancel this event quietly? No cancellation emails will be sent.')) return
     setDeleting(true)
     try {
       const res = await fetch(`/api/calendar/events?eventId=${eventId}`, { method: 'DELETE' })
@@ -694,7 +694,7 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
                     disabled={deleting}
                     className="text-xs text-red-400 hover:text-red-600 px-4 disabled:opacity-50"
                   >
-                    {deleting ? 'Deleting...' : 'Delete'}
+                    {deleting ? 'Canceling...' : 'Cancel Quietly'}
                   </button>
                 </div>
               )}
