@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAnyPermission } from '@/lib/api-auth'
-import { getGraphToken } from '@/lib/microsoft-graph'
+import { getGraphToken, getDelegatedTokenForUser } from '@/lib/microsoft-graph'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 
@@ -51,7 +51,7 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   try {
-    const token = await getGraphToken()
+    const token = await getDelegatedTokenForUser(auth.user.id)
     const eventUrl = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${encodeURIComponent(id)}`
 
     // Step 1: Strip all attendees silently before deleting.
