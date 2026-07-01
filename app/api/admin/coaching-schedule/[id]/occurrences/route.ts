@@ -129,12 +129,27 @@ export async function PATCH(
 
     const token = await getGraphToken()
 
-    // Build attendees from form only.
-    // Group members receive the event through group membership, not explicit attendees.
-    // The guest is the only person who needs to be explicitly listed.
-    const attendees: any[] = guestEmail
+    // ── Fetch current attendees on this occurrence ─────────────────────────
+    // CRITICAL: If we PATCH with only the new guest, Microsoft interprets
+    // every attendee not in the array as "removed" and sends them a
+    // cancellation email. We must read the existing list first and merge.
+    const fetchRes = await fetch(
+      `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${occurrenceId}?$select=attendees`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    const fetchData = fetchRes.ok ? await fetchRes.json() : {}
+    const existingAttendees: any[] = fetchData.attendees || []
+
+    // Merge: keep all existing attendees, add new guest (deduplicated by email)
+    const newGuest = guestEmail
       ? [{ emailAddress: { address: guestEmail, name: guestName || guestEmail }, type: 'required' }]
       : []
+    const mergedAttendees = [
+      ...existingAttendees.filter(
+        (a: any) => a.emailAddress?.address?.toLowerCase() !== guestEmail?.toLowerCase()
+      ),
+      ...newGuest,
+    ]
 
     // Build full session body (same as what the series master has)
     const sessionBody = buildEventBody({
@@ -161,7 +176,7 @@ export async function PATCH(
     const patchPayload: any = {
       subject: `Guest Presenter \u2013 ${patchSess.display_title}`,
       body: { contentType: 'html', content: occurrenceBodyHtml },
-      ...(attendees.length > 0 && { attendees }),
+      ...(mergedAttendees.length > 0 && { attendees: mergedAttendees }),
       ...(isCanceled && { isCancelled: false }),
     }
 
