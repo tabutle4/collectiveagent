@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAnyPermission } from '@/lib/api-auth'
-import { getGraphToken } from '@/lib/microsoft-graph'
+import { getGraphToken, getDelegatedTokenForUser } from '@/lib/microsoft-graph'
 import {
   buildEventBody,
   buildOccurrenceBody,
@@ -127,7 +127,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No Outlook event linked to this session' }, { status: 400 })
     }
 
-    const token = await getGraphToken()
+    const token = await getDelegatedTokenForUser(auth.user.id)
 
     // ── Fetch current attendees on this occurrence ─────────────────────────
     // CRITICAL: If we PATCH with only the new guest, Microsoft interprets
