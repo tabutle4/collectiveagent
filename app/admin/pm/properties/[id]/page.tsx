@@ -800,7 +800,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
       </div>
 
       {/* Bottom cards: Landlord Deductions + Tenant Charges - always visible */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="space-y-6 mt-6">
         {/* Landlord Deductions */}
         <div className="container-card">
           <div className="flex items-center justify-between mb-4">
