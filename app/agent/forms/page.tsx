@@ -208,6 +208,20 @@ export default function AgentFormsPage() {
 
   if (!user) return null
 
+  // Group forms into meaningful categories so agents know where to look.
+  // "when" is a short plain-English cue shown under each form.
+  const FORM_CATEGORY: Record<string, string> = {
+    'pre-listing': 'Listings',
+    'just-listed': 'Listings',
+    'under-contract': 'Transactions',
+    'compliance-cda': 'Transactions',
+  }
+  const CATEGORY_ORDER = ['Listings', 'Transactions', 'Other']
+  const categoryOf = (formType: string) => FORM_CATEGORY[formType] || 'Other'
+  const groupedForms = CATEGORY_ORDER
+    .map(cat => ({ cat, items: forms.filter(f => categoryOf(f.formType) === cat) }))
+    .filter(g => g.items.length > 0)
+
   return (
     <>
       <div>
@@ -246,9 +260,15 @@ export default function AgentFormsPage() {
               <p className="text-sm text-luxury-gray-3">Loading...</p>
             </div>
           ) : activeTab === 'forms' ? (
-            /* Available Forms */
-            <div className="space-y-3">
-              {forms.map(form => (
+            /* Available Forms - grouped by category */
+            <div className="space-y-6">
+              {groupedForms.map(group => (
+                <div key={group.cat}>
+                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                    {group.cat}
+                  </h2>
+                  <div className="space-y-3">
+                    {group.items.map(form => (
                 <div key={form.id} className="inner-card">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
@@ -302,6 +322,9 @@ export default function AgentFormsPage() {
                         </a>
                       ) : null}
                     </div>
+                  </div>
+                </div>
+                    ))}
                   </div>
                 </div>
               ))}

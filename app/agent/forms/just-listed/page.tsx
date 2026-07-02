@@ -124,7 +124,6 @@ export default function JustListedForm() {
       const data = await response.json()
 
       if (data.success) {
-        alert('Just Listed form submitted successfully!')
         // Redirect to user's dashboard based on role (simple string, not array)
         if (user?.role === 'Admin') {
           router.push('/admin/dashboard')
