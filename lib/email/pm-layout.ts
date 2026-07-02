@@ -299,6 +299,64 @@ export function pmBankActivationEmail(
 /**
  * Rent due email for tenant
  */
+/**
+ * Management fee invoice email for landlords.
+ * Sent when a management fee invoice is created and a payment link is generated.
+ */
+export function pmManagementFeeEmail(
+  landlordName: string,
+  propertyAddress: string,
+  amount: number,
+  periodLabel: string,
+  dueDate: string,
+  paymentUrl: string
+): string {
+  return getPMEmailLayout(
+    `${pmEmailGreeting(landlordName)}
+     ${pmEmailText('Your management fee invoice is ready for payment.')}
+     ${pmEmailDetail('Property', propertyAddress)}
+     ${pmEmailDetail('Period', periodLabel)}
+     ${pmEmailDetail('Amount Due', `$${amount.toLocaleString()}`)}
+     ${pmEmailDetail('Due Date', dueDate)}
+     ${pmEmailButton('Pay Now', paymentUrl)}`,
+    { title: 'CRC Property Management', subtitle: 'Management Fee Due', preheader: `Management fee of $${amount.toLocaleString()} due ${dueDate}` }
+  )
+}
+
+/**
+ * Late fee warning email for tenants.
+ * Sent the day before the late fee applies.
+ * Shows rent owed, initial late fee, daily rate, and cap.
+ */
+export function pmLateFeeWarningEmail(
+  tenantName: string,
+  propertyAddress: string,
+  rentAmount: number,
+  lateFeeInitial: number,
+  lateFeeDaily: number | null,
+  lateFeeCap: number,
+  dueDate: string,
+  paymentUrl: string
+): string {
+  const total = rentAmount + lateFeeInitial
+  return getPMEmailLayout(
+    `${pmEmailGreeting(tenantName)}
+     ${pmEmailText('Your rent payment is still outstanding. A late fee will be added to your balance tomorrow.')}
+     <div style="background-color: #FFF8F5; padding: 14px 16px; border-radius: 6px; border-left: 3px solid ${PM_EMAIL_COLORS.accent}; margin: 16px 0;">
+       ${pmEmailDetail('Property', propertyAddress)}
+       ${pmEmailDetail('Rent Due', `$${rentAmount.toLocaleString()}`)}
+       ${pmEmailDetail('Initial Late Fee', `+$${lateFeeInitial.toLocaleString()} (applied tomorrow)`)}
+       ${lateFeeDaily ? pmEmailDetail('Daily Rate After', `+$${lateFeeDaily.toLocaleString()}/day`) : ''}
+       ${pmEmailDetail('Late Fee Cap', `$${lateFeeCap.toLocaleString()} maximum`)}
+       <hr style="border: none; border-top: 1px solid ${PM_EMAIL_COLORS.border}; margin: 10px 0;">
+       ${pmEmailDetail('Total After Late Fee', `$${total.toLocaleString()}`)}
+     </div>
+     ${pmEmailText('Pay now to avoid the late fee.')}
+     ${pmEmailButton('Pay Now - Avoid Late Fee', paymentUrl)}`,
+    { title: 'CRC Property Management', subtitle: 'Late Fee Warning', preheader: `A late fee of $${lateFeeInitial.toLocaleString()} will be added to your account tomorrow` }
+  )
+}
+
 export function pmRentDueEmail(
   tenantName: string,
   propertyAddress: string,

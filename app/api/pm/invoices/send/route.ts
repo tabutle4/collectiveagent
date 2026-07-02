@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
+import { pmRentDueEmail } from '@/lib/email/pm-layout'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
+const FROM_UPN = 'tarab@collectiverealtyco.com'
+const BCC_OFFICE = 'office@collectiverealtyco.com'
+const REPLY_TO = 'pm@collectiverealtyco.com'
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_pm_invoices')
@@ -38,6 +46,45 @@ export async function POST(request: NextRequest) {
 
     const tenant = invoice.tenants
     const property = invoice.managed_properties
+    const propertyAddr = property
+      ? `${property.property_address}, ${property.city}`
+      : 'your rental property'
+    const MONTH_NAMES_FULL = ['January','February','March','April','May','June',
+      'July','August','September','October','November','December']
+    const monthLabel = MONTH_NAMES[(invoice.period_month - 1)] || ''
+    const monthFull = MONTH_NAMES_FULL[(invoice.period_month - 1)] || monthLabel
+    const dueDateFormatted = new Date(`${invoice.due_date}T12:00:00`).toLocaleDateString(
+      'en-US', { month: 'long', day: 'numeric', year: 'numeric' }
+    )
+
+    // Idempotency: if a payment link already exists, reuse it and just resend the email.
+    // Do NOT create a new Payload invoice/link — this prevents duplicate charges.
+    if (invoice.payload_payment_link_url) {
+      const html = pmRentDueEmail(
+        tenant.first_name,
+        propertyAddr,
+        Number(invoice.total_amount),
+        dueDateFormatted,
+        invoice.payload_payment_link_url
+      )
+      try {
+        await sendMailAs({
+          fromUpn: FROM_UPN,
+          to: tenant.email,
+          bcc: BCC_OFFICE,
+          replyTo: REPLY_TO,
+          subject: `${monthFull} ${invoice.period_year} Rent Due - ${propertyAddr}`,
+          html,
+        })
+      } catch (emailErr) {
+        console.error('Failed to resend rent due email:', emailErr)
+      }
+      return NextResponse.json({
+        success: true,
+        payment_link_url: invoice.payload_payment_link_url,
+        resent: true,
+      })
+    }
 
     // Create Payload customer if tenant doesn't have one
     let customerId = tenant.payload_customer_id
@@ -139,9 +186,27 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', invoice_id)
 
-    // TODO: Send email to tenant with payment link
-    // For now, log the URL
-    console.log(`Payment link for ${tenant.email}: ${paymentLinkData.url}`)
+    // Send rent due email to tenant via Graph (external recipient).
+    const html = pmRentDueEmail(
+      tenant.first_name,
+      propertyAddr,
+      Number(invoice.total_amount),
+      dueDateFormatted,
+      paymentLinkData.url
+    )
+    try {
+      await sendMailAs({
+        fromUpn: FROM_UPN,
+        to: tenant.email,
+        bcc: BCC_OFFICE,
+        replyTo: REPLY_TO,
+        subject: `${monthFull} ${invoice.period_year} Rent Due - ${propertyAddr}`,
+        html,
+      })
+    } catch (emailErr) {
+      // Log but don't fail the request - payment link was created successfully
+      console.error('Failed to send rent due email:', emailErr)
+    }
 
     return NextResponse.json({
       success: true,

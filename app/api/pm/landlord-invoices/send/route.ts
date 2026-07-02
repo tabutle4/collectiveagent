@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requirePermission } from '@/lib/api-auth'
+import { sendMailAs } from '@/lib/microsoft-graph-mail'
+import { pmManagementFeeEmail } from '@/lib/email/pm-layout'
 
 const authHeader = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
+
+const FROM_UPN = 'tarab@collectiverealtyco.com'
+const BCC_OFFICE = 'office@collectiverealtyco.com'
+const REPLY_TO = 'pm@collectiverealtyco.com'
 
 // POST /api/pm/landlord-invoices/send
 // Creates a Payload invoice + payment link and marks the landlord invoice as sent.
@@ -24,7 +30,8 @@ export async function POST(request: NextRequest) {
       .select(`
         *,
         landlords(id, first_name, last_name, email, payload_payee_id),
-        managed_properties(id, property_address, city)
+        managed_properties(id, property_address, city, pm_agreement_id,
+          pm_agreements(crc_collects_rent))
       `)
       .eq('id', invoice_id)
       .single()
@@ -37,8 +44,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invoice is already paid' }, { status: 400 })
     }
 
+    // Only send management fee invoices to self-collect landlords.
+    // Self-collect = landlord collects rent and pays CRC the management fee directly.
+    // When crc_collects_rent = true, CRC deducts the fee from the disbursement instead.
+    const prop = invoice.managed_properties as any
+    const agreement = Array.isArray(prop?.pm_agreements) ? prop.pm_agreements[0] : prop?.pm_agreements
+    if (agreement?.crc_collects_rent !== false) {
+      return NextResponse.json(
+        { error: 'This landlord is not self-collect. Management fees are deducted from disbursements.' },
+        { status: 400 }
+      )
+    }
+
     const landlord = invoice.landlords as any
     const property = invoice.managed_properties as any
+
+    const MONTH_NAMES_FULL = ['January','February','March','April','May','June',
+      'July','August','September','October','November','December']
+    const propertyAddr = property
+      ? `${property.property_address}, ${property.city}`
+      : 'your property'
+    const dueDateFormatted = new Date(`${invoice.due_date}T12:00:00`).toLocaleDateString(
+      'en-US', { month: 'long', day: 'numeric', year: 'numeric' }
+    )
+    const period = `${MONTH_NAMES_FULL[(invoice.period_month || 1) - 1]} ${invoice.period_year}`
+
+    // Idempotency: if a payment link already exists, reuse it and just resend the email.
+    if (invoice.payload_payment_link_url) {
+      const html = pmManagementFeeEmail(
+        landlord.first_name,
+        propertyAddr,
+        Number(invoice.amount),
+        period,
+        dueDateFormatted,
+        invoice.payload_payment_link_url
+      )
+      try {
+        await sendMailAs({
+          fromUpn: FROM_UPN,
+          to: landlord.email,
+          bcc: BCC_OFFICE,
+          replyTo: REPLY_TO,
+          subject: `Management Fee Invoice - ${period} - ${propertyAddr}`,
+          html,
+        })
+      } catch (emailErr) {
+        console.error('Failed to resend management fee email:', emailErr)
+      }
+      return NextResponse.json({
+        success: true,
+        payment_link_url: invoice.payload_payment_link_url,
+        resent: true,
+      })
+    }
 
     // Create Payload customer for landlord if needed
     let customerId = landlord.payload_payee_id
@@ -72,11 +130,9 @@ export async function POST(request: NextRequest) {
         .eq('id', landlord.id)
     }
 
-    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    const monthLabel = MONTH_NAMES[(invoice.period_month || 1) - 1]
     const description = property
-      ? `Management Fee - ${property.property_address}, ${property.city} - ${monthLabel} ${invoice.period_year}`
-      : `Management Fee - ${monthLabel} ${invoice.period_year}`
+      ? `Management Fee - ${property.property_address}, ${property.city} - ${period}`
+      : `Management Fee - ${period}`
 
     // Create Payload invoice
     const invoiceRes = await fetch('https://api.payload.com/invoices/', {
@@ -139,7 +195,28 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', invoice_id)
 
-    console.log(`Landlord invoice payment link for ${landlord.email}: ${paymentLinkData.url}`)
+    // Send management fee invoice email to landlord via Graph (external recipient).
+    const html = pmManagementFeeEmail(
+      landlord.first_name,
+      propertyAddr,
+      Number(invoice.amount),
+      period,
+      dueDateFormatted,
+      paymentLinkData.url
+    )
+    try {
+      await sendMailAs({
+        fromUpn: FROM_UPN,
+        to: landlord.email,
+        bcc: BCC_OFFICE,
+        replyTo: REPLY_TO,
+        subject: `Management Fee Invoice - ${period} - ${propertyAddr}`,
+        html,
+      })
+    } catch (emailErr) {
+      // Log but don't fail the request - payment link was created successfully
+      console.error('Failed to send management fee email:', emailErr)
+    }
 
     return NextResponse.json({
       success: true,

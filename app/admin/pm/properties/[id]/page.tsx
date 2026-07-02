@@ -96,6 +96,17 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   })
   const [savingDeduction, setSavingDeduction] = useState(false)
 
+  // Tenant charge state
+  const [showAddChargeModal, setShowAddChargeModal] = useState(false)
+  const [chargeForm, setChargeForm] = useState({
+    label: '',
+    amount: '',
+    description: '',
+    period_month: new Date().getMonth() + 1,
+    period_year: new Date().getFullYear(),
+  })
+  const [savingCharge, setSavingCharge] = useState(false)
+
   useEffect(() => {
     checkAuth()
   }, [])
@@ -255,6 +266,75 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
+  const saveCharge = async () => {
+    if (!property) return
+    if (!chargeForm.label || !chargeForm.amount) {
+      alert('Label and amount are required')
+      return
+    }
+    if (parseFloat(chargeForm.amount) <= 0) {
+      alert('Amount must be greater than zero')
+      return
+    }
+
+    setSavingCharge(true)
+    try {
+      // Find the unpaid invoice for this property and period
+      const res = await fetch(
+        `/api/pm/invoices?property_id=${id}&period_month=${chargeForm.period_month}&period_year=${chargeForm.period_year}`
+      )
+      if (!res.ok) throw new Error('Failed to fetch invoices')
+      const data = await res.json()
+
+      const invoice = (data.invoices || []).find(
+        (inv: any) => inv.status !== 'paid'
+      )
+
+      if (!invoice) {
+        alert(`No unpaid invoice found for ${chargeForm.period_month}/${chargeForm.period_year}. Make sure the invoice exists and is not already paid.`)
+        return
+      }
+
+      // Build updated other_charges and description
+      const currentOther = Number(invoice.other_charges || 0)
+      const newOther = currentOther + parseFloat(chargeForm.amount)
+      const currentDesc = invoice.other_charges_description || ''
+      const newDesc = currentDesc
+        ? `${currentDesc}; ${chargeForm.label}${chargeForm.description ? ` (${chargeForm.description})` : ''}`
+        : `${chargeForm.label}${chargeForm.description ? ` (${chargeForm.description})` : ''}`
+
+      const patchRes = await fetch(`/api/pm/invoices/${invoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          other_charges: newOther,
+          other_charges_description: newDesc,
+        }),
+      })
+
+      if (patchRes.ok) {
+        setShowAddChargeModal(false)
+        setChargeForm({
+          label: '',
+          amount: '',
+          description: '',
+          period_month: new Date().getMonth() + 1,
+          period_year: new Date().getFullYear(),
+        })
+        alert(`Charge of $${parseFloat(chargeForm.amount).toFixed(2)} added to the ${chargeForm.period_month}/${chargeForm.period_year} invoice.`)
+      } else {
+        const errData = await patchRes.json()
+        alert(errData.error || 'Failed to add charge')
+      }
+    } catch (err: any) {
+      console.error('Error saving charge:', err)
+      alert(err.message || 'Failed to add charge')
+    } finally {
+      setSavingCharge(false)
+    }
+  }
+
+
   const handleSave = async () => {
     setSaving(true)
     setError('')
@@ -344,6 +424,22 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
       {error && <div className="alert-error mb-4">{error}</div>}
       {success && <div className="alert-success mb-4">{success}</div>}
+
+      {/* Mobile-only quick action buttons */}
+      <div className="flex gap-3 mb-4 lg:hidden">
+        <button
+          onClick={openAddDeductionModal}
+          className="btn btn-secondary text-xs flex items-center gap-1 flex-1"
+        >
+          <Plus size={12} /> Landlord Deduction
+        </button>
+        <button
+          onClick={() => setShowAddChargeModal(true)}
+          className="btn btn-secondary text-xs flex items-center gap-1 flex-1"
+        >
+          <Plus size={12} /> Tenant Charge
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Form */}
@@ -703,85 +799,104 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Pending Deductions section. Property-scoped: only deductions
-          attached to this property that have not yet been applied to a
-          disbursement. */}
-      <div className="container-card mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
-            Pending Deductions
-          </h2>
-          <button
-            onClick={openAddDeductionModal}
-            className="btn btn-secondary text-xs flex items-center gap-1"
-          >
-            <Plus size={12} /> Add Deduction
-          </button>
-        </div>
+      {/* Bottom cards: Landlord Deductions + Tenant Charges - always visible */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        {/* Landlord Deductions */}
+        <div className="container-card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+              Landlord Deductions
+            </h2>
+            <button
+              onClick={openAddDeductionModal}
+              className="btn btn-secondary text-xs flex items-center gap-1"
+            >
+              <Plus size={12} /> Add Deduction
+            </button>
+          </div>
 
-        {loadingDeductions ? (
-          <p className="text-sm text-luxury-gray-3 text-center py-4">
-            Loading deductions...
-          </p>
-        ) : pendingDeductions.length === 0 ? (
-          <p className="text-sm text-luxury-gray-3 text-center py-4">
-            No pending deductions for this property. Add one to apply against the next disbursement.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {pendingDeductions.map((d: any) => (
-              <div key={d.id} className="inner-card">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-luxury-gray-1 truncate">
-                        {d.label}
-                      </p>
-                      {d.source_repair_id && (
-                        <span className="text-xs text-luxury-gray-3 shrink-0">
-                          (from repair)
-                        </span>
+          {loadingDeductions ? (
+            <p className="text-sm text-luxury-gray-3 text-center py-4">
+              Loading deductions...
+            </p>
+          ) : pendingDeductions.length === 0 ? (
+            <p className="text-sm text-luxury-gray-3 text-center py-4">
+              No pending deductions. Add one to apply against the next disbursement.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {pendingDeductions.map((d: any) => (
+                <div key={d.id} className="inner-card">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-luxury-gray-1 truncate">
+                          {d.label}
+                        </p>
+                        {d.source_repair_id && (
+                          <span className="text-xs text-luxury-gray-3 shrink-0">
+                            (from repair)
+                          </span>
+                        )}
+                        {d.source_invoice_id && (
+                          <span className="text-xs text-luxury-gray-3 shrink-0">
+                            (from unpaid invoice)
+                          </span>
+                        )}
+                      </div>
+                      {d.description && (
+                        <p className="text-xs text-luxury-gray-3 truncate">{d.description}</p>
                       )}
-                      {d.source_invoice_id && (
-                        <span className="text-xs text-luxury-gray-3 shrink-0">
-                          (from unpaid invoice)
-                        </span>
+                      {d.incurred_date && (
+                        <p className="text-xs text-luxury-gray-3">
+                          Incurred {formatDate(d.incurred_date)}
+                        </p>
                       )}
                     </div>
-                    {d.description && (
-                      <p className="text-xs text-luxury-gray-3 truncate">{d.description}</p>
-                    )}
-                    {d.incurred_date && (
-                      <p className="text-xs text-luxury-gray-3">
-                        Incurred {formatDate(d.incurred_date)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-sm font-semibold text-luxury-gray-1">
-                      {formatMoney(Number(d.amount))}
-                    </span>
-                    <button
-                      onClick={() => deleteDeduction(d.id)}
-                      className="text-luxury-gray-3 hover:text-red-600"
-                      title="Delete deduction"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-sm font-semibold text-luxury-gray-1">
+                        {formatMoney(Number(d.amount))}
+                      </span>
+                      <button
+                        onClick={() => deleteDeduction(d.id)}
+                        className="text-luxury-gray-3 hover:text-red-600"
+                        title="Delete deduction"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Tenant Charges */}
+        <div className="container-card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">
+              Tenant Charges
+            </h2>
+            <button
+              onClick={() => setShowAddChargeModal(true)}
+              className="btn btn-secondary text-xs flex items-center gap-1"
+            >
+              <Plus size={12} /> Add Charge
+            </button>
           </div>
-        )}
+          <p className="text-sm text-luxury-gray-3 text-center py-4">
+            Add a charge to a tenant&apos;s existing rent invoice for a specific month.
+          </p>
+        </div>
       </div>
 
-      {/* Add Pending Deduction Modal */}
+      {/* Add Landlord Deduction Modal */}
       {showAddDeductionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="container-card max-w-md w-full mx-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-luxury-gray-1">Add Pending Deduction</h2>
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Add Landlord Deduction</h2>
               <button
                 onClick={() => setShowAddDeductionModal(false)}
                 className="text-luxury-gray-3 hover:text-luxury-gray-1"
@@ -851,6 +966,109 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   disabled={savingDeduction}
                 >
                   {savingDeduction ? 'Saving...' : 'Add Deduction'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Tenant Charge Modal */}
+      {showAddChargeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="container-card max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Add Tenant Charge</h2>
+              <button
+                onClick={() => setShowAddChargeModal(false)}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="field-label">Label</label>
+                <input
+                  type="text"
+                  value={chargeForm.label}
+                  onChange={(e) => setChargeForm(prev => ({ ...prev, label: e.target.value }))}
+                  className="input-luxury w-full"
+                  placeholder="e.g., Late move-out fee, cleaning charge"
+                />
+              </div>
+
+              <div>
+                <label className="field-label">Amount</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={chargeForm.amount}
+                    onChange={(e) => setChargeForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="input-luxury w-full pl-7"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Rent Month</label>
+                  <select
+                    value={chargeForm.period_month}
+                    onChange={(e) => setChargeForm(prev => ({ ...prev, period_month: Number(e.target.value) }))}
+                    className="select-luxury w-full"
+                  >
+                    {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                      <option key={i + 1} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label">Year</label>
+                  <select
+                    value={chargeForm.period_year}
+                    onChange={(e) => setChargeForm(prev => ({ ...prev, period_year: Number(e.target.value) }))}
+                    className="select-luxury w-full"
+                  >
+                    {[2025, 2026, 2027, 2028].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="field-label">Description (optional)</label>
+                <textarea
+                  value={chargeForm.description}
+                  onChange={(e) => setChargeForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="input-luxury w-full"
+                  rows={2}
+                  placeholder="Additional context"
+                />
+              </div>
+
+              <p className="text-xs text-luxury-gray-3">
+                This charge will be added to the existing unpaid invoice for the selected month. The invoice total will be updated automatically.
+              </p>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowAddChargeModal(false)}
+                  className="btn btn-secondary"
+                  disabled={savingCharge}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveCharge}
+                  className="btn btn-primary"
+                  disabled={savingCharge}
+                >
+                  {savingCharge ? 'Saving...' : 'Add Charge'}
                 </button>
               </div>
             </div>
