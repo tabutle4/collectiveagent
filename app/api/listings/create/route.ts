@@ -194,6 +194,23 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Unified submission record for the update (e.g. Just Listed after Pre-Listing).
+        if (agentIdForListing) {
+          try {
+            await supabase.from('agent_form_submissions').insert({
+              form_id: formRecord?.id || null,
+              agent_id: agentIdForListing,
+              submitted_at: new Date().toISOString(),
+              status: 'submitted',
+              listing_id: existingListing.id,
+              data: { ...body, submission_mode: validation.formType, submission_type: 'update' },
+              updated_at: new Date().toISOString(),
+            })
+          } catch (subErr) {
+            console.error('Error writing submission record:', subErr)
+          }
+        }
+
         // Send notification email if form has notification_email set
         if (formRecord?.notification_email) {
           try {
@@ -227,6 +244,25 @@ export async function POST(request: NextRequest) {
 
       if (!listing) {
         return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
+      }
+
+      // Unified submission record: every form submission is logged here so the
+      // office has one audit trail across all forms. Linked to the listing.
+      if (agentIdForListing) {
+        try {
+          await supabase.from('agent_form_submissions').insert({
+            form_id: formRecord?.id || null,
+            agent_id: agentIdForListing,
+            submitted_at: new Date().toISOString(),
+            status: 'submitted',
+            listing_id: listing.id,
+            data: { ...body, submission_mode: validation.formType },
+            updated_at: new Date().toISOString(),
+          })
+        } catch (subErr) {
+          console.error('Error writing submission record:', subErr)
+          // Do not fail the submission if the audit record fails.
+        }
       }
 
       // Send notification email if form has notification_email set

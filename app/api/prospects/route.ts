@@ -97,6 +97,29 @@ for (const field of requiredFields) {
       throw insertError
     }
 
+    // Unified submission record so the prospective agent form appears in the
+    // single submissions audit trail alongside all other forms.
+    if (prospect?.id) {
+      try {
+        const { data: formRow } = await supabase
+          .from('forms')
+          .select('id')
+          .eq('form_type', 'prospective-agent')
+          .maybeSingle()
+        await supabase.from('agent_form_submissions').insert({
+          form_id: formRow?.id || null,
+          agent_id: prospect.id,
+          submitted_at: new Date().toISOString(),
+          status: 'submitted',
+          data: { ...formData, submission_mode: 'prospective-agent' },
+          updated_at: new Date().toISOString(),
+        })
+      } catch (subErr) {
+        console.error('Error writing submission record:', subErr)
+        // Do not fail the prospect creation if the audit record fails.
+      }
+    }
+
     // If a referring agent name was provided, look up their user ID and link it
     if (formData.referring_agent && prospect) {
       const nameParts = formData.referring_agent.trim().split(/\s+/)
