@@ -11,6 +11,7 @@ import {
   ExternalLink,
   AlertCircle,
   User,
+  UserMinus,
   History,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -78,6 +79,7 @@ export default function AgreementDetailPage({
   const { teamId, agreementId } = resolvedParams
 
   const [user, setUser] = useState<any>(null)
+  const [permissions, setPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [team, setTeam] = useState<Team | null>(null)
   const [agreement, setAgreement] = useState<Agreement | null>(null)
@@ -87,6 +89,11 @@ export default function AgreementDetailPage({
   const [showHistory, setShowHistory] = useState(false)
   const [showCrossTeam, setShowCrossTeam] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // End membership modal state
+  const [showEndModal, setShowEndModal] = useState(false)
+  const [ending, setEnding] = useState(false)
+  const [endError, setEndError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -98,6 +105,7 @@ export default function AgreementDetailPage({
         }
         const data = await response.json()
         setUser(data.user)
+        setPermissions(data.permissions || [])
       } catch {
         router.push('/auth/login')
       }
@@ -132,6 +140,29 @@ export default function AgreementDetailPage({
       console.error('Error loading agreement:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleEndMembership = async () => {
+    setEnding(true)
+    setEndError(null)
+    try {
+      const response = await fetch(
+        `/api/teams/${teamId}/members/${agreementId}`,
+        { method: 'DELETE' }
+      )
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to end membership')
+      }
+
+      setShowEndModal(false)
+      await loadAgreement()
+    } catch (err: any) {
+      setEndError(err.message)
+    } finally {
+      setEnding(false)
     }
   }
 
@@ -194,6 +225,7 @@ export default function AgreementDetailPage({
   }
 
   const groupedSplits = groupSplitsByPlanType(agreement.splits)
+  const canManageAgreements = permissions.includes('can_manage_team_agreements')
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -267,6 +299,18 @@ export default function AgreementDetailPage({
                 <FileText size={14} />
                 View Document
               </a>
+            )}
+            {!agreement.end_date && canManageAgreements && (
+              <button
+                onClick={() => {
+                  setEndError(null)
+                  setShowEndModal(true)
+                }}
+                className="btn btn-danger-outline text-xs"
+              >
+                <UserMinus size={14} />
+                End Membership
+              </button>
             )}
           </div>
         </div>
@@ -416,6 +460,58 @@ export default function AgreementDetailPage({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* End Membership Confirmation Modal */}
+      {showEndModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5 text-red-600">
+                <AlertCircle size={20} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-luxury-gray-1">
+                  End team membership?
+                </h3>
+                <p className="text-sm text-luxury-gray-2 mt-2">
+                  This ends {getAgentName(agreement.agent)}'s membership on{' '}
+                  {team?.team_name || 'this team'} as of today. They will move to
+                  Former Members. Pending deals keep their current team splits, and
+                  future deals use their standard brokerage split.
+                </p>
+                <p className="text-xs text-luxury-gray-3 mt-2">
+                  This is reversible. The agreement record is kept and can be
+                  reactivated later by clearing its end date.
+                </p>
+              </div>
+            </div>
+
+            {endError && (
+              <div className="mt-4 flex items-center gap-2 text-sm text-red-600">
+                <AlertCircle size={16} />
+                <span>{endError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowEndModal(false)}
+                disabled={ending}
+                className="btn btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEndMembership}
+                disabled={ending}
+                className="btn btn-danger text-xs"
+              >
+                {ending ? 'Ending...' : 'End Membership'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
