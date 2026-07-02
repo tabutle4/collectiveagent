@@ -92,6 +92,16 @@ export default function TeamsPage() {
   })
   const [splits, setSplits] = useState<Split[]>(JSON.parse(JSON.stringify(DEFAULT_SPLITS)))
 
+  // Create Team Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    team_name: '',
+    status: 'active',
+    lead_id: '',
+  })
+  const [creatingTeam, setCreatingTeam] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -159,6 +169,49 @@ export default function TeamsPage() {
     setSplits(JSON.parse(JSON.stringify(DEFAULT_SPLITS)))
     loadAgents()
     setShowAddModal(true)
+  }
+
+  const openCreateModal = () => {
+    setCreateForm({ team_name: '', status: 'active', lead_id: '' })
+    setCreateError(null)
+    loadAgents()
+    setShowCreateModal(true)
+  }
+
+  const handleCreateTeam = async () => {
+    if (!createForm.team_name.trim()) {
+      setCreateError('Team name is required.')
+      return
+    }
+    setCreatingTeam(true)
+    setCreateError(null)
+    try {
+      const response = await fetch('/api/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          team_name: createForm.team_name.trim(),
+          status: createForm.status,
+          lead_ids: createForm.lead_id ? [createForm.lead_id] : [],
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create team')
+      }
+
+      setShowCreateModal(false)
+      if (data.team?.id) {
+        router.push(`/admin/teams/${data.team.id}`)
+      } else {
+        loadTeams()
+      }
+    } catch (err: any) {
+      setCreateError(err.message)
+    } finally {
+      setCreatingTeam(false)
+    }
   }
 
   const updateSplit = (planType: string, leadSource: string, field: 'agent_pct' | 'team_lead_pct' | 'firm_pct', value: number) => {
@@ -274,10 +327,16 @@ export default function TeamsPage() {
             Manage teams, team leads, and member agreements
           </p>
         </div>
-        <button onClick={openAddModal} className="btn btn-primary flex items-center gap-2">
-          <UserPlus size={16} />
-          Add Member
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={openCreateModal} className="btn btn-secondary flex items-center gap-2">
+            <Plus size={16} />
+            Create Team
+          </button>
+          <button onClick={openAddModal} className="btn btn-primary flex items-center gap-2">
+            <UserPlus size={16} />
+            Add Member
+          </button>
+        </div>
       </div>
 
       <div className="container-card">
@@ -363,6 +422,86 @@ export default function TeamsPage() {
           </div>
         )}
       </div>
+
+      {/* Create Team Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-luxury-gray-1">Create Team</h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="field-label">Team Name *</label>
+                <input
+                  type="text"
+                  value={createForm.team_name}
+                  onChange={e => setCreateForm(f => ({ ...f, team_name: e.target.value }))}
+                  placeholder="e.g. The Signature Group"
+                  className="input-luxury w-full"
+                />
+              </div>
+
+              <div>
+                <label className="field-label">Status</label>
+                <select
+                  value={createForm.status}
+                  onChange={e => setCreateForm(f => ({ ...f, status: e.target.value }))}
+                  className="select-luxury w-full"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="field-label">Team Lead (optional)</label>
+                <select
+                  value={createForm.lead_id}
+                  onChange={e => setCreateForm(f => ({ ...f, lead_id: e.target.value }))}
+                  className="select-luxury w-full"
+                  disabled={loadingAgents}
+                >
+                  <option value="">No team lead yet</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {createError && (
+              <div className="mt-4 text-sm text-red-600">{createError}</div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                disabled={creatingTeam}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateTeam}
+                disabled={creatingTeam}
+                className="btn btn-primary"
+              >
+                {creatingTeam ? 'Creating...' : 'Create Team'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Member Modal */}
       {showAddModal && (
