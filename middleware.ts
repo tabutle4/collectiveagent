@@ -138,8 +138,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect agents from restricted pages to profile
+  // Note: /agent/transactions/[id]/flyer is exempt - agents need this to download their flyers
   const restrictedAgentPages = ['/agent/dashboard', '/agent/transactions']
-  if (!isAdminRole && restrictedAgentPages.some(p => pathname.startsWith(p))) {
+  const isAgentFlyerPage = /^\/agent\/transactions\/[^/]+\/flyer/.test(pathname)
+  if (!isAdminRole && !isAgentFlyerPage && restrictedAgentPages.some(p => pathname.startsWith(p))) {
     return NextResponse.redirect(new URL('/agent/profile', request.url))
   }
 
