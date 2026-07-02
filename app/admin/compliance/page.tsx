@@ -30,11 +30,13 @@ const MODE_LABELS: Record<string, string> = {
   compliance: 'Compliance & CDA',
   subsequent: 'Resubmission',
   retainer: 'Retainer',
+  under_contract: 'New Contract',
 }
 
 const MODE_BADGE: Record<string, string> = {
   compliance: 'text-blue-700 bg-blue-50',
   subsequent: 'text-amber-700 bg-amber-50',
+  under_contract: 'text-teal-700 bg-teal-50',
   retainer: 'text-purple-700 bg-purple-50',
 }
 

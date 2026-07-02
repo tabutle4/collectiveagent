@@ -14,6 +14,9 @@ import {
   ArrowUpDown,
   Edit2,
   Power,
+  ChevronUp,
+  ChevronDown,
+  Mail,
 } from 'lucide-react'
 
 interface ProspectResponse {
@@ -312,6 +315,12 @@ export default function FormResponsesPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [forms, setForms] = useState<any[]>([])
   const [editingForm, setEditingForm] = useState<any>(null)
+  const [notifForm, setNotifForm] = useState<any>(null)
+  const [notifEmails, setNotifEmails] = useState<string[]>([])
+  const [notifNewEmail, setNotifNewEmail] = useState('')
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifError, setNotifError] = useState('')
   const [formCopiedLink, setFormCopiedLink] = useState<string | null>(null)
   const [newFormData, setNewFormData] = useState<any>({
     agent_name: '',
@@ -773,235 +782,14 @@ export default function FormResponsesPage() {
       const response = await fetch('/api/forms/list')
       const data = await response.json()
       const dbForms = data.success && data.forms ? data.forms : []
-
-      // Default forms configuration
-      const defaultFormsConfig = [
-        {
-          id: 'prospective-agent',
-          name: 'Prospective Agent Form',
-          description: 'Public form for prospective agents to join the firm',
-          form_type: 'prospective-agent',
-          is_active: true,
-          shareable_link_url: 'https://agent.collectiverealtyco.com/prospective-agent-form',
-          shareable_token: null,
-        },
-        {
-          id: 'pre-listing',
-          name: 'Pre-Listing Form',
-          description:
-            'Submit when you have executed a new listing agreement but the property is not yet active on the MLS',
-          form_type: 'pre-listing',
-          is_active: true,
-        },
-        {
-          id: 'just-listed',
-          name: 'Just Listed Form',
-          description: 'Submit when you have a new active listing that is already on the MLS',
-          form_type: 'just-listed',
-          is_active: true,
-        },
-      ]
-
-      // Merge: use database forms if they exist, otherwise use defaults
-      const allForms = [...dbForms]
-
-      // Process default forms
-      for (const defaultFormConfig of defaultFormsConfig) {
-        const existingForm = dbForms.find((f: any) => f.form_type === defaultFormConfig.form_type)
-
-        if (!existingForm) {
-          // Form doesn't exist in database, generate token and link
-          if (defaultFormConfig.form_type === 'prospective-agent') {
-            // Prospective agent uses a static link
-            allForms.push({
-              ...defaultFormConfig,
-              shareable_link_url: 'https://agent.collectiverealtyco.com/prospective-agent-form',
-              created_at: new Date().toISOString(),
-            })
-          } else {
-            // Generate token and link for pre-listing and just-listed
-            try {
-              const tokenResponse = await fetch('/api/forms/generate-generic-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ form_type: defaultFormConfig.form_type }),
-              })
-
-              if (tokenResponse.ok) {
-                const tokenData = await tokenResponse.json()
-
-                // Create form in database with co-listing agent field in form_config
-                const formConfig = {
-                  fields: [
-                    {
-                      id: `co-listing-agent-${Date.now()}`,
-                      name: 'co_listing_agent',
-                      label: 'Co-Listing Agent',
-                      type: 'co-listing-agent',
-                      required: false,
-                      placeholder: 'Type to search for a co-listing agent...',
-                    },
-                  ],
-                }
-
-                // Create the form in the database
-                const createResponse = await fetch('/api/forms/create', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    name: defaultFormConfig.name,
-                    description: defaultFormConfig.description,
-                    form_type: defaultFormConfig.form_type,
-                    form_config: formConfig,
-                    shareable_token: tokenData.token,
-                    shareable_link_url: tokenData.link_url,
-                  }),
-                })
-
-                if (createResponse.ok) {
-                  const createdForm = await createResponse.json()
-                  allForms.push(createdForm.form)
-                } else {
-                  // If creation fails, still add form without database entry
-                  allForms.push({
-                    ...defaultFormConfig,
-                    shareable_link_url: tokenData.link_url,
-                    shareable_token: tokenData.token,
-                    form_config: formConfig,
-                    created_at: new Date().toISOString(),
-                  })
-                }
-              } else {
-                // If token generation fails, still add form without link
-                allForms.push({
-                  ...defaultFormConfig,
-                  shareable_link_url: null,
-                  shareable_token: null,
-                  form_config: {
-                    fields: [
-                      {
-                        id: `co-listing-agent-${Date.now()}`,
-                        name: 'co_listing_agent',
-                        label: 'Co-Listing Agent',
-                        type: 'co-listing-agent',
-                        required: false,
-                        placeholder: 'Type to search for a co-listing agent...',
-                      },
-                    ],
-                  },
-                  created_at: new Date().toISOString(),
-                })
-              }
-            } catch (error) {
-              console.error(`Error generating token for ${defaultFormConfig.form_type}:`, error)
-              allForms.push({
-                ...defaultFormConfig,
-                shareable_link_url: null,
-                shareable_token: null,
-                form_config: {
-                  fields: [
-                    {
-                      id: `co-listing-agent-${Date.now()}`,
-                      name: 'co_listing_agent',
-                      label: 'Co-Listing Agent',
-                      type: 'co-listing-agent',
-                      required: false,
-                      placeholder: 'Type to search for a co-listing agent...',
-                    },
-                  ],
-                },
-                created_at: new Date().toISOString(),
-              })
-            }
-          }
-        } else {
-          // Form exists in database, but ensure it has a shareable link
-          if (!existingForm.shareable_link_url && existingForm.form_type !== 'prospective-agent') {
-            // Generate token and link for forms missing them
-            try {
-              const tokenResponse = await fetch('/api/forms/generate-generic-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ form_type: existingForm.form_type }),
-              })
-
-              if (tokenResponse.ok) {
-                const tokenData = await tokenResponse.json()
-                // Update the form in the database
-                await fetch('/api/forms/update', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    id: existingForm.id,
-                    shareable_token: tokenData.token,
-                    shareable_link_url: tokenData.link_url,
-                  }),
-                })
-                existingForm.shareable_link_url = tokenData.link_url
-                existingForm.shareable_token = tokenData.token
-              }
-            } catch (error) {
-              console.error(`Error generating token for existing form ${existingForm.id}:`, error)
-            }
-          } else if (
-            existingForm.form_type === 'prospective-agent' &&
-            !existingForm.shareable_link_url
-          ) {
-            existingForm.shareable_link_url = '/prospective-agent-form'
-          }
-
-          // Ensure pre-listing and just-listed forms have co-listing agent field in form_config
-          if (
-            existingForm.form_type === 'pre-listing' ||
-            existingForm.form_type === 'just-listed'
-          ) {
-            const formConfig = existingForm.form_config || {}
-            const fields = formConfig.fields || []
-
-            // Check if co-listing agent field exists
-            const hasCoListingAgent = fields.some(
-              (f: any) => f.type === 'co-listing-agent' || f.name === 'co_listing_agent'
-            )
-
-            if (!hasCoListingAgent) {
-              // Add co-listing agent field to form_config
-              const coListingAgentField = {
-                id: `co-listing-agent-${Date.now()}`,
-                name: 'co_listing_agent',
-                label: 'Co-Listing Agent',
-                type: 'co-listing-agent',
-                required: false,
-                placeholder: 'Type to search for a co-listing agent...',
-              }
-
-              fields.push(coListingAgentField)
-
-              // Update form in database
-              try {
-                await fetch('/api/forms/update', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    id: existingForm.id,
-                    form_config: {
-                      ...formConfig,
-                      fields: fields,
-                    },
-                  }),
-                })
-                existingForm.form_config = {
-                  ...formConfig,
-                  fields: fields,
-                }
-              } catch (error) {
-                console.error(`Error updating form_config for ${existingForm.form_type}:`, error)
-              }
-            }
-          }
-        }
-      }
-
-      setForms(allForms)
+      // Forms are fully database-driven. Sort by display_order, then name.
+      const sorted = [...dbForms].sort((a: any, b: any) => {
+        const ao = a.display_order ?? 999
+        const bo = b.display_order ?? 999
+        if (ao !== bo) return ao - bo
+        return (a.name || '').localeCompare(b.name || '')
+      })
+      setForms(sorted)
     } catch (error) {
       console.error('Error loading forms:', error)
     }
@@ -1149,6 +937,98 @@ export default function FormResponsesPage() {
   const handleEditForm = (formId: string) => {
     // Navigate to form builder instead of opening modal
     router.push(`/admin/form-builder?id=${formId}`)
+  }
+
+  // Notification recipients editor
+  const openNotifEditor = async (form: any) => {
+    setNotifForm(form)
+    setNotifEmails([])
+    setNotifNewEmail('')
+    setNotifError('')
+    setNotifLoading(true)
+    try {
+      const res = await fetch(`/api/forms/notification-emails?id=${form.id}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load')
+      setNotifEmails(data.emails || [])
+    } catch (err: any) {
+      setNotifError(err.message)
+    } finally {
+      setNotifLoading(false)
+    }
+  }
+
+  const addNotifEmail = () => {
+    const e = notifNewEmail.trim().toLowerCase()
+    setNotifError('')
+    if (!e) return
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(e)) { setNotifError('Please enter a valid email address.'); return }
+    if (notifEmails.includes(e)) { setNotifError('That email is already on the list.'); return }
+    setNotifEmails([...notifEmails, e])
+    setNotifNewEmail('')
+  }
+
+  const saveNotifEmails = async () => {
+    if (!notifForm) return
+    setNotifError('')
+    // Flush a typed-but-not-added email so it is not lost.
+    let toSave = notifEmails
+    const typed = notifNewEmail.trim().toLowerCase()
+    if (typed) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(typed)) { setNotifError('Please enter a valid email address, or clear the box before saving.'); return }
+      if (!notifEmails.includes(typed)) { toSave = [...notifEmails, typed]; setNotifEmails(toSave) }
+      setNotifNewEmail('')
+    }
+    setNotifSaving(true)
+    try {
+      const res = await fetch('/api/forms/notification-emails', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notifForm.id, emails: toSave }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save')
+      setNotifEmails(data.emails || [])
+      setNotifForm(null)
+    } catch (err: any) {
+      setNotifError(err.message)
+    } finally {
+      setNotifSaving(false)
+    }
+  }
+
+  // Move a form up or down by swapping display_order with its neighbor.
+  const handleReorderForm = async (form: any, direction: 'up' | 'down') => {
+    const ordered = [...forms].sort(
+      (a: any, b: any) => (a.display_order ?? 999) - (b.display_order ?? 999)
+    )
+    const idx = ordered.findIndex((f: any) => f.id === form.id)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= ordered.length) return
+    const a = ordered[idx]
+    const b = ordered[swapIdx]
+    const aOrder = a.display_order ?? idx
+    const bOrder = b.display_order ?? swapIdx
+    try {
+      await Promise.all([
+        fetch('/api/forms/update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: a.id, display_order: bOrder }),
+        }),
+        fetch('/api/forms/update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: b.id, display_order: aOrder }),
+        }),
+      ])
+      loadForms()
+    } catch (error) {
+      console.error('Error reordering form:', error)
+    }
   }
 
   const handleUpdateForm = async () => {
@@ -1939,7 +1819,7 @@ export default function FormResponsesPage() {
                         return aVal < bVal ? 1 : -1
                       }
                     })
-                    .map(form => (
+                    .map((form, index) => (
                       <tr
                         key={form.id}
                         className="border-b border-luxury-gray-5 hover:bg-luxury-light transition-colors"
@@ -1987,26 +1867,47 @@ export default function FormResponsesPage() {
                         </td>
                         <td className="py-3 px-4 text-sm" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
-                            {/* Show edit/delete for all forms, including default forms */}
                             {form.id && (
                               <>
-                                {/* Only show edit for database forms (have UUID) */}
-                                {form.id.length > 20 && (
+                                {/* Reorder up/down */}
+                                <div className="flex flex-col">
                                   <button
-                                    onClick={() => handleEditForm(form.id)}
-                                    className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
-                                    title="Edit"
+                                    onClick={() => handleReorderForm(form, 'up')}
+                                    disabled={index === 0}
+                                    className="text-luxury-gray-3 hover:text-luxury-black disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title="Move up"
                                   >
-                                    <Edit2 className="w-4 h-4" />
+                                    <ChevronUp className="w-4 h-4" />
                                   </button>
-                                )}
-                                {/* Only show activate/deactivate for database forms */}
-                                {form.id.length > 20 && (
+                                  <button
+                                    onClick={() => handleReorderForm(form, 'down')}
+                                    disabled={index === forms.length - 1}
+                                    className="text-luxury-gray-3 hover:text-luxury-black disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title="Move down"
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => handleEditForm(form.id)}
+                                  className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
+                                  title="Edit"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => openNotifEditor(form)}
+                                  className="p-1.5 text-luxury-black hover:text-luxury-gray-1 hover:bg-luxury-light rounded transition-colors"
+                                  title="Notification recipients"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </button>
+                                {(
                                   <button
                                     onClick={async () => {
                                       try {
                                         const response = await fetch('/api/forms/update', {
-                                          method: 'POST',
+                                          method: 'PUT',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({
                                             id: form.id,
@@ -2031,8 +1932,7 @@ export default function FormResponsesPage() {
                                     <Power className="w-4 h-4" />
                                   </button>
                                 )}
-                                {/* Only show delete for database forms */}
-                                {form.id.length > 20 && (
+                                {(
                                   <button
                                     onClick={async () => {
                                       if (
@@ -3897,6 +3797,67 @@ export default function FormResponsesPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {notifForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setNotifForm(null)}>
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-luxury-black">Notification Recipients</h3>
+              <button onClick={() => setNotifForm(null)} className="text-luxury-gray-3 hover:text-luxury-black">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-luxury-gray-3">
+              These addresses are emailed whenever an agent submits <strong>{notifForm.name}</strong>. If empty, no notifications are sent.
+            </p>
+
+            {notifLoading ? (
+              <p className="text-xs text-luxury-gray-3">Loading...</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {notifEmails.length === 0 ? (
+                    <span className="text-xs text-luxury-gray-3">No recipients yet.</span>
+                  ) : (
+                    notifEmails.map(e => (
+                      <span key={e} className="inline-flex items-center gap-1.5 text-xs bg-luxury-light text-luxury-gray-1 px-2.5 py-1 rounded">
+                        {e}
+                        <button onClick={() => setNotifEmails(notifEmails.filter(x => x !== e))} className="text-luxury-gray-3 hover:text-red-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="email"
+                    value={notifNewEmail}
+                    onChange={e => setNotifNewEmail(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNotifEmail() } }}
+                    placeholder="name@collectiverealtyco.com"
+                    className="input-luxury text-sm flex-1"
+                  />
+                  <button onClick={addNotifEmail} className="px-3 py-2 text-sm rounded btn-secondary flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+
+                {notifError && <p className="text-xs text-red-600">{notifError}</p>}
+
+                <div className="flex items-center gap-2 pt-2 border-t border-luxury-gray-5">
+                  <button onClick={saveNotifEmails} disabled={notifSaving} className="px-4 py-2 text-sm rounded btn-primary disabled:opacity-50">
+                    {notifSaving ? 'Saving...' : 'Save Recipients'}
+                  </button>
+                  <button onClick={() => setNotifForm(null)} className="px-4 py-2 text-sm rounded btn-secondary">
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

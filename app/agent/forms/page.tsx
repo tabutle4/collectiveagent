@@ -276,13 +276,15 @@ export default function AgentFormsPage() {
                       )}
                     </div>
                     <div className="flex-shrink-0">
-                      {form.formType === 'pre-listing' || form.formType === 'just-listed' || form.formType === 'compliance-cda' ? (
+                      {form.formType === 'pre-listing' || form.formType === 'just-listed' || form.formType === 'compliance-cda' || form.formType === 'under-contract' ? (
                         <Link
                           href={
                             form.formType === 'pre-listing'
                               ? '/agent/forms/pre-listing'
                               : form.formType === 'just-listed'
                               ? '/agent/forms/just-listed'
+                              : form.formType === 'under-contract'
+                              ? '/agent/forms/under-contract'
                               : '/agent/forms/compliance-cda'
                           }
                           className="btn btn-primary flex items-center gap-1.5 text-xs"

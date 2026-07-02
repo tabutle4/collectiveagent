@@ -363,15 +363,37 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
       }
       await supabaseAdmin.from('transactions').update(txnFields).eq('id', transactionId)
-      if (title_officer_name || title_company || title_company_email) {
-        const { data: ec } = await supabaseAdmin.from('transaction_contacts').select('id').eq('transaction_id', transactionId).eq('contact_type', 'title').maybeSingle()
-        if (ec) {
-          await supabaseAdmin.from('transaction_contacts').update({ name: title_officer_name || null, company: title_company || null, email: title_company_email ? { primary: title_company_email } : null, updated_at: now }).eq('id', ec.id)
-        } else {
-          await supabaseAdmin.from('transaction_contacts').insert({ transaction_id: transactionId, contact_type: 'title', name: title_officer_name || null, company: title_company || null, email: title_company_email ? { primary: title_company_email } : null })
-        }
+    }
+
+    // ── Contacts: upsert client + title for both new and existing transactions ─
+    // Client type derives from representation; title from the title fields.
+    const clientContactType =
+      representing === 'seller' ? 'seller'
+      : representing === 'landlord' ? 'landlord'
+      : representing === 'tenant' ? 'tenant'
+      : representing === 'referred_out' ? null
+      : 'buyer'
+    async function upsertContact(contactType: string, fields: { name: string | null; company: string | null; email: string | null }) {
+      if (!fields.name && !fields.company && !fields.email) return
+      const { data: existing } = await supabaseAdmin
+        .from('transaction_contacts')
+        .select('id')
+        .eq('transaction_id', transactionId)
+        .eq('contact_type', contactType)
+        .maybeSingle()
+      if (existing) {
+        await supabaseAdmin.from('transaction_contacts')
+          .update({ name: fields.name, company: fields.company, email: fields.email, updated_at: now })
+          .eq('id', existing.id)
+      } else {
+        await supabaseAdmin.from('transaction_contacts')
+          .insert({ transaction_id: transactionId, contact_type: contactType, name: fields.name, company: fields.company, email: fields.email })
       }
     }
+    if (clientContactType) {
+      await upsertContact(clientContactType, { name: client_name || null, company: null, email: client_email || null })
+    }
+    await upsertContact('title_company', { name: title_officer_name || null, company: title_company || null, email: title_company_email || null })
 
     const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
       .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
