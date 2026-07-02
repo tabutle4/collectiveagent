@@ -92,6 +92,7 @@ export default function AgreementDetailPage({
 
   // End membership modal state
   const [showEndModal, setShowEndModal] = useState(false)
+  const [endDateInput, setEndDateInput] = useState('')
   const [ending, setEnding] = useState(false)
   const [endError, setEndError] = useState<string | null>(null)
 
@@ -143,18 +144,62 @@ export default function AgreementDetailPage({
     }
   }
 
-  const handleEndMembership = async () => {
+  const openEndDateModal = () => {
+    // Active agreement defaults to today; ended agreement pre-fills its end date.
+    setEndDateInput(
+      (agreement?.end_date || new Date().toISOString().split('T')[0]).slice(0, 10)
+    )
+    setEndError(null)
+    setShowEndModal(true)
+  }
+
+  const handleSaveEndDate = async () => {
+    if (!endDateInput) {
+      setEndError('Please choose an end date.')
+      return
+    }
     setEnding(true)
     setEndError(null)
     try {
       const response = await fetch(
         `/api/teams/${teamId}/members/${agreementId}`,
-        { method: 'DELETE' }
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ end_date: endDateInput }),
+        }
       )
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to end membership')
+        throw new Error(data.error || 'Failed to save end date')
+      }
+
+      setShowEndModal(false)
+      await loadAgreement()
+    } catch (err: any) {
+      setEndError(err.message)
+    } finally {
+      setEnding(false)
+    }
+  }
+
+  const handleReactivate = async () => {
+    setEnding(true)
+    setEndError(null)
+    try {
+      const response = await fetch(
+        `/api/teams/${teamId}/members/${agreementId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ end_date: null }),
+        }
+      )
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reactivate membership')
       }
 
       setShowEndModal(false)
@@ -300,18 +345,24 @@ export default function AgreementDetailPage({
                 View Document
               </a>
             )}
-            {!agreement.end_date && canManageAgreements && (
-              <button
-                onClick={() => {
-                  setEndError(null)
-                  setShowEndModal(true)
-                }}
-                className="btn btn-danger-outline text-xs"
-              >
-                <UserMinus size={14} />
-                End Membership
-              </button>
-            )}
+            {canManageAgreements &&
+              (agreement.end_date ? (
+                <button
+                  onClick={openEndDateModal}
+                  className="btn btn-secondary text-xs"
+                >
+                  <Calendar size={14} />
+                  Edit End Date
+                </button>
+              ) : (
+                <button
+                  onClick={openEndDateModal}
+                  className="btn btn-danger-outline text-xs"
+                >
+                  <UserMinus size={14} />
+                  End Membership
+                </button>
+              ))}
           </div>
         </div>
 
@@ -463,7 +514,7 @@ export default function AgreementDetailPage({
         </div>
       )}
 
-      {/* End Membership Confirmation Modal */}
+      {/* End Date Modal */}
       {showEndModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
@@ -473,19 +524,27 @@ export default function AgreementDetailPage({
               </div>
               <div className="flex-1">
                 <h3 className="text-base font-semibold text-luxury-gray-1">
-                  End team membership?
+                  {agreement.end_date ? 'Edit end date' : 'End team membership?'}
                 </h3>
                 <p className="text-sm text-luxury-gray-2 mt-2">
-                  This ends {getAgentName(agreement.agent)}'s membership on{' '}
-                  {team?.team_name || 'this team'} as of today. They will move to
-                  Former Members. Pending deals keep their current team splits, and
-                  future deals use their standard brokerage split.
-                </p>
-                <p className="text-xs text-luxury-gray-3 mt-2">
-                  This is reversible. The agreement record is kept and can be
-                  reactivated later by clearing its end date.
+                  Set the date {getAgentName(agreement.agent)}'s membership on{' '}
+                  {team?.team_name || 'this team'} ends. Deals dated on or before
+                  this date keep the team splits. Deals dated after it use the
+                  agent's standard brokerage split.
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs text-luxury-gray-3 uppercase tracking-widest mb-2">
+                End date
+              </label>
+              <input
+                type="date"
+                value={endDateInput}
+                onChange={e => setEndDateInput(e.target.value)}
+                className="input-luxury"
+              />
             </div>
 
             {endError && (
@@ -495,21 +554,42 @@ export default function AgreementDetailPage({
               </div>
             )}
 
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setShowEndModal(false)}
-                disabled={ending}
-                className="btn btn-secondary text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEndMembership}
-                disabled={ending}
-                className="btn btn-danger text-xs"
-              >
-                {ending ? 'Ending...' : 'End Membership'}
-              </button>
+            <div className="mt-6 flex items-center justify-between gap-2">
+              <div>
+                {agreement.end_date && (
+                  <button
+                    onClick={handleReactivate}
+                    disabled={ending}
+                    className="text-xs text-luxury-accent hover:underline"
+                  >
+                    Reactivate (clear end date)
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowEndModal(false)}
+                  disabled={ending}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEndDate}
+                  disabled={ending}
+                  className={
+                    agreement.end_date
+                      ? 'btn btn-primary text-xs'
+                      : 'btn btn-danger text-xs'
+                  }
+                >
+                  {ending
+                    ? 'Saving...'
+                    : agreement.end_date
+                      ? 'Save'
+                      : 'End Membership'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
