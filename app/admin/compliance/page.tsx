@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import Link from 'next/link'
-import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock } from 'lucide-react'
+import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check } from 'lucide-react'
 
 interface SubmissionRow {
   id: string
@@ -59,6 +59,13 @@ export default function AdminCompliancePage() {
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([])
   const [modeFilter, setModeFilter] = useState<'all' | 'compliance' | 'subsequent' | 'retainer'>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notifEmails, setNotifEmails] = useState<string[]>([])
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifSaved, setNotifSaved] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [notifError, setNotifError] = useState('')
 
   const loadSubmissions = useCallback(async () => {
     setLoading(true)
@@ -86,11 +93,145 @@ export default function AdminCompliancePage() {
     retainer: submissions.filter(s => s.submission_mode === 'retainer').length,
   }
 
+  const loadNotifEmails = useCallback(async () => {
+    setNotifLoading(true)
+    setNotifError('')
+    try {
+      const res = await fetch('/api/admin/compliance/notification-emails')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load')
+      setNotifEmails(data.emails || [])
+    } catch (err: any) {
+      setNotifError(err.message)
+    } finally {
+      setNotifLoading(false)
+    }
+  }, [])
+
+  const openSettings = () => {
+    setSettingsOpen(true)
+    loadNotifEmails()
+  }
+
+  const addEmail = () => {
+    const e = newEmail.trim().toLowerCase()
+    setNotifError('')
+    if (!e) return
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(e)) { setNotifError('Please enter a valid email address.'); return }
+    if (notifEmails.includes(e)) { setNotifError('That email is already on the list.'); return }
+    setNotifEmails([...notifEmails, e])
+    setNewEmail('')
+  }
+
+  const removeEmail = (e: string) => setNotifEmails(notifEmails.filter(x => x !== e))
+
+  const saveNotifEmails = async () => {
+    setNotifSaving(true)
+    setNotifError('')
+    setNotifSaved(false)
+    try {
+      const res = await fetch('/api/admin/compliance/notification-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: notifEmails }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to save')
+      setNotifEmails(data.emails || [])
+      setNotifSaved(true)
+      setTimeout(() => setNotifSaved(false), 3000)
+    } catch (err: any) {
+      setNotifError(err.message)
+    } finally {
+      setNotifSaving(false)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="page-title">COMPLIANCE QUEUE</h1>
+        <button
+          onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
+          className="btn btn-secondary text-xs flex items-center gap-1.5"
+        >
+          <Mail size={13} /> Notification Settings
+        </button>
       </div>
+
+      {settingsOpen && (
+        <div className="container-card mb-6 space-y-4">
+          <div>
+            <p className="text-sm font-medium text-luxury-gray-1">Compliance Notification Recipients</p>
+            <p className="text-xs text-luxury-gray-3 mt-1">
+              These addresses are emailed whenever an agent submits a compliance, resubmission, or retainer form. If the list is empty, no notifications are sent.
+            </p>
+          </div>
+
+          {notifLoading ? (
+            <div className="flex items-center gap-2 text-xs text-luxury-gray-3">
+              <Loader2 size={13} className="animate-spin" /> Loading...
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {notifEmails.length === 0 ? (
+                  <span className="text-xs text-luxury-gray-3">No recipients yet.</span>
+                ) : (
+                  notifEmails.map(e => (
+                    <span key={e} className="inline-flex items-center gap-1.5 text-xs bg-luxury-gray-5/40 text-luxury-gray-1 px-2.5 py-1 rounded">
+                      {e}
+                      <button onClick={() => removeEmail(e)} className="text-luxury-gray-3 hover:text-red-600">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addEmail() } }}
+                  placeholder="name@collectiverealtyco.com"
+                  className="input-luxury text-sm flex-1 max-w-xs"
+                />
+                <button onClick={addEmail} className="btn btn-secondary text-xs flex items-center gap-1">
+                  <Plus size={13} /> Add
+                </button>
+              </div>
+
+              {notifError && (
+                <div className="flex items-center gap-2 text-xs text-red-700">
+                  <AlertCircle size={13} className="flex-shrink-0" />{notifError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2 border-t border-luxury-gray-5/50">
+                <button
+                  onClick={saveNotifEmails}
+                  disabled={notifSaving}
+                  className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {notifSaving ? (
+                    <><Loader2 size={13} className="animate-spin" /> Saving...</>
+                  ) : notifSaved ? (
+                    <><Check size={13} /> Saved</>
+                  ) : (
+                    'Save Recipients'
+                  )}
+                </button>
+                <button onClick={() => setSettingsOpen(false)} className="btn btn-secondary text-xs">
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Mode filter tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">

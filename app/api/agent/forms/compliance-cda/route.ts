@@ -211,6 +211,7 @@ export async function POST(request: NextRequest) {
           lease_term:            formFields.lease_term_months ? parseInt(formFields.lease_term_months) : null,
           closing_date:          isLease ? null : formFields.closing_or_movein_date || null,
           move_in_date:          isLease ? formFields.closing_or_movein_date || null : null,
+          acceptance_date:       formFields.acceptance_date || null,
           loan_type:             formFields.loan_type || null,
           sales_price:           formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
           monthly_rent:          isLease && formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
@@ -283,7 +284,7 @@ export async function POST(request: NextRequest) {
 
     // ── COMPLIANCE ───────────────────────────────────────────────────────────
     const { team_or_office, unit, in_matrix, mls_link, client_name, client_email, lead_source,
-      closing_or_movein_date, representing, tenant_transaction_type, lease_term_months,
+      closing_or_movein_date, acceptance_date, representing, tenant_transaction_type, lease_term_months,
       referred_client_type, commission_basis_price, commission_rate, commission_rate_type,
       total_sales_rent_price, bonus_btsa_amount, additional_compensation, rebate_amount,
       internal_referral, internal_referral_fee, external_referral, external_referral_fee,
@@ -292,6 +293,8 @@ export async function POST(request: NextRequest) {
       flyer_display_type, flyer_division, flyer_team_name, additional_notes } = body
 
     if (!expedite_acknowledged) return NextResponse.json({ error: 'You must acknowledge the expedite policy' }, { status: 400 })
+    if (!acceptance_date) return NextResponse.json({ error: 'Acceptance date is required' }, { status: 400 })
+    if (!closing_or_movein_date) return NextResponse.json({ error: 'Closing or move-in date is required' }, { status: 400 })
 
     const { data: agentProfile } = await supabaseAdmin.from('users').select('office').eq('id', agentId).single()
     const isLease = representing === 'tenant' || representing === 'landlord'
@@ -304,7 +307,7 @@ export async function POST(request: NextRequest) {
     const submissionData = {
       submission_mode: 'compliance', property_address: property_address || txn?.property_address,
       team_or_office, unit: unit || null, in_matrix, mls_link, client_name, client_email,
-      lead_source, closing_or_movein_date, representing,
+      lead_source, closing_or_movein_date, acceptance_date: acceptance_date || null, representing,
       tenant_transaction_type: tenant_transaction_type || null, lease_term_months: lease_term_months || null,
       referred_client_type: referred_client_type || null, commission_basis_price, commission_rate,
       commission_rate_type, total_sales_rent_price, bonus_btsa_amount: bonus_btsa_amount || 0,
@@ -323,6 +326,7 @@ export async function POST(request: NextRequest) {
       lease_term: lease_term_months ? parseInt(lease_term_months) : null,
       closing_date: isLease ? null : closing_or_movein_date || null,
       move_in_date: isLease ? closing_or_movein_date || null : null,
+      acceptance_date: acceptance_date || null,
       mls_link: mls_link || null, client_name: client_name || null, client_email: client_email || null,
       lead_source: lead_source || null, loan_type: loan_type || null,
       sales_price: total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,

@@ -79,7 +79,7 @@ export default function ComplianceCdaForm() {
   const [form, setForm] = useState({
     team_or_office: '', unit: '', in_matrix: '' as '' | 'yes' | 'no',
     mls_link: '', client_name: '', client_email: '', lead_source: '',
-    closing_or_movein_date: '', representing: '', tenant_transaction_type: '',
+    closing_or_movein_date: '', acceptance_date: '', representing: '', tenant_transaction_type: '',
     lease_term_months: '', referred_client_type: '', commission_basis_price: '',
     commission_rate: '', commission_rate_type: 'percent' as 'percent' | 'flat',
     total_sales_rent_price: '', bonus_btsa_amount: '0', rebate_amount: '0',
@@ -159,6 +159,7 @@ export default function ComplianceCdaForm() {
           lease_term_months: src.lease_term_months ? String(src.lease_term_months) : txn.lease_term ? String(txn.lease_term) : '',
           referred_client_type: src.referred_client_type || '',
           closing_or_movein_date: src.closing_or_movein_date || txn.closing_date || txn.move_in_date || '',
+          acceptance_date: src.acceptance_date || txn.acceptance_date || '',
           commission_basis_price: src.commission_basis_price ? String(src.commission_basis_price) : txn.gross_commission ? String(txn.gross_commission) : '',
           commission_rate: src.commission_rate || '',
           commission_rate_type: src.commission_rate_type || 'percent',
@@ -189,11 +190,14 @@ export default function ComplianceCdaForm() {
       payload = { ...payload, ...retainer, retainer_amount: parseFloat(retainer.retainer_amount), confirm_new_deal: confirmedNewDeal }
     } else if (mode === 'subsequent') {
       if (!searchDone || !foundTransaction) { setError('Please find your transaction first.'); return }
+      if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
+      if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!expediteAcknowledgedSub) { setError('You must acknowledge the expedite policy.'); return }
       payload = { ...payload, ...form, transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: subsequentNotes }
     } else {
       if (!form.expedite_acknowledged) { setError('You must acknowledge the expedite policy.'); return }
       if (!form.client_name) { setError('Client name is required.'); return }
+      if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!form.representing) { setError('Representation is required.'); return }
       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
@@ -412,7 +416,9 @@ export default function ComplianceCdaForm() {
                   <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Transaction</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Closing or Move-In Date</label>
+                      <label className="block text-xs text-luxury-gray-3 mb-1">Acceptance Date <span className="text-red-500">*</span></label>
+                      <input type="date" className="input-luxury w-full text-sm mb-3" value={form.acceptance_date} onChange={e => setField('acceptance_date', e.target.value)} />
+                      <label className="block text-xs text-luxury-gray-3 mb-1">Closing or Move-In Date <span className="text-red-500">*</span></label>
                       <input type="date" className="input-luxury w-full text-sm" value={form.closing_or_movein_date} onChange={e => setField('closing_or_movein_date', e.target.value)} />
                     </div>
                     <div className="md:col-span-2">
@@ -605,6 +611,10 @@ export default function ComplianceCdaForm() {
                     <option value="">Select...</option>
                     {LEAD_SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Acceptance Date <span className="text-red-500">*</span></label>
+                  <input type="date" className="input-luxury w-full text-sm" value={form.acceptance_date} onChange={e => setField('acceptance_date', e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Closing or Move-In Date <span className="text-red-500">*</span></label>
