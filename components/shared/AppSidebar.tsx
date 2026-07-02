@@ -39,6 +39,7 @@ import {
   Landmark,
   Mic,
   ShieldCheck,
+  Inbox,
   Image as ImageIcon,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
@@ -113,6 +114,7 @@ const adminNavEntries: NavEntry[] = [
         { href: '/admin/onboarding', label: 'Onboarding', icon: ClipboardList },
         { href: '/admin/campaigns', label: 'Campaigns', icon: Megaphone },
         { href: '/admin/form-responses', label: 'Forms', icon: FileText },
+        { href: '/admin/form-submissions', label: 'Form Submissions', icon: Inbox },
         {
           href: 'https://agent.collectiverealtyco.com/roster',
           label: 'Roster',
@@ -192,6 +194,7 @@ const tcNavEntries: NavEntry[] = [
         { href: '/admin/prospects', label: 'Prospects', icon: UserPlus },
         { href: '/admin/teams', label: 'Teams', icon: UsersRound },
         { href: '/admin/form-responses', label: 'Forms', icon: FileText },
+        { href: '/admin/form-submissions', label: 'Form Submissions', icon: Inbox },
         {
           href: 'https://agent.collectiverealtyco.com/roster',
           label: 'Roster',
@@ -251,6 +254,7 @@ const supportNavEntries: NavEntry[] = [
         { href: '/admin/teams', label: 'Teams', icon: UsersRound },
         { href: '/admin/revenue-share', label: 'Revenue Share', icon: DollarSign },
         { href: '/admin/form-responses', label: 'Forms', icon: FileText },
+        { href: '/admin/form-submissions', label: 'Form Submissions', icon: Inbox },
         {
           href: 'https://agent.collectiverealtyco.com/roster',
           label: 'Roster',
