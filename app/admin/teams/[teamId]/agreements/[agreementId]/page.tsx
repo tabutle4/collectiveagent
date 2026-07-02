@@ -158,6 +158,10 @@ export default function AgreementDetailPage({
       setEndError('Please choose an end date.')
       return
     }
+    if (agreement && endDateInput < agreement.effective_date.slice(0, 10)) {
+      setEndError('End date cannot be before the start date.')
+      return
+    }
     setEnding(true)
     setEndError(null)
     try {
