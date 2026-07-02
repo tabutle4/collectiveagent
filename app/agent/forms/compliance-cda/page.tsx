@@ -125,6 +125,13 @@ export default function ComplianceCdaForm() {
   }, [user?.id])
 
   const isLease = form.representing === 'tenant' || form.representing === 'landlord'
+  const isReferredOut = form.representing === 'referred_out'
+  // Title + Loan only apply to sales the agent is closing (not leases, not referred-out)
+  const showTitleLoan = !isLease && !isReferredOut
+  // Flyer type: for referred-out, use the referred client type; otherwise use representation
+  const flyerIsLease = isReferredOut
+    ? (form.referred_client_type === 'tenant' || form.referred_client_type === 'landlord')
+    : isLease
   const setField = (k: keyof typeof form, v: any) => setForm(prev => ({ ...prev, [k]: v }))
   const setRField = (k: keyof typeof retainer, v: any) => setRetainer(prev => ({ ...prev, [k]: v }))
 
@@ -681,7 +688,7 @@ export default function ComplianceCdaForm() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1">Total {isLease ? 'Rent' : 'Sales'} Price <span className="text-red-500">*</span></label>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Total {flyerIsLease ? 'Rent' : 'Sales'} Price <span className="text-red-500">*</span></label>
                   <input type="number" className="input-luxury w-full text-sm" value={form.total_sales_rent_price} onChange={e => setField('total_sales_rent_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
                 </div>
                 <div>
@@ -760,22 +767,23 @@ export default function ComplianceCdaForm() {
               </div>
             </section>
 
-            {/* Section 4 - Title */}
+            {/* Section 4 - Title (sales only; hidden for leases and referred-out) */}
+            {showTitleLoan && (
             <section>
               <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">
-                Title {isLease ? '(optional for leases)' : ''}
+                Title
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Officer Name {!isLease && <span className="text-red-500">*</span>}</label>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Officer Name <span className="text-red-500">*</span></label>
                   <input className="input-luxury w-full text-sm" value={form.title_officer_name} onChange={e => setField('title_officer_name', e.target.value)} placeholder="Full name" />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Company {!isLease && <span className="text-red-500">*</span>}</label>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Company <span className="text-red-500">*</span></label>
                   <input className="input-luxury w-full text-sm" value={form.title_company} onChange={e => setField('title_company', e.target.value)} placeholder="Company name" />
                 </div>
                 <div>
-                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Company Email (used to send CDA) {!isLease && <span className="text-red-500">*</span>}</label>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Company Email (used to send CDA) <span className="text-red-500">*</span></label>
                   <input type="email" className="input-luxury w-full text-sm" value={form.title_company_email} onChange={e => setField('title_company_email', e.target.value)} placeholder="email@titleco.com" />
                 </div>
                 <div>
@@ -787,6 +795,7 @@ export default function ComplianceCdaForm() {
                 </div>
               </div>
             </section>
+            )}
 
             {/* Section 5 - Expedite */}
             <section>

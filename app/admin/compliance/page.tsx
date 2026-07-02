@@ -151,7 +151,7 @@ export default function AdminCompliancePage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="page-title">COMPLIANCE QUEUE</h1>
+        <h1 className="page-title">COMPLIANCE REQUESTS</h1>
         <button
           onClick={() => (settingsOpen ? setSettingsOpen(false) : openSettings())}
           className="btn btn-secondary text-xs flex items-center gap-1.5"

@@ -39,6 +39,7 @@ import {
   Landmark,
   Mic,
   ShieldCheck,
+  Image as ImageIcon,
 } from 'lucide-react'
 import ContactDrawer from './ContactDrawer'
 import GlobalSearch from './GlobalSearch'
@@ -89,7 +90,7 @@ const adminNavEntries: NavEntry[] = [
       label: 'Deals',
       items: [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
-        { href: '/admin/compliance', label: 'Compliance Queue', icon: ShieldCheck },
+        { href: '/admin/compliance', label: 'Compliance Requests', icon: ShieldCheck },
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
         { href: '/admin/pm', label: 'Property Management', icon: Building2 },
@@ -171,7 +172,7 @@ const tcNavEntries: NavEntry[] = [
       label: 'Deals',
       items: [
         { href: '/transactions', label: 'Transactions', icon: Receipt },
-        { href: '/admin/compliance', label: 'Compliance Queue', icon: ShieldCheck },
+        { href: '/admin/compliance', label: 'Compliance Requests', icon: ShieldCheck },
         { href: '/admin/tc', label: 'Transaction Coordination', icon: Workflow },
         { href: '/admin/coordination', label: 'Listing Coordination', icon: Briefcase },
         { href: '/admin/pm', label: 'Property Management', icon: Building2 },
@@ -292,6 +293,7 @@ const agentNav: NavItem[] = [
   { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
   { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
   { href: '/agent/forms', label: 'Forms', icon: FileText },
+  { href: '/agent/flyer', label: 'My Flyers', icon: ImageIcon },
   { href: '/agent/contacts', label: 'Contacts', icon: Users },
   { href: '/agent/documents', label: 'Documents', icon: FolderOpen },
   {

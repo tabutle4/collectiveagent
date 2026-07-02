@@ -161,7 +161,7 @@ export default function FlyerPage() {
   // Load flyer data
   useEffect(() => {
     if (!transactionId) return
-    fetch(`/api/agent/transactions/${transactionId}/flyer`)
+    fetch(`/api/agent/flyer/${transactionId}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) { setError(data.error); return }
@@ -229,7 +229,7 @@ export default function FlyerPage() {
       const fd = new FormData()
       fd.append('file', file)
       if (flyer?.id) fd.append('flyer_id', flyer.id)
-      const res = await fetch(`/api/agent/transactions/${transactionId}/flyer`, {
+      const res = await fetch(`/api/agent/flyer/${transactionId}`, {
         method: 'POST',
         body: fd,
       })
@@ -290,7 +290,7 @@ export default function FlyerPage() {
       link.click()
 
       // Record download
-      await fetch(`/api/agent/transactions/${transactionId}/flyer`, {
+      await fetch(`/api/agent/flyer/${transactionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flyer_id: flyer?.id || null }),

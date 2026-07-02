@@ -153,7 +153,6 @@ export async function POST(request: NextRequest) {
       const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
         .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
         .select('id').single()
-      await supabaseAdmin.from('transaction_flyers').insert({ transaction_id: transactionId, flyer_type: 'retainer', status: 'requested', requested_by: agentId, updated_at: now })
       const typeLabel: Record<string, string> = { residential_rental: 'Residential Rental', residential_buyer: 'Residential Buyer', commercial_rental: 'Commercial Rental' }
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A retainer submission has been received.</p>
@@ -298,7 +297,11 @@ export async function POST(request: NextRequest) {
 
     const { data: agentProfile } = await supabaseAdmin.from('users').select('office').eq('id', agentId).single()
     const isLease = representing === 'tenant' || representing === 'landlord'
-    const flyerType = isLease ? 'just_leased' : 'just_sold'
+    // Flyer type: for referred-out, base it on the type of client referred; otherwise on representation.
+    const flyerIsLease = representing === 'referred_out'
+      ? (referred_client_type === 'tenant' || referred_client_type === 'landlord')
+      : isLease
+    const flyerType = flyerIsLease ? 'just_leased' : 'just_sold'
     let flyerDisplayLine: string | null = null
     if (flyer_display_type === 'office') flyerDisplayLine = agentProfile?.office || null
     else if (flyer_display_type === 'team') flyerDisplayLine = flyer_team_name || null
@@ -386,12 +389,12 @@ export async function POST(request: NextRequest) {
       { title: 'New Compliance Request', preheader: `Compliance for ${submissionData.property_address}` }
     )
     await sendNotifications(notificationEmails, 'Compliance & CDA Request', notifyHtml, submissionData.property_address || '')
-    const flyerUrl = `${appUrl}/transactions/${transactionId}/flyer`
+    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
     try {
       await resend.emails.send({ from: FROM_EMAIL, to: [auth.user.email], subject: `Compliance Request Received - ${submissionData.property_address}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your compliance review and CDA request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong> has been received. Our team will review your documents and follow up shortly.</p>
-           <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${isLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>
+           <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${flyerIsLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>
            <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`,
           { title: 'Compliance Request Received', preheader: `Request received for ${submissionData.property_address}` }
         ),
