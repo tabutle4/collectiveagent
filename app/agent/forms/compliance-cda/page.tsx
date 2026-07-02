@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Search, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
 import { LEAD_SOURCES, LOAN_TYPES, FLYER_DIVISIONS } from '@/lib/transactions/constants'
+import AgentSelect, { AgentOption } from '@/components/forms/AgentSelect'
 
 const TEAM_OR_OFFICE_OPTIONS = [
   'Houston Office', 'Dallas Office', 'Clutch City Realty Group',
@@ -59,6 +60,9 @@ type Mode = 'compliance' | 'subsequent' | 'retainer'
 export default function ComplianceCdaForm() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [onBehalfAgent, setOnBehalfAgent] = useState<AgentOption | null>(null)
+  const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+  const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
   const [agentTeam, setAgentTeam] = useState<{ team_name: string } | null>(null)
   const [mode, setMode] = useState<Mode>('compliance')
   const [submitting, setSubmitting] = useState(false)
@@ -149,7 +153,8 @@ export default function ComplianceCdaForm() {
     if (!addressSearch.trim()) return
     setSearching(true); setSearchDone(false)
     try {
-      const url = `/api/agent/forms/compliance-cda?address=${encodeURIComponent(addressSearch)}&mode=${mode}`
+      const behalfParam = isAdmin && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
+      const url = `/api/agent/forms/compliance-cda?address=${encodeURIComponent(addressSearch)}&mode=${mode}${behalfParam}`
       const res = await fetch(url)
       const data = await res.json()
       setFoundTransaction(data.transaction || null)
@@ -183,7 +188,7 @@ export default function ComplianceCdaForm() {
         }))
       }
     } catch { setSearchDone(true) } finally { setSearching(false) }
-  }, [addressSearch, mode])
+  }, [addressSearch, mode, isAdmin, onBehalfAgent])
 
   const handleSubmit = async () => {
     setError('')
@@ -218,6 +223,10 @@ export default function ComplianceCdaForm() {
         additional_compensation: comps.map(c => ({ amount: parseFloat(c.amount) || 0, fee_type: c.fee_type, fee_type_other: c.fee_type_other || null, paid_by: c.paid_by, paid_by_other: c.paid_by_other || null })),
         flyer_team_name: agentTeam?.team_name || null,
       }
+    }
+
+    if (isAdmin && onBehalfAgent) {
+      payload = { ...payload, on_behalf_of_agent_id: onBehalfAgent.id }
     }
 
     setSubmitting(true)
@@ -263,6 +272,16 @@ export default function ComplianceCdaForm() {
     <div>
       <h1 className="page-title mb-2">COMPLIANCE &amp; CDA</h1>
       <p className="text-xs text-luxury-gray-3 mb-6">Select the type of submission below.</p>
+
+      {isAdmin && (
+        <div className="container-card mb-6 border-luxury-accent/30">
+          <p className="text-sm font-medium text-luxury-gray-1 mb-1">Submitting on behalf of an agent</p>
+          <p className="text-xs text-luxury-gray-3 mb-3">
+            As office staff, choose the agent this submission is for. The transaction will be created under the selected agent. Leave blank to submit as yourself.
+          </p>
+          <AgentSelect value={onBehalfAgent?.id || ''} onSelect={setOnBehalfAgent} label="Agent" placeholder="Search for an agent..." />
+        </div>
+      )}
 
       {/* Stop notice */}
       <div className="inner-card border-red-200 bg-red-50 mb-6">

@@ -133,7 +133,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/agent/profile', request.url))
   }
 
-  if (pathname.startsWith('/agent') && isAdminRole) {
+  // Admins are normally redirected out of the agent area, but they still need to
+  // be able to open and fill out the shared agent forms.
+  const sharedFormPaths = ['/agent/forms']
+  const isSharedForm = sharedFormPaths.some(p => pathname.startsWith(p))
+  if (pathname.startsWith('/agent') && isAdminRole && !isSharedForm) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url))
   }
 

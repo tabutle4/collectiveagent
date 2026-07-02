@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import AgentSelect, { AgentOption } from '@/components/forms/AgentSelect'
 
 // Lead sources match the New Contract MS Form exactly.
 const LEAD_SOURCES = [
@@ -29,6 +30,9 @@ const FLYER_CHOICES = [
 export default function UnderContractForm() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [onBehalfAgent, setOnBehalfAgent] = useState<AgentOption | null>(null)
+  const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+  const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitResult, setSubmitResult] = useState<any>(null)
@@ -99,6 +103,7 @@ export default function UnderContractForm() {
     try {
       const payload = {
         ...form,
+        on_behalf_of_agent_id: isAdmin && onBehalfAgent ? onBehalfAgent.id : null,
         add_transaction_coordination: form.add_transaction_coordination === 'yes',
       }
       const res = await fetch('/api/agent/forms/under-contract', {
@@ -154,6 +159,24 @@ export default function UnderContractForm() {
       </p>
 
       <div className="container-card space-y-8">
+
+        {isAdmin && (
+          <section className="border border-luxury-accent/30 rounded p-4">
+            <p className="text-sm font-medium text-luxury-gray-1 mb-1">Submitting on behalf of an agent</p>
+            <p className="text-xs text-luxury-gray-3 mb-3">
+              As office staff, choose the agent this contract is for. The transaction will be created under the selected agent. Leave blank to submit as yourself.
+            </p>
+            <AgentSelect
+              value={onBehalfAgent?.id || ''}
+              onSelect={(a) => {
+                setOnBehalfAgent(a)
+                if (a) setForm(prev => ({ ...prev, agent_name: a.name }))
+              }}
+              label="Agent"
+              placeholder="Search for an agent..."
+            />
+          </section>
+        )}
 
         {/* Agent */}
         <section>

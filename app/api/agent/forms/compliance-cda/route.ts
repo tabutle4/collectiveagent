@@ -43,6 +43,14 @@ export async function GET(request: NextRequest) {
   const address = searchParams.get('address')
   const transactionId = searchParams.get('transaction_id')
   const mode = searchParams.get('mode')
+  const onBehalfOfAgentId = searchParams.get('on_behalf_of_agent_id')
+  // Office staff may look up an agent's transactions when filing on their behalf.
+  // Verify staff server-side; otherwise fall back to the caller's own id.
+  const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+  const lookupAgentId =
+    onBehalfOfAgentId && STAFF_ROLES.includes(String(auth.user.role || '').toLowerCase())
+      ? onBehalfOfAgentId
+      : auth.user.id
   try {
     let txn: any = null
     if (transactionId) {
@@ -51,7 +59,7 @@ export async function GET(request: NextRequest) {
         .eq('id', transactionId).single()
       txn = data
     } else if (address?.trim()) {
-      const { data: tiaRows } = await supabaseAdmin.from('transaction_internal_agents').select('transaction_id').eq('agent_id', auth.user.id)
+      const { data: tiaRows } = await supabaseAdmin.from('transaction_internal_agents').select('transaction_id').eq('agent_id', lookupAgentId)
       if (tiaRows?.length) {
         const ids = tiaRows.map((r: any) => r.transaction_id)
         const { data } = await supabaseAdmin.from('transactions')
@@ -64,7 +72,7 @@ export async function GET(request: NextRequest) {
     let lastSubmission: any = null
     if (mode === 'subsequent') {
       const { data: lastSub } = await supabaseAdmin.from('agent_form_submissions')
-        .select('id, data, submitted_at').eq('transaction_id', txn.id).eq('agent_id', auth.user.id)
+        .select('id, data, submitted_at').eq('transaction_id', txn.id).eq('agent_id', lookupAgentId)
         .order('submitted_at', { ascending: false }).limit(1).maybeSingle()
       lastSubmission = lastSub || null
     }
@@ -79,9 +87,34 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
   try {
     const body = await request.json()
-    const { submission_mode } = body
+    const { submission_mode, on_behalf_of_agent_id } = body
     if (!submission_mode) return NextResponse.json({ error: 'submission_mode is required' }, { status: 400 })
-    const agentId = auth.user.id
+
+    // Office staff may submit on behalf of an agent. Verify the submitter is
+    // staff server-side before honoring the selected agent (never trust the client).
+    const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+    let agentId = auth.user.id
+    let agentEmail = auth.user.email
+    let agentName = `${auth.user.first_name} ${auth.user.last_name}`
+    if (on_behalf_of_agent_id) {
+      const submitterRole = String(auth.user.role || '').toLowerCase()
+      if (!STAFF_ROLES.includes(submitterRole)) {
+        return NextResponse.json({ error: 'Not permitted to submit on behalf of another agent' }, { status: 403 })
+      }
+      // Confirm the target is a real licensed agent
+      const { data: targetAgent } = await supabaseAdmin
+        .from('users')
+        .select('id, email, first_name, last_name, preferred_first_name, preferred_last_name')
+        .eq('id', on_behalf_of_agent_id)
+        .eq('is_licensed_agent', true)
+        .maybeSingle()
+      if (!targetAgent) {
+        return NextResponse.json({ error: 'Selected agent not found' }, { status: 400 })
+      }
+      agentId = on_behalf_of_agent_id
+      agentEmail = targetAgent.email || auth.user.email
+      agentName = `${targetAgent.preferred_first_name || targetAgent.first_name || ''} ${targetAgent.preferred_last_name || targetAgent.last_name || ''}`.trim() || agentName
+    }
     const now = new Date().toISOString()
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
     const { data: formRecord } = await supabaseAdmin.from('forms').select('id, name, notification_emails')
@@ -157,7 +190,7 @@ export async function POST(request: NextRequest) {
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A retainer submission has been received.</p>
          <div style="background-color:#f9f9f9;padding:16px 20px;margin:0 0 20px;border-left:3px solid #C5A278;">
-           <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${auth.user.first_name} ${auth.user.last_name}</p>
+           <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${agentName}</p>
            <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Client:</strong> ${client_name}</p>
            <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Type:</strong> ${typeLabel[retainer_transaction_type] || retainer_transaction_type}</p>
            <p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Amount:</strong> $${amount.toFixed(2)} (agent net $${(amount - 45).toFixed(2)} after $45 processing fee)</p>
@@ -403,7 +436,7 @@ export async function POST(request: NextRequest) {
     const notifyHtml = getEmailLayout(
       `<p style="margin:0 0 16px;font-size:14px;color:#555555;">New compliance request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong>.</p>
        <div style="background-color:#f9f9f9;padding:16px 20px;margin:0 0 20px;border-left:3px solid #C5A278;">
-         <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${auth.user.first_name} ${auth.user.last_name}</p>
+         <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${agentName}</p>
          <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Closing/Move-in:</strong> ${closing_or_movein_date || 'N/A'}</p>
          <p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Representing:</strong> ${representing || 'N/A'}</p>
        </div>
@@ -413,7 +446,7 @@ export async function POST(request: NextRequest) {
     await sendNotifications(notificationEmails, 'Compliance & CDA Request', notifyHtml, submissionData.property_address || '')
     const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
     try {
-      await resend.emails.send({ from: FROM_EMAIL, to: [auth.user.email], subject: `Compliance Request Received - ${submissionData.property_address}`,
+      await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], subject: `Compliance Request Received - ${submissionData.property_address}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your compliance review and CDA request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong> has been received. Our team will review your documents and follow up shortly.</p>
            <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${flyerIsLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>

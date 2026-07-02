@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
-  const agentId = auth.user.id
+  let agentId = auth.user.id
   const now = new Date().toISOString()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
 
@@ -42,7 +42,27 @@ export async function POST(request: NextRequest) {
       lender_company, lender_contact_name, lender_phone, lender_email,
       add_transaction_coordination, documents_uploaded_ack,
       bedrooms, bathrooms, garage, sqft,
+      on_behalf_of_agent_id,
     } = body
+
+    // Office staff may submit on behalf of an agent. Verify server-side.
+    const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+    if (on_behalf_of_agent_id) {
+      const submitterRole = String(auth.user.role || '').toLowerCase()
+      if (!STAFF_ROLES.includes(submitterRole)) {
+        return NextResponse.json({ error: 'Not permitted to submit on behalf of another agent' }, { status: 403 })
+      }
+      const { data: targetAgent } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('id', on_behalf_of_agent_id)
+        .eq('is_licensed_agent', true)
+        .maybeSingle()
+      if (!targetAgent) {
+        return NextResponse.json({ error: 'Selected agent not found' }, { status: 400 })
+      }
+      agentId = on_behalf_of_agent_id
+    }
 
     // ── Required-field validation (server side) ──────────────────────────────
     const required: Record<string, any> = {
