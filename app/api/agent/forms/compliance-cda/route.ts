@@ -282,13 +282,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ── COMPLIANCE ───────────────────────────────────────────────────────────
-    const { team_or_office, unit, in_matrix, mls_link, client_name, client_email, lead_source,
+    const { team_or_office, unit, in_matrix, mls_link, client_name, client_email, client_phone, lead_source,
       closing_or_movein_date, acceptance_date, representing, tenant_transaction_type, lease_term_months,
       referred_client_type, commission_basis_price, commission_rate, commission_rate_type,
       total_sales_rent_price, bonus_btsa_amount, additional_compensation, rebate_amount,
       internal_referral, internal_referral_fee, external_referral, external_referral_fee,
       brokerage_referral, brokerage_referral_fee, title_officer_name, title_company,
-      title_company_email, loan_type, expedite_acknowledged, bedrooms, bathrooms, garage, sqft,
+      title_company_email, title_phone, loan_type, expedite_acknowledged, bedrooms, bathrooms, garage, sqft,
       flyer_display_type, flyer_division, flyer_team_name, additional_notes } = body
 
     if (!expedite_acknowledged) return NextResponse.json({ error: 'You must acknowledge the expedite policy' }, { status: 400 })
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
 
     const submissionData = {
       submission_mode: 'compliance', property_address: property_address || txn?.property_address,
-      team_or_office, unit: unit || null, in_matrix, mls_link, client_name, client_email,
+      team_or_office, unit: unit || null, in_matrix, mls_link, client_name, client_email, client_phone: client_phone || null,
       lead_source, closing_or_movein_date, acceptance_date: acceptance_date || null, representing,
       tenant_transaction_type: tenant_transaction_type || null, lease_term_months: lease_term_months || null,
       referred_client_type: referred_client_type || null, commission_basis_price, commission_rate,
@@ -373,8 +373,8 @@ export async function POST(request: NextRequest) {
       : representing === 'tenant' ? 'tenant'
       : representing === 'referred_out' ? null
       : 'buyer'
-    async function upsertContact(contactType: string, fields: { name: string | null; company: string | null; email: string | null }) {
-      if (!fields.name && !fields.company && !fields.email) return
+    async function upsertContact(contactType: string, fields: { name: string | null; company: string | null; email: string | null; phone: string | null }) {
+      if (!fields.name && !fields.company && !fields.email && !fields.phone) return
       const { data: existing } = await supabaseAdmin
         .from('transaction_contacts')
         .select('id')
@@ -383,17 +383,17 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
       if (existing) {
         await supabaseAdmin.from('transaction_contacts')
-          .update({ name: fields.name, company: fields.company, email: fields.email, updated_at: now })
+          .update({ name: fields.name, company: fields.company, email: fields.email, phone: fields.phone, updated_at: now })
           .eq('id', existing.id)
       } else {
         await supabaseAdmin.from('transaction_contacts')
-          .insert({ transaction_id: transactionId, contact_type: contactType, name: fields.name, company: fields.company, email: fields.email })
+          .insert({ transaction_id: transactionId, contact_type: contactType, name: fields.name, company: fields.company, email: fields.email, phone: fields.phone })
       }
     }
     if (clientContactType) {
-      await upsertContact(clientContactType, { name: client_name || null, company: null, email: client_email || null })
+      await upsertContact(clientContactType, { name: client_name || null, company: null, email: client_email || null, phone: client_phone || null })
     }
-    await upsertContact('title_company', { name: title_officer_name || null, company: title_company || null, email: title_company_email || null })
+    await upsertContact('title_company', { name: title_officer_name || null, company: title_company || null, email: title_company_email || null, phone: title_phone || null })
 
     const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
       .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })

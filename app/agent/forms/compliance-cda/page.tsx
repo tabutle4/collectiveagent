@@ -78,7 +78,7 @@ export default function ComplianceCdaForm() {
   // Compliance form state
   const [form, setForm] = useState({
     team_or_office: '', unit: '', in_matrix: '' as '' | 'yes' | 'no',
-    mls_link: '', client_name: '', client_email: '', lead_source: '',
+    mls_link: '', client_name: '', client_email: '', client_phone: '', lead_source: '',
     closing_or_movein_date: '', acceptance_date: '', representing: '', tenant_transaction_type: '',
     lease_term_months: '', referred_client_type: '', commission_basis_price: '',
     commission_rate: '', commission_rate_type: 'percent' as 'percent' | 'flat',
@@ -86,7 +86,7 @@ export default function ComplianceCdaForm() {
     internal_referral: false, internal_referral_fee: '',
     external_referral: false, external_referral_fee: '',
     brokerage_referral: false, brokerage_referral_fee: '',
-    title_officer_name: '', title_company: '', title_company_email: '',
+    title_officer_name: '', title_company: '', title_company_email: '', title_phone: '',
     loan_type: '', expedite_acknowledged: false,
     bedrooms: '', bathrooms: '', garage: '', sqft: '',
     flyer_display_type: 'office' as 'office' | 'team' | 'division',
@@ -613,6 +613,10 @@ export default function ComplianceCdaForm() {
                   <input type="email" className="input-luxury w-full text-sm" value={form.client_email} onChange={e => setField('client_email', e.target.value)} placeholder="email@example.com" />
                 </div>
                 <div>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Client Phone</label>
+                  <input type="tel" className="input-luxury w-full text-sm" value={form.client_phone} onChange={e => setField('client_phone', e.target.value)} placeholder="(555) 555-5555" />
+                </div>
+                <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Lead Source <span className="text-red-500">*</span></label>
                   <select className="input-luxury w-full text-sm" value={form.lead_source} onChange={e => setField('lead_source', e.target.value)}>
                     <option value="">Select...</option>
@@ -785,6 +789,10 @@ export default function ComplianceCdaForm() {
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Title Company Email (used to send CDA) <span className="text-red-500">*</span></label>
                   <input type="email" className="input-luxury w-full text-sm" value={form.title_company_email} onChange={e => setField('title_company_email', e.target.value)} placeholder="email@titleco.com" />
+                </div>
+                <div>
+                  <label className="block text-xs text-luxury-gray-3 mb-1">Title Company Phone</label>
+                  <input type="tel" className="input-luxury w-full text-sm" value={form.title_phone} onChange={e => setField('title_phone', e.target.value)} placeholder="(555) 555-5555" />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Loan Type <span className="text-red-500">*</span></label>
