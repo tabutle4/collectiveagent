@@ -4,6 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { defaultBasisForSide, sideCategory, type Side } from '@/lib/transactions/sides'
+import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 
 // ─── GET: reference data + agent profile (commission plan, team, MP, YTD) ────
 
@@ -166,6 +167,11 @@ export async function POST(request: NextRequest) {
       is_lease: isLeaseInput,
       // Backward compat: existing callers pass office_gross
       office_gross: officeGrossLegacy,
+      // Governing dates for team-agreement matching. Sent flat by the editor;
+      // a transaction object is also supported for any other caller.
+      acceptance_date: acceptanceDateInput,
+      move_in_date: moveInDateInput,
+      closing_date: closingDateInput,
     } = body
 
     if (!agent_id) {
@@ -205,16 +211,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
 
-    // Fetch team membership
-    const { data: membershipData } = await supabase
-      .from('team_member_agreements')
-      .select(`
-        id, agent_id, firm_min_override,
-        team:teams!team_member_agreements_team_id_fkey(id, team_name)
-      `)
-      .eq('agent_id', agent_id)
-      .is('end_date', null)
-      .single()
+    // Fetch the team membership governing this deal's date (sales by purchase
+    // agreement execution, leases by tenant move-in, falling back to closing).
+    const governingDate =
+      (isLease
+        ? (moveInDateInput || transaction?.move_in_date)
+        : (acceptanceDateInput || transaction?.acceptance_date)) ||
+      closingDateInput ||
+      transaction?.closing_date ||
+      null
+    const membershipData = await resolveGoverningTeamAgreement(supabase, agent_id, governingDate)
 
     let teamMembership: any = null
     let teamSplits: any[] = []

@@ -6,6 +6,7 @@ import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getLeadSourceBucket } from '@/lib/transactions/constants'
 import { computeCommission, computeGrossFromSides } from '@/lib/transactions/math'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
+import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 import {
   buildStatementEmail,
   buildCdaEmail,
@@ -87,6 +88,7 @@ async function computeCommissionBreakdown(args: {
 }) {
   const {
     agentId,
+    transactionId,
     internalAgentId,
     commissionAmount,
     leadSource,
@@ -142,15 +144,21 @@ async function computeCommissionBreakdown(args: {
     (p: any) => p.code?.toLowerCase() === (transactionType || '').toLowerCase()
   )
 
-  // Team membership
-  const { data: membership } = await supabase
-    .from('team_member_agreements')
-    .select(`
-      id, team:teams!team_member_agreements_team_id_fkey(id, team_name)
-    `)
-    .eq('agent_id', agentId)
-    .is('end_date', null)
+  // Team membership governing this deal's date. Sales are governed by the
+  // purchase agreement execution date, leases by the tenant move-in date,
+  // falling back to the closing date. This keeps a pending deal on the team
+  // splits that were in effect when it was signed, even if the membership has
+  // since ended. See resolveGoverningTeamAgreement.
+  const { data: txnDates } = await supabase
+    .from('transactions')
+    .select('acceptance_date, move_in_date, closing_date')
+    .eq('id', transactionId)
     .maybeSingle()
+  const governingDate =
+    (isLease ? txnDates?.move_in_date : txnDates?.acceptance_date) ||
+    txnDates?.closing_date ||
+    null
+  const membership = await resolveGoverningTeamAgreement(supabase, agentId, governingDate)
 
   let teamLeadIds: string[] = []
   let teamSplits: any[] = []

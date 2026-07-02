@@ -2241,6 +2241,9 @@ export default function AdminTransactionDetailPage() {
             transaction_type: txn.transaction_type,
             lead_source: agentLeadSources[a.agent_id] || 'own',
             is_lease: isLease(txn.transaction_type),
+            acceptance_date: txn.acceptance_date || null,
+            move_in_date: txn.move_in_date || null,
+            closing_date: txn.closing_date || null,
           }),
         })
         if (res.ok) {
