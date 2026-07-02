@@ -103,6 +103,13 @@ export default function AgentFormsPage() {
             description: 'Submit when your listing is already active on the MLS.',
             formType: 'just-listed',
           },
+          {
+            id: 'compliance-cda',
+            name: 'Compliance & CDA Request',
+            description: 'Request compliance review and commission disbursement authorization for a transaction.',
+            formType: 'compliance-cda',
+          },
+
         ]
         const all = [...mapped]
         defaults.forEach(d => {
@@ -269,12 +276,14 @@ export default function AgentFormsPage() {
                       )}
                     </div>
                     <div className="flex-shrink-0">
-                      {form.formType === 'pre-listing' || form.formType === 'just-listed' ? (
+                      {form.formType === 'pre-listing' || form.formType === 'just-listed' || form.formType === 'compliance-cda' ? (
                         <Link
                           href={
                             form.formType === 'pre-listing'
                               ? '/agent/forms/pre-listing'
-                              : '/agent/forms/just-listed'
+                              : form.formType === 'just-listed'
+                              ? '/agent/forms/just-listed'
+                              : '/agent/forms/compliance-cda'
                           }
                           className="btn btn-primary flex items-center gap-1.5 text-xs"
                         >
