@@ -127,14 +127,28 @@ export default function AdminCompliancePage() {
   const removeEmail = (e: string) => setNotifEmails(notifEmails.filter(x => x !== e))
 
   const saveNotifEmails = async () => {
-    setNotifSaving(true)
     setNotifError('')
     setNotifSaved(false)
+
+    // Flush a typed-but-not-yet-added email from the input box so it is not lost on save.
+    let toSave = notifEmails
+    const typed = newEmail.trim().toLowerCase()
+    if (typed) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(typed)) { setNotifError('Please enter a valid email address, or clear the box before saving.'); return }
+      if (!notifEmails.includes(typed)) {
+        toSave = [...notifEmails, typed]
+        setNotifEmails(toSave)
+      }
+      setNewEmail('')
+    }
+
+    setNotifSaving(true)
     try {
       const res = await fetch('/api/admin/compliance/notification-emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ emails: notifEmails }),
+        body: JSON.stringify({ emails: toSave }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to save')
