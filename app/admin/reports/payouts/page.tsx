@@ -80,6 +80,10 @@ const fmt = (n: number) =>
 const fmtDate = (d: string | null) =>
   d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '-'
 
+// Full timestamp for the last-balanced line in the Bottom Line verdict bar
+const fmtStamp = (d: string | null) =>
+  d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
+
 // Cleared dates: green when the check has cleared (date is today or earlier),
 // red when it has not cleared yet (date is in the future). No date stays neutral.
 // Mirrors the not-cleared rule in app/api/admin/payouts-report/route.ts (cleared_date > today).
@@ -564,6 +568,12 @@ export default function PayoutsReportPage() {
   const [holds, setHolds] = useState('')
   const [savingBalances, setSavingBalances] = useState(false)
   const [autoPayloadTotal, setAutoPayloadTotal] = useState(0)
+  const [payloadBreakdown, setPayloadBreakdown] = useState<{ commission_link: number; retainer_link: number; pm_rent: number; other: number }>({ commission_link: 0, retainer_link: 0, pm_rent: 0, other: 0 })
+  const [bankHoldRows, setBankHoldRows] = useState<{ check_id: string; label: string; amount: number }[]>([])
+  const [autoHoldsTotal, setAutoHoldsTotal] = useState(0)
+  const [balanceUpdatedAt, setBalanceUpdatedAt] = useState<string | null>(null)
+  const [holdsOpen, setHoldsOpen] = useState(false)
+  const [payloadOpen, setPayloadOpen] = useState(false)
 
   const [newDesc, setNewDesc] = useState('')
   const [newAmt, setNewAmt] = useState('')
@@ -608,6 +618,10 @@ export default function PayoutsReportPage() {
       setBankBalance(json.settings?.bank_balance?.toString() || '')
       setHolds(json.settings?.funds_on_hold?.toString() || '')
       setAutoPayloadTotal(json.pending_payload_total || 0)
+      setPayloadBreakdown(json.payload_breakdown || { commission_link: 0, retainer_link: 0, pm_rent: 0, other: 0 })
+      setBankHoldRows(json.hold_rows || [])
+      setAutoHoldsTotal(json.auto_holds_total || 0)
+      setBalanceUpdatedAt(json.settings?.bank_balance_updated_at || null)
     } catch (err: any) {
       setError(err.message || 'Failed to load payouts')
     } finally {
@@ -639,10 +653,16 @@ export default function PayoutsReportPage() {
   const grandTotal       = paidAgentTotal + holdAgentTotal + expensesTotal + pmFeesTotal + landlordTotal
 
   const bank                  = parseFloat(bankBalance) || 0
-  const holdsAmt              = parseFloat(holds) || 0
+  const manualHolds           = parseFloat(holds) || 0
+  const holdsAmt              = autoHoldsTotal + manualHolds
   const payloadAmt            = autoPayloadTotal
   const difference            = (bank + holdsAmt + payloadAmt) - grandTotal
-  const availableAfterPaidOut = bank - (paidAgentTotal + expensesTotal + pmFeesTotal + landlordTotal)
+  // Waterfall values for the Bottom Line. What's left is `difference` by
+  // construction: totalFunds - grandTotal, just presented top down.
+  const totalFunds            = bank + holdsAmt + payloadAmt
+  const agentCommissions      = paidAgentTotal + holdAgentTotal
+  const brokerageAfterAgents  = totalFunds - agentCommissions
+  const afterPM               = brokerageAfterAgents - landlordTotal - pmFeesTotal
 
   const saveBalances = async () => {
     setSavingBalances(true)
@@ -1001,77 +1021,139 @@ export default function PayoutsReportPage() {
         <div className="order-1 lg:order-5 mb-5">
         <div className="container-card">
         <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Bottom Line</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+
+        {/* Verdict bar - the whole report in one line */}
+        <div className={`rounded-lg px-4 py-3 mb-4 flex items-center justify-between gap-3 ${difference < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
           <div>
-            <label className="field-label">Bank balance (payouts acct)</label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-luxury-gray-3">$</span>
-              <input type="number" step="0.01" value={bankBalance} onChange={e => setBankBalance(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
+            <p className={`text-sm font-semibold ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>
+              {difference < 0 ? `Short by ${fmt(Math.abs(difference))} to cover everything queued` : `Covered with ${fmt(difference)} to spare`}
+            </p>
+            {fmtStamp(balanceUpdatedAt) && (
+              <p className={`text-xs mt-0.5 ${difference < 0 ? 'text-red-600/70' : 'text-green-700/70'}`}>Last balanced {fmtStamp(balanceUpdatedAt)}</p>
+            )}
+          </div>
+          <span className={`text-lg font-bold whitespace-nowrap ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(difference)}</span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+          {/* Bank balance */}
+          <div className="inner-card">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Bank Balance</p>
+            <div className="mb-3">
+              <label className="field-label">Payouts account</label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-luxury-gray-3">$</span>
+                <input type="number" step="0.01" value={bankBalance} onChange={e => setBankBalance(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
+              </div>
+            </div>
+
+            {/* Holds - auto from uncleared checks, expandable */}
+            <button type="button" onClick={() => setHoldsOpen(v => !v)} className="w-full flex items-center justify-between text-sm py-1">
+              <span className="text-luxury-gray-2 flex items-center gap-1">
+                {holdsOpen ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+                Holds
+              </span>
+              <span className="font-medium text-luxury-gray-1">{fmt(holdsAmt)}</span>
+            </button>
+            {holdsOpen && (
+              <div className="pl-4 pb-1 space-y-1">
+                {bankHoldRows.map(h => (
+                  <div key={h.check_id} className="flex justify-between text-xs">
+                    <span className="text-luxury-gray-3 truncate pr-2">{h.label}</span>
+                    <span className="text-luxury-gray-2 tabular-nums flex-shrink-0">{fmt(h.amount)}</span>
+                  </div>
+                ))}
+                {bankHoldRows.length === 0 && (
+                  <p className="text-xs text-luxury-gray-3">No uncleared check holds</p>
+                )}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-xs text-luxury-gray-3">Other holds (manual)</span>
+                  <div className="flex items-center gap-1 w-28">
+                    <span className="text-xs text-luxury-gray-3">$</span>
+                    <input type="number" step="0.01" value={holds} onChange={e => setHolds(e.target.value)} className="input-luxury text-xs flex-1" placeholder="0.00" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Pending Payload - expandable breakdown */}
+            <button type="button" onClick={() => setPayloadOpen(v => !v)} className="w-full flex items-center justify-between text-sm py-1">
+              <span className="text-luxury-gray-2 flex items-center gap-1">
+                {payloadOpen ? <ChevronUp size={12} className="text-luxury-gray-3" /> : <ChevronDown size={12} className="text-luxury-gray-3" />}
+                Pending Payload
+              </span>
+              <span className="font-medium text-luxury-accent">{fmt(payloadAmt)}</span>
+            </button>
+            {payloadOpen && (
+              <div className="pl-4 pb-1 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">Commission link</span>
+                  <span className="text-luxury-gray-2 tabular-nums">{fmt(payloadBreakdown.commission_link)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">Retainer link</span>
+                  <span className="text-luxury-gray-2 tabular-nums">{fmt(payloadBreakdown.retainer_link)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">PM rent</span>
+                  <span className="text-luxury-gray-2 tabular-nums">{fmt(payloadBreakdown.pm_rent)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-luxury-gray-3">Other Payload checks</span>
+                  <span className="text-luxury-gray-2 tabular-nums">{fmt(payloadBreakdown.other)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between text-sm border-t border-luxury-gray-5/50 pt-2 mt-2">
+              <span className="text-luxury-gray-2 font-medium">Total funds</span>
+              <span className="font-semibold text-luxury-gray-1">{fmt(totalFunds)}</span>
+            </div>
+            <button onClick={saveBalances} disabled={savingBalances} className="btn btn-primary text-xs px-4 flex items-center gap-1.5 mt-3 disabled:opacity-50">
+              <Save size={12} /> {savingBalances ? 'Saving...' : 'Save balances'}
+            </button>
+          </div>
+
+          {/* Where it goes - waterfall */}
+          <div className="inner-card">
+            <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Where It Goes</p>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-luxury-gray-2">Total funds</span>
+                <span className="font-medium text-luxury-gray-1">{fmt(totalFunds)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-luxury-gray-2">- Agent commissions</span>
+                <span className="font-medium text-luxury-gray-1">-{fmt(agentCommissions)}</span>
+              </div>
+              <div className="flex justify-between text-sm bg-luxury-gray-5/40 rounded px-2 py-1.5">
+                <span className="font-semibold text-luxury-gray-1">Brokerage money after agents paid</span>
+                <span className="font-bold text-luxury-accent whitespace-nowrap">{fmt(brokerageAfterAgents)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-luxury-gray-2">- Landlord disbursements</span>
+                <span className="font-medium text-luxury-gray-1">-{fmt(landlordTotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-luxury-gray-2">- PM referral fees</span>
+                <span className="font-medium text-luxury-gray-1">-{fmt(pmFeesTotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-luxury-gray-5/50 pt-2">
+                <span className="text-luxury-gray-2 font-medium">After PM</span>
+                <span className="font-semibold text-luxury-gray-1">{fmt(afterPM)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-luxury-gray-2">- Also in payouts</span>
+                <span className="font-medium text-luxury-gray-1">-{fmt(expensesTotal)}</span>
+              </div>
+              <div className={`flex justify-between text-sm rounded px-2 py-1.5 ${difference < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                <span className={`font-semibold ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>What&apos;s left</span>
+                <span className={`font-bold whitespace-nowrap ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(difference)}</span>
+              </div>
             </div>
           </div>
-          <div>
-            <label className="field-label">Bank holds</label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-luxury-gray-3">$</span>
-              <input type="number" step="0.01" value={holds} onChange={e => setHolds(e.target.value)} className="input-luxury flex-1" placeholder="0.00" />
-            </div>
-          </div>
-        </div>
-        <div className="inner-card flex items-center justify-between mb-4">
-          <div>
-            <p className="field-label">Pending Payload</p>
-            <p className="text-xs text-luxury-gray-3 mt-0.5">Auto-calculated from transactions</p>
-          </div>
-          <span className="text-sm font-semibold text-luxury-accent">{fmt(autoPayloadTotal)}</span>
-        </div>
-        <button onClick={saveBalances} disabled={savingBalances} className="btn btn-primary text-xs px-4 flex items-center gap-1.5 mb-5 disabled:opacity-50">
-          <Save size={12} /> {savingBalances ? 'Saving...' : 'Save balances'}
-        </button>
-        <div className="border-t border-luxury-gray-5/50 pt-4 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">Recently paid</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(paidAgentTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">On hold</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(holdAgentTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">Landlord disbursements</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(landlordTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">PM referral fees</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(pmFeesTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">Also in payouts</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(expensesTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm border-t border-luxury-gray-5/50 pt-2">
-            <span className="text-luxury-gray-2 font-medium">Grand total</span>
-            <span className="font-semibold text-luxury-gray-1">{fmt(grandTotal)}</span>
-          </div>
-          <div className="flex justify-between text-sm pt-1">
-            <span className="text-luxury-gray-2">Bank balance (payouts acct)</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(bank)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">+ Bank holds</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(holdsAmt)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-luxury-gray-2">+ Pending Payload</span>
-            <span className="font-medium text-luxury-accent">{fmt(payloadAmt)}</span>
-          </div>
-          <div className="flex justify-between text-sm border-t border-luxury-gray-5/50 pt-2">
-            <span className={`font-semibold ${difference < 0 ? 'text-red-600' : 'text-luxury-gray-1'}`}>Difference</span>
-            <span className={`font-bold ${difference < 0 ? 'text-red-600' : 'text-green-700'}`}>{fmt(difference)}</span>
-          </div>
-          <div className="flex justify-between text-sm border-t border-luxury-gray-5/50 pt-2">
-            <span className="text-luxury-gray-2">Available after paid out</span>
-            <span className="font-medium text-luxury-gray-1">{fmt(availableAfterPaidOut)}</span>
-          </div>
+
         </div>
         </div>
         </div>

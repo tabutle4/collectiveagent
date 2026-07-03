@@ -4675,6 +4675,17 @@ export default function AdminTransactionDetailPage() {
                                   onBlur={() => updateCheck(check.id, { brokerage_amount: checkEdit.brokerage_amount })}
                                 />
                               </div>
+                              <div>
+                                <label className="field-label">On Hold Amount</label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="input-luxury text-xs"
+                                  value={checkEdit.hold_amount || ''}
+                                  onChange={e => updateCheckField(check.id, 'hold_amount', e.target.value)}
+                                  onBlur={() => updateCheck(check.id, { hold_amount: checkEdit.hold_amount })}
+                                />
+                              </div>
                             </div>
 
                             {/* Payment Method + Funds Status */}

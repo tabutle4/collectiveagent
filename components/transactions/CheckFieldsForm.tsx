@@ -24,6 +24,7 @@ export interface CheckFieldsValue {
   cleared_date?: string | null
   compliance_complete_date?: string | null
   brokerage_amount?: number | string | null
+  hold_amount?: number | string | null
   payment_method?: string | null
   status?: string | null
   compliance_status?: string | null
@@ -123,6 +124,16 @@ export default function CheckFieldsForm({ value, onChange }: Props) {
             className="input-luxury text-xs"
             value={value.brokerage_amount ?? ''}
             onChange={e => onChange('brokerage_amount', e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="field-label">On Hold Amount</label>
+          <input
+            type="number"
+            step="0.01"
+            className="input-luxury text-xs"
+            value={value.hold_amount ?? ''}
+            onChange={e => onChange('hold_amount', e.target.value)}
           />
         </div>
       </div>

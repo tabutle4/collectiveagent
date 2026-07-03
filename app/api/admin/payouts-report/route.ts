@@ -30,10 +30,10 @@ export async function GET(request: NextRequest) {
     // Fetch all checks linked to transactions (batched)
     const checks = await fetchAllRows(
       'checks_received',
-      `id, property_address, check_amount, brokerage_amount,
+      `id, property_address, check_amount, brokerage_amount, hold_amount, check_from,
        received_date, cleared_date, deposited_date,
        compliance_complete_date, crc_transferred, agents_paid, status, notes,
-       transaction_id, agent_id, payment_method`,
+       transaction_id, agent_id, payment_method, payload_payment_link_id`,
       {
         filters: [
           { type: 'not', column: 'transaction_id', value: null },
@@ -46,10 +46,10 @@ export async function GET(request: NextRequest) {
     // Fetch standalone checks (no transaction) - batched
     const standaloneChecks = await fetchAllRows(
       'checks_received',
-      `id, property_address, check_amount, brokerage_amount,
+      `id, property_address, check_amount, brokerage_amount, hold_amount, check_from,
        received_date, cleared_date, deposited_date,
        compliance_complete_date, crc_transferred, agents_paid, status, notes,
-       transaction_id, agent_id, payment_method`,
+       transaction_id, agent_id, payment_method, payload_payment_link_id`,
       {
         filters: [
           { type: 'is', column: 'transaction_id', value: null },
@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
     // Company settings (bank balance, holds, payload pending)
     const { data: settings } = await supabaseAdmin
       .from('company_settings')
-      .select('bank_balance, funds_on_hold, payload_pending_balance, bank_balance_updated_at')
+      .select('bank_balance, funds_on_hold, payload_pending_balance, bank_balance_updated_at, payload_commission_link_id, payload_retainer_link_id')
       .limit(1)
       .maybeSingle()
 
@@ -346,11 +346,56 @@ export async function GET(request: NextRequest) {
     })
 
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
-   // A cleared_date in the future still counts as pending
-   const today = new Date().toISOString().split('T')[0]
-   const pendingPayloadTotal = allChecks
-     .filter(c => c.payment_method === 'payload' && (!c.cleared_date || c.cleared_date > today))
-     .reduce((sum, c) => sum + (c.check_amount || 0), 0)
+    // A cleared_date in the future still counts as pending
+    const today = new Date().toISOString().split('T')[0]
+    // Rejected checks (ACH returned via Payload) never land, so they count
+    // neither as pending payload nor as bank holds.
+    const notCleared = (c: any) => (!c.cleared_date || c.cleared_date > today) && c.status !== 'rejected'
+    const pendingPayloadChecks = allChecks.filter(c => c.payment_method === 'payload' && notCleared(c))
+
+    // Split by source pay link so the report can break Pending Payload down.
+    const commissionLinkId = settings?.payload_commission_link_id || null
+    const retainerLinkId   = settings?.payload_retainer_link_id || null
+    const sumChecks = (list: any[]) => list.reduce((sum, c) => sum + (parseFloat(c.check_amount) || 0), 0)
+    const commissionLinkTotal = commissionLinkId
+      ? sumChecks(pendingPayloadChecks.filter(c => c.payload_payment_link_id === commissionLinkId))
+      : 0
+    const retainerLinkTotal = retainerLinkId
+      ? sumChecks(pendingPayloadChecks.filter(c => c.payload_payment_link_id === retainerLinkId))
+      : 0
+    const otherPayloadTotal = sumChecks(pendingPayloadChecks.filter(c =>
+      c.payload_payment_link_id !== commissionLinkId && c.payload_payment_link_id !== retainerLinkId
+    ))
+
+    // PM rent in flight: tenant invoices paid via Payload whose funds have not
+    // settled yet (funds_cleared_at stamped by the daily funding-sync cron).
+    const pendingRentInvoices = await fetchAllRows(
+      'tenant_invoices',
+      'id, paid_amount, total_amount, payment_method, status, funds_cleared_at',
+      {
+        filters: [
+          { type: 'eq', column: 'payment_method', value: 'payload' },
+          { type: 'eq', column: 'status', value: 'paid' },
+          { type: 'is', column: 'funds_cleared_at', value: null },
+        ],
+      }
+    )
+    const pmRentTotal = pendingRentInvoices.reduce(
+      (sum, inv) => sum + (parseFloat(inv.paid_amount ?? inv.total_amount) || 0), 0
+    )
+
+    const pendingPayloadTotal = commissionLinkTotal + retainerLinkTotal + otherPayloadTotal + pmRentTotal
+
+    // Auto bank holds: per-check hold_amount for checks that have not cleared.
+    // Payload-method checks are excluded (they are counted in Pending Payload).
+    const holdRows = allChecks
+      .filter(c => c.payment_method !== 'payload' && notCleared(c) && (parseFloat(c.hold_amount) || 0) > 0)
+      .map(c => ({
+        check_id: c.id,
+        label: c.property_address || c.check_from || 'Check',
+        amount: parseFloat(c.hold_amount) || 0,
+      }))
+    const autoHoldsTotal = holdRows.reduce((sum, h) => sum + h.amount, 0)
 
     return NextResponse.json({
       rows,
@@ -359,6 +404,14 @@ export async function GET(request: NextRequest) {
       pm_fees: pmFees,
       landlord_payouts: landlordPayouts,
       pending_payload_total: pendingPayloadTotal,
+      payload_breakdown: {
+        commission_link: commissionLinkTotal,
+        retainer_link: retainerLinkTotal,
+        pm_rent: pmRentTotal,
+        other: otherPayloadTotal,
+      },
+      hold_rows: holdRows,
+      auto_holds_total: autoHoldsTotal,
     })
   } catch (error: any) {
     console.error('Payouts report error:', error)
