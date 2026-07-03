@@ -64,6 +64,7 @@ export default function AgentFormsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [requestingUpdate, setRequestingUpdate] = useState(false)
   const [updateMessage, setUpdateMessage] = useState('')
+  const [updateStatus, setUpdateStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [referralEligible, setReferralEligible] = useState(false)
 
@@ -157,6 +158,7 @@ export default function AgentFormsPage() {
     setSelectedSubmission(submission)
     setModalOpen(true)
     setUpdateMessage('')
+    setUpdateStatus(null)
   }
 
   const handleRequestUpdate = async () => {
@@ -177,15 +179,18 @@ export default function AgentFormsPage() {
       })
       const data = await response.json()
       if (data.success) {
-        alert('Update request sent successfully!')
+        setUpdateStatus({ type: 'success', text: 'Update request sent successfully.' })
         setUpdateMessage('')
-        setModalOpen(false)
+        setTimeout(() => {
+          setModalOpen(false)
+          setUpdateStatus(null)
+        }, 1500)
       } else {
-        alert(`Error: ${data.error || 'Failed to send request'}`)
+        setUpdateStatus({ type: 'error', text: data.error || 'Failed to send request. Please try again.' })
       }
-    } catch (error) {
-      console.error('Error requesting update:', error)
-      alert('Failed to send request.')
+    } catch (err) {
+      console.error('Error requesting update:', err)
+      setUpdateStatus({ type: 'error', text: 'Failed to send request. Please try again.' })
     } finally {
       setRequestingUpdate(false)
     }
@@ -670,6 +675,11 @@ export default function AgentFormsPage() {
                 >
                   {requestingUpdate ? 'Sending...' : 'Send Request'}
                 </button>
+                {updateStatus && (
+                  <p className={`text-xs mt-3 ${updateStatus.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
+                    {updateStatus.text}
+                  </p>
+                )}
               </div>
             </div>
           </div>

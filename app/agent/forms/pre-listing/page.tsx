@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ServiceConfiguration } from '@/types/listing-coordination'
 import { LEAD_SOURCES } from '@/lib/transactions/constants'
+import { AlertCircle } from 'lucide-react'
 
 export default function PreListingForm() {
   const router = useRouter()
@@ -25,6 +26,7 @@ export default function PreListingForm() {
     if (!user) fetchUser()
   }, [router, user])
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
   const [submissionType, setSubmissionType] = useState<'new' | 'update'>('new')
@@ -104,9 +106,10 @@ export default function PreListingForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
 
     if (!selectedAgent) {
-      alert('Please select an agent from the dropdown')
+      setError('Please select an agent from the dropdown.')
       return
     }
 
@@ -135,12 +138,12 @@ export default function PreListingForm() {
           router.push('/forms/success')
         }
       } else {
-        alert(`Error: ${data.error || 'Failed to submit form'}`)
+        setError(data.error || 'Failed to submit form. Please try again.')
         setLoading(false)
       }
-    } catch (error) {
-      console.error('Error submitting form:', error)
-      alert('Failed to submit form. Please try again.')
+    } catch (err) {
+      console.error('Error submitting form:', err)
+      setError('Failed to submit form. Please try again.')
       setLoading(false)
     }
   }
@@ -604,6 +607,12 @@ export default function PreListingForm() {
                 </label>
               </div>
             </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 rounded text-xs text-red-700">
+                <AlertCircle size={14} className="flex-shrink-0" />{error}
+              </div>
+            )}
 
             <div className="flex justify-center gap-4 pt-6">
               <button

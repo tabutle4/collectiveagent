@@ -35,6 +35,7 @@ export default function UnderContractForm() {
   const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [showReview, setShowReview] = useState(false)
   const [submitResult, setSubmitResult] = useState<any>(null)
   const [error, setError] = useState('')
 
@@ -99,6 +100,12 @@ export default function UnderContractForm() {
     if (!form.add_transaction_coordination) { setError('Please answer the transaction coordination question.'); return }
     if (!form.documents_uploaded_ack) { setError('Please confirm you have uploaded the contract documents.'); return }
 
+    // Passed validation: show the review step instead of submitting immediately.
+    setShowReview(true)
+  }
+
+  const handleConfirmSubmit = async () => {
+    setError('')
     setSubmitting(true)
     try {
       const payload = {
@@ -415,11 +422,44 @@ export default function UnderContractForm() {
           </div>
         )}
 
-        <div className="flex justify-end">
-          <button onClick={handleSubmit} disabled={submitting} className="btn btn-primary text-sm disabled:opacity-50">
-            {submitting ? 'Submitting...' : 'Submit New Contract'}
-          </button>
-        </div>
+        {showReview ? (
+          <div className="container-card border border-luxury-accent/40">
+            <h3 className="text-sm font-semibold text-luxury-gray-1 mb-1">Review before submitting</h3>
+            <p className="text-xs text-luxury-gray-3 mb-4">
+              Submitting will create a transaction. Please confirm these details are correct.
+            </p>
+            <div className="space-y-2 text-xs text-luxury-gray-2 mb-5">
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Property</span><span className="text-right font-medium text-luxury-gray-1">{form.property_address}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Client</span><span className="text-right">{form.client_name}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Agent</span><span className="text-right">{form.agent_name}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Representation</span><span className="text-right">{form.representing}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Sales price</span><span className="text-right">{form.sales_price}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Closing date</span><span className="text-right">{form.closing_date}</span></div>
+            </div>
+            <div className="flex justify-between gap-3">
+              <button
+                onClick={() => setShowReview(false)}
+                disabled={submitting}
+                className="btn btn-secondary text-sm disabled:opacity-50"
+              >
+                Back to edit
+              </button>
+              <button
+                onClick={handleConfirmSubmit}
+                disabled={submitting}
+                className="btn btn-primary text-sm disabled:opacity-50"
+              >
+                {submitting ? 'Submitting...' : 'Confirm and Submit'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button onClick={handleSubmit} disabled={submitting} className="btn btn-primary text-sm disabled:opacity-50">
+              {submitting ? 'Submitting...' : 'Submit New Contract'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
