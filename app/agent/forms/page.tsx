@@ -65,6 +65,14 @@ export default function AgentFormsPage() {
   const [requestingUpdate, setRequestingUpdate] = useState(false)
   const [updateMessage, setUpdateMessage] = useState('')
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
+  const [referralEligible, setReferralEligible] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/agent/referral-eligibility')
+      .then(r => r.json())
+      .then(d => setReferralEligible(!!d.eligible))
+      .catch(() => setReferralEligible(false))
+  }, [])
 
   useEffect(() => {
     try {
@@ -229,6 +237,39 @@ export default function AgentFormsPage() {
         <p className="text-xs text-luxury-gray-3 mb-6">
           Submit forms and view your past submissions.
         </p>
+
+        {user?.id && referralEligible && (
+          <div className="container-card mb-6">
+            <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
+              Your Referral Link
+            </h2>
+            <p className="text-xs text-luxury-gray-3 mb-3">
+              Share this link with agents you want to recruit. Anyone who joins through it is
+              automatically credited to you as their momentum partner.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/prospective-agent-form?ref=${user.id}`}
+                onClick={e => (e.target as HTMLInputElement).select()}
+                className="input-luxury text-xs flex-1"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  handleCopyLink(
+                    `${window.location.origin}/prospective-agent-form?ref=${user.id}`,
+                    'referral'
+                  )
+                }
+                className="btn btn-secondary text-xs flex-shrink-0"
+              >
+                {copiedLink === 'referral' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="container-card">
           {/* Tabs */}
