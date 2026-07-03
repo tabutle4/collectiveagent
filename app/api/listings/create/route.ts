@@ -8,6 +8,7 @@ import { sendWelcomeEmail } from '@/lib/email/send'
 import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
+import { normalizeAddressForStorage } from '@/lib/transactions/utils'
 
 // Helper function to find existing transaction by property address and agent
 async function findExistingTransaction(
@@ -50,6 +51,12 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
     const body = await request.json()
+
+    // Normalize the property address once, up front, so every downstream use
+    // (storage, matching, coordination folder, contacts) uses the clean value.
+    if (body.property_address) {
+      body.property_address = normalizeAddressForStorage(body.property_address)
+    }
 
     // Get agent_id (either from body.agent_id or look up by agent_name)
     let agentIdForListing: string | null = null

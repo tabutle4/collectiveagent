@@ -136,3 +136,36 @@ export function buildPropertyAddress(
   if (zip) parts.push(zip)
   return parts.filter(Boolean).join(', ')
 }
+
+// ===== Address Normalization =====
+
+/**
+ * Clean an address for STORAGE and DISPLAY. Collapses stray whitespace,
+ * trims, and applies consistent Title Case plus standard street/directional
+ * abbreviations. This is what should be saved on the record so every address
+ * reads the same way regardless of how the agent typed it.
+ */
+export function normalizeAddressForStorage(str: string | null | undefined): string {
+  if (!str) return ''
+  // Collapse runs of whitespace (including tabs/newlines) to single spaces, trim.
+  const collapsed = str.replace(/\s+/g, ' ').trim()
+  if (!collapsed) return ''
+  return formatAddress(collapsed)
+}
+
+/**
+ * Produce a canonical MATCH KEY for comparing two addresses in find-or-create
+ * logic. This is NOT stored or shown to anyone. It lowercases, strips
+ * punctuation, and collapses whitespace so "123 Main St." and "123 main  street"
+ * compare as close as possible. It intentionally keeps unit/zip content so that
+ * a missing unit or zip still produces a different key (we do not want to merge
+ * two genuinely different units into one deal).
+ */
+export function addressMatchKey(str: string | null | undefined): string {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .replace(/[.,#]/g, ' ') // drop common punctuation
+    .replace(/\s+/g, ' ') // collapse whitespace
+    .trim()
+}

@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
+import { normalizeAddressForStorage } from '@/lib/transactions/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -382,7 +383,7 @@ export async function POST(request: NextRequest) {
 
     if (!txn) {
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-        .insert({ property_address: (property_address || '').trim(), status: 'pending', submitted_by: agentId, transaction_type: isLease ? 'lease' : 'sale', ...txnFields })
+        .insert({ property_address: normalizeAddressForStorage(property_address), status: 'pending', submitted_by: agentId, transaction_type: isLease ? 'lease' : 'sale', ...txnFields })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       transactionId = newTxn.id

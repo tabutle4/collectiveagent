@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
+import { normalizeAddressForStorage } from '@/lib/transactions/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,10 @@ export async function POST(request: NextRequest) {
       bedrooms, bathrooms, garage, sqft,
       on_behalf_of_agent_id,
     } = body
+
+    // Normalize the address once so it is stored consistently (Title Case,
+    // standard abbreviations, collapsed whitespace).
+    const normalizedAddress = normalizeAddressForStorage(property_address)
 
     // Office staff may submit on behalf of an agent. Verify server-side.
     const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
     const { data: newTxn, error: createErr } = await supabaseAdmin
       .from('transactions')
       .insert({
-        property_address: property_address.trim(),
+        property_address: normalizedAddress,
         status: 'pending',
         transaction_type: isLease ? 'lease' : 'sale',
         representing: representing || null,
@@ -227,7 +232,7 @@ export async function POST(request: NextRequest) {
       ? '<p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Transaction Coordination:</strong> Requested</p>'
       : ''
     const notifyHtml = getEmailLayout(
-      `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A new contract has been submitted for <strong style="color:#1a1a1a;">${property_address}</strong>.</p>
+      `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A new contract has been submitted for <strong style="color:#1a1a1a;">${normalizedAddress}</strong>.</p>
        <div style="background-color:#f9f9f9;padding:16px 20px;margin:0 0 20px;border-left:3px solid #C5A278;">
          <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${agent_name}</p>
          <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Representing:</strong> ${representing}</p>
@@ -235,7 +240,7 @@ export async function POST(request: NextRequest) {
          ${tcLine}
        </div>
        <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Admin</a></p>`,
-      { title: 'New Contract Submitted', preheader: `Under contract: ${property_address}` }
+      { title: 'New Contract Submitted', preheader: `Under contract: ${normalizedAddress}` }
     )
     await sendNotifications(notificationEmails, 'New Contract', notifyHtml, property_address)
 
@@ -243,12 +248,12 @@ export async function POST(request: NextRequest) {
     const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
     try {
       await resend.emails.send({
-        from: FROM_EMAIL, to: [agent_email], subject: `New Contract Received - ${property_address}`,
+        from: FROM_EMAIL, to: [agent_email], subject: `New Contract Received - ${normalizedAddress}`,
         html: getEmailLayout(
-          `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your new contract for <strong style="color:#1a1a1a;">${property_address}</strong> has been received and the transaction has been created.</p>
+          `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your new contract for <strong style="color:#1a1a1a;">${normalizedAddress}</strong> has been received and the transaction has been created.</p>
            <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Under Contract flyer, please upload a property photo.</p>
            <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`,
-          { title: 'New Contract Received', preheader: `Contract received for ${property_address}` }
+          { title: 'New Contract Received', preheader: `Contract received for ${normalizedAddress}` }
         ),
       })
     } catch (err) { console.error('Failed to send agent confirmation:', err) }
