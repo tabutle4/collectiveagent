@@ -34,7 +34,30 @@ function ProspectiveAgentFormContent() {
     how_heard_other: '',
     referring_agent: '',
     joining_team: '',
+    referring_agent_id: '',
   })
+
+  // When the form is opened through an agent's affiliate link (?ref=<agentId>),
+  // resolve that agent and lock them in as the referrer / momentum partner so
+  // the prospect does not have to type a name (and cannot mistype it).
+  const [momentumPartner, setMomentumPartner] = useState<{ id: string; name: string } | null>(null)
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    if (!ref) return
+    fetch(`/api/public/referring-agent?ref=${encodeURIComponent(ref)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.found) {
+          setMomentumPartner({ id: d.id, name: d.name })
+          setFormData(prev => ({
+            ...prev,
+            referring_agent: d.name,
+            referring_agent_id: d.id,
+          }))
+        }
+      })
+      .catch(err => console.error('Error resolving referral link:', err))
+  }, [searchParams])
 
   // Pre-select MLS choice if type=referral in URL
   useEffect(() => {
@@ -469,13 +492,22 @@ function ProspectiveAgentFormContent() {
                         <label className="block text-xs text-luxury-gray-3 mb-1.5">
                           If an agent referred you, please list their name below
                         </label>
-                        <input
-                          name="referring_agent"
-                          type="text"
-                          value={formData.referring_agent}
-                          onChange={handleChange}
-                          className="input-luxury"
-                        />
+                        {momentumPartner ? (
+                          <div className="input-luxury flex items-center justify-between bg-luxury-light/50">
+                            <span className="text-sm text-luxury-gray-1">
+                              Referred by {momentumPartner.name}
+                            </span>
+                            <span className="text-xs text-luxury-accent font-medium">Momentum Partner</span>
+                          </div>
+                        ) : (
+                          <input
+                            name="referring_agent"
+                            type="text"
+                            value={formData.referring_agent}
+                            onChange={handleChange}
+                            className="input-luxury"
+                          />
+                        )}
                       </div>
                     )}
                     {!isReferralAgent && (

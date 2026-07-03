@@ -120,26 +120,45 @@ for (const field of requiredFields) {
       }
     }
 
-    // If a referring agent name was provided, look up their user ID and link it
-    if (formData.referring_agent && prospect) {
-      const nameParts = formData.referring_agent.trim().split(/\s+/)
-      if (nameParts.length >= 2) {
-        const firstName = nameParts[0]
-        const lastName = nameParts.slice(1).join(' ')
-        const { data: referrer } = await supabase
+    // Link the referring agent (momentum partner). If the prospect arrived via
+    // an affiliate link, we already have a verified referring_agent_id and use
+    // it directly. Otherwise fall back to matching the typed name.
+    if (prospect) {
+      let referrerId: string | null = null
+
+      if (formData.referring_agent_id) {
+        // Verify the id is a real licensed agent before trusting it.
+        const { data: verified } = await supabase
           .from('users')
           .select('id')
-          .ilike('first_name', firstName)
-          .ilike('last_name', lastName)
-          .eq('is_active', true)
-          .limit(1)
-          .single()
-        if (referrer) {
-          await supabase
+          .eq('id', formData.referring_agent_id)
+          .eq('is_licensed_agent', true)
+          .maybeSingle()
+        if (verified) referrerId = verified.id
+      }
+
+      if (!referrerId && formData.referring_agent) {
+        const nameParts = formData.referring_agent.trim().split(/\s+/)
+        if (nameParts.length >= 2) {
+          const firstName = nameParts[0]
+          const lastName = nameParts.slice(1).join(' ')
+          const { data: referrer } = await supabase
             .from('users')
-            .update({ referring_agent_id: referrer.id })
-            .eq('id', prospect.id)
+            .select('id')
+            .ilike('first_name', firstName)
+            .ilike('last_name', lastName)
+            .eq('is_active', true)
+            .limit(1)
+            .single()
+          if (referrer) referrerId = referrer.id
         }
+      }
+
+      if (referrerId) {
+        await supabase
+          .from('users')
+          .update({ referring_agent_id: referrerId })
+          .eq('id', prospect.id)
       }
     }
 
