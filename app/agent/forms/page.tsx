@@ -67,6 +67,10 @@ export default function AgentFormsPage() {
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [referralEligible, setReferralEligible] = useState(false)
 
+  // Admin roles may see admin-only forms (e.g. the prospective agent form).
+  const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
+  const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
+
   useEffect(() => {
     fetch('/api/agent/referral-eligibility')
       .then(r => r.json())
@@ -226,8 +230,14 @@ export default function AgentFormsPage() {
   }
   const CATEGORY_ORDER = ['Listings', 'Transactions', 'Other']
   const categoryOf = (formType: string) => FORM_CATEGORY[formType] || 'Other'
+  // Some forms are admin-only on this page. The prospective agent form is
+  // managed by the office; regular agents use their referral link instead.
+  const ADMIN_ONLY_FORMS = ['prospective-agent']
+  const visibleForms = forms.filter(
+    f => isAdmin || !ADMIN_ONLY_FORMS.includes(f.formType)
+  )
   const groupedForms = CATEGORY_ORDER
-    .map(cat => ({ cat, items: forms.filter(f => categoryOf(f.formType) === cat) }))
+    .map(cat => ({ cat, items: visibleForms.filter(f => categoryOf(f.formType) === cat) }))
     .filter(g => g.items.length > 0)
 
   return (
@@ -282,7 +292,7 @@ export default function AgentFormsPage() {
                   : 'text-luxury-gray-3 hover:text-luxury-gray-1'
               }`}
             >
-              Available Forms ({forms.length})
+              Available Forms ({visibleForms.length})
             </button>
             <button
               onClick={() => setActiveTab('submissions')}
@@ -369,7 +379,7 @@ export default function AgentFormsPage() {
                   </div>
                 </div>
               ))}
-              {forms.length === 0 && (
+              {visibleForms.length === 0 && (
                 <div className="text-center py-12">
                   <p className="text-sm text-luxury-gray-3">No forms available</p>
                 </div>
