@@ -37,6 +37,7 @@ export async function createListing(
       photography_requested: data.photography_requested,
       pre_listing_token: preListingToken,
       just_listed_token: justListedToken,
+      is_broker_listing: data.is_broker_listing || false,
     })
     .select()
     .single()

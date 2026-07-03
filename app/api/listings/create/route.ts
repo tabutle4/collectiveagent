@@ -8,9 +8,12 @@ import { sendWelcomeEmail } from '@/lib/email/send'
 import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
-import { normalizeAddressForStorage } from '@/lib/transactions/utils'
+import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
 
-// Helper function to find existing transaction by property address and agent
+// Helper function to find existing transaction by property address and agent.
+// Matches on a normalized address key so slight typing differences still match
+// (e.g. "123 Main St." vs "123 main street") and pre-normalization historical
+// rows still pair with new normalized submissions.
 async function findExistingTransaction(
   supabase: any,
   propertyAddress: string,
@@ -28,20 +31,113 @@ async function findExistingTransaction(
 
   const transactionIds = agentTransactions.map((t: any) => t.transaction_id)
 
-  const { data: existingTransaction, error } = await supabase
+  // Pull this agent's transactions and match on the normalized key in code,
+  // since the stored value is display-normalized, not match-key form.
+  const { data: candidates, error } = await supabase
     .from('transactions')
     .select('*')
-    .eq('property_address', propertyAddress)
     .in('id', transactionIds)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
 
-  if (error || !existingTransaction) {
+  if (error || !candidates?.length) {
     return null
   }
 
-  return existingTransaction
+  const targetKey = addressMatchKey(propertyAddress)
+  if (!targetKey) return null
+
+  const match = candidates.find(
+    (t: any) => addressMatchKey(t.property_address) === targetKey
+  )
+
+  return match || null
+}
+
+// Option B: link a listing to a transaction. Finds an existing transaction for
+// this agent+property; if none exists, creates ONE with the right status, links
+// it to the listing via legacy_listing_id, and creates the client contact +
+// listing-agent rows. Never creates a duplicate. Returns the transaction id or
+// null if it could not resolve one. Failures here never block the listing.
+async function findOrCreateListingTransaction(
+  supabase: any,
+  body: any,
+  agentId: string | null,
+  listing: any,
+  formType: string
+): Promise<string | null> {
+  try {
+    if (!agentId || !listing?.id || !listing?.property_address) return null
+
+    // 1. Find an existing transaction for this agent + property.
+    const existing = await findExistingTransaction(
+      supabase,
+      listing.property_address,
+      agentId
+    )
+
+    if (existing) {
+      // Link the existing transaction to this listing (do not duplicate).
+      if (!existing.legacy_listing_id) {
+        await supabase
+          .from('transactions')
+          .update({ legacy_listing_id: listing.id, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+      }
+      return existing.id
+    }
+
+    // 2. No transaction yet: create one. Status by form type.
+    const status = formType === 'just-listed' ? 'active_listing' : 'prospect'
+    const isLease = listing.transaction_type === 'lease'
+
+    const { data: newTxn, error: txnErr } = await supabase
+      .from('transactions')
+      .insert({
+        property_address: listing.property_address,
+        status,
+        transaction_type: listing.transaction_type || 'sale',
+        client_name: body.client_names || null,
+        client_email: body.client_email || null,
+        client_phone: body.client_phone || null,
+        lead_source: body.lead_source || null,
+        mls_link: body.mls_link || null,
+        submitted_by: agentId,
+        legacy_listing_id: listing.id,
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+
+    if (txnErr || !newTxn) {
+      console.error('Option B: failed to create listing transaction:', txnErr)
+      return null
+    }
+
+    // 3. Listing agent row.
+    await supabase.from('transaction_internal_agents').insert({
+      transaction_id: newTxn.id,
+      agent_id: agentId,
+      agent_role: 'listing_agent',
+      payment_status: 'pending',
+      updated_at: new Date().toISOString(),
+    })
+
+    // 4. Client contact row (seller for sale, landlord for lease).
+    if (body.client_names) {
+      await supabase.from('transaction_contacts').insert({
+        transaction_id: newTxn.id,
+        contact_type: isLease ? 'landlord' : 'seller',
+        name: body.client_names || null,
+        phone: body.client_phone || null,
+        email: body.client_email || null,
+      })
+    }
+
+    return newTxn.id
+  } catch (err) {
+    console.error('Option B: findOrCreateListingTransaction error:', err)
+    return null
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -252,6 +348,15 @@ export async function POST(request: NextRequest) {
       if (!listing) {
         return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
       }
+
+      // Option B: find-or-create the linked transaction for this listing.
+      await findOrCreateListingTransaction(
+        supabase,
+        body,
+        agentIdForListing,
+        listing,
+        validation.formType
+      )
 
       // Unified submission record: every form submission is logged here so the
       // office has one audit trail across all forms. Linked to the listing.
@@ -544,6 +649,18 @@ export async function POST(request: NextRequest) {
     if (!listing) {
       return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
     }
+
+    // Option B: find-or-create the linked transaction for this listing.
+    // Derive form type the same way createListing does: an MLS link means the
+    // property is already listed (just-listed), otherwise it is a pre-listing.
+    const listingFormType = body.mls_link ? 'just-listed' : 'pre-listing'
+    await findOrCreateListingTransaction(
+      supabase,
+      body,
+      finalAgentId,
+      listing,
+      listingFormType
+    )
 
     if (body.coordination_requested) {
       // If broker listing, fee is $0 and payment method is not required

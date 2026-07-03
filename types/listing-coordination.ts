@@ -117,4 +117,5 @@ export interface ListingFormData {
   coordination_requested: boolean
   coordination_payment_method?: 'client_direct' | 'agent_pays'
   photography_requested: boolean
+  is_broker_listing?: boolean
 }
