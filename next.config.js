@@ -23,12 +23,12 @@ const nextConfig = {
 nextConfig.redirects = async () => [
   {
     source: '/pay/retainer',
-    destination: 'https://payload.com/pay/12iNY7p4qZuJenrf8bKrHONnvdSj4WTxngsSaI1IPIBQJN',
+    destination: 'https://payload.com/pay/12iNdDJBUv5ez0WPEstKcyvZjFsOguGaxvIHGeW3TuksVt',
     permanent: false,
   },
   {
     source: '/pay/commission',
-    destination: 'https://payload.com/pay/12iNY7qfPjXchPl8UUkuFEJ4k3ftqgmmlKY8TwrFz27KKH',
+    destination: 'https://payload.com/pay/12iNdDJ7O8qcRaFjlKUDn0q7D5hRERR9OYSUMyOLfFDt9F',
     permanent: false,
   },
   {
