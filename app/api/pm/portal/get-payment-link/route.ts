@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     const invoiceParams = new URLSearchParams({
       type: 'bill',
       due_date: earliestDueDate,
-      processing_id: process.env.PAYLOAD_PROCESSING_ID || '',
+      processing_id: process.env.PAYLOAD_PM_PROCESSING_ID || process.env.PAYLOAD_PROCESSING_ID || '',
       customer_id: customerId,
       description,
     })
