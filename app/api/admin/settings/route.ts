@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
       standard_onboarding_fee: 399,
       standard_monthly_fee: 50,
       standard_late_fee: 25,
+      payload_retainer_fee: 0,
       board_requirement_days: 30,
       termination_notice_days: 14,
       commission_payment_days: 30,

@@ -64,6 +64,7 @@ interface CompanySettings {
   standard_onboarding_fee: number
   standard_monthly_fee: number
   standard_late_fee: number
+  payload_retainer_fee: number
   board_requirement_days: number
   termination_notice_days: number
   commission_payment_days: number
@@ -699,6 +700,18 @@ export default function SettingsPage() {
                             type="number"
                             value={settings.standard_late_fee}
                             onChange={(e) => updateSetting('standard_late_fee', Number(e.target.value))}
+                            className="input-luxury pl-7"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="field-label">Office Retainer Fee</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                          <input
+                            type="number"
+                            value={settings.payload_retainer_fee}
+                            onChange={(e) => updateSetting('payload_retainer_fee', Number(e.target.value))}
                             className="input-luxury pl-7"
                           />
                         </div>

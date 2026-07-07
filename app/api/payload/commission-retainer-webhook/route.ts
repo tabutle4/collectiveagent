@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     // Only pay-link transactions from the two configured links matter here.
     const { data: settings } = await supabase
       .from('company_settings')
-      .select('payload_commission_link_id, payload_retainer_link_id')
+      .select('payload_commission_link_id, payload_retainer_link_id, payload_retainer_fee')
       .limit(1)
       .maybeSingle()
     const commissionLinkId = settings?.payload_commission_link_id || null
@@ -327,7 +327,6 @@ export async function POST(request: NextRequest) {
           ...baseCheck,
           transaction_id: null,
           property_address: payerName ? `${payerName} (Retainer)` : 'Retainer',
-          brokerage_amount: amount,
           notes: `Payload retainer, no agent match. Realtor submitted: ${realtorName || 'none'}. Client type: ${clientTypeRaw || 'none'}. Payer: ${payerName || 'unknown'}${payerEmail ? ` (${payerEmail})` : ''}.`,
         })
         .select('id')
@@ -358,8 +357,21 @@ export async function POST(request: NextRequest) {
       .single()
     if (txnError) throw txnError
 
+    // Role and side derive from the type code once, shared by the primary TIA
+    // and the retainer row (the transaction page passes the agent row's own
+    // role/side to add_retainer_row; mirror that here).
+    const txnTypeCode = transactionType || ''
+    const derivedIsListing = txnTypeCode.includes('landlord') || txnTypeCode.includes('seller')
+    const derivedRole = derivedIsListing ? 'listing_agent' : 'primary_agent'
+    const derivedSide =
+      txnTypeCode.includes('landlord') ? 'landlord'
+      : txnTypeCode.includes('seller') ? 'seller'
+      : txnTypeCode.includes('tenant') ? 'tenant'
+      : txnTypeCode.includes('buyer') ? 'buyer'
+      : null
+
     try {
-      const txnType = transactionType || ''
+      const txnType = txnTypeCode
       const { data: pft } = await supabase
         .from('processing_fee_types')
         .select('is_lease, name')
@@ -372,14 +384,8 @@ export async function POST(request: NextRequest) {
       const commissionPlan = isLease
         ? (agentUser.lease_commission_plan || agentUser.commission_plan || '')
         : (agentUser.commission_plan || '')
-      const isListingSide = txnType.includes('landlord') || txnType.includes('seller')
-      const agentRole = isListingSide ? 'listing_agent' : 'primary_agent'
-      const side =
-        txnType.includes('landlord') ? 'landlord'
-        : txnType.includes('seller') ? 'seller'
-        : txnType.includes('tenant') ? 'tenant'
-        : txnType.includes('buyer') ? 'buyer'
-        : null
+      const agentRole = derivedRole
+      const side = derivedSide
       const countsToward = !isLease && (agentRole === 'primary_agent' || agentRole === 'listing_agent')
 
       const { error: tiaError } = await supabase
@@ -401,13 +407,50 @@ export async function POST(request: NextRequest) {
       console.error('Pay-link retainer TIA block error:', err?.message || err)
     }
 
+    // Retainer money row, mirroring the add_retainer_row action: agent gets
+    // amount minus the office retainer fee (from company settings); all
+    // commission fields zero. The fee is the house's cut.
+    const retainerFee = parseFloat(String(settings?.payload_retainer_fee ?? 0)) || 0
+    try {
+      const amount1099 = Math.round((amount - retainerFee) * 100) / 100
+      const { error: retainerError } = await supabase
+        .from('transaction_internal_agents')
+        .insert({
+          transaction_id: newTxn.id,
+          agent_id: agentUser.id,
+          agent_role: derivedRole,
+          side: derivedSide,
+          installment_kind: 'retainer',
+          agent_basis: amount,
+          processing_fee: retainerFee,
+          amount_1099_reportable: amount1099,
+          agent_net: amount1099,
+          payment_status: 'pending',
+          split_percentage: 0,
+          agent_gross: 0,
+          brokerage_split: 0,
+          coaching_fee: 0,
+          team_lead_commission: 0,
+          btsa_amount: 0,
+          rebate_amount: 0,
+          other_fees: 0,
+          sales_volume: 0,
+          units: 0,
+          debts_deducted: 0,
+          counts_toward_progress: false,
+        })
+      if (retainerError) console.error('Pay-link retainer row insert failed:', retainerError.message)
+    } catch (err: any) {
+      console.error('Pay-link retainer row block error:', err?.message || err)
+    }
+
     const { data: check, error: checkError } = await supabase
       .from('checks_received')
       .insert({
         ...baseCheck,
         transaction_id: newTxn.id,
         property_address: newTxn.property_address,
-        brokerage_amount: amount,
+        brokerage_amount: retainerFee,
         notes: `Payload retainer from ${payerName || 'unknown payer'}${payerEmail ? ` (${payerEmail})` : ''}. Client type: ${clientTypeRaw || 'not given'}.`,
       })
       .select('id')
