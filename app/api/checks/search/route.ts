@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows, type FetchAllRowsOptions } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
+import { getCentralDateString } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -114,7 +115,10 @@ export async function GET(request: NextRequest) {
     // 'deposited' even after that date passes. Recompute from dates here so the
     // page is always correct, and write back any corrections so the stored
     // value (read by reports etc.) stays accurate too.
-    const today = new Date().toISOString().split('T')[0]
+    // Central date, not UTC: matches the trigger and the payouts report so a
+    // check clearing tomorrow is not re-stamped 'cleared' during the evening
+    // hours when UTC has already rolled to tomorrow.
+    const today = getCentralDateString()
     const deriveStatus = (depositedDate: string | null, clearedDate: string | null): string => {
       if (clearedDate && clearedDate <= today) return 'cleared'
       if (depositedDate) return 'deposited'

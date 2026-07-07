@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { getCentralDateString } from '@/lib/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -346,8 +347,10 @@ export async function GET(request: NextRequest) {
     })
 
     // Auto-calculate pending Payload: checks where payment_method = 'payload' and not yet cleared
-    // A cleared_date in the future still counts as pending
-    const today = new Date().toISOString().split('T')[0]
+    // A cleared_date in the future still counts as pending. Use Central date,
+    // not UTC: after ~7pm Texas time UTC has already rolled to tomorrow, which
+    // would wrongly treat a check clearing tomorrow as already cleared.
+    const today = getCentralDateString()
     // Rejected checks (ACH returned via Payload) never land, so they count
     // neither as pending payload nor as bank holds.
     const notCleared = (c: any) => (!c.cleared_date || c.cleared_date > today) && c.status !== 'rejected'
@@ -481,7 +484,9 @@ export async function POST(request: NextRequest) {
     const updates: Record<string, any> = {}
     
     if (compliance_status === 'complete') {
-      updates.compliance_complete_date = new Date().toISOString().split('T')[0]
+      // Central date, not UTC: after ~7pm Texas time UTC has rolled to tomorrow,
+      // which would stamp the wrong completion date.
+      updates.compliance_complete_date = getCentralDateString()
     } else if (compliance_status === 'not_submitted') {
       updates.compliance_complete_date = null
     }

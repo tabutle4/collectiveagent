@@ -89,7 +89,9 @@ const fmtStamp = (d: string | null) =>
 // Mirrors the not-cleared rule in app/api/admin/payouts-report/route.ts (cleared_date > today).
 const clearedDateClass = (d: string | null): string => {
   if (!d) return 'text-luxury-gray-3'
-  const today = new Date().toISOString().split('T')[0]
+  // Central date, not UTC: matches the report route so coloring and the holds
+  // math agree during the evening hours when UTC has rolled to tomorrow.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
   return d > today ? 'text-red-500' : 'text-green-700'
 }
 
