@@ -1616,7 +1616,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       // When check_amount is saved, auto-populate base commission on the
       // correct side if not already set, then recompute gross/office_net.
-      if ('check_amount' in cleanUpdates) {
+      // Non-base checks (retainer, BTSA, additional commission) pass
+      // skip_base_autofill so they never set the deal's base commission.
+      if ('check_amount' in cleanUpdates && !body.skip_base_autofill) {
         const amount = parseFloat(cleanUpdates.check_amount) || 0
         if (amount > 0) {
           const { data: txn } = await supabase

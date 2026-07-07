@@ -73,6 +73,16 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
   const [savingCheck, setSavingCheck] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // Check type routes the money the same way the transaction page does:
+  // base = today's flow; retainer -> add_retainer_row; btsa / additional
+  // commission -> add_additional_comp. Same actions, same math.
+  const [checkType, setCheckType] = useState<'base' | 'retainer' | 'btsa' | 'additional_commission'>('base')
+  const [txnTias, setTxnTias] = useState<any[]>([])
+  const [compAgentId, setCompAgentId] = useState('')
+  const [retainerFee, setRetainerFee] = useState('')
+  const [compFees, setCompFees] = useState('')
+  const [compDebt, setCompDebt] = useState('')
+
   const [txnAgents, setTxnAgents] = useState<any[]>([])
 
   useEffect(() => {
@@ -286,7 +296,9 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
       const res = await fetch(`/api/admin/transactions/${selectedTxn.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_check', check_id: cid, updates: checkUpdates }),
+        // Only base-commission checks feed the base-commission autofill.
+        // A retainer or additional check must not set the deal's base.
+        body: JSON.stringify({ action: 'update_check', check_id: cid, updates: checkUpdates, skip_base_autofill: checkType !== 'base' }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -299,6 +311,64 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
           body: JSON.stringify({ action: 'update_transaction', updates: { compliance_status } }),
         })
       }
+
+      // Non-base checks fire the same actions the transaction page uses.
+      if (checkType !== 'base') {
+        const a = txnTias.find(t => t.id === compAgentId)
+        if (!a) throw new Error('Pick an agent for this check type')
+        const amount = parseFloat(String(fields.check_amount ?? '')) || 0
+        if (amount <= 0) throw new Error('Enter a check amount first')
+
+        if (checkType === 'retainer') {
+          // Mirrors the transaction page + Add Retainer flow (add_retainer_row).
+          const fee = parseFloat(retainerFee || '0') || 0
+          const rRes = await fetch(`/api/admin/transactions/${selectedTxn.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'add_retainer_row',
+              retainer: {
+                agent_id: a.agent_id,
+                agent_role: a.agent_role,
+                side: a.side,
+                retainer_amount: amount,
+                retainer_fee: fee,
+              },
+            }),
+          })
+          if (!rRes.ok) {
+            const d = await rRes.json().catch(() => ({}))
+            throw new Error(d.error || 'Failed to add retainer row')
+          }
+        } else {
+          // Mirrors the transaction page additional comp modal (add_additional_comp).
+          const fees = parseFloat(compFees || '0') || 0
+          const debt = parseFloat(compDebt || '0') || 0
+          const splitPct = parseFloat(a.split_percentage || 85)
+          const agentGross = checkType === 'btsa' ? amount : Math.round(amount * splitPct / 100 * 100) / 100
+          const amount1099 = Math.round((agentGross - fees) * 100) / 100
+          const agentNet = Math.round((amount1099 - debt) * 100) / 100
+          const cRes = await fetch(`/api/admin/transactions/${selectedTxn.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'add_additional_comp',
+              primary_tia_id: a.id,
+              comp_type: checkType,
+              amount,
+              amount_1099: amount1099,
+              agent_net: agentNet,
+              side: a.side || null,
+              commission_plan: a.commission_plan || '',
+              funding_source: a.funding_source || 'crc',
+            }),
+          })
+          if (!cRes.ok) {
+            const d = await cRes.json().catch(() => ({}))
+            throw new Error(d.error || 'Failed to save additional compensation')
+          }
+        }
+      }
       return true
     } catch (err: any) {
       setSaveError(err.message || 'Failed to save check')
@@ -306,7 +376,7 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
     } finally {
       setSavingCheck(false)
     }
-  }, [selectedTxn, fields, ensureCheck])
+  }, [selectedTxn, fields, ensureCheck, checkType, txnTias, compAgentId, retainerFee, compFees, compDebt])
 
   const goToNotify = useCallback(async () => {
     const ok = await saveCheck()
@@ -322,6 +392,28 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
   const onFieldChange = (field: keyof CheckFieldsValue, value: any) => {
     setFields(prev => ({ ...prev, [field]: value }))
   }
+
+  // Load the transaction's TIA rows for the check-type flows. Eligible rows
+  // mirror the transaction page's + Add Retainer / additional comp buttons:
+  // primary/listing/co roles that are not themselves retainer rows.
+  useEffect(() => {
+    if (step !== 'confirm' || !selectedTxn) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/admin/transactions/${selectedTxn.id}`)
+        const data = await res.json()
+        if (cancelled) return
+        const eligible = (data.agents || []).filter((a: any) =>
+          ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) &&
+          a.installment_kind !== 'retainer'
+        )
+        setTxnTias(eligible)
+        if (eligible.length === 1) setCompAgentId(eligible[0].id)
+      } catch { /* selector stays empty; base still works */ }
+    })()
+    return () => { cancelled = true }
+  }, [step, selectedTxn])
 
   if (showCreate) {
     return (
@@ -564,6 +656,74 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
 
           {step === 'confirm' && selectedTxn && (
             <div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="field-label">Check Type</label>
+                  <select
+                    className="select-luxury text-xs"
+                    value={checkType}
+                    onChange={e => setCheckType(e.target.value as any)}
+                  >
+                    <option value="base">Base Commission</option>
+                    <option value="retainer">Retainer</option>
+                    <option value="btsa">BTSA</option>
+                    <option value="additional_commission">Additional Commission</option>
+                  </select>
+                </div>
+                {checkType !== 'base' && (
+                  <div>
+                    <label className="field-label">Agent</label>
+                    <select
+                      className="select-luxury text-xs"
+                      value={compAgentId}
+                      onChange={e => setCompAgentId(e.target.value)}
+                    >
+                      <option value="">Select agent...</option>
+                      {txnTias.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {`${a.user?.preferred_first_name || a.user?.first_name || ''} ${a.user?.preferred_last_name || a.user?.last_name || ''}`.trim()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {checkType === 'retainer' && (
+                  <div>
+                    <label className="field-label">Office Retainer Fee</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input-luxury text-xs"
+                      value={retainerFee}
+                      onChange={e => setRetainerFee(e.target.value)}
+                    />
+                  </div>
+                )}
+                {(checkType === 'btsa' || checkType === 'additional_commission') && (
+                  <>
+                    <div>
+                      <label className="field-label">Fees</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="input-luxury text-xs"
+                        value={compFees}
+                        onChange={e => setCompFees(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Debt</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="input-luxury text-xs"
+                        value={compDebt}
+                        onChange={e => setCompDebt(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
               <CheckFieldsForm value={fields} onChange={onFieldChange} />
               {saveError && <div className="text-xs text-red-600 mt-2">{saveError}</div>}
               <div className="flex items-center justify-between mt-5">
