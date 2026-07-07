@@ -32,6 +32,11 @@ nextConfig.redirects = async () => [
     permanent: false,
   },
   {
+    source: '/pay/rc-commission',
+    destination: 'https://payload.com/pay/12iNdDMfeogrpOW5AFnEV74DGN9EyiQ7tp0rRdJlcWCRPd',
+    permanent: false,
+  },
+  {
     source: '/onboarding-checklist',
     destination: '/agent/checklist',
     permanent: false,
