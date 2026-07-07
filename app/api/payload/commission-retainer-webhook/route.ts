@@ -47,6 +47,23 @@ function clientTypeToTransactionType(raw: string): string | null {
   return null
 }
 
+// Match a submitted realtor name against active users, exact full-name match
+// on either legal or preferred name (case-insensitive, collapsed spaces).
+// Used by both the commission and retainer paths.
+async function findAgentByName(realtorName: string): Promise<any | null> {
+  if (!realtorName) return null
+  const wanted = realtorName.toLowerCase().replace(/\s+/g, ' ').trim()
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, email, office_email, first_name, preferred_first_name, last_name, preferred_last_name, commission_plan, lease_commission_plan, office')
+    .eq('is_active', true)
+  return (users || []).find(u => {
+    const legal = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
+    const preferred = `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
+    return wanted === legal || wanted === preferred
+  }) || null
+}
+
 // Send the same agent notification the checks page sends, mirroring
 // app/api/checks/notify-agent/route.ts (Resend + getEmailLayout, agent-facing).
 async function sendCheckReceivedEmail(agent: {
@@ -280,19 +297,102 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // No address match: standalone check so the money still shows in
-        // Pending Payload and on the checks report for manual linking.
+        // No address match: create the transaction so the money has a home
+        // right away. The form's Realtor Name picks the agent; if the name
+        // matches an active agent the deal is created with them (plus their
+        // TIA row and a notification). No name match: agent-less prospect to
+        // assign by hand. If the insert fails, fall back to a standalone
+        // check so the payment is never lost.
+        const commissionRealtorName = readAttr(txn.attrs, 'Realtor Name')
+        const commissionAgent: any = await findAgentByName(commissionRealtorName)
+
+        let createdTxn: { id: string; property_address: string | null } | null = null
+        try {
+          const nowIso = new Date().toISOString()
+          const { data: made, error: makeError } = await supabase
+            .from('transactions')
+            .insert({
+              property_address: submittedAddress || `${payerName || 'Payload payment'} (Commission)`,
+              status: 'prospect',
+              compliance_status: 'not_requested',
+              submitted_by: commissionAgent?.id ?? null,
+              office_location: commissionAgent?.office ?? null,
+              created_at: nowIso,
+              updated_at: nowIso,
+            })
+            .select('id, property_address')
+            .single()
+          if (makeError) throw makeError
+          createdTxn = made
+        } catch (err: any) {
+          console.error('Pay-link commission transaction create failed:', err?.message || err)
+        }
+
+        // Matched agent gets their TIA row, same shape as the retainer path's
+        // primary insert. Type is unknown here (the commission form has no
+        // client type), so side is null and the sale commission plan applies;
+        // both settle when the type is set on the deal.
+        if (createdTxn && commissionAgent) {
+          try {
+            const { error: tiaError } = await supabase
+              .from('transaction_internal_agents')
+              .insert({
+                transaction_id: createdTxn.id,
+                agent_id: commissionAgent.id,
+                agent_role: 'primary_agent',
+                side: null,
+                commission_plan: commissionAgent.commission_plan || '',
+                counts_toward_progress: true,
+                units: 1,
+                funding_source: 'crc',
+                payment_status: 'pending',
+                uses_canonical_math: true,
+              })
+            if (tiaError) console.error('Pay-link commission TIA insert failed:', tiaError.message)
+          } catch (err: any) {
+            console.error('Pay-link commission TIA block error:', err?.message || err)
+          }
+        }
+
         const { data: check, error } = await supabase
           .from('checks_received')
           .insert({
             ...baseCheck,
-            transaction_id: null,
-            property_address: submittedAddress || null,
-            notes: `Payload commission payment, no transaction match. Payer: ${payerName || 'unknown'}${payerEmail ? ` (${payerEmail})` : ''}. Submitted address: ${submittedAddress || 'none'}. Link to a transaction from the checks page.`,
+            transaction_id: createdTxn?.id || null,
+            property_address: createdTxn?.property_address || submittedAddress || null,
+            notes: createdTxn
+              ? `Payload commission payment. Payer: ${payerName || 'unknown'}${payerEmail ? ` (${payerEmail})` : ''}.${commissionAgent ? ` Agent: ${commissionRealtorName}. New transaction created from this payment: set the transaction type.` : ` New transaction created from this payment: assign the agent and transaction type. Realtor submitted: ${commissionRealtorName || 'none'}.`}`
+              : `Payload commission payment, no transaction match. Payer: ${payerName || 'unknown'}${payerEmail ? ` (${payerEmail})` : ''}. Submitted address: ${submittedAddress || 'none'}. Link to a transaction from the checks page.`,
           })
           .select('id')
           .single()
         if (error) throw error
-        console.log('Pay-link commission check created unmatched:', check.id)
+
+        // Best-effort: record the payer as a title contact on the new deal.
+        if (createdTxn && (payerName || payerEmail)) {
+          try {
+            await supabase.from('transaction_contacts').insert({
+              transaction_id: createdTxn.id,
+              contact_type: 'title',
+              name: payerName || null,
+              company: null,
+              email: payerEmail || null,
+              phone: null,
+            })
+          } catch (err: any) {
+            console.error('Pay-link contact insert failed:', err?.message || err)
+          }
+        }
+
+        // Best-effort: notify the matched agent, same as the matched-deal path.
+        if (createdTxn && commissionAgent) {
+          try {
+            await sendCheckReceivedEmail(commissionAgent, createdTxn.property_address || submittedAddress)
+          } catch (err: any) {
+            console.error('Pay-link notify failed:', err?.message || err)
+          }
+        }
+        console.log('Pay-link commission check created', createdTxn ? `with new txn ${createdTxn.id}:` : 'unmatched:', check.id)
       }
       return NextResponse.json({ received: true })
     }
@@ -302,21 +402,8 @@ export async function POST(request: NextRequest) {
     const clientTypeRaw = readAttr(txn.attrs, 'Client Type')
     const transactionType = clientTypeToTransactionType(clientTypeRaw)
 
-    // Match the named realtor against active users, exact full-name match on
-    // either legal or preferred name (case-insensitive, collapsed spaces).
-    let agentUser: any = null
-    if (realtorName) {
-      const wanted = realtorName.toLowerCase().replace(/\s+/g, ' ').trim()
-      const { data: users } = await supabase
-        .from('users')
-        .select('id, email, office_email, first_name, preferred_first_name, last_name, preferred_last_name, commission_plan, lease_commission_plan, office')
-        .eq('is_active', true)
-      agentUser = (users || []).find(u => {
-        const legal = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
-        const preferred = `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.toLowerCase().replace(/\s+/g, ' ').trim()
-        return wanted === legal || wanted === preferred
-      }) || null
-    }
+    // Match the named realtor against active users.
+    const agentUser: any = await findAgentByName(realtorName)
 
     if (!agentUser) {
       // Realtor not matched: standalone check with everything needed to
