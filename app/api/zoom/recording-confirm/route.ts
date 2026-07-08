@@ -5,6 +5,8 @@ import { getGraphToken } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
 import { getEmailLayout, emailButton, emailSignature } from '@/lib/email/layout'
 
+export const maxDuration = 300
+
 const resend = new Resend(process.env.RESEND_API_KEY)
 const ONEDRIVE_USER = process.env.MICROSOFT_ONEDRIVE_USER!
 const SHAREPOINT_SITE = 'collectiverealtyco.sharepoint.com:/sites/agenttrainingcenter:'
@@ -248,13 +250,12 @@ export async function POST(req: NextRequest) {
       await deleteFromOneDrive(token, job.onedrive_item_id)
 
     } else {
-      // Fallback: download from Zoom directly (for older jobs without OneDrive)
-      const zoomRes = await fetch(`${job.mp4_download_url}?access_token=${job.zoom_token}`)
-      if (!zoomRes.ok) throw new Error(`Failed to download from Zoom: ${zoomRes.status}`)
-      const arrayBuffer = await zoomRes.arrayBuffer()
-      const fileBuffer = Buffer.from(arrayBuffer)
+      // Fallback: stream from Zoom to SharePoint in chunks (no full-file buffering)
+      const headRes = await fetch(`${job.mp4_download_url}?access_token=${job.zoom_token}`, { method: 'HEAD' })
+      if (!headRes.ok) throw new Error(`Failed to reach Zoom file: ${headRes.status}`)
+      const fileSize = Number(headRes.headers.get('content-length') || 0)
+      if (!fileSize) throw new Error('Could not determine Zoom file size')
 
-      // Upload buffer to SharePoint in chunks
       const itemPath = `${folder}/${fileName}`
       const sessionRes = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${itemPath}:/createUploadSession`,
@@ -267,15 +268,22 @@ export async function POST(req: NextRequest) {
       if (!sessionRes.ok) throw new Error(`Failed to create upload session: ${await sessionRes.text()}`)
       const { uploadUrl } = await sessionRes.json()
 
-      const chunkSize = 5 * 1024 * 1024
+      const chunkSize = 10 * 1024 * 1024
       let offset = 0
-      while (offset < fileBuffer.length) {
-        const end = Math.min(offset + chunkSize, fileBuffer.length)
-        const chunk = fileBuffer.slice(offset, end)
+      while (offset < fileSize) {
+        const end = Math.min(offset + chunkSize - 1, fileSize - 1)
+        const chunkDownload = await fetch(`${job.mp4_download_url}?access_token=${job.zoom_token}`, {
+          headers: { Range: `bytes=${offset}-${end}` },
+        })
+        if (!chunkDownload.ok && chunkDownload.status !== 206) {
+          throw new Error(`Zoom chunk download failed: ${chunkDownload.status}`)
+        }
+        const chunk = Buffer.from(await chunkDownload.arrayBuffer())
+
         const chunkRes = await fetch(uploadUrl, {
           method: 'PUT',
           headers: {
-            'Content-Range': `bytes ${offset}-${end - 1}/${fileBuffer.length}`,
+            'Content-Range': `bytes ${offset}-${end}/${fileSize}`,
             'Content-Length': String(chunk.length),
           },
           body: chunk,
@@ -284,9 +292,9 @@ export async function POST(req: NextRequest) {
           const result = await chunkRes.json()
           rawUrl = result.webUrl || ''
         } else if (chunkRes.status !== 202) {
-          throw new Error(`Upload chunk failed: ${chunkRes.status}`)
+          throw new Error(`SharePoint chunk upload failed: ${chunkRes.status} ${await chunkRes.text()}`)
         }
-        offset = end
+        offset = end + 1
       }
     }
 
