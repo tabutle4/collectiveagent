@@ -309,6 +309,11 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
   const [agentSearch, setAgentSearch]             = useState<Record<string, string>>({})
   const [agentDropdownOpen, setAgentDropdownOpen] = useState<Record<string, boolean>>({})
 
+  // External brokerage directory (previously used brokerages) + search state for new rows
+  const [brokerageDirectory, setBrokerageDirectory]       = useState<any[]>([])
+  const [brokerageSearch, setBrokerageSearch]             = useState<Record<string, string>>({})
+  const [brokerageDropdownOpen, setBrokerageDropdownOpen] = useState<Record<string, boolean>>({})
+
   const [agentsOpen, setAgentsOpen]               = useState(true)
   const [brokeragesOpen, setBrokeragesOpen]       = useState(true)
 
@@ -319,9 +324,10 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
 
     const load = async () => {
       try {
-        const [extRes, usersRes] = await Promise.all([
+        const [extRes, usersRes, dirRes] = await Promise.all([
           fetch(`/api/admin/transactions/${transactionId}?section=external_brokerages`),
           fetch('/api/users/list'),
+          fetch('/api/admin/external-brokerages'),
         ])
         if (extRes.ok) {
           const d = await extRes.json()
@@ -349,6 +355,10 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
             else if (a.user) searchInit[a.id] = `${a.user.preferred_first_name || a.user.first_name} ${a.user.preferred_last_name || a.user.last_name}`
           }
           setAgentSearch(searchInit)
+        }
+        if (dirRes.ok) {
+          const d = await dirRes.json()
+          setBrokerageDirectory(d.brokerages || [])
         }
       } finally {
         setLoading(false)
@@ -400,6 +410,39 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
     }
     setAgentSearch(p => ({ ...p, [rowId]: name }))
     setAgentDropdownOpen(p => ({ ...p, [rowId]: false }))
+  }
+
+  const filteredBrokerages = (rowId: string) => {
+    const q = (brokerageSearch[rowId] || '').toLowerCase()
+    if (!q) return brokerageDirectory
+    return brokerageDirectory.filter(b => (b.brokerage_name || '').toLowerCase().includes(q))
+  }
+
+  // Prefill a new brokerage row from a saved directory entry. Identity, contact,
+  // address and W-9 / federal ID only; commission and payment stay blank because
+  // they are specific to this deal.
+  const handleSelectBrokerage = (rowId: string, dir: any) => {
+    setNewBrokerageRows(p => p.map(r => r._id === rowId ? {
+      ...r,
+      brokerage_name:    dir.brokerage_name    || '',
+      brokerage_role:    dir.brokerage_role    || '',
+      agent_name:        dir.agent_name        || '',
+      agent_email:       dir.agent_email       || '',
+      agent_phone:       dir.agent_phone       || '',
+      broker_name:       dir.broker_name       || '',
+      broker_phone:      dir.broker_phone      || '',
+      broker_email:      dir.broker_email      || '',
+      brokerage_address: dir.brokerage_address || '',
+      brokerage_city:    dir.brokerage_city    || '',
+      brokerage_state:   dir.brokerage_state   || '',
+      brokerage_zip:     dir.brokerage_zip     || '',
+      side:              dir.side              || '',
+      federal_id_type:   dir.federal_id_type   || '',
+      federal_id_number: dir.federal_id_number || '',
+      w9_on_file:        dir.w9_on_file === true,
+    } : r))
+    setBrokerageSearch(p => ({ ...p, [rowId]: dir.brokerage_name || '' }))
+    setBrokerageDropdownOpen(p => ({ ...p, [rowId]: false }))
   }
 
   const callAction = async (action: string, extra: object) => {
@@ -563,6 +606,45 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
     )
   }
 
+  // Picker shown on new brokerage rows to prefill from a previously used brokerage.
+  function BrokerageSearchField({ rowId }: { rowId: string }) {
+    return (
+      <div className="col-span-2">
+        <Field label="Select Existing Brokerage">
+          <div className="relative">
+            <input
+              type="text"
+              className="input-luxury text-xs"
+              placeholder="Search saved brokerages..."
+              value={brokerageSearch[rowId] || ''}
+              onChange={e => {
+                setBrokerageSearch(p => ({ ...p, [rowId]: e.target.value }))
+                setBrokerageDropdownOpen(p => ({ ...p, [rowId]: true }))
+              }}
+              onFocus={() => setBrokerageDropdownOpen(p => ({ ...p, [rowId]: true }))}
+              onBlur={() => setTimeout(() => setBrokerageDropdownOpen(p => ({ ...p, [rowId]: false })), 150)}
+            />
+            {brokerageDropdownOpen[rowId] && filteredBrokerages(rowId).length > 0 && (
+              <div className="absolute z-20 w-full bg-white border border-luxury-gray-5 rounded-lg shadow-lg mt-1 max-h-52 overflow-y-auto">
+                {filteredBrokerages(rowId).map((b, i) => (
+                  <button
+                    key={`${b.brokerage_name}-${i}`}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-luxury-light text-luxury-gray-1"
+                    onMouseDown={() => handleSelectBrokerage(rowId, b)}
+                  >
+                    {b.brokerage_name}
+                    {b.broker_name ? <span className="text-luxury-gray-3"> ({b.broker_name})</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </Field>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-6">
@@ -723,6 +805,7 @@ export default function PayoutModal({ transactionId, agents, onClose, onSaved }:
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
+                      <BrokerageSearchField rowId={row._id} />
                       <Field label="Brokerage Name">
                         <input type="text" className="input-luxury text-xs" value={row.brokerage_name} onChange={e => setNewBrokerageF(row._id, 'brokerage_name', e.target.value)} placeholder="Brokerage name" />
                       </Field>
