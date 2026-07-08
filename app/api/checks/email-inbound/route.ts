@@ -93,10 +93,10 @@ export async function POST(request: NextRequest) {
     const fileName = `${checkLabel}_${checkId.substring(0, 8)}.${ext}`
 
     // Upload to OneDrive
-    const { fileUrl } = await graphClient.uploadFileToFolder(folderPath, fileName, fileBuffer)
+    const { fileUrl, downloadUrl } = await graphClient.uploadFileToFolder(folderPath, fileName, fileBuffer)
 
     // Build update payload — always save the image URL
-    const updateFields: Record<string, any> = { check_image_url: fileUrl }
+    const updateFields: Record<string, any> = { check_image_url: downloadUrl }
 
     // Run AI extraction if Anthropic key is configured — best-effort, never blocks save
     if (process.env.ANTHROPIC_API_KEY) {
