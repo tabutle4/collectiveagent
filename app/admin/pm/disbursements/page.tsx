@@ -100,6 +100,7 @@ export default function DisbursementsPage() {
     property_id: '',
     gross_rent: '',
     management_fee: '',
+    owner_charges_amount: '',
     reserve_amount: '',
     deposit_amount: '',
     other_deductions: '',
@@ -543,6 +544,7 @@ export default function DisbursementsPage() {
       property_id: '',
       gross_rent: '',
       management_fee: '',
+      owner_charges_amount: '',
       reserve_amount: '',
       deposit_amount: '',
       other_deductions: '',
@@ -603,6 +605,61 @@ export default function DisbursementsPage() {
     setHeldInTrust(null)
   }
 
+  // Fetch the paid invoice for a property+period and prefill gross rent
+  // (from rent_amount) and owner charges (sum of 'owner' line items on paid
+  // invoices for the period). Stale-guarded by the fetch counter.
+  const autofillFromInvoice = async (
+    propertyId: string,
+    periodMonth: number,
+    periodYear: number,
+    agreement: any,
+    myFetch: number
+  ) => {
+    try {
+      const res = await fetch(
+        `/api/pm/invoices?property_id=${propertyId}&period_month=${periodMonth}&period_year=${periodYear}`
+      )
+      if (!res.ok || myFetch !== propertyFetchCounter.current) return
+      const data = await res.json()
+
+      const paidInvoices = (data.invoices || []).filter((inv: any) => inv.status === 'paid')
+      if (paidInvoices.length === 0) {
+        // No paid invoice for this period - leave fields for manual entry.
+        return
+      }
+
+      // Rent from the paid invoice's rent_amount (rent only).
+      const rent = paidInvoices.reduce(
+        (sum: number, inv: any) => sum + Number(inv.rent_amount || 0), 0
+      )
+
+      // Owner charges from line-item charges on those paid invoices.
+      let ownerCharges = 0
+      const paidIds = paidInvoices.map((inv: any) => inv.id)
+      for (const invId of paidIds) {
+        const cRes = await fetch(`/api/pm/invoice-charges?tenant_invoice_id=${invId}`)
+        if (cRes.ok && myFetch === propertyFetchCounter.current) {
+          const cData = await cRes.json()
+          ownerCharges += (cData.charges || [])
+            .filter((c: any) => c.destination === 'owner')
+            .reduce((sum: number, c: any) => sum + Number(c.amount || 0), 0)
+        }
+      }
+
+      if (myFetch !== propertyFetchCounter.current) return
+
+      const rentStr = rent > 0 ? String(rent) : ''
+      setCreateForm(prev => ({
+        ...prev,
+        gross_rent: rentStr,
+        owner_charges_amount: ownerCharges > 0 ? String(Math.round(ownerCharges * 100) / 100) : '',
+        management_fee: computeMgmtFee(agreement, rentStr),
+      }))
+    } catch (err) {
+      console.error('Failed to autofill from invoice:', err)
+    }
+  }
+
   const handlePropertyChange = async (propertyId: string) => {
     // Bump the fetch counter and capture it locally. Any fetch whose
     // counter no longer matches by the time it resolves is stale and
@@ -633,6 +690,15 @@ export default function DisbursementsPage() {
       property_id: propertyId,
       management_fee: computeMgmtFee(agreement, prev.gross_rent),
     }))
+
+    // Auto-fill gross rent + owner charges from the paid invoice for this
+    // property and the currently-selected period. Rent comes from the
+    // invoice's rent_amount; owner charges are the sum of 'owner' line-item
+    // charges on paid invoices for the period (they add to landlord net).
+    // Only fills for rent-type disbursements.
+    if (disbursementType === 'rent') {
+      await autofillFromInvoice(propertyId, createForm.period_month, createForm.period_year, agreement, myFetch)
+    }
 
     // Load pending deductions for this property so admin can attach them.
     try {
@@ -708,10 +774,11 @@ export default function DisbursementsPage() {
       return parseFloat(createForm.deposit_amount) || 0
     }
     const gross = parseFloat(createForm.gross_rent) || 0
+    const ownerCharges = parseFloat(createForm.owner_charges_amount) || 0
     const mgmtFee = parseFloat(createForm.management_fee) || 0
     const reserve = parseFloat(createForm.reserve_amount) || 0
     const other = parseFloat(createForm.other_deductions) || 0
-    return gross - mgmtFee - reserve - other - selectedDeductionsTotal
+    return gross + ownerCharges - mgmtFee - reserve - other - selectedDeductionsTotal
   }
 
   const handleCreateDisbursement = async () => {
@@ -1225,6 +1292,10 @@ export default function DisbursementsPage() {
                             setTenantForm(prev => ({ ...prev, period_month: val }))
                           } else {
                             setCreateForm(prev => ({ ...prev, period_month: val }))
+                            if (createForm.property_id && disbursementType === 'rent') {
+                              const ag = getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+                              autofillFromInvoice(createForm.property_id, val, createForm.period_year, ag, ++propertyFetchCounter.current)
+                            }
                           }
                         }}
                         className="select-luxury w-full"
@@ -1246,6 +1317,10 @@ export default function DisbursementsPage() {
                             setTenantForm(prev => ({ ...prev, period_year: val }))
                           } else {
                             setCreateForm(prev => ({ ...prev, period_year: val }))
+                            if (createForm.property_id && disbursementType === 'rent') {
+                              const ag = getAgreementForProperty(createForm.landlord_id, createForm.property_id)
+                              autofillFromInvoice(createForm.property_id, createForm.period_month, val, ag, ++propertyFetchCounter.current)
+                            }
                           }
                         }}
                         className="select-luxury w-full"
@@ -1321,6 +1396,27 @@ export default function DisbursementsPage() {
                                 Cannot disburse on $0 gross rent. Wait for the next month with rent received. Pending deductions will carry over.
                               </p>
                             )}
+                          </div>
+
+                          <div>
+                            <label className="field-label">
+                              Owner Charges
+                              <span className="text-luxury-gray-3 font-normal ml-1">(from tenant charges going to landlord)</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={createForm.owner_charges_amount}
+                                readOnly
+                                className="input-luxury w-full pl-7 bg-luxury-light"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <p className="text-xs text-luxury-gray-3 mt-1">
+                              Auto-filled from paid invoice charges for this period. Added to the landlord&apos;s net.
+                            </p>
                           </div>
 
                           {(() => {
