@@ -480,33 +480,48 @@ export async function POST(req: NextRequest) {
       await sendErrorNotification(notifyEmail, meetingTitle, confirmUrl, err.message)
     }
 
-    // Send standard notification email per segment
-    const oneDriveNote = oneDriveSuccess
-    ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom recording will be deleted after you confirm upload to SharePoint.</p>`
-    : `<p style="font-size:13px;color:#c0392b;">OneDrive upload failed. Zoom recording still available for ~24 hours.</p>`
+    // Notification: only send immediately if the transcript is already present.
+    // If Zoom hasn't generated the transcript yet, hold the email — the
+    // send-recording-notifications cron will send it once the transcript lands
+    // (or after a 2-hour timeout fallback).
+    if (fullTranscript) {
+      const oneDriveNote = oneDriveSuccess
+      ? `<p style="font-size:13px;color:#4a7c59;">Video saved to OneDrive. Zoom recording will be deleted after you confirm upload to SharePoint.</p>`
+      : `<p style="font-size:13px;color:#c0392b;">OneDrive upload failed. Zoom recording still available for ~24 hours.</p>`
 
-    const notifyHtml = getEmailLayout(
-    `<p class="email-greeting">New Zoom recording ready for review.</p>
-    <div class="email-section">
-      <h3>Recording Details</h3>
-      <p><strong>Meeting:</strong> ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}</p>
-      <p><strong>Date:</strong> ${dateStr}</p>
-      <p><strong>Suggested Title:</strong> ${segmentTitle}</p>
-      <p><strong>Suggested Folder:</strong> ${suggestedFolder}</p>
-      <p><strong>Attendees captured:</strong> ${participants.length}</p>
-      ${oneDriveNote}
-    </div>
-    ${emailButton('Review & Upload to SharePoint', confirmUrl)}
-    ${emailSignature('Collective Agent', 'Automated Recording System')}`,
-    { title: 'New Recording Ready', preheader: `New recording: ${meetingTitle}` }
-  )
+      const notifyHtml = getEmailLayout(
+      `<p class="email-greeting">New Zoom recording ready for review.</p>
+      <div class="email-section">
+        <h3>Recording Details</h3>
+        <p><strong>Meeting:</strong> ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}</p>
+        <p><strong>Date:</strong> ${dateStr}</p>
+        <p><strong>Suggested Title:</strong> ${segmentTitle}</p>
+        <p><strong>Suggested Folder:</strong> ${suggestedFolder}</p>
+        <p><strong>Attendees captured:</strong> ${participants.length}</p>
+        ${oneDriveNote}
+      </div>
+      ${emailButton('Review & Upload to SharePoint', confirmUrl)}
+      ${emailSignature('Collective Agent', 'Automated Recording System')}`,
+      { title: 'New Recording Ready', preheader: `New recording: ${meetingTitle}` }
+    )
 
-    await resend.emails.send({
-      from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
-      to: notifyEmail,
-      subject: `New Recording Ready: ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}`,
-      html: notifyHtml,
-    })
+      await resend.emails.send({
+        from: 'Collective Notifications <notifications@coachingbrokeragetools.com>',
+        to: notifyEmail,
+        subject: `New Recording Ready: ${meetingTitle}${segmentLabel ? ` (${segmentLabel.trim()})` : ''}`,
+        html: notifyHtml,
+      })
+
+      await supabaseAdmin
+        .from('zoom_recording_jobs')
+        .update({ notification_sent: true })
+        .eq('id', job.id)
+    } else {
+      await supabaseAdmin
+        .from('zoom_recording_jobs')
+        .update({ notification_sent: false, notification_hold_since: new Date().toISOString() })
+        .eq('id', job.id)
+    }
 
     results.push({ ok: true, jobId: job.id })
   } // end segment loop
