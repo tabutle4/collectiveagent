@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     //    paid_at falls within period AND landlord/property match
     const { data: paidInvoices } = await supabaseAdmin
       .from('tenant_invoices')
-      .select('rent_amount, deposit_amount, paid_at')
+      .select('id, rent_amount, deposit_amount, late_fee, paid_at')
       .eq('landlord_id', landlordId)
       .eq('property_id', propertyId)
       .eq('status', 'paid')
@@ -112,6 +112,50 @@ export async function POST(request: NextRequest) {
       (sum, inv: any) => sum + Number(inv.deposit_amount || 0),
       0
     )
+
+    // 1b. Additional charges + late fees.
+    //   - Late fees (tenant_invoices.late_fee on paid invoices) are
+    //     CRC-retained per PM agreement 6(F): shown under "Fees Collected
+    //     by CRC", NOT landlord income. Pulled from invoices - they never
+    //     touch disbursements so they don't need to reconcile with net.
+    //   - Owner charges (tenant_invoice_charges destination='owner') are
+    //     landlord income. The disbursement route auto-includes them in
+    //     net_amount via owner_charges_amount, so the statement TOTAL is
+    //     read from disbursements (authoritative, reconciles with net).
+    //     The invoice line items provide the display labels.
+    //   - CRC charges (destination='crc') join late fees under Fees
+    //     Collected by CRC.
+    const ownerChargeBreakdown: { label: string; amount: number }[] = []
+    const adminFeeBreakdown: { label: string; amount: number }[] = []
+
+    const paidInvoiceIds = (paidInvoices || []).map((inv: any) => inv.id)
+
+    // Late fees -> admin fees (CRC)
+    for (const inv of (paidInvoices || [])) {
+      const lf = Number(inv.late_fee || 0)
+      if (lf > 0) {
+        adminFeeBreakdown.push({ label: 'Late Fee', amount: lf })
+      }
+    }
+
+    // Line-item charges on those paid invoices
+    if (paidInvoiceIds.length > 0) {
+      const { data: charges } = await supabaseAdmin
+        .from('tenant_invoice_charges')
+        .select('label, amount, destination')
+        .in('tenant_invoice_id', paidInvoiceIds)
+
+      for (const c of (charges || [])) {
+        const entry = { label: c.label, amount: Number(c.amount || 0) }
+        if (c.destination === 'crc') {
+          adminFeeBreakdown.push(entry)
+        } else {
+          ownerChargeBreakdown.push(entry)
+        }
+      }
+    }
+
+    const totalAdminFeesCrc = adminFeeBreakdown.reduce((s, c) => s + c.amount, 0)
 
     // 2. Mgmt fees: from paid pm_landlord_invoices within the period
     // (invoices are the canonical source for all landlords - full-service
@@ -141,6 +185,7 @@ export async function POST(request: NextRequest) {
         id,
         gross_rent,
         management_fee,
+        owner_charges_amount,
         other_deductions,
         deposit_amount,
         net_amount,
@@ -171,13 +216,21 @@ export async function POST(request: NextRequest) {
       (d: any) => ['pending', 'processing'].includes(d.payment_status)
     )
 
-    // Deductions: derive from the gap between gross_rent minus mgmt_fee and
-    // net_amount. This ensures the displayed deductions match exactly what
-    // produced the net — no double-counting with line-item deduction rows.
-    // Formula per disbursement: gross_rent - management_fee - net_amount
+    // Owner charges total: authoritative from disbursements so it always
+    // reconciles with net. (net = gross + owner_charges - mgmt - deductions - reserve)
+    const totalOwnerCharges = (disbursements || []).reduce(
+      (sum, d: any) => sum + Number(d.owner_charges_amount || 0), 0
+    )
+
+    // Deductions: derive from the gap between (gross_rent + owner charges)
+    // minus mgmt_fee and net_amount. This ensures the displayed deductions
+    // match exactly what produced the net — no double-counting with
+    // line-item deduction rows.
+    // Formula per disbursement:
+    //   gross_rent + owner_charges_amount - management_fee - net_amount
     const totalDeductions = (disbursements || []).reduce(
       (sum, d: any) => {
-        const implied = Number(d.gross_rent || 0) - Number(d.management_fee || 0) - Number(d.net_amount || 0)
+        const implied = Number(d.gross_rent || 0) + Number(d.owner_charges_amount || 0) - Number(d.management_fee || 0) - Number(d.net_amount || 0)
         return sum + Math.max(0, implied)
       }, 0
     )
@@ -237,6 +290,10 @@ export async function POST(request: NextRequest) {
         total_rent_collected: Math.round(totalRentCollected * 100) / 100,
         total_management_fees: Math.round(totalMgmtFees * 100) / 100,
         total_deductions: Math.round(totalDeductions * 100) / 100,
+        total_owner_charges: Math.round(totalOwnerCharges * 100) / 100,
+        owner_charges_breakdown: ownerChargeBreakdown,
+        total_admin_fees_crc: Math.round(totalAdminFeesCrc * 100) / 100,
+        admin_fees_breakdown: adminFeeBreakdown,
         total_deposits_in: Math.round(totalDepositsIn * 100) / 100,
         total_deposits_returned_to_landlord: Math.round(totalDepositsReturnedToLandlord * 100) / 100,
         total_deposits_refunded_to_tenant: Math.round(totalDepositsRefundedToTenant * 100) / 100,

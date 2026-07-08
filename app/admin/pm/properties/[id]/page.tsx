@@ -102,6 +102,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     label: '',
     amount: '',
     description: '',
+    destination: 'owner',
     period_month: new Date().getMonth() + 1,
     period_year: new Date().getFullYear(),
   })
@@ -295,35 +296,34 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         return
       }
 
-      // Build updated other_charges and description
-      const currentOther = Number(invoice.other_charges || 0)
-      const newOther = currentOther + parseFloat(chargeForm.amount)
-      const currentDesc = invoice.other_charges_description || ''
-      const newDesc = currentDesc
-        ? `${currentDesc}; ${chargeForm.label}${chargeForm.description ? ` (${chargeForm.description})` : ''}`
-        : `${chargeForm.label}${chargeForm.description ? ` (${chargeForm.description})` : ''}`
-
-      const patchRes = await fetch(`/api/pm/invoices/${invoice.id}`, {
-        method: 'PATCH',
+      // Write a line-item charge. The route re-syncs the invoice's
+      // other_charges total and total_amount automatically.
+      const postRes = await fetch('/api/pm/invoice-charges', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          other_charges: newOther,
-          other_charges_description: newDesc,
+          tenant_invoice_id: invoice.id,
+          label: chargeForm.label,
+          amount: parseFloat(chargeForm.amount),
+          description: chargeForm.description || null,
+          destination: chargeForm.destination,
         }),
       })
 
-      if (patchRes.ok) {
+      if (postRes.ok) {
         setShowAddChargeModal(false)
         setChargeForm({
           label: '',
           amount: '',
           description: '',
+          destination: 'owner',
           period_month: new Date().getMonth() + 1,
           period_year: new Date().getFullYear(),
         })
-        alert(`Charge of $${parseFloat(chargeForm.amount).toFixed(2)} added to the ${chargeForm.period_month}/${chargeForm.period_year} invoice.`)
+        const destLabel = chargeForm.destination === 'crc' ? 'retained by CRC' : 'to landlord'
+        alert(`Charge of $${parseFloat(chargeForm.amount).toFixed(2)} (${destLabel}) added to the ${chargeForm.period_month}/${chargeForm.period_year} invoice.`)
       } else {
-        const errData = await patchRes.json()
+        const errData = await postRes.json()
         alert(errData.error || 'Failed to add charge')
       }
     } catch (err: any) {
@@ -799,8 +799,10 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Bottom cards: Landlord Deductions + Tenant Charges - always visible */}
-      <div className="space-y-6 mt-6">
+      {/* Bottom cards: Landlord Deductions + Tenant Charges - stacked,
+          constrained to 2/3 width to match the main form column above. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+       <div className="lg:col-span-2 space-y-6">
         {/* Landlord Deductions */}
         <div className="container-card">
           <div className="flex items-center justify-between mb-4">
@@ -889,6 +891,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             Add a charge to a tenant&apos;s existing rent invoice for a specific month.
           </p>
         </div>
+       </div>
       </div>
 
       {/* Add Landlord Deduction Modal */}
@@ -1049,6 +1052,28 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   rows={2}
                   placeholder="Additional context"
                 />
+              </div>
+
+              <div>
+                <label className="field-label">Destination</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChargeForm(prev => ({ ...prev, destination: 'owner' }))}
+                    className={`text-left px-3 py-2 rounded border text-sm ${chargeForm.destination === 'owner' ? 'border-luxury-accent bg-luxury-light' : 'border-luxury-gray-5'}`}
+                  >
+                    <span className="font-semibold text-luxury-gray-1">Owner Charge</span>
+                    <span className="block text-xs text-luxury-gray-3">Goes to landlord (adds to their net)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChargeForm(prev => ({ ...prev, destination: 'crc' }))}
+                    className={`text-left px-3 py-2 rounded border text-sm ${chargeForm.destination === 'crc' ? 'border-luxury-accent bg-luxury-light' : 'border-luxury-gray-5'}`}
+                  >
+                    <span className="font-semibold text-luxury-gray-1">Administrative Fee</span>
+                    <span className="block text-xs text-luxury-gray-3">Retained by CRC per management agreement</span>
+                  </button>
+                </div>
               </div>
 
               <p className="text-xs text-luxury-gray-3">

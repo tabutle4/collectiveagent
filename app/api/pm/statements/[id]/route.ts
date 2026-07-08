@@ -176,13 +176,6 @@ export async function GET(
           amount: Number(d.other_deductions),
         })
       }
-      // Reserve replenishment withheld from this disbursement
-      if (Number(d.reserve_amount) > 0) {
-        deductionLines.push({
-          label: 'Reserve Replenishment',
-          amount: Number(d.reserve_amount),
-        })
-      }
     }
 
     // Pending deposit returns: deposit disbursements that are pending/processing
@@ -248,6 +241,12 @@ export async function GET(
       total_management_fees: fmt$(statement.total_management_fees),
       total_deductions: fmt$(statement.total_deductions),
       deduction_lines: deductionLines,
+      owner_charge_lines: (statement.owner_charges_breakdown as any[]) || [],
+      total_owner_charges: fmt$(statement.total_owner_charges),
+      has_owner_charges: Number(statement.total_owner_charges || 0) > 0,
+      admin_fee_lines: (statement.admin_fees_breakdown as any[]) || [],
+      total_admin_fees_crc: fmt$(statement.total_admin_fees_crc),
+      has_admin_fees: Number(statement.total_admin_fees_crc || 0) > 0,
       total_deposits_in: fmt$(statement.total_deposits_in),
       total_deposits_returned_to_landlord: fmt$(statement.total_deposits_returned_to_landlord),
       total_deposits_refunded_to_tenant: fmt$(statement.total_deposits_refunded_to_tenant),
@@ -384,6 +383,16 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Rent Collected</span>
         <span style="font-weight: 500;">${data.total_rent_collected}</span>
       </div>
+      ${data.has_owner_charges ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <div>
+          <span>Additional Charges</span>
+          <div style="color: #999; font-size: 9px; margin-top: 2px;">
+            ${(data.owner_charge_lines as any[]).map((c: any) => `<div>${c.label} (${fmt$(c.amount)})</div>`).join('')}
+          </div>
+        </div>
+        <span style="font-weight: 500;">+ ${data.total_owner_charges}</span>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
         <span>Management Fees <span style="color: #999; font-size: 9px; margin-left: 6px;">retained by CRC</span></span>
         <span style="font-weight: 500;">- ${data.total_management_fees}</span>
@@ -393,7 +402,7 @@ function generateStatementHTML(data: Record<string, any>): string {
           <span>Deductions</span>
           ${(data.deduction_lines as any[]).length > 0 ? `
           <div style="color: #999; font-size: 9px; margin-top: 2px;">
-            ${(data.deduction_lines as any[]).map((d: any) => `<div>${d.label} (${fmt$(d.amount)})</div>`).join('')}
+            ${(data.deduction_lines as any[]).map((d: any) => `${d.label} (${fmt$(d.amount)})`).join(' · ')}
           </div>` : `<span style="color: #999; font-size: 9px; margin-left: 6px;">repairs, HOA, etc.</span>`}
         </div>
         <span style="font-weight: 500;">- ${data.total_deductions}</span>
@@ -404,6 +413,26 @@ function generateStatementHTML(data: Record<string, any>): string {
       </div>
     </div>
   </div>
+
+  ${data.has_admin_fees ? `
+  <!-- Fees Collected by CRC section (not landlord income) -->
+  <div style="margin-bottom: 20px;">
+    <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Fees Collected by CRC</div>
+    <div style="font-size: 11px; color: #333;">
+      ${(data.admin_fee_lines as any[]).map((c: any) => `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd; color: #888;">
+        <span>${c.label}</span>
+        <span style="font-weight: 500;">${fmt$(c.amount)}</span>
+      </div>`).join('')}
+      <div style="display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 8px;">
+        <span style="font-weight: 600; color: #888;">Total Retained by CRC</span>
+        <span style="font-weight: 600; color: #888;">${data.total_admin_fees_crc}</span>
+      </div>
+      <div style="font-size: 9px; color: #aaa; margin-top: 6px; font-style: italic;">
+        Administrative fees collected from the tenant and retained by Collective Realty Co. per the management agreement. Not part of your net.
+      </div>
+    </div>
+  </div>` : ''}
 
   <!-- Security Deposit Activity section -->
   <div style="margin-bottom: 20px;">

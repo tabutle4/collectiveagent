@@ -92,7 +92,7 @@ export async function PATCH(
     ) {
       const { data: current } = await supabase
         .from('landlord_disbursements')
-        .select('gross_rent, management_fee, other_deductions, deposit_amount, reserve_amount, disbursement_type')
+        .select('gross_rent, management_fee, owner_charges_amount, other_deductions, deposit_amount, reserve_amount, disbursement_type')
         .eq('id', resolvedParams.id)
         .single()
 
@@ -109,13 +109,14 @@ export async function PATCH(
         } else {
           const gross = Number(filteredUpdates.gross_rent ?? current.gross_rent ?? 0)
           const mgmt = Number(filteredUpdates.management_fee ?? current.management_fee ?? 0)
+          const ownerCharges = Number(current.owner_charges_amount ?? 0)
           const other = Number(filteredUpdates.other_deductions ?? current.other_deductions ?? 0)
           const reserve = Number(filteredUpdates.reserve_amount ?? current.reserve_amount ?? 0)
           const lineItems = (deductionRows || []).reduce(
             (sum: number, d: any) => sum + Number(d.amount || 0),
             0
           )
-          filteredUpdates.net_amount = gross - mgmt - other - reserve - lineItems
+          filteredUpdates.net_amount = gross + ownerCharges - mgmt - other - reserve - lineItems
         }
       }
     }

@@ -123,9 +123,41 @@ export async function POST(request: NextRequest) {
     // Combine manual + recurring deduction totals for net calculation
     const allLineItemTotal = lineItemTotal + recurringLineItemTotal
 
+    // Auto-include owner charges from PAID tenant invoices for this
+    // property/period. These are line-item charges with destination='owner'
+    // (pet fees, utility reimbursements, etc.) collected from the tenant
+    // that belong to the landlord. They add to the landlord's net.
+    // CRC-retained charges (destination='crc') and late fees never touch
+    // the disbursement - they are CRC income per PM agreement 6(F).
+    // Kept in its own column (not folded into gross_rent) so the
+    // management fee stays a percentage of rents only.
+    let ownerChargesAmount = 0
+    if (!isDeposit && !isReserve) {
+      const { data: paidInvoices } = await supabase
+        .from('tenant_invoices')
+        .select('id')
+        .eq('property_id', property_id)
+        .eq('period_month', period_month)
+        .eq('period_year', period_year)
+        .eq('status', 'paid')
+
+      const paidIds = (paidInvoices || []).map((i: any) => i.id)
+      if (paidIds.length > 0) {
+        const { data: ownerCharges } = await supabase
+          .from('tenant_invoice_charges')
+          .select('amount')
+          .in('tenant_invoice_id', paidIds)
+          .eq('destination', 'owner')
+
+        ownerChargesAmount = (ownerCharges || []).reduce(
+          (sum: number, c: any) => sum + Number(c.amount || 0), 0
+        )
+      }
+    }
+
     const netAmount = (isDeposit || isReserve)
       ? depositAmt
-      : Number(gross_rent) - mgmtFee - otherDed - allLineItemTotal - reserveAmt
+      : Number(gross_rent) + ownerChargesAmount - mgmtFee - otherDed - allLineItemTotal - reserveAmt
 
     if (netAmount < 0) {
       return NextResponse.json(
@@ -191,6 +223,7 @@ export async function POST(request: NextRequest) {
         tenant_invoice_id: tenant_invoice_id || null,
         gross_rent: isDeposit || isReserve ? 0 : Number(gross_rent),
         management_fee: isDeposit || isReserve ? 0 : mgmtFee,
+        owner_charges_amount: isDeposit || isReserve ? 0 : ownerChargesAmount,
         deposit_amount: depositAmt,
         reserve_amount: reserveAmt,
         disbursement_type: disbursementType,

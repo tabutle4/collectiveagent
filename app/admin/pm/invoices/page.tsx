@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign, Pencil, X } from 'lucide-react'
+import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign, Pencil, X, Plus } from 'lucide-react'
 
 // ---- Tenant Invoice types ----
 interface TenantInvoice {
@@ -210,6 +210,10 @@ function TenantInvoicesTab() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [markPaidInvoice, setMarkPaidInvoice] = useState<TenantInvoice | null>(null)
   const [savingMarkPaid, setSavingMarkPaid] = useState(false)
+  const [invoiceCharges, setInvoiceCharges] = useState<any[]>([])
+  const [loadingCharges, setLoadingCharges] = useState(false)
+  const [newCharge, setNewCharge] = useState({ label: '', amount: '', destination: 'owner' })
+  const [savingCharge, setSavingCharge] = useState(false)
 
   useEffect(() => { loadInvoices() }, [])
   useEffect(() => { const t = setTimeout(loadInvoices, 300); return () => clearTimeout(t) }, [search, statusFilter])
@@ -292,6 +296,56 @@ function TenantInvoicesTab() {
       deposit_amount: String(inv.deposit_amount ?? ''), deposit_description: inv.deposit_description || '',
       due_date: inv.due_date, status: inv.status, notes: inv.notes || '',
     })
+    setNewCharge({ label: '', amount: '', destination: 'owner' })
+    loadCharges(inv.id)
+  }
+
+  const loadCharges = async (invoiceId: string) => {
+    setLoadingCharges(true)
+    try {
+      const res = await fetch(`/api/pm/invoice-charges?tenant_invoice_id=${invoiceId}`)
+      if (res.ok) {
+        const d = await res.json()
+        setInvoiceCharges(d.charges || [])
+      }
+    } catch { /* non-fatal */ }
+    finally { setLoadingCharges(false) }
+  }
+
+  const addCharge = async () => {
+    if (!editingInvoice) return
+    if (!newCharge.label || !newCharge.amount) { alert('Label and amount required'); return }
+    if (parseFloat(newCharge.amount) <= 0) { alert('Amount must be greater than zero'); return }
+    setSavingCharge(true)
+    try {
+      const res = await fetch('/api/pm/invoice-charges', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_invoice_id: editingInvoice.id,
+          label: newCharge.label,
+          amount: parseFloat(newCharge.amount),
+          destination: newCharge.destination,
+        }),
+      })
+      if (res.ok) {
+        setNewCharge({ label: '', amount: '', destination: 'owner' })
+        await loadCharges(editingInvoice.id)
+        loadInvoices()
+      } else { const d = await res.json(); alert(d.error || 'Failed to add charge') }
+    } catch { alert('Failed to add charge') }
+    finally { setSavingCharge(false) }
+  }
+
+  const deleteCharge = async (chargeId: string) => {
+    if (!editingInvoice) return
+    if (!confirm('Remove this charge?')) return
+    try {
+      const res = await fetch(`/api/pm/invoice-charges/${chargeId}`, { method: 'DELETE' })
+      if (res.ok) {
+        await loadCharges(editingInvoice.id)
+        loadInvoices()
+      } else { const d = await res.json(); alert(d.error || 'Failed to remove charge') }
+    } catch { alert('Failed to remove charge') }
   }
 
   const saveEdit = async () => {
@@ -302,10 +356,10 @@ function TenantInvoicesTab() {
       const body = isPaid
         ? { notes: editForm.notes || null, status: editForm.status }
         : {
+            // other_charges is managed via line-item charges (synced by the
+            // invoice-charges route), so it is intentionally NOT sent here.
             rent_amount: parseFloat(editForm.rent_amount) || 0,
             late_fee: parseFloat(editForm.late_fee) || 0,
-            other_charges: parseFloat(editForm.other_charges) || 0,
-            other_charges_description: editForm.other_charges_description || null,
             deposit_amount: parseFloat(editForm.deposit_amount) || 0,
             deposit_description: editForm.deposit_description || null,
             due_date: editForm.due_date, status: editForm.status, notes: editForm.notes || null,
@@ -459,16 +513,42 @@ function TenantInvoicesTab() {
                       </div>
                     ))}
                   </div>
-                  <div><label className="field-label">Other Charges</label>
-                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
-                      <input type="number" step="0.01" value={editForm.other_charges} onChange={e => setEditForm(p => ({...p, other_charges: e.target.value}))} className="input-luxury w-full pl-7" />
+                  <div className="border border-luxury-gray-5 rounded p-3">
+                    <label className="field-label">Additional Charges</label>
+                    {loadingCharges ? (
+                      <p className="text-xs text-luxury-gray-3 py-2">Loading charges...</p>
+                    ) : invoiceCharges.length === 0 ? (
+                      <p className="text-xs text-luxury-gray-3 py-2">No additional charges yet.</p>
+                    ) : (
+                      <div className="space-y-1 mb-3">
+                        {invoiceCharges.map((c: any) => (
+                          <div key={c.id} className="flex items-center justify-between text-sm border-b border-luxury-gray-5/50 py-1">
+                            <div className="min-w-0 flex-1">
+                              <span className="text-luxury-gray-1">{c.label}</span>
+                              <span className={`ml-2 text-xs ${c.destination === 'crc' ? 'text-luxury-accent' : 'text-luxury-gray-3'}`}>
+                                {c.destination === 'crc' ? 'CRC' : 'Landlord'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-luxury-gray-1">{formatMoney(Number(c.amount))}</span>
+                              <button onClick={() => deleteCharge(c.id)} className="text-luxury-gray-3 hover:text-red-600" title="Remove charge"><X size={13} /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <input type="text" value={newCharge.label} onChange={e => setNewCharge(p => ({...p, label: e.target.value}))} className="input-luxury w-full text-sm" placeholder="Label" />
+                      <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
+                        <input type="number" step="0.01" value={newCharge.amount} onChange={e => setNewCharge(p => ({...p, amount: e.target.value}))} className="input-luxury w-full pl-7 text-sm" placeholder="0.00" />
+                      </div>
                     </div>
+                    <select value={newCharge.destination} onChange={e => setNewCharge(p => ({...p, destination: e.target.value}))} className="select-luxury w-full text-sm mt-2">
+                      <option value="owner">Owner Charge (goes to landlord)</option>
+                      <option value="crc">Administrative Fee (retained by CRC)</option>
+                    </select>
+                    <button onClick={addCharge} disabled={savingCharge} className="btn btn-secondary text-xs w-full mt-2 flex items-center justify-center gap-1"><Plus size={12} />{savingCharge ? 'Adding...' : 'Add Charge'}</button>
                   </div>
-                  {parseFloat(editForm.other_charges) > 0 && (
-                    <div><label className="field-label">Other Charges Description</label>
-                      <input type="text" value={editForm.other_charges_description} onChange={e => setEditForm(p => ({...p, other_charges_description: e.target.value}))} className="input-luxury w-full" />
-                    </div>
-                  )}
                   <div><label className="field-label">Security Deposit</label>
                     <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-gray-3">$</span>
                       <input type="number" step="0.01" value={editForm.deposit_amount} onChange={e => setEditForm(p => ({...p, deposit_amount: e.target.value}))} className="input-luxury w-full pl-7" />
@@ -489,7 +569,7 @@ function TenantInvoicesTab() {
                   </div>
                   <div className="inner-card flex justify-between items-center">
                     <span className="text-sm text-luxury-gray-3">New Total</span>
-                    <span className="text-xl font-bold text-luxury-gray-1">{formatMoney((parseFloat(editForm.rent_amount)||0)+(parseFloat(editForm.late_fee)||0)+(parseFloat(editForm.other_charges)||0)+(parseFloat(editForm.deposit_amount)||0))}</span>
+                    <span className="text-xl font-bold text-luxury-gray-1">{formatMoney((parseFloat(editForm.rent_amount)||0)+(parseFloat(editForm.late_fee)||0)+invoiceCharges.reduce((s,c)=>s+Number(c.amount||0),0)+(parseFloat(editForm.deposit_amount)||0))}</span>
                   </div>
                   <button onClick={() => { setEditingInvoice(null); setMarkPaidInvoice(editingInvoice) }} className="btn btn-primary w-full flex items-center justify-center gap-2"><CheckCircle size={16} />Mark as Paid</button>
                 </>
