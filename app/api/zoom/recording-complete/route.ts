@@ -369,13 +369,15 @@ export async function POST(req: NextRequest) {
 
   // Topic suggestions based on transcript (shared across segments)
   const suggestedTopics = await suggestTopics(transcript, meetingTitle)
-  const dateStr = formatDate(startTime)
   const suggestedFolder = guessFolderFromTitle(meetingTitle)
   const topicStr = suggestedTopics.length > 0 ? ' - ' + suggestedTopics.join(' - ') : ''
 
   // Per-segment: dedup, insert, upload
   for (const mp4File of mp4Segments) {
     const segmentStartTime: string = mp4File.recording_start || startTime
+    // Date from the actual recording start (recording_start), not the meeting start_time,
+    // which Zoom can report hours off and cause a wrong date across midnight.
+    const dateStr = formatDate(segmentStartTime)
     const segmentLabel = mp4Segments.length > 1
       ? ` Part ${mp4Segments.indexOf(mp4File) + 1}`
       : ''
