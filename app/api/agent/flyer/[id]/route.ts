@@ -187,3 +187,60 @@ export async function PATCH(
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
+// ── PUT: admin-only edit of flyer display fields ────────────────────────────
+// Only users with can_view_all_transactions (operations/broker/admin) may edit.
+// Agents cannot reach this branch even though the route lives under /api/agent.
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
+  const canEdit = auth.permissions.has('can_view_all_transactions')
+  if (!canEdit) {
+    return NextResponse.json({ error: 'Not authorized to edit flyer fields' }, { status: 403 })
+  }
+
+  const { id: transactionId } = await params
+
+  try {
+    const body = await request.json()
+    const flyerId: string | null = body.flyer_id || null
+
+    // Whitelist of editable columns. Anything not listed is ignored.
+    const allowedTypes = ['just_listed', 'just_sold', 'just_leased', 'under_contract']
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() }
+
+    if (typeof body.flyer_type === 'string' && allowedTypes.includes(body.flyer_type)) {
+      updates.flyer_type = body.flyer_type
+    }
+    if (typeof body.city === 'string') {
+      updates.city = body.city.trim() || null
+    }
+    if (typeof body.flyer_division === 'string') {
+      updates.flyer_division = body.flyer_division.trim() || null
+    }
+    for (const numField of ['bedrooms', 'bathrooms', 'garage', 'sqft']) {
+      if (body[numField] === '' || body[numField] === null || body[numField] === undefined) {
+        updates[numField] = null
+      } else {
+        const n = Number(body[numField])
+        if (!Number.isNaN(n) && n >= 0) updates[numField] = n
+      }
+    }
+
+    const query = supabaseAdmin.from('transaction_flyers').update(updates)
+    if (flyerId) {
+      await query.eq('id', flyerId)
+    } else {
+      await query.eq('transaction_id', transactionId)
+    }
+
+    return NextResponse.json({ success: true, updates })
+  } catch (err: any) {
+    console.error('flyer PUT error:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}

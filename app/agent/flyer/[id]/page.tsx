@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Pencil, Save } from 'lucide-react'
 import { FLYER_FONT_CSS } from '@/lib/flyer-fonts'
+import { useAuth } from '@/lib/context/AuthContext'
 
 // ── Flyer type label helpers ──────────────────────────────────────────────────
 const FLYER_LABELS: Record<string, { just: string; type: string }> = {
@@ -148,6 +149,17 @@ export default function FlyerPage() {
   const flyerContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Admin-only edit panel
+  const { hasPermission } = useAuth()
+  const isAdmin = hasPermission('can_view_all_transactions')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [editFields, setEditFields] = useState({
+    flyer_type: '', city: '', flyer_division: '',
+    bedrooms: '', bathrooms: '', garage: '', sqft: '',
+  })
+
   // Load logo as base64 for embedding in canvas.
   // Uses a flyer-specific portrait logo so the shared /logo.png used elsewhere
   // (header, sidebar, PM portals, PDFs) is not affected.
@@ -174,6 +186,17 @@ export default function FlyerPage() {
         setTransaction(data.transaction)
         setAgent(data.agent)
         setPhotoUrl(data.flyer?.photo_url || null)
+        if (data.flyer) {
+          setEditFields({
+            flyer_type: data.flyer.flyer_type || '',
+            city: data.flyer.city || '',
+            flyer_division: data.flyer.flyer_division || '',
+            bedrooms: data.flyer.bedrooms != null ? String(data.flyer.bedrooms) : '',
+            bathrooms: data.flyer.bathrooms != null ? String(data.flyer.bathrooms) : '',
+            garage: data.flyer.garage != null ? String(data.flyer.garage) : '',
+            sqft: data.flyer.sqft != null ? String(data.flyer.sqft) : '',
+          })
+        }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
@@ -314,6 +337,42 @@ export default function FlyerPage() {
     }
   }
 
+  const saveEdits = async () => {
+    setSaving(true)
+    setError('')
+    setSaveSuccess(false)
+    try {
+      const res = await fetch(`/api/agent/flyer/${transactionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flyer_id: flyer?.id || null, ...editFields }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setError(data.error || 'Save failed')
+        return
+      }
+      // Update local flyer so the preview reflects the edits immediately
+      setFlyer((prev: any) => ({
+        ...prev,
+        flyer_type: editFields.flyer_type,
+        city: editFields.city.trim() || null,
+        flyer_division: editFields.flyer_division.trim() || null,
+        bedrooms: editFields.bedrooms === '' ? null : Number(editFields.bedrooms),
+        bathrooms: editFields.bathrooms === '' ? null : Number(editFields.bathrooms),
+        garage: editFields.garage === '' ? null : Number(editFields.garage),
+        sqft: editFields.sqft === '' ? null : Number(editFields.sqft),
+      }))
+      setSaveSuccess(true)
+      setEditing(false)
+      setTimeout(() => setSaveSuccess(false), 2500)
+    } catch (err: any) {
+      setError('Save failed: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -415,6 +474,126 @@ export default function FlyerPage() {
           <div className="flex items-center gap-2 p-3 bg-luxury-accent/5 border border-luxury-accent/20 rounded text-xs text-luxury-gray-2">
             <AlertCircle size={13} className="text-luxury-accent flex-shrink-0" />
             You can download without a photo, but the flyer will show a placeholder. Upload a photo for a complete flyer.
+          </div>
+        )}
+
+        {/* Admin-only edit panel */}
+        {isAdmin && (
+          <div className="border border-luxury-gray-5 rounded p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-luxury-gray-2 flex items-center gap-1.5">
+                <Pencil size={13} className="text-luxury-accent" /> Admin: Edit Flyer Fields
+              </p>
+              {!editing && (
+                <button onClick={() => setEditing(true)} className="btn btn-secondary text-xs">
+                  Edit
+                </button>
+              )}
+              {saveSuccess && (
+                <span className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 size={13} /> Saved
+                </span>
+              )}
+            </div>
+
+            {editing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="field-label">Flyer Type</label>
+                    <select
+                      className="select-luxury"
+                      value={editFields.flyer_type}
+                      onChange={e => setEditFields(f => ({ ...f, flyer_type: e.target.value }))}
+                    >
+                      <option value="just_listed">Just Listed</option>
+                      <option value="just_sold">Just Sold</option>
+                      <option value="just_leased">Just Leased</option>
+                      <option value="under_contract">Under Contract</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">City</label>
+                    <input
+                      className="input-luxury"
+                      value={editFields.city}
+                      onChange={e => setEditFields(f => ({ ...f, city: e.target.value }))}
+                      placeholder="Iowa Colony, TX"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Division</label>
+                    <input
+                      className="input-luxury"
+                      value={editFields.flyer_division}
+                      onChange={e => setEditFields(f => ({ ...f, flyer_division: e.target.value }))}
+                      placeholder="Houston"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Bedrooms</label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      min="0"
+                      value={editFields.bedrooms}
+                      onChange={e => setEditFields(f => ({ ...f, bedrooms: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Bathrooms</label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={editFields.bathrooms}
+                      onChange={e => setEditFields(f => ({ ...f, bathrooms: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Car Garage</label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      min="0"
+                      value={editFields.garage}
+                      onChange={e => setEditFields(f => ({ ...f, garage: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Sq. Ft.</label>
+                    <input
+                      className="input-luxury"
+                      type="number"
+                      min="0"
+                      value={editFields.sqft}
+                      onChange={e => setEditFields(f => ({ ...f, sqft: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveEdits}
+                    disabled={saving}
+                    className="btn btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <><Loader2 size={13} className="animate-spin" /> Saving...</>
+                    ) : (
+                      <><Save size={13} /> Save Changes</>
+                    )}
+                  </button>
+                  <button onClick={() => setEditing(false)} className="btn btn-secondary text-xs">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-luxury-gray-3">
+                Edit the flyer type, city, division, and property stats. Changes update the preview and the saved flyer.
+              </p>
+            )}
           </div>
         )}
 
