@@ -16,6 +16,7 @@ interface Form {
 
 interface Submission {
   id: string
+  kind?: string
   created_at: string
   agent_name: string
   property_address: string
@@ -137,10 +138,20 @@ export default function AgentFormsPage() {
 
   const loadSubmissions = async (userId: string) => {
     try {
-      const res = await fetch(`/api/form-responses?type=listings&agent_id=${userId}`)
-      const data = await res.json()
-      if (!res.ok) console.error('Error loading submissions:', data.error)
-      else setSubmissions(data.listings || [])
+      const [listingsRes, formsRes] = await Promise.all([
+        fetch(`/api/form-responses?type=listings&agent_id=${userId}`),
+        fetch('/api/form-responses?type=my_submissions'),
+      ])
+      const listingsData = await listingsRes.json()
+      const formsData = await formsRes.json()
+      if (!listingsRes.ok) console.error('Error loading submissions:', listingsData.error)
+      if (!formsRes.ok) console.error('Error loading form submissions:', formsData.error)
+      const listingRows = (listingsRes.ok ? listingsData.listings || [] : []).map((l: any) => ({ ...l, kind: 'listing' }))
+      const formRows = formsRes.ok ? formsData.submissions || [] : []
+      const merged = [...listingRows, ...formRows].sort(
+        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      setSubmissions(merged)
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
@@ -155,6 +166,7 @@ export default function AgentFormsPage() {
   }
 
   const handleRowClick = (submission: any) => {
+    if (submission.kind === 'form') return
     setSelectedSubmission(submission)
     setModalOpen(true)
     setUpdateMessage('')
@@ -207,6 +219,12 @@ export default function AgentFormsPage() {
 
   const getStatusStyle = (status: string) => {
     switch (status) {
+      case 'complete':
+        return 'bg-green-50 text-green-700'
+      case 'incomplete':
+        return 'bg-red-50 text-red-600'
+      case 'in_review':
+        return 'bg-yellow-50 text-yellow-700'
       case 'active':
         return 'bg-green-50 text-green-700'
       case 'pre-listing':
@@ -420,7 +438,7 @@ export default function AgentFormsPage() {
                       <tr
                         key={s.id}
                         onClick={() => handleRowClick(s)}
-                        className="border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors cursor-pointer"
+                        className={`border-b border-luxury-gray-5/30 last:border-0 hover:bg-luxury-light/50 transition-colors ${s.kind === 'form' ? '' : 'cursor-pointer'}`}
                       >
                         <td className="py-3 px-4 text-xs text-luxury-gray-3">
                           {formatDate(s.created_at)}
@@ -436,7 +454,7 @@ export default function AgentFormsPage() {
                           <span
                             className={`text-xs px-2.5 py-1 rounded font-medium capitalize ${getStatusStyle(s.status)}`}
                           >
-                            {s.status}
+                            {s.status.replace(/_/g, ' ')}
                           </span>
                         </td>
                       </tr>
@@ -450,7 +468,7 @@ export default function AgentFormsPage() {
                   <div
                     key={s.id}
                     onClick={() => handleRowClick(s)}
-                    className="inner-card cursor-pointer"
+                    className={`inner-card ${s.kind === 'form' ? '' : 'cursor-pointer'}`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-sm font-semibold text-luxury-gray-1">
@@ -459,7 +477,7 @@ export default function AgentFormsPage() {
                       <span
                         className={`text-xs px-2.5 py-1 rounded font-medium capitalize flex-shrink-0 ml-2 ${getStatusStyle(s.status)}`}
                       >
-                        {s.status}
+                        {s.status.replace(/_/g, ' ')}
                       </span>
                     </div>
                     <div className="space-y-1 text-xs text-luxury-gray-3">

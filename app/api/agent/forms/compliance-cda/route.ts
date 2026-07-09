@@ -11,6 +11,17 @@ export const dynamic = 'force-dynamic'
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM_EMAIL = 'Collective Realty Co. <transactions@coachingbrokeragetools.com>'
 
+// A typed address rarely matches the stored one exactly (commas, suffixes,
+// city/zip present or missing, double spaces). Fall back to matching on the
+// street number + street name when the full string finds nothing.
+function addressSearchTerms(typed: string): string[] {
+  const full = typed.replace(/\s+/g, ' ').trim()
+  const tokens = full.replace(/[.,#]/g, ' ').replace(/\s+/g, ' ').trim().split(' ')
+  const terms = [full]
+  if (tokens.length >= 2) terms.push(`${tokens[0]} ${tokens[1]}`)
+  return terms
+}
+
 async function findTransactionByAddress(agentId: string, propertyAddress: string) {
   const { data: tiaRows } = await supabaseAdmin
     .from('transaction_internal_agents')
@@ -18,15 +29,18 @@ async function findTransactionByAddress(agentId: string, propertyAddress: string
     .eq('agent_id', agentId)
   if (!tiaRows?.length) return null
   const ids = tiaRows.map((r: any) => r.transaction_id)
-  const { data } = await supabaseAdmin
-    .from('transactions')
-    .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status')
-    .ilike('property_address', `%${propertyAddress.trim()}%`)
-    .in('id', ids)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return data || null
+  for (const term of addressSearchTerms(propertyAddress)) {
+    const { data } = await supabaseAdmin
+      .from('transactions')
+      .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status')
+      .ilike('property_address', `%${term}%`)
+      .in('id', ids)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (data) return data
+  }
+  return null
 }
 
 async function sendNotifications(emails: string[], subject: string, html: string, identifier: string) {
@@ -64,10 +78,12 @@ export async function GET(request: NextRequest) {
       const { data: tiaRows } = await supabaseAdmin.from('transaction_internal_agents').select('transaction_id').eq('agent_id', lookupAgentId)
       if (tiaRows?.length) {
         const ids = tiaRows.map((r: any) => r.transaction_id)
-        const { data } = await supabaseAdmin.from('transactions')
-          .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division')
-          .ilike('property_address', `%${address.trim()}%`).in('id', ids).order('created_at', { ascending: false }).limit(5)
-        txn = data?.[0] || null
+        for (const term of addressSearchTerms(address)) {
+          const { data } = await supabaseAdmin.from('transactions')
+            .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division')
+            .ilike('property_address', `%${term}%`).in('id', ids).order('created_at', { ascending: false }).limit(5)
+          if (data?.length) { txn = data[0]; break }
+        }
       }
     }
     if (!txn) return NextResponse.json({ transaction: null, last_submission: null })
@@ -449,7 +465,8 @@ export async function POST(request: NextRequest) {
     await sendNotifications(notificationEmails, 'Compliance & CDA Request', notifyHtml, submissionData.property_address || '')
     const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
     try {
-      await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], subject: `Compliance Request Received - ${submissionData.property_address}`,
+      const ccList = notificationEmails.filter(e => e?.trim()).map(e => e.trim())
+      await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], ...(ccList.length ? { cc: ccList } : {}), subject: `Compliance Request Received - ${submissionData.property_address}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your compliance review and CDA request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong> has been received. Our team will review your documents and follow up shortly.</p>
            <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${flyerIsLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>

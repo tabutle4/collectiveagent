@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
 
 export async function GET(request: NextRequest) {
@@ -27,6 +28,41 @@ export async function GET(request: NextRequest) {
 
       if (error) throw error
       return NextResponse.json({ prospects: data || [] })
+    }
+
+    // The caller's own form submissions (compliance, recheck, retainer, under
+    // contract) for the My Submissions tab. Always scoped to the logged-in
+    // user; the agent_id query param is intentionally ignored here. Listing
+    // submissions are excluded because the tab already shows them from the
+    // listings table.
+    if (type === 'my_submissions') {
+      const { data, error } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('id, submitted_at, status, data')
+        .eq('agent_id', auth.user!.id)
+        .order('submitted_at', { ascending: false })
+        .limit(200)
+
+      if (error) throw error
+
+      const MODE_LABEL: Record<string, string> = {
+        compliance: 'Compliance & CDA',
+        subsequent: 'Recheck',
+        retainer: 'Retainer',
+        under_contract: 'Under Contract',
+      }
+      const rows = (data || [])
+        .filter((r: any) => MODE_LABEL[r.data?.submission_mode || ''])
+        .map((r: any) => ({
+          id: r.id,
+          created_at: r.submitted_at,
+          property_address: r.data?.property_address || r.data?.client_name || '-',
+          client_names: r.data?.client_name || '-',
+          transaction_type: MODE_LABEL[r.data?.submission_mode],
+          status: r.status || 'submitted',
+          kind: 'form',
+        }))
+      return NextResponse.json({ submissions: rows })
     }
 
     if (type === 'listings') {
