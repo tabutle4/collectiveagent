@@ -91,21 +91,21 @@ function buildFlyerHTML(d: FlyerData): string {
       ${FLYER_FONT_CSS}
       * { margin: 0; padding: 0; box-sizing: border-box; }
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
-      .top-zone { height: 240px; padding: 40px 52px 0 52px; position: relative; }
-      .logo { position: absolute; top: 36px; right: 52px; height: 140px; width: auto; display: block; }
-      .headline { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
-      .just-box { background: #000; padding: 10px 20px 12px 20px; display: inline-block; }
+      .top-zone { height: 280px; padding: 52px 52px 0 52px; position: relative; }
+      .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
+      .headline { display: flex; align-items: center; gap: 14px; padding-top: 12px; }
+      .just-box { background: #000; padding: 16px 24px 18px 24px; display: inline-block; }
       .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
       .city { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 26px; color: #000; letter-spacing: 0.2em; text-transform: uppercase; line-height: 1; margin-top: 12px; }
       .photo-zone { height: 930px; position: relative; overflow: hidden; }
       .photo { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
       .photo-placeholder { width: 100%; height: 100%; background: #d8d5cd; display: flex; align-items: center; justify-content: center; color: #b0ada6; font-family: "Aileron", sans-serif; font-size: 20px; letter-spacing: 0.18em; text-transform: uppercase; }
-      .stats-box { position: absolute; bottom: 36px; left: 130px; right: 130px; height: 120px; background: #fff; border: 2px solid #111; display: flex; align-items: stretch; }
-      .stat-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; position: relative; }
-      .stat-item:not(:last-child)::after { content: ''; position: absolute; right: 0; top: 18%; height: 64%; width: 2px; background: #111; }
-      .stat-num { font-family: "TheSeasons", serif; font-style: normal; font-size: 44px; color: #000; line-height: 1; }
-      .stat-label { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 17px; color: #222; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1; }
+      .stats-box { position: absolute; bottom: 36px; left: 130px; right: 130px; min-height: 150px; padding: 16px 20px; background: #fff; border: 2px solid #111; display: flex; align-items: stretch; }
+      .stat-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; position: relative; padding: 4px 0; }
+      .stat-item:not(:last-child)::after { content: ''; position: absolute; right: 0; top: 14%; height: 72%; width: 2px; background: #111; }
+      .stat-num { font-family: "TheSeasons", serif; font-style: normal; font-size: 48px; color: #000; line-height: 1; }
+      .stat-label { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 18px; color: #222; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1; }
       .bottom-zone { height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 0 52px; }
       .agent-name { font-family: "TheSeasons", serif; font-style: normal; font-size: 52px; color: #000; letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.05; text-align: center; }
       .agent-email { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 23px; color: #000; letter-spacing: 0.07em; text-decoration: underline; text-underline-offset: 4px; text-align: center; line-height: 1; }
