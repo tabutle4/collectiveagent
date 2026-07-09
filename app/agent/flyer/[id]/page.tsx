@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { FLYER_FONT_CSS } from '@/lib/flyer-fonts'
