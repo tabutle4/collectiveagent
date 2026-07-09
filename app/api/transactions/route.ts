@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows, supabaseAdmin } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
@@ -112,14 +113,14 @@ export async function POST(request: NextRequest) {
       submittedBy = body.submitted_by
     }
 
-    const transactionData = {
+    const transactionData = normalizeTransactionEntryFields({
       ...body,
       submitted_by: submittedBy,
       status: body.status || 'prospect',
       compliance_status: body.compliance_status || 'not_requested',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }
+    })
 
     // Remove fields that shouldn't be inserted directly
     delete transactionData.id

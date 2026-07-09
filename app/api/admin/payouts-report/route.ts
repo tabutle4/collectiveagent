@@ -89,6 +89,25 @@ export async function GET(request: NextRequest) {
       transactions = txnRes.data || []
     }
 
+    // Compliance is per side: each agent's compliance submission holds that
+    // side's status. An agent is payable when THEIR side is complete, not when
+    // the whole deal is. Load side statuses for the deals in view.
+    const sideStatusByTxnAgent: Record<string, string> = {}
+    const sideStatusesByTxn: Record<string, string[]> = {}
+    if (txnIds.length) {
+      const { data: sideSubs } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('transaction_id, agent_id, status, data')
+        .in('transaction_id', txnIds)
+        .filter('data->>submission_mode', 'eq', 'compliance')
+      for (const s of sideSubs || []) {
+        if (!s.transaction_id) continue
+        sideStatusByTxnAgent[`${s.transaction_id}:${s.agent_id}`] = s.status
+        if (!sideStatusesByTxn[s.transaction_id]) sideStatusesByTxn[s.transaction_id] = []
+        sideStatusesByTxn[s.transaction_id].push(s.status)
+      }
+    }
+
     // Pull staged-but-pending debts/credits keyed by TIA so we can subtract
     // them from agent_net. After Mark Paid, agent_net already reflects them
     // (debts_deducted is on the row), so we only adjust for rows where the
@@ -199,6 +218,7 @@ export async function GET(request: NextRequest) {
           payment_status: a.payment_status,
           payment_date: a.payment_date,
           is_lease: isLease,
+          side_compliance: sideStatusByTxnAgent[`${a.transaction_id}:${a.agent_id}`] || null,
         }
       })
 
@@ -212,7 +232,15 @@ export async function GET(request: NextRequest) {
       }))
 
       const address = check.property_address || txn?.property_address || 'Unknown'
-      const complianceStatus = txn?.compliance_status || (check.compliance_complete_date ? 'complete' : 'not_submitted')
+      const sideStatuses = txn ? sideStatusesByTxn[txn.id] || [] : []
+      const sidesDerived = sideStatuses.length === 0
+        ? null
+        : sideStatuses.includes('incomplete')
+          ? 'incomplete'
+          : sideStatuses.some(s => s === 'in_review' || s === 'submitted')
+            ? 'in_review'
+            : 'complete'
+      const complianceStatus = sidesDerived || txn?.compliance_status || (check.compliance_complete_date ? 'complete' : 'not_submitted')
 
       // Standalone check with direct agent
       const standaloneAgentName = check.agent_id ? agentNames[check.agent_id] : null

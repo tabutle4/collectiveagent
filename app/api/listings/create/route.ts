@@ -9,6 +9,7 @@ import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
+import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 // Helper function to find existing transaction by property address and agent.
 // Matches on a normalized address key so slight typing differences still match
@@ -96,7 +97,7 @@ async function findOrCreateListingTransaction(
         property_address: listing.property_address,
         status,
         transaction_type: listing.transaction_type || 'sale',
-        client_name: body.client_names || null,
+        client_name: body.client_names ? formatNameToTitleCase(String(body.client_names).trim()) : null,
         client_email: body.client_email || null,
         client_phone: body.client_phone || null,
         lead_source: body.lead_source || null,

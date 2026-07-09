@@ -5,35 +5,42 @@ import { supabaseAdmin } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 // GET /api/admin/compliance
-// Lists agent form submissions (compliance, subsequent, retainer) with
-// agent, transaction, and flyer info for the admin queue.
+// Leah's compliance tracker. Compliance is per side: each row is one compliance
+// submission (one agent, one side of a deal). The submission holds the truth:
+// its status, admin_notes (missing items), reviewed_at (date completed). A
+// subsequent recheck on the same deal does not add a row; it flags the existing
+// side's row. Paid, flyer, and CDA are auto-derived, read-only.
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_review_compliance')
   if (auth.error) return auth.error
 
   try {
-    const { searchParams } = new URL(request.url)
-    const mode = searchParams.get('mode') // compliance | subsequent | retainer | all
-    const limit = Math.min(parseInt(searchParams.get('limit') || '200'), 500)
-
-    const { data: submissions, error } = await supabaseAdmin
+    const { data: allRows, error } = await supabaseAdmin
       .from('agent_form_submissions')
-      .select('id, agent_id, transaction_id, submitted_at, status, data, created_at')
+      .select('id, agent_id, transaction_id, submitted_at, status, data, admin_notes, reviewed_at, created_at')
       .order('submitted_at', { ascending: false })
-      .limit(limit)
+      .limit(3000)
 
     if (error) throw error
 
-    let rows = submissions || []
-
-    // Filter by mode if requested (mode lives inside data jsonb)
-    if (mode && mode !== 'all') {
-      rows = rows.filter((r: any) => (r.data?.submission_mode || 'compliance') === mode)
+    const rows = (allRows || []).filter(
+      (r: any) => (r.data?.submission_mode || '') === 'compliance'
+    )
+    const recheckByTxn: Record<string, { submitted_at: string; changed_fields: string[] | null }> = {}
+    for (const r of allRows || []) {
+      if ((r.data?.submission_mode || '') === 'subsequent' && r.transaction_id) {
+        if (!recheckByTxn[r.transaction_id]) {
+          recheckByTxn[r.transaction_id] = {
+            submitted_at: r.submitted_at,
+            changed_fields: r.data?.changed_fields || null,
+          }
+        }
+      }
     }
 
-    // Batch load agents
+    // Batch: agents
     const agentIds = Array.from(new Set(rows.map((r: any) => r.agent_id).filter(Boolean)))
-    const agentMap: Record<string, any> = {}
+    const agentMap: Record<string, string> = {}
     if (agentIds.length) {
       const { data: agents } = await supabaseAdmin
         .from('users')
@@ -44,18 +51,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch load transactions
+    // Batch: transactions
     const txnIds = Array.from(new Set(rows.map((r: any) => r.transaction_id).filter(Boolean)))
     const txnMap: Record<string, any> = {}
     if (txnIds.length) {
       const { data: txns } = await supabaseAdmin
         .from('transactions')
-        .select('id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status')
+        .select('id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date')
         .in('id', txnIds)
       for (const t of txns || []) txnMap[t.id] = t
     }
 
-    // Batch load flyers for these transactions
+    // Batch: flyers
     const flyerMap: Record<string, any> = {}
     if (txnIds.length) {
       const { data: flyers } = await supabaseAdmin
@@ -68,16 +75,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch load rejected documents (the "what's missing" from Leah's review).
-    // These carry the reviewer's compliance_notes per document.
-    const missingMap: Record<string, { name: string; notes: string | null }[]> = {}
+    // Batch: rejected docs per SIDE (missing items default). Docs tagged to a
+    // submission belong to that side; untagged docs count toward every side.
+    const rejectedBySub: Record<string, { name: string; notes: string | null }[]> = {}
+    const rejectedShared: Record<string, { name: string; notes: string | null }[]> = {}
     if (txnIds.length) {
       const { data: rejectedDocs } = await supabaseAdmin
         .from('transaction_documents')
-        .select('transaction_id, file_name, compliance_notes, required_document_id')
+        .select('transaction_id, submission_id, file_name, compliance_notes, required_document_id')
         .in('transaction_id', txnIds)
         .eq('compliance_status', 'rejected')
-      // Resolve required-document names for nicer labels
       const rdIds = Array.from(
         new Set((rejectedDocs || []).filter((d: any) => d.required_document_id).map((d: any) => d.required_document_id))
       )
@@ -91,35 +98,27 @@ export async function GET(request: NextRequest) {
       }
       for (const d of rejectedDocs || []) {
         const name = d.required_document_id && rdMap[d.required_document_id] ? rdMap[d.required_document_id] : d.file_name
-        if (!missingMap[d.transaction_id]) missingMap[d.transaction_id] = []
-        missingMap[d.transaction_id].push({ name, notes: d.compliance_notes || null })
+        const item = { name, notes: d.compliance_notes || null }
+        if (d.submission_id) {
+          if (!rejectedBySub[d.submission_id]) rejectedBySub[d.submission_id] = []
+          rejectedBySub[d.submission_id].push(item)
+        } else if (d.transaction_id) {
+          if (!rejectedShared[d.transaction_id]) rejectedShared[d.transaction_id] = []
+          rejectedShared[d.transaction_id].push(item)
+        }
       }
     }
 
-    // Batch load the latest compliance review per transaction (reviewer + when).
-    const reviewMap: Record<string, any> = {}
-    if (txnIds.length) {
-      const { data: reviews } = await supabaseAdmin
-        .from('compliance_reviews')
-        .select('transaction_id, status, notes, completed_at')
-        .in('transaction_id', txnIds)
-        .order('completed_at', { ascending: false, nullsFirst: false })
-      for (const rv of reviews || []) {
-        if (!reviewMap[rv.transaction_id]) reviewMap[rv.transaction_id] = rv
-      }
-    }
-
-    // Batch load the primary agent's payment status to auto-derive "Paid".
-    const paidMap: Record<string, boolean> = {}
+    // Batch: paid per agent per deal (the side's own agent got paid)
+    const paidByTxnAgent: Record<string, boolean> = {}
     if (txnIds.length) {
       const { data: internalAgents } = await supabaseAdmin
         .from('transaction_internal_agents')
-        .select('transaction_id, agent_role, payment_status')
+        .select('transaction_id, agent_id, payment_status')
         .in('transaction_id', txnIds)
       for (const ia of internalAgents || []) {
-        // A deal counts as paid when its primary agent has been paid.
-        if (ia.agent_role === 'primary_agent' && ia.payment_status === 'paid') {
-          paidMap[ia.transaction_id] = true
+        if (ia.payment_status === 'paid') {
+          paidByTxnAgent[`${ia.transaction_id}:${ia.agent_id}`] = true
         }
       }
     }
@@ -127,38 +126,41 @@ export async function GET(request: NextRequest) {
     const result = rows.map((r: any) => {
       const txn = txnMap[r.transaction_id] || null
       const flyer = flyerMap[r.transaction_id] || null
+      const d = r.data || {}
+      const missing = [
+        ...(rejectedBySub[r.id] || []),
+        ...(r.transaction_id ? rejectedShared[r.transaction_id] || [] : []),
+      ]
+      const recheck = r.transaction_id ? recheckByTxn[r.transaction_id] || null : null
       return {
         id: r.id,
-        submitted_at: r.submitted_at,
-        status: r.status,
-        submission_mode: r.data?.submission_mode || 'compliance',
+        transaction_id: r.transaction_id,
         agent_id: r.agent_id,
         agent_name: agentMap[r.agent_id] || 'Unknown',
-        transaction_id: r.transaction_id,
-        property_address: txn?.property_address || r.data?.property_address || null,
-        client_name: txn?.client_name || r.data?.client_name || null,
-        transaction_status: txn?.status || null,
-        compliance_status: txn?.compliance_status || null,
+        submitted_at: r.submitted_at,
+        side: d.representing || null,
+        // The truth: submission status + Leah's fields
+        compliance_status: r.status,
+        missing_notes: r.admin_notes,
+        completed_at: r.reviewed_at,
+        // Auto-derived, read-only
+        paid: !!(r.transaction_id && r.agent_id && paidByTxnAgent[`${r.transaction_id}:${r.agent_id}`]),
         cda_sent: txn?.cda_status === 'sent',
-        paid: !!paidMap[r.transaction_id],
-        missing_items: missingMap[r.transaction_id] || [],
-        review: reviewMap[r.transaction_id]
-          ? {
-              status: reviewMap[r.transaction_id].status,
-              notes: reviewMap[r.transaction_id].notes,
-              completed_at: reviewMap[r.transaction_id].completed_at,
-            }
-          : null,
-        is_locked: txn?.is_locked || false,
-        locked_transaction: r.data?.locked_transaction || false,
-        changed_fields: r.data?.changed_fields || null,
-        retainer_amount: r.data?.retainer_amount || null,
-        retainer_transaction_type: r.data?.retainer_transaction_type || null,
-        expedite_acknowledged: r.data?.expedite_acknowledged || false,
-        notes: r.data?.notes || null,
         flyer: flyer
           ? { id: flyer.id, flyer_type: flyer.flyer_type, has_photo: !!flyer.photo_url, downloaded: !!flyer.downloaded_at }
           : null,
+        recheck_requested: !!recheck,
+        recheck_at: recheck?.submitted_at || null,
+        recheck_changed_fields: recheck?.changed_fields || null,
+        missing_items: missing,
+        // Deal display fields
+        property_address: d.property_address || txn?.property_address || null,
+        client_name: d.client_name || txn?.client_name || null,
+        closing_date: d.closing_or_movein_date || txn?.closing_date || txn?.move_in_date || null,
+        transaction_type: txn?.transaction_type || null,
+        is_locked: txn?.is_locked || false,
+        // The full form responses for the expandable detail
+        form_data: d,
       }
     })
 

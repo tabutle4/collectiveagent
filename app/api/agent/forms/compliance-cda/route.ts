@@ -3,7 +3,8 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
-import { normalizeAddressForStorage } from '@/lib/transactions/utils'
+import { normalizeAddressForStorage, toTitleCase } from '@/lib/transactions/utils'
+import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export const dynamic = 'force-dynamic'
 
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
       }
 
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-        .insert({ property_address: client_name.trim(), client_name: client_name.trim(), status: 'prospect', transaction_type: isLease ? 'lease' : 'sale', submitted_by: agentId, updated_at: now })
+        .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: isLease ? 'lease' : 'sale', submitted_by: agentId, updated_at: now })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create retainer transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       const transactionId = newTxn.id
@@ -364,7 +365,7 @@ export async function POST(request: NextRequest) {
       closing_date: isLease ? null : closing_or_movein_date || null,
       move_in_date: isLease ? closing_or_movein_date || null : null,
       acceptance_date: acceptance_date || null,
-      mls_link: mls_link || null, client_name: client_name || null, client_email: client_email || null,
+      mls_link: mls_link || null, client_name: client_name ? formatNameToTitleCase(String(client_name).trim()) : null, client_email: client_email || null,
       lead_source: lead_source || null, loan_type: loan_type || null,
       sales_price: total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
       monthly_rent: isLease && total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
@@ -376,7 +377,8 @@ export async function POST(request: NextRequest) {
       internal_referral: internal_referral || false, internal_referral_fee: internal_referral_fee ? parseFloat(internal_referral_fee) : 0,
       external_referral: external_referral || false, external_referral_fee: external_referral_fee ? parseFloat(external_referral_fee) : 0,
       brokerage_referral: brokerage_referral || false, brokerage_referral_fee: brokerage_referral_fee ? parseFloat(brokerage_referral_fee) : 0,
-      title_officer_name: title_officer_name || null, title_company: title_company || null,
+      title_officer_name: title_officer_name ? formatNameToTitleCase(String(title_officer_name).trim()) : null,
+      title_company: title_company ? toTitleCase(String(title_company).trim()) : null,
       title_company_email: title_company_email || null, flyer_division: flyerDisplayLine,
       compliance_status: 'submitted', compliance_submitted_at: now, compliance_submitted_by: agentId, updated_at: now,
     }

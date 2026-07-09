@@ -1,3 +1,4 @@
+import { formatNameToTitleCase } from '@/lib/nameFormatter'
 // ===== Text Formatting =====
 
 /** Convert text to Title Case (every word capitalized) */
@@ -168,4 +169,28 @@ export function addressMatchKey(str: string | null | undefined): string {
     .replace(/[.,#]/g, ' ') // drop common punctuation
     .replace(/\s+/g, ' ') // collapse whitespace
     .trim()
+}
+
+/**
+ * Normalize free-typed entry fields on transactions, checks, and related
+ * records at every point of entry. People type addresses and names in ALL
+ * CAPS or all lowercase; storage should always be consistently formatted.
+ * Only touches string values that are present; leaves everything else as-is.
+ */
+export function normalizeTransactionEntryFields<T extends Record<string, any>>(obj: T): T {
+  const out: Record<string, any> = { ...obj }
+  if (typeof out.property_address === 'string' && out.property_address.trim()) {
+    out.property_address = normalizeAddressForStorage(out.property_address)
+  }
+  for (const key of ['client_name', 'title_officer_name', 'agent_name', 'payor_name']) {
+    if (typeof out[key] === 'string' && out[key].trim()) {
+      out[key] = formatNameToTitleCase(out[key].trim())
+    }
+  }
+  for (const key of ['title_company', 'brokerage_name']) {
+    if (typeof out[key] === 'string' && out[key].trim()) {
+      out[key] = toTitleCase(out[key].trim())
+    }
+  }
+  return out as T
 }

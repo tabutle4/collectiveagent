@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage } from '@/lib/transactions/utils'
+import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
         closing_date: isLease ? null : closing_date || null,
         move_in_date: isLease ? closing_date || null : null,
         mls_link: mls_link || null,
-        client_name: client_name || null,
+        client_name: client_name ? formatNameToTitleCase(String(client_name).trim()) : null,
         client_email: client_email || null,
         lead_source: lead_source || null,
         title_officer_name: title_contact_name || null,

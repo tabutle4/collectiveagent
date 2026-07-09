@@ -915,6 +915,170 @@ export default function AgentTransactionDetailPage() {
           />
         </div>
       </div>
+
+      {/* Compliance documents: this agent's own side of the deal only. Uploads
+          are tagged to their side server-side; admins see every side. */}
+      <AgentDealDocuments transactionId={txnId} />
+    </div>
+  )
+}
+
+function AgentDealDocuments({ transactionId }: { transactionId: string }) {
+  const [data, setData] = useState<{ required_docs: any[]; uploaded_docs: any[]; submissions: any[] } | null>(null)
+  const [docsError, setDocsError] = useState('')
+  const [uploadingSlot, setUploadingSlot] = useState<string | null>(null)
+
+  const loadDocs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/documents`)
+      const json = await res.json()
+      if (!res.ok) { setDocsError(json.error || 'Could not load documents'); return }
+      setData({
+        required_docs: json.required_docs || [],
+        uploaded_docs: json.uploaded_docs || [],
+        submissions: json.submissions || [],
+      })
+    } catch {
+      setDocsError('Could not load documents')
+    }
+  }, [transactionId])
+
+  useEffect(() => { loadDocs() }, [loadDocs])
+
+  const uploadToSlot = async (file: File, requiredDocumentId: string | null, slotKey: string) => {
+    setUploadingSlot(slotKey)
+    setDocsError('')
+    try {
+      const sessionRes = await fetch('/api/uploads/create-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, file_size: file.size, content_type: file.type, transaction_id: transactionId }),
+      })
+      const sessionData = await sessionRes.json()
+      if (!sessionRes.ok) throw new Error(sessionData.error || 'Failed to start upload')
+      const putRes = await fetch(sessionData.upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type, 'Content-Range': `bytes 0-${file.size - 1}/${file.size}`, 'Content-Length': String(file.size) },
+        body: file,
+      })
+      if (!putRes.ok) throw new Error('Upload failed')
+      const item = await putRes.json()
+      const addRes = await fetch(`/api/admin/transactions/${transactionId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_document',
+          file_name: file.name,
+          file_url: item.webUrl,
+          onedrive_file_url: item.webUrl,
+          file_size: file.size,
+          file_type: file.type,
+          required_document_id: requiredDocumentId,
+        }),
+      })
+      const addJson = await addRes.json()
+      if (!addRes.ok) throw new Error(addJson.error || 'Failed to save document')
+      await loadDocs()
+    } catch (err: any) {
+      setDocsError(err.message || 'Upload failed')
+    } finally {
+      setUploadingSlot(null)
+    }
+  }
+
+  if (!data || data.submissions.length === 0) return null
+
+  const mySide = data.submissions[0]
+  const sideLabel = mySide?.side ? mySide.side.charAt(0).toUpperCase() + mySide.side.slice(1) : null
+  const myRequiredDocs: any[] = mySide?.required_docs || data.required_docs
+  const docs = data.uploaded_docs
+  const additional = docs.filter((d: any) => !d.required_document_id)
+
+  const badge = (status: string) => {
+    if (status === 'approved') return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full"><Check size={9} /> Approved</span>
+    if (status === 'rejected') return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full"><X size={9} /> Needs correction</span>
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">In review</span>
+  }
+
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-luxury-gray-1">My Compliance Documents</h2>
+        {sideLabel && <span className="text-[11px] text-luxury-gray-3">{sideLabel} side</span>}
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+          mySide.status === 'complete' ? 'text-green-700 bg-green-50 border-green-200'
+          : mySide.status === 'incomplete' ? 'text-red-700 bg-red-50 border-red-200'
+          : 'text-luxury-gray-2 bg-luxury-gray-5/40 border-luxury-gray-5'
+        }`}>{String(mySide.status || '').replace(/_/g, ' ')}</span>
+      </div>
+
+      {docsError && (
+        <div className="p-2.5 bg-red-50 rounded text-xs text-red-700">{docsError}</div>
+      )}
+
+      {myRequiredDocs.length > 0 && (
+        <div className="container-card">
+          <p className="section-title mb-3">Required Documents</p>
+          <div className="space-y-3">
+            {myRequiredDocs.map((rd: any) => {
+              const linked = docs.filter((d: any) => d.required_document_id === rd.id)
+              const latest = linked[0]
+              return (
+                <div key={rd.id} className="border border-luxury-gray-5 rounded-lg p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-luxury-gray-1">{rd.name}</p>
+                      {latest ? (
+                        <div className="mt-1 flex items-center gap-2 flex-wrap">
+                          <FileText size={11} className="text-luxury-gray-3" />
+                          <span className="text-[11px] text-luxury-gray-2 truncate">{latest.file_name}</span>
+                          {badge(latest.compliance_status)}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-luxury-gray-3 mt-1">Not uploaded yet</p>
+                      )}
+                      {latest?.compliance_status === 'rejected' && latest.compliance_notes && (
+                        <p className="text-[11px] text-red-600 mt-1">{latest.compliance_notes}</p>
+                      )}
+                    </div>
+                    <label className={`flex items-center gap-1 text-[11px] text-luxury-accent cursor-pointer hover:underline shrink-0 ${uploadingSlot === rd.id ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <Upload size={11} />
+                      {uploadingSlot === rd.id ? 'Uploading...' : latest ? 'Replace' : 'Upload'}
+                      <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadToSlot(f, rd.id, rd.id) }} />
+                    </label>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="container-card">
+        <div className="flex items-center justify-between mb-3">
+          <p className="section-title">Additional Documents</p>
+          <label className={`flex items-center gap-1 text-[11px] text-luxury-accent cursor-pointer hover:underline ${uploadingSlot === 'additional' ? 'opacity-50 pointer-events-none' : ''}`}>
+            <Upload size={11} />
+            {uploadingSlot === 'additional' ? 'Uploading...' : 'Upload file'}
+            <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadToSlot(f, null, 'additional') }} />
+          </label>
+        </div>
+        {additional.length === 0 ? (
+          <p className="text-[11px] text-luxury-gray-3 text-center py-3">No additional documents uploaded.</p>
+        ) : (
+          <div className="space-y-2">
+            {additional.map((doc: any) => (
+              <div key={doc.id} className="p-2.5 border border-luxury-gray-5 rounded-lg flex items-center gap-2">
+                <FileText size={12} className="text-luxury-gray-3 shrink-0" />
+                <span className="text-[11px] text-luxury-gray-2 truncate flex-1">{doc.file_name}</span>
+                {badge(doc.compliance_status)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

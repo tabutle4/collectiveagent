@@ -222,8 +222,19 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Insert docs — strip temp field first
-    const docsForInsert = docsToCreate.map(({ _suggested_slots, ...rest }) => rest)
+    // Insert docs, stripping the temp field first. Compliance is per side: when the
+    // deal has exactly one compliance side, inbound docs belong to it. With two
+    // sides the sender is unknown, so the doc stays shared (untagged) for the
+    // reviewer to assign.
+    let inboundSubmissionId: string | null = null
+    const { data: inboundSides } = await supabase
+      .from('agent_form_submissions')
+      .select('id')
+      .eq('transaction_id', transactionId)
+      .filter('data->>submission_mode', 'eq', 'compliance')
+    if ((inboundSides || []).length === 1) inboundSubmissionId = inboundSides![0].id
+
+    const docsForInsert = docsToCreate.map(({ _suggested_slots, ...rest }) => ({ ...rest, submission_id: inboundSubmissionId }))
     const { data: insertedDocs, error: insertError } = await supabase
       .from('transaction_documents')
       .insert(docsForInsert)

@@ -15,8 +15,12 @@ const RECHECK_URL = 'https://visit.collectiverealtyco.com/recheck'
 // TODO: Replace RECHECK_URL with in-app recheck form URL once built.
 // Pull from company_settings once a recheck_url column is added.
 
-// Shared helper: load transaction, agents, docs, and build email payload
-async function buildEmailPayload(id: string) {
+// Shared helper: load transaction, the side under review, its docs, and build
+// the email payload. Compliance is per side: each compliance submission (one per
+// agent per side) is reviewed on its own. When submissionId is given, docs and
+// the recipient are scoped to that side; otherwise the single compliance
+// submission on the deal is used (legacy single-side behavior).
+async function buildEmailPayload(id: string, submissionId?: string | null) {
   const { data: txn } = await supabase
     .from('transactions')
     .select('id, property_address, transaction_type, compliance_status, compliance_submitted_at')
@@ -25,30 +29,60 @@ async function buildEmailPayload(id: string) {
 
   if (!txn) throw new Error('Transaction not found')
 
-  const { data: agents } = await supabase
-    .from('transaction_internal_agents')
-    .select(`
-      agent_role,
-      user:users!transaction_internal_agents_agent_id_fkey(
-        id, first_name, last_name, preferred_first_name, preferred_last_name,
-        email, office_email
-      )
-    `)
+  // Resolve the side under review.
+  const { data: sideSubs } = await supabase
+    .from('agent_form_submissions')
+    .select('id, agent_id, status, data')
     .eq('transaction_id', id)
-    .in('agent_role', ['primary_agent', 'listing_agent', 'buyer_agent'])
-    .limit(5)
+    .filter('data->>submission_mode', 'eq', 'compliance')
+  const submissions = sideSubs || []
+  const submission = submissionId
+    ? submissions.find((s: any) => s.id === submissionId) || null
+    : submissions.length === 1
+      ? submissions[0]
+      : null
+  if (submissionId && !submission) throw new Error('Compliance submission not found for this deal')
 
-  const primaryAgent = agents?.find((a: any) => a.agent_role === 'primary_agent') || agents?.[0]
-  const agentUser = primaryAgent?.user as any
-  const toEmail = agentUser?.office_email || agentUser?.email
+  // Recipient: the reviewed side's agent when known; otherwise the primary agent.
+  let toEmail: string | null = null
+  if (submission?.agent_id) {
+    const { data: sideAgent } = await supabase
+      .from('users')
+      .select('email, office_email')
+      .eq('id', submission.agent_id)
+      .maybeSingle()
+    toEmail = sideAgent?.office_email || sideAgent?.email || null
+  }
+  if (!toEmail) {
+    const { data: agents } = await supabase
+      .from('transaction_internal_agents')
+      .select(`
+        agent_role,
+        user:users!transaction_internal_agents_agent_id_fkey(
+          id, first_name, last_name, preferred_first_name, preferred_last_name,
+          email, office_email
+        )
+      `)
+      .eq('transaction_id', id)
+      .in('agent_role', ['primary_agent', 'listing_agent', 'buyer_agent'])
+      .limit(5)
+    const primaryAgent = agents?.find((a: any) => a.agent_role === 'primary_agent') || agents?.[0]
+    const agentUser = primaryAgent?.user as any
+    toEmail = agentUser?.office_email || agentUser?.email
+  }
 
   if (!toEmail) throw new Error('No agent email found for this transaction')
 
-  const { data: docs } = await supabase
+  // This side's docs: tagged to the submission, plus shared (untagged) docs.
+  let docsQuery = supabase
     .from('transaction_documents')
-    .select('id, file_name, compliance_status, compliance_notes, required_document_id')
+    .select('id, file_name, compliance_status, compliance_notes, required_document_id, submission_id')
     .eq('transaction_id', id)
     .in('compliance_status', ['approved', 'rejected'])
+  const { data: allDocs } = await docsQuery
+  const docs = submission
+    ? (allDocs || []).filter((d: any) => d.submission_id === submission.id || d.submission_id === null)
+    : allDocs
 
   if (!docs || docs.length === 0) {
     throw new Error('No reviewed documents found. Approve or reject at least one document first.')
@@ -92,7 +126,7 @@ async function buildEmailPayload(id: string) {
     recheckUrl: RECHECK_URL,
   })
 
-  return { txn, toEmail, approved, rejected, subject, html }
+  return { txn, toEmail, approved, rejected, subject, html, submission }
 }
 
 export async function POST(
@@ -110,12 +144,13 @@ export async function POST(
 
     // ── Preview: return structured doc arrays for Leah to review and edit ──
     if (action === 'preview') {
-      const { toEmail, approved, rejected, subject } = await buildEmailPayload(id)
+      const { toEmail, approved, rejected, subject, submission } = await buildEmailPayload(id, body.submission_id || null)
+      void submission
       return NextResponse.json({ to: toEmail, cc: CC_EMAIL, subject, approved, rejected })
     }
 
     // ── Send: accept edited subject + doc arrays, rebuild HTML server-side ──
-    const { toEmail, txn } = await buildEmailPayload(id)
+    const { toEmail, txn, submission } = await buildEmailPayload(id, body.submission_id || null)
     const finalSubject = body.subject || ''
     const editedApproved: { name: string; notes: string | null }[] = body.approved || []
     const editedRejected: { name: string; notes: string | null }[] = body.rejected || []
@@ -153,13 +188,51 @@ export async function POST(
 
     const hasRejections = rejected.length > 0
     const newComplianceStatus = hasRejections ? 'incomplete' : 'complete'
+    const nowIso = new Date().toISOString()
+
+    // The submission (this side) is the source of truth. Missing items default
+    // to the rejected docs' notes; Leah can edit them later from the tracker.
+    if (submission) {
+      const missingText = hasRejections
+        ? rejected.map(r => `${r.name}${r.notes ? `: ${r.notes}` : ''}`).join('\n')
+        : null
+      await supabase
+        .from('agent_form_submissions')
+        .update({
+          status: newComplianceStatus,
+          admin_notes: missingText,
+          reviewed_by: auth.user!.id,
+          reviewed_at: hasRejections ? null : nowIso,
+          updated_at: nowIso,
+        })
+        .eq('id', submission.id)
+    }
+
+    // Dual-write the transaction as the worst status across sides so legacy
+    // readers keep working during rollout.
+    let derivedTxnStatus = newComplianceStatus
+    const { data: allSides } = await supabase
+      .from('agent_form_submissions')
+      .select('id, status')
+      .eq('transaction_id', id)
+      .filter('data->>submission_mode', 'eq', 'compliance')
+    if (allSides && allSides.length > 0) {
+      const statuses = allSides.map((s: any) =>
+        submission && s.id === submission.id ? newComplianceStatus : s.status
+      )
+      derivedTxnStatus = statuses.includes('incomplete')
+        ? 'incomplete'
+        : statuses.some((s: string) => s === 'in_review' || s === 'submitted')
+          ? 'in_review'
+          : 'complete'
+    }
 
     await supabase
       .from('transactions')
       .update({
-        compliance_status: newComplianceStatus,
-        compliance_submitted_at: txn.compliance_submitted_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        compliance_status: derivedTxnStatus,
+        compliance_submitted_at: txn.compliance_submitted_at || nowIso,
+        updated_at: nowIso,
       })
       .eq('id', id)
 

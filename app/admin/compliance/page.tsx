@@ -1,91 +1,222 @@
 'use client'
 
 import { useState, useEffect, useCallback, Fragment } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 
-interface SubmissionRow {
+interface TrackerRow {
   id: string
-  submitted_at: string
-  status: string
-  submission_mode: string
-  agent_id: string
-  agent_name: string
   transaction_id: string | null
+  agent_id: string | null
+  agent_name: string
+  submitted_at: string
+  side: string | null
+  compliance_status: string
+  missing_notes: string | null
+  completed_at: string | null
+  paid: boolean
+  cda_sent: boolean
+  flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean } | null
+  recheck_requested: boolean
+  recheck_at: string | null
+  recheck_changed_fields: string[] | null
+  missing_items: { name: string; notes: string | null }[]
   property_address: string | null
   client_name: string | null
-  transaction_status: string | null
-  compliance_status: string | null
-  cda_sent: boolean
-  paid: boolean
-  missing_items: { name: string; notes: string | null }[]
-  review: { status: string; notes: string | null; completed_at: string | null } | null
+  closing_date: string | null
+  transaction_type: string | null
   is_locked: boolean
-  locked_transaction: boolean
-  changed_fields: string[] | null
-  retainer_amount: number | null
-  retainer_transaction_type: string | null
-  expedite_acknowledged: boolean
-  notes: string | null
-  flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean } | null
+  form_data: Record<string, any>
 }
 
-const MODE_LABELS: Record<string, string> = {
-  compliance: 'Compliance & CDA',
-  subsequent: 'Resubmission',
-  retainer: 'Retainer',
-  under_contract: 'New Contract',
-}
-
-const MODE_BADGE: Record<string, string> = {
-  compliance: 'text-blue-700 bg-blue-50',
-  subsequent: 'text-amber-700 bg-amber-50',
-  under_contract: 'text-teal-700 bg-teal-50',
-  retainer: 'text-purple-700 bg-purple-50',
-}
-
-const RETAINER_TYPE_LABELS: Record<string, string> = {
-  residential_rental: 'Residential Rental',
-  residential_buyer: 'Residential Buyer',
-  commercial_rental: 'Commercial Rental',
-}
+const STATUS_OPTIONS = [
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'in_review', label: 'In review' },
+  { value: 'complete', label: 'Complete' },
+  { value: 'incomplete', label: 'Incomplete' },
+]
 
 const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-'
+  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
-const fmtMoney = (n: number | null) =>
-  n != null ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n) : '-'
+const fmtMoney = (v: any) => {
+  const n = parseFloat(v)
+  if (isNaN(n)) return String(v)
+  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+}
 
-const formatLabel = (k: string) =>
-  k.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+const yesNo = (v: any) => (v === true ? 'Yes' : v === false ? 'No' : String(v))
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+// Every question on the compliance form, smart-grouped for the expandable
+// detail. A field renders only when it has a value; a group renders only when
+// at least one of its fields does. Nothing with data is ever hidden.
+const FIELD_GROUPS: { title: string; fields: { key: string; label: string; fmt?: (v: any, d: Record<string, any>) => string }[] }[] = [
+  {
+    title: 'Deal',
+    fields: [
+      { key: 'team_or_office', label: 'Team / office' },
+      { key: 'representing', label: 'Representing', fmt: v => cap(String(v)) },
+      { key: 'unit', label: 'Unit' },
+      { key: 'in_matrix', label: 'In MLS Matrix', fmt: yesNo },
+      { key: 'mls_link', label: 'MLS link' },
+      { key: 'acceptance_date', label: 'Acceptance date', fmt: v => fmtDate(String(v)) || String(v) },
+      { key: 'closing_or_movein_date', label: 'Closing / move-in', fmt: v => fmtDate(String(v)) || String(v) },
+    ],
+  },
+  {
+    title: 'Client',
+    fields: [
+      { key: 'client_name', label: 'Client name' },
+      { key: 'client_email', label: 'Client email' },
+      { key: 'client_phone', label: 'Client phone' },
+      { key: 'lead_source', label: 'Lead source' },
+    ],
+  },
+  {
+    title: 'Lease details',
+    fields: [
+      { key: 'tenant_transaction_type', label: 'Lease type' },
+      { key: 'lease_term_months', label: 'Lease term (months)' },
+      { key: 'referred_client_type', label: 'Referred client type' },
+    ],
+  },
+  {
+    title: 'Financials',
+    fields: [
+      { key: 'commission_basis_price', label: 'Commission basis price', fmt: fmtMoney },
+      { key: 'total_sales_rent_price', label: 'Total sales / rent price', fmt: fmtMoney },
+      { key: 'commission_rate', label: 'Commission rate', fmt: (v, d) => (d.commission_rate_type === 'flat' ? fmtMoney(v) : `${v}%`) },
+      { key: 'bonus_btsa_amount', label: 'BTSA', fmt: fmtMoney },
+      { key: 'rebate_amount', label: 'Rebate', fmt: fmtMoney },
+      { key: 'expedite_acknowledged', label: 'Expedite', fmt: yesNo },
+    ],
+  },
+  {
+    title: 'Referrals',
+    fields: [
+      { key: 'internal_referral', label: 'Internal referral', fmt: yesNo },
+      { key: 'internal_referral_fee', label: 'Internal fee' },
+      { key: 'external_referral', label: 'External referral', fmt: yesNo },
+      { key: 'external_referral_fee', label: 'External fee' },
+      { key: 'brokerage_referral', label: 'Brokerage referral', fmt: yesNo },
+      { key: 'brokerage_referral_fee', label: 'Brokerage fee' },
+    ],
+  },
+  {
+    title: 'Title & loan',
+    fields: [
+      { key: 'title_officer_name', label: 'Title officer' },
+      { key: 'title_company', label: 'Title company' },
+      { key: 'title_company_email', label: 'Title email' },
+      { key: 'title_phone', label: 'Title phone' },
+      { key: 'loan_type', label: 'Loan type' },
+    ],
+  },
+  {
+    title: 'Flyer & notes',
+    fields: [
+      { key: 'flyer_display_type', label: 'Flyer display', fmt: v => cap(String(v)) },
+      { key: 'flyer_display_line', label: 'Division / team line' },
+      { key: 'bedrooms', label: 'Bedrooms' },
+      { key: 'bathrooms', label: 'Bathrooms' },
+      { key: 'garage', label: 'Garage' },
+      { key: 'sqft', label: 'Sqft' },
+      { key: 'additional_notes', label: 'Additional notes' },
+    ],
+  },
+]
+
+const hasValue = (v: any) => {
+  if (v === null || v === undefined) return false
+  if (typeof v === 'string') return v.trim() !== ''
+  if (typeof v === 'boolean') return v === true
+  if (typeof v === 'number') return v !== 0
+  if (Array.isArray(v)) return v.length > 0
+  return true
+}
 
 export default function AdminCompliancePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [submissions, setSubmissions] = useState<SubmissionRow[]>([])
-  const [modeFilter, setModeFilter] = useState<'all' | 'compliance' | 'subsequent' | 'retainer'>('all')
+  const [rows, setRows] = useState<TrackerRow[]>([])
   const [needsWorkOnly, setNeedsWorkOnly] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Status editing (per row)
+  const [editStatus, setEditStatus] = useState<string>('')
+  const [editDate, setEditDate] = useState<string>('')
+  const [editNotes, setEditNotes] = useState<string>('')
+  const [savingStatus, setSavingStatus] = useState(false)
+
+  // Flyer actions
   const [generatingFlyer, setGeneratingFlyer] = useState<string | null>(null)
   const [sendingFlyer, setSendingFlyer] = useState<string | null>(null)
 
-  const sendFlyerEmail = async (transactionId: string, mode: 'request_photo' | 'flyer_ready') => {
-    setSendingFlyer(transactionId)
+  // Notification settings
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notifEmails, setNotifEmails] = useState<string[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifSaved, setNotifSaved] = useState(false)
+  const [notifError, setNotifError] = useState('')
+
+  const loadRows = useCallback(async () => {
+    setLoading(true)
+    setError('')
     try {
-      const res = await fetch('/api/admin/compliance/send-flyer-email', {
+      const res = await fetch('/api/admin/compliance')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to load')
+      setRows(data.submissions || [])
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadRows() }, [loadRows])
+
+  const needsWork = (r: TrackerRow) => r.compliance_status !== 'complete'
+  const needsWorkCount = rows.filter(needsWork).length
+  const visible = needsWorkOnly ? rows.filter(needsWork) : rows
+
+  const openExpand = (r: TrackerRow) => {
+    if (expandedId === r.id) { setExpandedId(null); return }
+    setExpandedId(r.id)
+    setEditStatus(r.compliance_status)
+    setEditDate(r.completed_at ? r.completed_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
+    setEditNotes(
+      r.missing_notes ||
+      r.missing_items.map(m => `${m.name}${m.notes ? `: ${m.notes}` : ''}`).join('\n')
+    )
+  }
+
+  const saveStatus = async (r: TrackerRow) => {
+    setSavingStatus(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction_id: transactionId, mode }),
+        body: JSON.stringify({
+          submission_id: r.id,
+          status: editStatus,
+          completed_at: editStatus === 'complete' && editDate ? new Date(`${editDate}T12:00:00`).toISOString() : undefined,
+          missing_notes: editStatus === 'incomplete' ? editNotes : undefined,
+        }),
       })
       const data = await res.json()
-      if (!res.ok || !data.success) {
-        setError(data.error || 'Could not send the email. Please try again.')
-      }
-    } catch {
-      setError('Could not send the email. Please try again.')
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not save status')
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
     } finally {
-      setSendingFlyer(null)
+      setSavingStatus(false)
     }
   }
 
@@ -98,59 +229,31 @@ export default function AdminCompliancePage() {
         body: JSON.stringify({ transaction_id: transactionId }),
       })
       const data = await res.json()
-      if (res.ok && data.success) {
-        await loadSubmissions()
-      } else {
-        setError(data.error || 'Could not generate the flyer. Please try again.')
-      }
+      if (res.ok && data.success) await loadRows()
+      else setError(data.error || 'Could not generate the flyer. Please try again.')
     } catch {
       setError('Could not generate the flyer. Please try again.')
     } finally {
       setGeneratingFlyer(null)
     }
   }
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [notifEmails, setNotifEmails] = useState<string[]>([])
-  const [notifLoading, setNotifLoading] = useState(false)
-  const [notifSaving, setNotifSaving] = useState(false)
-  const [notifSaved, setNotifSaved] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
-  const [notifError, setNotifError] = useState('')
 
-  const loadSubmissions = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  const sendFlyerEmail = async (transactionId: string, mode: 'request_photo' | 'flyer_ready') => {
+    setSendingFlyer(transactionId)
     try {
-      const params = new URLSearchParams()
-      if (modeFilter !== 'all') params.set('mode', modeFilter)
-      const res = await fetch(`/api/admin/compliance?${params}`)
+      const res = await fetch('/api/admin/compliance/send-flyer-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction_id: transactionId, mode }),
+      })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to load')
-      setSubmissions(data.submissions || [])
-    } catch (err: any) {
-      setError(err.message)
+      if (!res.ok || !data.success) setError(data.error || 'Could not send the email. Please try again.')
+    } catch {
+      setError('Could not send the email. Please try again.')
     } finally {
-      setLoading(false)
+      setSendingFlyer(null)
     }
-  }, [modeFilter])
-
-  useEffect(() => { loadSubmissions() }, [loadSubmissions])
-
-  const counts = {
-    all: submissions.length,
-    compliance: submissions.filter(s => s.submission_mode === 'compliance').length,
-    subsequent: submissions.filter(s => s.submission_mode === 'subsequent').length,
-    retainer: submissions.filter(s => s.submission_mode === 'retainer').length,
   }
-
-  // A deal still needs work until its compliance review is finished. Complete
-  // and approved mean Leah has signed off; anything else is still in her queue.
-  const needsWork = (s: SubmissionRow) =>
-    s.compliance_status !== 'complete' && s.compliance_status !== 'approved'
-
-  const needsWorkCount = submissions.filter(needsWork).length
-  const visibleSubmissions = needsWorkOnly ? submissions.filter(needsWork) : submissions
 
   const loadNotifEmails = useCallback(async () => {
     setNotifLoading(true)
@@ -188,8 +291,6 @@ export default function AdminCompliancePage() {
   const saveNotifEmails = async () => {
     setNotifError('')
     setNotifSaved(false)
-
-    // Flush a typed-but-not-yet-added email from the input box so it is not lost on save.
     let toSave = notifEmails
     const typed = newEmail.trim().toLowerCase()
     if (typed) {
@@ -201,7 +302,6 @@ export default function AdminCompliancePage() {
       }
       setNewEmail('')
     }
-
     setNotifSaving(true)
     try {
       const res = await fetch('/api/admin/compliance/notification-emails', {
@@ -219,6 +319,17 @@ export default function AdminCompliancePage() {
     } finally {
       setNotifSaving(false)
     }
+  }
+
+  const statusBadge = (status: string) => {
+    const label = status.replace(/_/g, ' ')
+    if (status === 'complete') {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs capitalize bg-green-50 text-green-700">{label}</span>
+    }
+    if (status === 'incomplete') {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs capitalize bg-red-50 text-red-700">{label}</span>
+    }
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs capitalize bg-luxury-gray-5/40 text-luxury-gray-2">{label}</span>
   }
 
   return (
@@ -306,25 +417,19 @@ export default function AdminCompliancePage() {
         </div>
       )}
 
-      {/* Mode filter tabs */}
       <div className="flex gap-2 mb-6 flex-wrap items-center">
-        {(['all', 'compliance', 'subsequent', 'retainer'] as const).map(m => (
-          <button
-            key={m}
-            onClick={() => setModeFilter(m)}
-            className={`text-xs px-3 py-1.5 rounded border transition-colors ${
-              modeFilter === m
-                ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
-                : 'bg-white text-luxury-gray-2 border-luxury-gray-5 hover:border-luxury-gray-3'
-            }`}
-          >
-            {m === 'all' ? 'All' : MODE_LABELS[m]}
-            {modeFilter === 'all' || modeFilter === m ? ` (${counts[m]})` : ''}
-          </button>
-        ))}
-        <div className="w-px h-5 bg-luxury-gray-5 mx-1" />
         <button
-          onClick={() => setNeedsWorkOnly(v => !v)}
+          onClick={() => setNeedsWorkOnly(false)}
+          className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+            !needsWorkOnly
+              ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
+              : 'bg-white text-luxury-gray-2 border-luxury-gray-5 hover:border-luxury-gray-3'
+          }`}
+        >
+          All ({rows.length})
+        </button>
+        <button
+          onClick={() => setNeedsWorkOnly(true)}
           className={`text-xs px-3 py-1.5 rounded border transition-colors ${
             needsWorkOnly
               ? 'bg-red-600 text-white border-red-600'
@@ -345,10 +450,10 @@ export default function AdminCompliancePage() {
         <div className="flex items-center justify-center py-16">
           <Loader2 size={22} className="animate-spin text-luxury-gray-3" />
         </div>
-      ) : visibleSubmissions.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="container-card text-center py-12">
           <p className="text-sm text-luxury-gray-3">
-            {needsWorkOnly ? 'Nothing needs work right now.' : 'No submissions yet.'}
+            {needsWorkOnly ? 'Nothing needs work right now.' : 'No compliance submissions yet.'}
           </p>
         </div>
       ) : (
@@ -357,171 +462,165 @@ export default function AdminCompliancePage() {
             <thead>
               <tr className="border-b border-luxury-gray-5">
                 <th className="px-2 py-3 w-6"></th>
-                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Submitted</th>
-                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Type</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Paid</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Flyer</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Closing</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Compliance</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Property / Client</th>
-                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Details</th>
-                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Status</th>
-                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Flyer</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Type</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {visibleSubmissions.map(s => (
-                <Fragment key={s.id}>
+              {visible.map(r => (
+                <Fragment key={r.id}>
                   <tr
                     className="border-b border-luxury-gray-5/50 hover:bg-luxury-gray-5/20 cursor-pointer"
-                    onClick={() => {
-                      if (s.transaction_id) router.push(`/admin/transactions/${s.transaction_id}`)
-                    }}
+                    onClick={() => openExpand(r)}
                   >
-                    <td className="px-2 py-3 w-6" onClick={e => e.stopPropagation()}>
-                      {(s.missing_items?.length > 0 || s.notes || s.changed_fields?.length || s.review) ? (
-                        <button
-                          onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                          className="text-luxury-gray-4 hover:text-luxury-gray-1"
-                          aria-label="Toggle details"
-                        >
-                          {expandedId === s.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                      ) : null}
+                    <td className="px-2 py-3 w-6">
+                      {expandedId === r.id ? <ChevronDown size={14} className="text-luxury-gray-3" /> : <ChevronRight size={14} className="text-luxury-gray-4" />}
                     </td>
-                    <td className="text-xs text-luxury-gray-2 px-4 py-3 whitespace-nowrap">{fmtDate(s.submitted_at)}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${MODE_BADGE[s.submission_mode] || 'text-luxury-gray-3 bg-luxury-gray-5/50'}`}>
-                        {MODE_LABELS[s.submission_mode] || s.submission_mode}
-                      </span>
-                      {(s.is_locked || s.locked_transaction) && (
-                        <Lock size={11} className="inline-block ml-1.5 text-amber-600" />
-                      )}
+                      {r.paid ? <Check size={14} className="text-green-600" /> : <span className="text-luxury-gray-4 text-xs">-</span>}
                     </td>
-                    <td className="text-xs text-luxury-gray-1 px-4 py-3 whitespace-nowrap">{s.agent_name}</td>
-                    <td className="text-xs text-luxury-gray-1 px-4 py-3">
-                      {s.property_address || s.client_name || '-'}
-                    </td>
-                    <td className="text-xs text-luxury-gray-2 px-4 py-3">
-                      {s.submission_mode === 'retainer' && (
-                        <span>
-                          {fmtMoney(s.retainer_amount)}
-                          {s.retainer_transaction_type ? ` \u00b7 ${RETAINER_TYPE_LABELS[s.retainer_transaction_type] || s.retainer_transaction_type}` : ''}
+                    <td className="px-4 py-3">
+                      {r.flyer ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-luxury-gray-3">
+                          <ImageIcon size={12} className={r.flyer.has_photo ? 'text-green-600' : 'text-luxury-gray-4'} />
+                          {r.flyer.has_photo ? (r.flyer.downloaded ? 'Downloaded' : 'Ready') : 'No photo'}
                         </span>
-                      )}
-                      {s.submission_mode === 'subsequent' && s.changed_fields && (
-                        <span>{s.changed_fields.length} field{s.changed_fields.length === 1 ? '' : 's'} changed</span>
-                      )}
-                      {s.submission_mode === 'compliance' && s.expedite_acknowledged && (
-                        <span className="text-luxury-accent">Expedite requested</span>
+                      ) : (
+                        <span className="text-luxury-gray-4 text-xs">-</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{fmtDate(r.closing_date) || '-'}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1 items-start">
-                        {s.compliance_status && (
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs capitalize ${
-                              s.compliance_status === 'complete' || s.compliance_status === 'approved'
-                                ? 'bg-green-50 text-green-700'
-                                : s.compliance_status === 'incomplete' || s.compliance_status === 'revision_requested' || s.compliance_status === 'rejected'
-                                  ? 'bg-red-50 text-red-700'
-                                  : 'bg-luxury-gray-5/40 text-luxury-gray-2'
-                            }`}
-                          >
-                            {s.compliance_status.replace(/_/g, ' ')}
+                        {statusBadge(r.compliance_status)}
+                        {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
+                          <span className="text-xs text-red-600">{r.missing_items.length} missing</span>
+                        )}
+                        {r.recheck_requested && (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+                            <RefreshCw size={10} /> Recheck
                           </span>
                         )}
-                        {s.missing_items && s.missing_items.length > 0 && (
-                          <span className="text-xs text-red-600">
-                            {s.missing_items.length} missing
-                          </span>
-                        )}
-                        {s.paid && (
-                          <span className="text-xs text-green-700">Paid</span>
-                        )}
-                        {s.cda_sent && (
-                          <span className="text-xs text-luxury-gray-3">CDA sent</span>
-                        )}
+                        {r.cda_sent && <span className="text-xs text-luxury-gray-3">CDA sent</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      {s.flyer ? (
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="inline-flex items-center gap-1 text-xs text-luxury-gray-3">
-                            <ImageIcon size={12} className={s.flyer.has_photo ? 'text-green-600' : 'text-luxury-gray-4'} />
-                            {s.flyer.has_photo ? (s.flyer.downloaded ? 'Downloaded' : 'Photo added') : 'No photo'}
-                          </span>
-                          {s.transaction_id && (
-                            s.flyer.has_photo ? (
-                              <button
-                                onClick={e => { e.stopPropagation(); sendFlyerEmail(s.transaction_id!, 'flyer_ready') }}
-                                disabled={sendingFlyer === s.transaction_id}
-                                className="text-xs text-luxury-accent hover:underline disabled:opacity-50 whitespace-nowrap"
-                              >
-                                {sendingFlyer === s.transaction_id ? 'Sending...' : 'Email agent: flyer ready'}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={e => { e.stopPropagation(); sendFlyerEmail(s.transaction_id!, 'request_photo') }}
-                                disabled={sendingFlyer === s.transaction_id}
-                                className="text-xs text-luxury-accent hover:underline disabled:opacity-50 whitespace-nowrap"
-                              >
-                                {sendingFlyer === s.transaction_id ? 'Sending...' : 'Email agent: request photo'}
-                              </button>
-                            )
-                          )}
-                        </div>
-                      ) : s.transaction_id ? (
-                        <button
-                          onClick={e => { e.stopPropagation(); generateFlyer(s.transaction_id!) }}
-                          disabled={generatingFlyer === s.transaction_id}
-                          className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline disabled:opacity-50 whitespace-nowrap"
-                        >
-                          {generatingFlyer === s.transaction_id ? 'Generating...' : 'Generate flyer'}
-                        </button>
-                      ) : null}
+                    <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
+                      {r.agent_name}
+                      {r.side && <span className="block text-luxury-gray-3 capitalize">{r.side}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-luxury-gray-1">
+                      <span className="block">{r.property_address || '-'}</span>
+                      {r.client_name && <span className="block text-luxury-gray-3">{r.client_name}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap">
+                      {r.transaction_type ? r.transaction_type.replace(/_v2$/, '').replace(/_/g, ' ') : '-'}
+                      {r.is_locked && <Lock size={11} className="inline-block ml-1.5 text-amber-600" />}
                     </td>
                     <td className="px-4 py-3">
-                      {s.transaction_id && (
-                        <Link
-                          href={`/admin/transactions/${s.transaction_id}`}
-                          onClick={e => e.stopPropagation()}
+                      {r.transaction_id && (
+                        <a
+                          href={`/admin/transactions/${r.transaction_id}?tab=documents`}
+                          onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=documents`) }}
                           className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline whitespace-nowrap"
                         >
                           Work Deal <ExternalLink size={11} />
-                        </Link>
+                        </a>
                       )}
                     </td>
                   </tr>
-                  {expandedId === s.id && (
-                    <tr key={`${s.id}-detail`} className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={9} className="px-4 py-4">
-                        <div className="space-y-2 text-xs text-luxury-gray-2">
-                          {s.submission_mode === 'subsequent' && s.changed_fields && s.changed_fields.length > 0 && (
-                            <div>
-                              <span className="font-medium text-luxury-gray-1">Changed fields: </span>
-                              {s.changed_fields.map(formatLabel).join(', ')}
+
+                  {expandedId === r.id && (
+                    <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
+                      <td colSpan={9} className="px-5 py-4">
+                        <div className="space-y-4">
+
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-xs font-semibold text-luxury-gray-1">
+                              {r.property_address || 'Deal'}
+                            </span>
+                            <span className="text-[11px] text-luxury-gray-3">Submitted {fmtDate(r.submitted_at)}</span>
+                            {r.recheck_requested && (
+                              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700">
+                                <RefreshCw size={10} /> Recheck requested {r.recheck_at ? fmtDate(r.recheck_at) : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {r.recheck_requested && r.recheck_changed_fields && r.recheck_changed_fields.length > 0 && (
+                            <div className="text-xs">
+                              <span className="font-medium text-luxury-gray-1">Recheck changed fields: </span>
+                              <span className="text-luxury-gray-2">
+                                {r.recheck_changed_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
+                              </span>
                             </div>
                           )}
-                          {(s.is_locked || s.locked_transaction) && (
-                            <div className="text-amber-700">
-                              Transaction is locked. Submission saved but transaction was not updated. Manual update required.
-                            </div>
-                          )}
-                          {s.notes && (
+
+                          {/* Editable compliance status: the submission is the truth */}
+                          <div
+                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
+                            onClick={e => e.stopPropagation()}
+                          >
                             <div>
-                              <span className="font-medium text-luxury-gray-1">Agent notes: </span>{s.notes}
+                              <label className="field-label block mb-1">Compliance status</label>
+                              <select
+                                value={editStatus}
+                                onChange={e => setEditStatus(e.target.value)}
+                                className="select-luxury text-xs"
+                              >
+                                {STATUS_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
                             </div>
-                          )}
-                          {s.compliance_status && (
-                            <div>
-                              <span className="font-medium text-luxury-gray-1">Transaction compliance status: </span>
-                              <span className="capitalize">{s.compliance_status}</span>
-                            </div>
-                          )}
-                          {s.missing_items && s.missing_items.length > 0 && (
-                            <div>
-                              <span className="font-medium text-luxury-gray-1">Missing / needs correction: </span>
+                            {editStatus === 'complete' && (
+                              <div>
+                                <label className="field-label block mb-1">Date completed</label>
+                                <input
+                                  type="date"
+                                  value={editDate}
+                                  onChange={e => setEditDate(e.target.value)}
+                                  className="input-luxury text-xs"
+                                />
+                              </div>
+                            )}
+                            {editStatus === 'incomplete' && (
+                              <div className="flex-1 min-w-[240px]">
+                                <label className="field-label block mb-1">Missing / incomplete items</label>
+                                <textarea
+                                  value={editNotes}
+                                  onChange={e => setEditNotes(e.target.value)}
+                                  rows={2}
+                                  className="input-luxury text-xs w-full resize-none"
+                                  placeholder="Missing: Settlement Statement, Survey"
+                                />
+                              </div>
+                            )}
+                            <button
+                              onClick={() => saveStatus(r)}
+                              disabled={savingStatus}
+                              className="btn btn-primary text-xs disabled:opacity-50"
+                            >
+                              {savingStatus ? 'Saving...' : 'Save'}
+                            </button>
+                            {r.completed_at && r.compliance_status === 'complete' && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Completed {fmtDate(r.completed_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Missing items from Leah's document review */}
+                          {r.missing_items.length > 0 && (
+                            <div className="text-xs">
+                              <span className="font-medium text-luxury-gray-1">Missing / needs correction (from review): </span>
                               <ul className="mt-1 ml-4 list-disc space-y-0.5">
-                                {s.missing_items.map((m, i) => (
+                                {r.missing_items.map((m, i) => (
                                   <li key={i} className="text-luxury-gray-2">
                                     {m.name}
                                     {m.notes ? <span className="text-luxury-gray-3"> - {m.notes}</span> : null}
@@ -530,14 +629,63 @@ export default function AdminCompliancePage() {
                               </ul>
                             </div>
                           )}
-                          {s.review && s.review.completed_at && (
-                            <div className="text-luxury-gray-3">
-                              Review completed {new Date(s.review.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+
+                          {/* Every form answer with a value, smart-grouped */}
+                          {FIELD_GROUPS.map(group => {
+                            const filled = group.fields.filter(f => hasValue(r.form_data?.[f.key]))
+                            if (filled.length === 0) return null
+                            return (
+                              <div key={group.title}>
+                                <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wider mb-1.5">{group.title}</p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
+                                  {filled.map(f => {
+                                    const raw = r.form_data[f.key]
+                                    const val = f.fmt ? f.fmt(raw, r.form_data) : String(raw)
+                                    return (
+                                      <div key={f.key} className={f.key === 'additional_notes' ? 'col-span-2 md:col-span-4' : ''}>
+                                        <span className="text-luxury-gray-3 block">{f.label}</span>
+                                        <span className="text-luxury-gray-1 break-words">{val}</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* Flyer actions */}
+                          {r.transaction_id && (
+                            <div className="flex items-center gap-3 pt-2 border-t border-luxury-gray-5/50" onClick={e => e.stopPropagation()}>
+                              {r.flyer ? (
+                                r.flyer.has_photo ? (
+                                  <button
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'flyer_ready')}
+                                    disabled={sendingFlyer === r.transaction_id}
+                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                  >
+                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: flyer ready'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'request_photo')}
+                                    disabled={sendingFlyer === r.transaction_id}
+                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                  >
+                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: request photo'}
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  onClick={() => generateFlyer(r.transaction_id!)}
+                                  disabled={generatingFlyer === r.transaction_id}
+                                  className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                >
+                                  {generatingFlyer === r.transaction_id ? 'Generating...' : 'Generate flyer'}
+                                </button>
+                              )}
                             </div>
                           )}
-                          {!s.notes && !s.changed_fields?.length && !s.is_locked && !s.locked_transaction && !s.compliance_status && (
-                            <div className="text-luxury-gray-3">No additional details.</div>
-                          )}
+
                         </div>
                       </td>
                     </tr>

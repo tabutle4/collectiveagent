@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { updates } = body
       const { error } = await supabase
         .from('transactions')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...normalizeTransactionEntryFields(updates || {}), updated_at: new Date().toISOString() })
         .eq('id', id)
       if (error) throw error
       return NextResponse.json({ success: true })
@@ -291,7 +292,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
      }
      const { error } = await supabase
        .from('checks_received')
-       .update({ ...cleanUpdates, updated_at: new Date().toISOString() })
+       .update({ ...normalizeTransactionEntryFields(cleanUpdates), updated_at: new Date().toISOString() })
        .eq('id', check_id)
      if (error) throw error
      return NextResponse.json({ success: true })
@@ -302,7 +303,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { check } = body
       const { data, error } = await supabase
         .from('checks_received')
-        .insert({ ...check, transaction_id: id })
+        .insert({ ...normalizeTransactionEntryFields(check || {}), transaction_id: id })
         .select()
         .single()
       if (error) throw error
@@ -360,7 +361,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { brokerage_id, updates } = body
       const { error } = await supabase
         .from('transaction_external_brokerages')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...normalizeTransactionEntryFields(updates || {}), updated_at: new Date().toISOString() })
         .eq('id', brokerage_id)
       if (error) throw error
       return NextResponse.json({ success: true })
@@ -383,7 +384,7 @@ if (action === 'add_external_brokerage') {
   const { brokerage } = body
   const { data, error } = await supabase
     .from('transaction_external_brokerages')
-    .insert({ ...brokerage, transaction_id: id })
+    .insert({ ...normalizeTransactionEntryFields(brokerage || {}), transaction_id: id })
     .select()
     .single()
   if (error) throw error

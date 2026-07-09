@@ -571,6 +571,7 @@ function ComplianceDocumentsTab({
     transaction: { id: string; transaction_type: string | null; property_address: string | null; compliance_status: string | null }
     required_docs: any[]
     uploaded_docs: any[]
+    submissions?: any[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -786,7 +787,7 @@ function ComplianceDocumentsTab({
   // WITHOUT waiting for the AI read. The doc lands in the slot the admin picked
   // (or unassigned). Returns the new doc id + the named file so the AI read can
   // run afterward in the background. This is what makes the upload feel fast.
-  const uploadOneDoc = async (file: File, requiredDocId: string | null, slotName?: string): Promise<{ docId: string | null; namedFile: File }> => {
+  const uploadOneDoc = async (file: File, requiredDocId: string | null, slotName?: string, submissionId?: string | null): Promise<{ docId: string | null; namedFile: File }> => {
     // Prepend slot label to filename so OneDrive shows "Invoice - 2026-06-02.pdf"
     const ext = file.name.split('.').pop()?.toLowerCase() || 'pdf'
     const date = new Date().toISOString().slice(0, 10)
@@ -805,6 +806,7 @@ function ComplianceDocumentsTab({
       file_type: file.type,
       required_document_id: requiredDocId || null,
       ai_summary: null,
+      submission_id: submissionId || null,
     })
     return { docId: result?.doc?.id || null, namedFile }
   }
@@ -855,10 +857,10 @@ function ComplianceDocumentsTab({
     }
   }
 
-  const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string) => {
+  const handleFileUpload = async (file: File, requiredDocId: string | null, slotName?: string, submissionId?: string | null) => {
     setUploadingSlotId(requiredDocId || 'unlinked')
     try {
-      const { docId, namedFile } = await uploadOneDoc(file, requiredDocId, slotName)
+      const { docId, namedFile } = await uploadOneDoc(file, requiredDocId, slotName, submissionId)
       await load()
       setUploadingSlotId(null)
       // AI review runs after the upload returns so the file appears immediately.
@@ -878,7 +880,7 @@ function ComplianceDocumentsTab({
   // the early-exit folder path, so no folder-creation race). Concurrency of 3 keeps
   // total in-flight AI tokens well under rate limits while being ~3x faster than
   // one-at-a-time. load() runs once at the end, not per file.
-  const handleMultiFileUpload = async (files: FileList) => {
+  const handleMultiFileUpload = async (files: FileList, submissionId?: string | null) => {
     const list = Array.from(files)
     if (list.length === 0) return
     setMultiUploadRemaining(list.length)
@@ -888,7 +890,7 @@ function ComplianceDocumentsTab({
     try {
       // First file alone - creates + caches the OneDrive folder URL
       try {
-        const r = await uploadOneDoc(list[0], null)
+        const r = await uploadOneDoc(list[0], null, undefined, submissionId)
         if (r.docId) uploaded.push({ docId: r.docId, namedFile: r.namedFile })
       } catch (err: any) {
         setError(err.message)
@@ -904,7 +906,7 @@ function ComplianceDocumentsTab({
         while (cursor < rest.length) {
           const myIndex = cursor++
           try {
-            const r = await uploadOneDoc(rest[myIndex], null)
+            const r = await uploadOneDoc(rest[myIndex], null, undefined, submissionId)
             if (r.docId) uploaded.push({ docId: r.docId, namedFile: r.namedFile })
           } catch (err: any) {
             setError(err.message)
@@ -1462,13 +1464,38 @@ function ComplianceDocumentsTab({
         </div>
       )}
 
+      {/* Compliance is per side: one stacked section per compliance submission
+          (agent + side). Docs tagged to a side show under it; untagged docs are
+          shared and appear under every side. Single-side deals render as before. */}
+      {((docsData?.submissions?.length ? docsData.submissions : [null]) as any[]).map((side: any) => {
+        const sideDocs = side
+          ? uploadedDocs.filter(d => d.submission_id === side.id || d.submission_id === null)
+          : uploadedDocs
+        const sideRequiredDocs = (side?.required_docs as any[] | undefined) || requiredDocs
+        const showSideHeader = !!side && (docsData?.submissions?.length || 0) > 1
+        const sideLabel = side?.side
+          ? side.side.charAt(0).toUpperCase() + side.side.slice(1)
+          : 'Side'
+        return (
+        <div key={side?.id || 'all'} className="space-y-4">
+        {showSideHeader && (
+          <div className="flex items-center gap-2 pt-2">
+            <span className="text-xs font-semibold text-luxury-gray-1">{sideLabel} side</span>
+            <span className="text-[11px] text-luxury-gray-3">{side.agent_name}</span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+              side.status === 'complete' ? 'text-green-700 bg-green-50 border-green-200'
+              : side.status === 'incomplete' ? 'text-red-700 bg-red-50 border-red-200'
+              : 'text-luxury-gray-2 bg-luxury-gray-5/40 border-luxury-gray-5'
+            }`}>{String(side.status || '').replace(/_/g, ' ')}</span>
+          </div>
+        )}
       {/* Required document slots */}
-      {requiredDocs.length > 0 && (
+      {sideRequiredDocs.length > 0 && (
         <div className="container-card">
           <p className="section-title mb-3">Required Documents</p>
           <div className="space-y-3">
-            {requiredDocs.map(rd => {
-              const linked = uploadedDocs.filter(d => d.required_document_id === rd.id)
+            {sideRequiredDocs.map(rd => {
+              const linked = sideDocs.filter(d => d.required_document_id === rd.id)
               const latest = linked[0]
               return (
                 <div key={rd.id} className="border border-luxury-gray-5 rounded-lg p-3">
@@ -1687,7 +1714,7 @@ function ComplianceDocumentsTab({
                             onClick={() => {
                               setEditingSlotsDocId(editingSlotsDocId === latest.id ? null : latest.id)
                               setEditSlotSelected(
-                                uploadedDocs.filter(d => d.file_url === latest.file_url && d.required_document_id).map(d => d.required_document_id)
+                                sideDocs.filter(d => d.file_url === latest.file_url && d.required_document_id).map(d => d.required_document_id)
                               )
                             }}
                             className="text-[11px] px-2.5 py-1 text-luxury-gray-3 border border-luxury-gray-5 rounded hover:bg-luxury-light transition-colors"
@@ -1709,7 +1736,7 @@ function ComplianceDocumentsTab({
                         <div className="mt-2 border border-luxury-gray-5 rounded p-2 bg-luxury-light">
                           <p className="text-[10px] text-luxury-gray-3 mb-1.5 font-semibold">Assign this file to slot(s):</p>
                           <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
-                            {requiredDocs.map(slot => (
+                            {sideRequiredDocs.map(slot => (
                               <label key={slot.id} className="flex items-center gap-1.5 cursor-pointer">
                                 <input
                                   type="checkbox"
@@ -1727,7 +1754,7 @@ function ComplianceDocumentsTab({
                             <button
                               disabled={!!actionLoading}
                               onClick={async () => {
-                                const alreadyLinked = uploadedDocs
+                                const alreadyLinked = sideDocs
                                   .filter(d => d.file_url === latest.file_url && d.required_document_id)
                                   .map(d => d.required_document_id)
                                 await handleEditSlots(latest.id, rd.id, editSlotSelected, alreadyLinked)
@@ -1753,7 +1780,7 @@ function ComplianceDocumentsTab({
                       <Upload size={11} />
                       {uploadingSlotId === rd.id ? 'Uploading...' : 'Upload document'}
                       <input type="file" accept=".pdf,.doc,.docx,image/*" className="hidden"
-                        onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], rd.id, rd.name)} />
+                        onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0], rd.id, rd.name, side?.id || null)} />
                     </label>
                   )}
                 </div>
@@ -1765,7 +1792,7 @@ function ComplianceDocumentsTab({
 
       {/* Additional / unlinked docs */}
       {(() => {
-        const unlinked = uploadedDocs.filter(d => !d.required_document_id)
+        const unlinked = sideDocs.filter(d => !d.required_document_id)
         return (
           <div className="container-card">
             <div className="flex items-center justify-between mb-3">
@@ -1774,7 +1801,7 @@ function ComplianceDocumentsTab({
                 <Upload size={11} />
                 {multiUploadRemaining > 0 ? `Uploading ${multiUploadRemaining}...` : 'Upload files'}
                 <input type="file" accept=".pdf,.doc,.docx,image/*" multiple className="hidden"
-                  onChange={e => e.target.files?.length && handleMultiFileUpload(e.target.files)} />
+                  onChange={e => e.target.files?.length && handleMultiFileUpload(e.target.files, side?.id || null)} />
               </label>
             </div>
             {unlinked.length === 0 ? (
@@ -1833,7 +1860,7 @@ function ComplianceDocumentsTab({
                           <div className="mt-1.5 border border-luxury-gray-5 rounded p-2 bg-luxury-light">
                             <p className="text-[10px] text-luxury-gray-3 mb-1.5 font-semibold">Assign to slot(s):</p>
                             <div className="space-y-1 mb-2 max-h-32 overflow-y-auto">
-                              {requiredDocs.map(rd => (
+                              {sideRequiredDocs.map(rd => (
                                 <label key={rd.id} className="flex items-center gap-1.5 cursor-pointer">
                                   <input
                                     type="checkbox"
@@ -1924,6 +1951,9 @@ function ComplianceDocumentsTab({
           </div>
         )
       })()}
+        </div>
+        )
+      })}
     </div>
   )
 }
