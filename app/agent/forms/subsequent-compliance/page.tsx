@@ -206,7 +206,7 @@ export default function SubsequentComplianceForm() {
         <div className="flex gap-2 items-start">
           <AlertCircle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-red-700 font-medium">
-            STOP - Do not complete this form until all required compliance documents have been signed and uploaded to BoldTrail Back Office.
+            STOP - Do not complete this form until all required compliance documents have been signed and uploaded.
           </p>
         </div>
       </div>

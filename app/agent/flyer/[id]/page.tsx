@@ -91,14 +91,14 @@ function buildFlyerHTML(d: FlyerData): string {
       ${FLYER_FONT_CSS}
       * { margin: 0; padding: 0; box-sizing: border-box; }
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
-      .top-zone { height: 280px; padding: 52px 52px 0 52px; position: relative; }
+      .top-zone { height: 260px; padding: 52px 52px 0 52px; position: relative; }
       .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
       .headline { display: flex; align-items: center; gap: 14px; padding-top: 12px; }
-      .just-box { background: #000; padding: 16px 24px 18px 24px; display: inline-block; }
-      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
+      .just-box { background: #000; padding: 0 22px; display: inline-flex; align-items: center; justify-content: center; min-height: 112px; }
+      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
       .city { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 26px; color: #000; letter-spacing: 0.2em; text-transform: uppercase; line-height: 1; margin-top: 12px; }
-      .photo-zone { height: 930px; position: relative; overflow: hidden; }
+      .photo-zone { height: 910px; position: relative; overflow: hidden; }
       .photo { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
       .photo-placeholder { width: 100%; height: 100%; background: #d8d5cd; display: flex; align-items: center; justify-content: center; color: #b0ada6; font-family: "Aileron", sans-serif; font-size: 20px; letter-spacing: 0.18em; text-transform: uppercase; }
       .stats-box { position: absolute; bottom: 36px; left: 130px; right: 130px; min-height: 150px; padding: 16px 20px; background: #fff; border: 2px solid #111; display: flex; align-items: stretch; }
@@ -278,6 +278,9 @@ export default function FlyerPage() {
       scaleWrap.style.transformOrigin = 'top left'
 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if ('fonts' in document) {
+        await document.fonts.ready
+      }
 
       const canvas = await (window as any).html2canvas(flyerEl, {
         width: 1080,
