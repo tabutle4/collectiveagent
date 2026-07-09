@@ -91,7 +91,7 @@ async function moveToSharePoint(
   oneDriveItemId: string,
   folderPath: string,
   fileName: string
-): Promise<string> {
+): Promise<{ webUrl: string; itemId: string }> {
   // Get OneDrive download URL
   const itemRes = await fetch(
     `https://graph.microsoft.com/v1.0/users/${ONEDRIVE_USER}/drive/items/${oneDriveItemId}`,
@@ -128,6 +128,7 @@ async function moveToSharePoint(
   const chunkSize = 10 * 1024 * 1024
   let offset = 0
   let webUrl = ''
+  let itemId = ''
 
   while (offset < fileSize) {
     const end = Math.min(offset + chunkSize - 1, fileSize - 1)
@@ -151,6 +152,7 @@ async function moveToSharePoint(
     if (chunkUpload.status === 200 || chunkUpload.status === 201) {
       const result = await chunkUpload.json()
       webUrl = result.webUrl || ''
+      itemId = result.id || ''
     } else if (chunkUpload.status !== 202) {
       throw new Error(`SharePoint chunk upload failed: ${chunkUpload.status} ${await chunkUpload.text()}`)
     }
@@ -158,7 +160,7 @@ async function moveToSharePoint(
     offset = end + 1
   }
 
-  return webUrl
+  return { webUrl, itemId }
 }
 
 // Verify file exists in SharePoint by checking its webUrl path
@@ -173,6 +175,42 @@ async function verifySharePointFile(token: string, driveId: string, folderPath: 
   } catch {
     return false
   }
+}
+
+// Verify the file's stream reference is actually resolvable (not just that it exists).
+// Newly API-uploaded SharePoint files sometimes have a broken stream/preview reference
+// until a rename forces SharePoint to re-register it. We check the downloadUrl resolves.
+async function verifyStreamResolves(token: string, driveId: string, itemId: string): Promise<boolean> {
+  try {
+    if (!itemId) return false
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!res.ok) return false
+    const data = await res.json()
+    const dl = data['@microsoft.graph.downloadUrl']
+    if (!dl) return false
+    // Confirm the pre-authenticated URL actually serves content
+    const head = await fetch(dl, { method: 'GET', headers: { Range: 'bytes=0-1' } })
+    return head.ok || head.status === 206
+  } catch {
+    return false
+  }
+}
+
+// Force SharePoint to re-register a file's stream reference by renaming it and back.
+// Returns the (possibly unchanged) final name.
+async function renameAndBack(token: string, driveId: string, itemId: string, finalName: string): Promise<void> {
+  const tempName = `_healing_${Date.now()}_${finalName}`
+  const patch = async (name: string) =>
+    fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+  await patch(tempName)
+  await patch(finalName)
 }
 
 // Delete file from OneDrive
@@ -237,10 +275,13 @@ export async function POST(req: NextRequest) {
     const fileName = `${finalTitle}.mp4`
 
     let rawUrl = ''
+    let sharePointItemId = ''
 
     if (job.onedrive_item_id) {
       // Upload from OneDrive to SharePoint
-      rawUrl = await moveToSharePoint(token, driveId, job.onedrive_item_id, folder, fileName)
+      const moveResult = await moveToSharePoint(token, driveId, job.onedrive_item_id, folder, fileName)
+      rawUrl = moveResult.webUrl
+      sharePointItemId = moveResult.itemId
 
       // Verify file is in SharePoint before deleting from OneDrive
       const verified = await verifySharePointFile(token, driveId, folder, fileName)
@@ -291,6 +332,7 @@ export async function POST(req: NextRequest) {
         if (chunkRes.status === 200 || chunkRes.status === 201) {
           const result = await chunkRes.json()
           rawUrl = result.webUrl || ''
+          sharePointItemId = result.id || ''
         } else if (chunkRes.status !== 202) {
           throw new Error(`SharePoint chunk upload failed: ${chunkRes.status} ${await chunkRes.text()}`)
         }
@@ -356,7 +398,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mark as uploaded
+    // Verify the stream link actually resolves. Newly uploaded SharePoint files
+    // sometimes have a broken stream reference until a rename forces re-registration.
+    let linkReady = await verifyStreamResolves(token, driveId, sharePointItemId)
+    if (!linkReady && sharePointItemId) {
+      // Self-heal: rename the file and back to force SharePoint to re-register it.
+      try {
+        await renameAndBack(token, driveId, sharePointItemId, `${finalTitle}.mp4`)
+        linkReady = await verifyStreamResolves(token, driveId, sharePointItemId)
+      } catch (e) {
+        console.error('rename-and-back heal failed:', e)
+      }
+    }
+
+    // Mark as uploaded. If the link still isn't ready, flag it so the cron retries
+    // and holds the agent email until it resolves.
     await supabaseAdmin
       .from('zoom_recording_jobs')
       .update({
@@ -365,8 +421,17 @@ export async function POST(req: NextRequest) {
         uploaded_at: new Date().toISOString(),
         onedrive_url: null,
         onedrive_item_id: null,
+        sharepoint_item_id: sharePointItemId || null,
+        link_verify_pending: linkReady ? false : true,
+        link_verify_attempts: 0,
       })
       .eq('id', jobId)
+
+    // If the link isn't ready, hold the agent email — the cron will send it once
+    // the link resolves (or notify admin if it never does).
+    if (!linkReady) {
+      return NextResponse.json({ ok: true, webUrl, linkPending: true })
+    }
 
     // Email agents
     const emailHtml = getEmailLayout(

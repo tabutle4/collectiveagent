@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/payload/funding-sync",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/verify-recording-links",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
