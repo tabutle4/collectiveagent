@@ -18,7 +18,6 @@ interface SubmissionRow {
   transaction_status: string | null
   compliance_status: string | null
   cda_sent: boolean
-  flyer_sent: boolean
   paid: boolean
   missing_items: { name: string; notes: string | null }[]
   review: { status: string; notes: string | null; completed_at: string | null } | null

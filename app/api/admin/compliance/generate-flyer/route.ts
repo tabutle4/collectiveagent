@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         transaction_id: transactionId,
         flyer_type: flyerType,
         status: 'requested',
-        requested_by: auth.user.id,
+        requested_by: auth.user!.id,
         flyer_division: txn.flyer_division || null,
         updated_at: now,
       })

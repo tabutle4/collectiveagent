@@ -140,7 +140,6 @@ export async function GET(request: NextRequest) {
         transaction_status: txn?.status || null,
         compliance_status: txn?.compliance_status || null,
         cda_sent: txn?.cda_status === 'sent',
-        flyer_sent: flyer ? (!!flyer.downloaded_at || flyer.status === 'sent') : false,
         paid: !!paidMap[r.transaction_id],
         missing_items: missingMap[r.transaction_id] || [],
         review: reviewMap[r.transaction_id]
