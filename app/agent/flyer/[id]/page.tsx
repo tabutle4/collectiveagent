@@ -94,8 +94,8 @@ function buildFlyerHTML(d: FlyerData): string {
       .top-zone { height: 260px; padding: 52px 52px 0 52px; position: relative; }
       .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
       .headline { display: flex; align-items: center; gap: 14px; padding-top: 12px; }
-      .just-box { background: #000; padding: 0 22px; display: inline-flex; align-items: center; justify-content: center; min-height: 112px; }
-      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; }
+      .just-box { background: #000; padding: 0 22px; display: inline-flex; align-items: center; justify-content: center; height: 96px; }
+      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 0.95; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
       .city { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 26px; color: #000; letter-spacing: 0.2em; text-transform: uppercase; line-height: 1; margin-top: 12px; }
       .photo-zone { height: 910px; position: relative; overflow: hidden; }
