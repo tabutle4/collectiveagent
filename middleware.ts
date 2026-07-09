@@ -135,10 +135,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Admins are normally redirected out of the agent area, but they still need to
-  // be able to open and fill out the shared agent forms.
-  const sharedFormPaths = ['/agent/forms']
-  const isSharedForm = sharedFormPaths.some(p => pathname.startsWith(p))
-  if (pathname.startsWith('/agent') && isAdminRole && !isSharedForm) {
+  // be able to open the shared agent forms and view agent flyer pages.
+  const adminAllowedAgentPaths = ['/agent/forms', '/agent/flyer']
+  const isAdminAllowedAgentPath = adminAllowedAgentPaths.some(p => pathname.startsWith(p))
+  if (pathname.startsWith('/agent') && isAdminRole && !isAdminAllowedAgentPath) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url))
   }
 

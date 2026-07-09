@@ -20,11 +20,14 @@ function formatNumber(n: number | null | undefined): string {
 }
 
 function parseCityFromAddress(address: string): string {
-  // "123 Main St, Houston, TX 77001" -> "Houston, Texas"
+  // "123 Main St, Houston, TX 77001" -> "Houston, TX 77001" (state kept for expandState)
   const parts = address.split(',').map(p => p.trim())
+  if (parts.length >= 3) {
+    // street, city, state+zip -> keep city and the state segment
+    return `${parts[1]}, ${parts[2]}`
+  }
   if (parts.length >= 2) {
-    const cityRaw = parts[1]
-    return cityRaw
+    return parts[1]
   }
   return ''
 }
@@ -89,7 +92,7 @@ function buildFlyerHTML(d: FlyerData): string {
       * { margin: 0; padding: 0; box-sizing: border-box; }
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
       .top-zone { height: 240px; padding: 40px 52px 0 52px; position: relative; }
-      .logo { position: absolute; top: 36px; right: 52px; width: 150px; height: 177px; display: block; }
+      .logo { position: absolute; top: 36px; right: 52px; height: 140px; width: auto; display: block; }
       .headline { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
       .just-box { background: #000; padding: 10px 20px 12px 20px; display: inline-block; }
       .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
@@ -145,9 +148,11 @@ export default function FlyerPage() {
   const flyerContainerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Load logo as base64 for embedding in canvas
+  // Load logo as base64 for embedding in canvas.
+  // Uses a flyer-specific portrait logo so the shared /logo.png used elsewhere
+  // (header, sidebar, PM portals, PDFs) is not affected.
   useEffect(() => {
-    fetch('/logo.png')
+    fetch('/logo-flyer.png')
       .then(r => r.arrayBuffer())
       .then(buf => {
         const bytes = new Uint8Array(buf)
@@ -206,10 +211,14 @@ export default function FlyerPage() {
   const scaleWrapRef = useRef<HTMLDivElement>(null)
   const scaleFlyer = useCallback(() => {
     if (!scaleWrapRef.current) return
-    const maxW = Math.min(window.innerWidth - 32, 600)
+    // Measure the actual available width of the wrapper's parent (the card column),
+    // not the window, so the preview never overflows its container.
+    const parent = scaleWrapRef.current.parentElement
+    const available = parent ? parent.clientWidth : Math.min(window.innerWidth - 32, 600)
+    const maxW = Math.min(available, 600)
     const scale = maxW / 1080
     scaleWrapRef.current.style.transform = `scale(${scale})`
-    scaleWrapRef.current.style.transformOrigin = 'top center'
+    scaleWrapRef.current.style.transformOrigin = 'top left'
     scaleWrapRef.current.style.marginBottom = `${1350 * scale - 1350}px`
   }, [])
 
