@@ -343,6 +343,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
     { href: '/admin/checks', label: 'Checks', icon: Landmark },
     { href: '/agent/forms', label: 'Forms', icon: FileText },
+    { href: '/agent/flyer', label: 'My Flyers', icon: ImageIcon },
     { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },

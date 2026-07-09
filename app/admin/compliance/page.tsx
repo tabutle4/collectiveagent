@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/context/AuthContext'
 import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 
 interface TrackerRow {
@@ -139,8 +140,10 @@ const hasValue = (v: any) => {
 
 export default function AdminCompliancePage() {
   const router = useRouter()
+  const { hasPermission, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
   const [needsWorkOnly, setNeedsWorkOnly] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -222,6 +225,8 @@ export default function AdminCompliancePage() {
 
   const generateFlyer = async (transactionId: string) => {
     setGeneratingFlyer(transactionId)
+    setFlyerMsg('')
+    setError('')
     try {
       const res = await fetch('/api/admin/compliance/generate-flyer', {
         method: 'POST',
@@ -229,8 +234,13 @@ export default function AdminCompliancePage() {
         body: JSON.stringify({ transaction_id: transactionId }),
       })
       const data = await res.json()
-      if (res.ok && data.success) await loadRows()
-      else setError(data.error || 'Could not generate the flyer. Please try again.')
+      if (res.ok && data.success) {
+        // Open the flyer page so Leah can add a photo, download, or send it.
+        window.open(`/agent/flyer/${transactionId}`, '_blank', 'noopener,noreferrer')
+        await loadRows()
+      } else {
+        setError(data.error || 'Could not generate the flyer. Please try again.')
+      }
     } catch {
       setError('Could not generate the flyer. Please try again.')
     } finally {
@@ -247,7 +257,12 @@ export default function AdminCompliancePage() {
         body: JSON.stringify({ transaction_id: transactionId, mode }),
       })
       const data = await res.json()
-      if (!res.ok || !data.success) setError(data.error || 'Could not send the email. Please try again.')
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Could not send the email. Please try again.')
+      } else {
+        setFlyerMsg(data.sent_to ? `Email sent to ${data.sent_to}.` : 'Email sent.')
+        setTimeout(() => setFlyerMsg(''), 4000)
+      }
     } catch {
       setError('Could not send the email. Please try again.')
     } finally {
@@ -330,6 +345,16 @@ export default function AdminCompliancePage() {
       return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs capitalize bg-red-50 text-red-700">{label}</span>
     }
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs capitalize bg-luxury-gray-5/40 text-luxury-gray-2">{label}</span>
+  }
+
+  // The admin layout already blocks this route, but guard defensively too.
+  if (!authLoading && !hasPermission('can_review_compliance')) {
+    return (
+      <div className="container-card max-w-md mx-auto text-center">
+        <h1 className="text-xl font-semibold text-luxury-gray-1 mb-2">Access Denied</h1>
+        <p className="text-luxury-gray-3">You do not have permission to view compliance requests.</p>
+      </div>
+    )
   }
 
   return (
@@ -443,6 +468,12 @@ export default function AdminCompliancePage() {
       {error && (
         <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 rounded text-xs text-red-700">
           <AlertCircle size={14} className="flex-shrink-0" />{error}
+        </div>
+      )}
+
+      {flyerMsg && (
+        <div className="flex items-center gap-2 p-3 mb-4 bg-green-50 rounded text-xs text-green-700">
+          <Check size={14} className="flex-shrink-0" />{flyerMsg}
         </div>
       )}
 
@@ -682,6 +713,16 @@ export default function AdminCompliancePage() {
                                 >
                                   {generatingFlyer === r.transaction_id ? 'Generating...' : 'Generate flyer'}
                                 </button>
+                              )}
+                              {r.flyer && (
+                                <a
+                                  href={`/agent/flyer/${r.transaction_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
+                                >
+                                  <ImageIcon size={12} /> Open flyer page <ExternalLink size={11} />
+                                </a>
                               )}
                             </div>
                           )}
