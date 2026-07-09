@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     if (txnIds.length) {
       const { data: txns } = await supabaseAdmin
         .from('transactions')
-        .select('id, property_address, client_name, status, compliance_status, transaction_type, is_locked')
+        .select('id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status')
         .in('id', txnIds)
       for (const t of txns || []) txnMap[t.id] = t
     }
@@ -65,6 +65,62 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
       for (const f of flyers || []) {
         if (!flyerMap[f.transaction_id]) flyerMap[f.transaction_id] = f
+      }
+    }
+
+    // Batch load rejected documents (the "what's missing" from Leah's review).
+    // These carry the reviewer's compliance_notes per document.
+    const missingMap: Record<string, { name: string; notes: string | null }[]> = {}
+    if (txnIds.length) {
+      const { data: rejectedDocs } = await supabaseAdmin
+        .from('transaction_documents')
+        .select('transaction_id, file_name, compliance_notes, required_document_id')
+        .in('transaction_id', txnIds)
+        .eq('compliance_status', 'rejected')
+      // Resolve required-document names for nicer labels
+      const rdIds = Array.from(
+        new Set((rejectedDocs || []).filter((d: any) => d.required_document_id).map((d: any) => d.required_document_id))
+      )
+      const rdMap: Record<string, string> = {}
+      if (rdIds.length) {
+        const { data: rds } = await supabaseAdmin
+          .from('required_documents')
+          .select('id, name')
+          .in('id', rdIds)
+        for (const rd of rds || []) rdMap[rd.id] = rd.name
+      }
+      for (const d of rejectedDocs || []) {
+        const name = d.required_document_id && rdMap[d.required_document_id] ? rdMap[d.required_document_id] : d.file_name
+        if (!missingMap[d.transaction_id]) missingMap[d.transaction_id] = []
+        missingMap[d.transaction_id].push({ name, notes: d.compliance_notes || null })
+      }
+    }
+
+    // Batch load the latest compliance review per transaction (reviewer + when).
+    const reviewMap: Record<string, any> = {}
+    if (txnIds.length) {
+      const { data: reviews } = await supabaseAdmin
+        .from('compliance_reviews')
+        .select('transaction_id, status, notes, completed_at')
+        .in('transaction_id', txnIds)
+        .order('completed_at', { ascending: false, nullsFirst: false })
+      for (const rv of reviews || []) {
+        if (!reviewMap[rv.transaction_id]) reviewMap[rv.transaction_id] = rv
+      }
+    }
+
+    // Batch load the primary agent's payment status to auto-derive "Paid".
+    const paidMap: Record<string, boolean> = {}
+    if (txnIds.length) {
+      const { data: internalAgents } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .select('transaction_id, agent_role, payment_status')
+        .in('transaction_id', txnIds)
+      for (const ia of internalAgents || []) {
+        // A deal counts as paid when its primary agent has been paid.
+        if (ia.agent_role === 'primary_agent' && ia.payment_status === 'paid') {
+          paidMap[ia.transaction_id] = true
+        }
       }
     }
 
@@ -83,6 +139,17 @@ export async function GET(request: NextRequest) {
         client_name: txn?.client_name || r.data?.client_name || null,
         transaction_status: txn?.status || null,
         compliance_status: txn?.compliance_status || null,
+        cda_sent: txn?.cda_status === 'sent',
+        flyer_sent: flyer ? (!!flyer.downloaded_at || flyer.status === 'sent') : false,
+        paid: !!paidMap[r.transaction_id],
+        missing_items: missingMap[r.transaction_id] || [],
+        review: reviewMap[r.transaction_id]
+          ? {
+              status: reviewMap[r.transaction_id].status,
+              notes: reviewMap[r.transaction_id].notes,
+              completed_at: reviewMap[r.transaction_id].completed_at,
+            }
+          : null,
         is_locked: txn?.is_locked || false,
         locked_transaction: r.data?.locked_transaction || false,
         changed_fields: r.data?.changed_fields || null,
