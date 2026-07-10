@@ -94,9 +94,9 @@ function buildFlyerHTML(d: FlyerData): string {
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
       .top-zone { height: 260px; padding: 52px 52px 0 52px; position: relative; }
       .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
-      .headline { display: flex; align-items: center; gap: 14px; padding-top: 12px; min-height: 88px; max-height: 88px; }
-      .just-box { background: #000; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 140px; height: 80px; min-height: 80px; max-height: 80px; padding: 0 18px; overflow: hidden; }
-      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 58px; color: #fff; line-height: 1; display: block; white-space: nowrap; max-height: 80px; }
+      .headline { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
+      .just-box { background: #000; padding: 10px 20px 12px 20px; display: inline-block; }
+      .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
       .city { font-family: "Aileron", sans-serif; font-weight: 400; font-size: 26px; color: #000; letter-spacing: 0.2em; text-transform: uppercase; line-height: 1; margin-top: 12px; }
       .photo-zone { height: 910px; position: relative; overflow: hidden; }
