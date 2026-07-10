@@ -227,7 +227,7 @@ export async function GET(
   <title>CDA - ${agentName} - ${propertyAddr}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 11px; color: #333; line-height: 1.4; padding: 40px; max-width: 8.5in; margin: 0 auto; background: white; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 11px; color: #333; line-height: 1.4; padding: 40px; max-width: 8.5in; margin: 0 auto; background: white; overflow-wrap: break-word; word-break: break-word; }
     @media print { body { padding: 20px; } .no-print { display: none !important; } }
     .save-pdf-button { display: inline-block; padding: 8px 16px; background-color: #C5A278; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; font-family: inherit; }
     .save-pdf-button:hover { background-color: #b39068; }
@@ -238,7 +238,11 @@ export async function GET(
     .label { color: #555; }
     .value { font-weight: 500; color: #333; }
     .accent { color: #C5A278; }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .doc-title { font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #333; }
+    .pdf-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
     .meta-box { background: #fafafa; padding: 12px; border-radius: 6px; }
     .meta-label { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
     .meta-value { font-weight: 600; font-size: 12px; color: #333; margin-bottom: 2px; }
@@ -246,10 +250,19 @@ export async function GET(
     .section { margin-bottom: 20px; }
     .note-box { background: #f9f7f4; border-left: 3px solid #C5A278; padding: 10px 12px; border-radius: 0 4px 4px 0; font-size: 10px; color: #555; margin-bottom: 20px; }
     .wire-box { background: #f0f8f0; border-left: 3px solid #4a7c59; padding: 10px 12px; border-radius: 0 4px 4px 0; font-size: 10px; color: #2d4a35; margin-top: 20px; }
+    @media (max-width: 640px) {
+      body { padding: 18px; }
+      .doc-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .doc-title { font-size: 14px; letter-spacing: 1px; }
+      .pdf-banner { flex-direction: column; align-items: flex-start; }
+      .meta-grid, .two-col { grid-template-columns: 1fr; }
+      table { font-size: 10px; }
+      td, th { padding-left: 2px !important; padding-right: 2px !important; }
+    }
   </style>
 </head>
 <body>
-  <div class="no-print" style="margin-bottom: 20px; padding: 12px 16px; background: #f9f7f4; border: 1px solid #e5ddd3; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+  <div class="no-print pdf-banner" style="margin-bottom: 20px; padding: 12px 16px; background: #f9f7f4; border: 1px solid #e5ddd3; border-radius: 6px;">
     <div>
       <div style="font-size: 12px; font-weight: 500; color: #333; margin-bottom: 2px;">Want a PDF copy?</div>
       <div style="font-size: 11px; color: #666;">Click the button and choose "Save as PDF" in the destination dropdown.</div>
@@ -257,15 +270,15 @@ export async function GET(
     <button class="save-pdf-button" onclick="window.print()">Save as PDF</button>
   </div>
 
-  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C5A278;">
+  <div class="doc-header" style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C5A278;">
     <div style="display: flex; align-items: center; gap: 12px;">
       <img src="${logoUrl}" alt="${agencyName}" style="height: 40px; width: auto;" onerror="this.style.display='none'" />
       <span style="font-size: 13px; font-weight: 500; letter-spacing: 1px; color: #333;">${agencyName.toUpperCase()}</span>
     </div>
-    <span style="font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #333;">COMMISSION DISBURSEMENT AUTHORIZATION</span>
+    <span class="doc-title">COMMISSION DISBURSEMENT AUTHORIZATION</span>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+  <div class="two-col">
     <div>
       <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Brokerage</div>
       <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:2px">${agencyName}</div>

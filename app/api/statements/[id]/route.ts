@@ -402,22 +402,34 @@ function generateStatementHTML(data: Record<string, any>): string {
       max-width: 8.5in;
       margin: 0 auto;
       background: white;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
+    .doc-header { display: flex; justify-content: space-between; align-items: flex-start; }
+    .doc-title { font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #333; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     @media print {
       body { padding: 20px; }
+    }
+    @media (max-width: 640px) {
+      body { padding: 18px; font-size: 12px; }
+      .doc-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .doc-title { font-size: 15px; letter-spacing: 1px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C5A278;">
+  <div class="doc-header" style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #C5A278;">
     <div style="display: flex; align-items: center; gap: 12px;">
       <img src="${data.logo_url}" alt="CRC" style="height: 48px; width: auto;" onerror="this.style.display='none'">
       <span style="font-size: 13px; font-weight: 500; letter-spacing: 1px; color: #333;">COLLECTIVE REALTY CO</span>
     </div>
-    <span style="font-size: 18px; font-weight: 300; letter-spacing: 2px; color: #333;">COMMISSION STATEMENT</span>
+    <span class="doc-title">COMMISSION STATEMENT</span>
   </div>
 
-  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+  <div class="grid-2" style="margin-bottom: 24px;">
     <div style="background: #fafafa; padding: 12px; border-radius: 6px;">
       <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 11px;">
         <span style="color: #888; text-transform: uppercase; font-size: 9px;">Prepared for</span>
@@ -493,7 +505,7 @@ function generateStatementHTML(data: Record<string, any>): string {
   ${newAgentProgressSection}
   ${capProgressSection}
 
-  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+  <div class="grid-3" style="margin-bottom: 20px;">
     <div style="background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; padding: 14px;">
       <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 6px;">Your 1099 income</div>
       <div style="font-size: 22px; font-weight: 600; color: #333; margin-bottom: 8px;">${data.amount_1099}</div>
