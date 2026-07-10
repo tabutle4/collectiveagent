@@ -128,7 +128,7 @@ function buildFlyerHTML(d: FlyerData): string {
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
       .top-zone { height: 260px; padding: 52px 52px 0 52px; position: relative; }
       .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
-      .headline { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
+      .headline { display: flex; align-items: baseline; gap: 14px; padding-top: 8px; }
       .just-box { background: #000; padding: 10px 20px 12px 20px; display: inline-block; }
       .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
