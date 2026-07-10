@@ -6,6 +6,40 @@ import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Pencil
 import { FLYER_FONT_CSS } from '@/lib/flyer-fonts'
 import { useAuth } from '@/lib/context/AuthContext'
 
+// ── Font loading gate ─────────────────────────────────────────────────────────
+// The flyer fonts are injected as base64 @font-face rules in a <style> tag. An
+// injected @font-face is not guaranteed to register as a pending load, so
+// document.fonts.ready can resolve before the glyphs are actually available,
+// which makes the first word ("Just") paint in a fallback serif. Registering the
+// faces explicitly via the FontFace API and awaiting them guarantees the real
+// font is present before the flyer renders or exports.
+let flyerFontsPromise: Promise<void> | null = null
+function ensureFlyerFontsLoaded(): Promise<void> {
+  if (flyerFontsPromise) return flyerFontsPromise
+  flyerFontsPromise = (async () => {
+    if (typeof document === 'undefined' || !('fonts' in document)) return
+    const faceRe = /@font-face\s*\{[^}]*?font-family:\s*"([^"]+)"[^}]*?src:\s*url\("([^"]+)"\)[^}]*?\}/g
+    let match: RegExpExecArray | null
+    const loads: Promise<unknown>[] = []
+    while ((match = faceRe.exec(FLYER_FONT_CSS)) !== null) {
+      const family = match[1]
+      const src = match[2]
+      try {
+        const face = new FontFace(family, `url(${src})`)
+        loads.push(
+          face.load().then(loaded => {
+            ;(document.fonts as unknown as FontFaceSet).add(loaded)
+          })
+        )
+      } catch {}
+    }
+    try {
+      await Promise.all(loads)
+    } catch {}
+  })()
+  return flyerFontsPromise
+}
+
 // ── Flyer type label helpers ──────────────────────────────────────────────────
 const FLYER_LABELS: Record<string, { just: string; type: string }> = {
   just_listed:  { just: 'Just',  type: 'Listed' },
@@ -175,6 +209,12 @@ export default function FlyerPage() {
       .catch(() => {})
   }, [])
 
+  // Preload the embedded flyer fonts so the on-screen preview renders in
+  // TheSeasons rather than a fallback serif on first paint.
+  useEffect(() => {
+    ensureFlyerFontsLoaded().catch(() => {})
+  }, [])
+
   // Load flyer data
   useEffect(() => {
     if (!transactionId) return
@@ -302,6 +342,9 @@ export default function FlyerPage() {
 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if ('fonts' in document) {
+        try {
+          await ensureFlyerFontsLoaded()
+        } catch {}
         await document.fonts.ready
       }
 
