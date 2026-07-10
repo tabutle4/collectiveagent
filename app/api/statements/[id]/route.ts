@@ -106,18 +106,28 @@ export async function GET(
     const ROLE_PRIORITY: Record<string, number> = {
       primary_agent: 0, listing_agent: 1, co_agent: 2,
     }
-    const { data: agentRowsRaw } = await supabase
+    const PRODUCING_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
+    const { data: allTxnRowsRaw } = await supabase
       .from('transaction_internal_agents')
       .select('*')
       .eq('transaction_id', tia.transaction_id)
-      .eq('agent_id', tia.agent_id)
-    const agentRows = (agentRowsRaw && agentRowsRaw.length > 0) ? agentRowsRaw : [tia]
+    const allTxnRows = (allTxnRowsRaw && allTxnRowsRaw.length > 0) ? allTxnRowsRaw : [tia]
+    const agentRows = allTxnRows.filter(r => r.agent_id === tia.agent_id)
     const primaryRow = [...agentRows].sort(
       (a, b) => (ROLE_PRIORITY[a.agent_role] ?? 9) - (ROLE_PRIORITY[b.agent_role] ?? 9)
     )[0]
     // Rows other than the anchor contribute their 1099/net as add-ons.
     const extraRows = agentRows.filter(r => r.id !== primaryRow.id)
     const allTiaIds = agentRows.map(r => r.id)
+    // Is this agent the only producing agent on the deal? Only then can the
+    // brokerage line be reconciled as office side minus this agent's payout
+    // without stealing another agent's share.
+    const otherProducingAgentIds = new Set(
+      allTxnRows
+        .filter(r => PRODUCING_ROLES.includes(r.agent_role) && r.agent_id !== tia.agent_id)
+        .map(r => r.agent_id)
+    )
+    const isSoleProducingAgent = otherProducingAgentIds.size === 0
 
     // Base the commission breakdown on the primary row so a second-check
     // co_agent row never drives the layout or the displayed role.
@@ -126,16 +136,6 @@ export async function GET(
     const roleLabel = formatRole(baseTia.agent_role)
 
     const currentYear = new Date().getFullYear()
-    const { data: ytdData } = await supabase
-      .from('transaction_internal_agents')
-      .select('sales_volume, agent_net')
-      .eq('agent_id', tia.agent_id)
-      .eq('payment_status', 'paid')
-      .gte('payment_date', `${currentYear}-01-01`)
-      .lte('payment_date', `${currentYear}-12-31`)
-
-    const ytdVolume = (ytdData || []).reduce((s, r) => s + parseFloat(r.sales_volume || 0), 0)
-    const ytdNet = (ytdData || []).reduce((s, r) => s + parseFloat(r.agent_net || 0), 0)
 
     // Calculate YTD cap progress from TIA
     const { data: capData } = await supabase
@@ -183,11 +183,23 @@ export async function GET(
     // Additional-comp rows (extra checks to the same agent) add their own 1099
     // and net on top of the primary row.
     const extraComp1099 = extraRows.reduce((s, r) => s + rowAmount1099(r), 0)
+    // Per-row disbursement to the agent: base rows carry agent_gross; extra
+    // co_agent rows carry agent_net (no gross). Used for the commission split.
+    const rowAgentDisburse = (r: any): number => {
+      const g = parseFloat(r.agent_gross || 0)
+      return g > 0 ? g : parseFloat(r.agent_net || 0)
+    }
+    const extraAgentAmount = extraRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
+    const agentDisburseTotal = agentGross + extraAgentAmount
     // Totals reflect every row for this agent on the deal.
     const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
-    const debtsDeducted = agentRows.reduce((s, r) => s + parseFloat(r.debts_deducted || 0), 0)
     const agentNet = agentRows.reduce((s, r) => s + parseFloat(r.agent_net || 0), 0)
-    const brokerageSplit = parseFloat(baseTia.brokerage_split || 0)
+    // Amount withheld = what was actually applied against this agent's cards on
+    // the deal. Use the applied debt records so a withholding shows even when
+    // the TIA debts_deducted column has not been stamped.
+    const debtsDeducted = (appliedDebts || []).reduce(
+      (s, d) => s + parseFloat(d.amount_paid || 0), 0
+    )
     const agentBasis = parseFloat(baseTia.agent_basis || 0)
     const splitPct = parseFloat(baseTia.split_percentage || 0)
     const brokerageSplitPct = 100 - splitPct
@@ -206,9 +218,22 @@ export async function GET(
     const grossCommission = parseFloat(txn?.gross_commission || baseTia.agent_basis || 0)
     const officeGross = parseFloat(txn?.office_gross || 0)
     const btsaAmount = parseFloat(baseTia.btsa_amount || 0)
-    const commissionPct = txn?.sales_price
-      ? ((grossCommission / parseFloat(txn.sales_price)) * 100).toFixed(2)
+    // Commission percent: use the sale price, or the monthly rent for leases,
+    // as the basis. Always compute when a basis is available (was showing 0%
+    // whenever sales_price was blank, e.g. on leases).
+    const commissionBasisForPct = parseFloat(txn?.sales_price || 0) || parseFloat(txn?.monthly_rent || 0)
+    const commissionPct = commissionBasisForPct > 0
+      ? ((grossCommission / commissionBasisForPct) * 100).toFixed(2)
       : '0'
+    // Brokerage's cut for the commission-calculation section. When this agent
+    // is the only producing agent on the deal, derive it as the office side
+    // minus the agent's full payout so the section reconciles (Split +
+    // Additional + Brokerage = office side). With multiple producing agents the
+    // office side also covers the others, so fall back to this row's stored
+    // brokerage_split to avoid attributing their share to the brokerage.
+    const brokerageSplit = isSoleProducingAgent
+      ? Math.max(0, Math.round((officeGross - agentDisburseTotal) * 100) / 100)
+      : parseFloat(baseTia.brokerage_split || 0)
 
     const debts = (appliedDebts || []).map(d => ({
       description: d.description || d.debt_type?.replace(/_/g, ' ') || 'Balance owed',
@@ -231,8 +256,6 @@ export async function GET(
       role: roleLabel,
       payment_date: fmtDate(baseTia.payment_date),
       payment_method: baseTia.payment_method || 'ACH',
-      ytd_volume: fmt$(ytdVolume),
-      ytd_net: fmt$(ytdNet),
       agent_basis: fmt$(agentBasis),
       split_percentage: splitPct.toString(),
       brokerage_split_pct: brokerageSplitPct.toString(),
@@ -374,13 +397,9 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="color: #888; text-transform: uppercase; font-size: 9px;">Gross Commission</span>
         <span style="font-weight: 500; color: #333;">${data.gross_commission} (${data.commission_pct}%)</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 11px;">
+      <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px;">
         <span style="color: #888; text-transform: uppercase; font-size: 9px;">Payment Date</span>
         <span style="font-weight: 500; color: #333;">${data.payment_date}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; padding: 3px 0; font-size: 11px;">
-        <span style="color: #888; text-transform: uppercase; font-size: 9px;">YTD Net</span>
-        <span style="font-weight: 500; color: #333;">${data.ytd_net}</span>
       </div>
     </div>
   </div>
@@ -406,6 +425,12 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.split_percentage}% of basis</span></span>
         <span style="font-weight: 500;">${data.agent_gross}</span>
       </div>
+      ${data.has_extra_comp ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Additional commission <span style="color: #999; font-size: 9px; margin-left: 6px;">paid to you</span></span>
+        <span style="font-weight: 500;">${data.extra_comp_amount}</span>
+      </div>
+      ` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0;">
         <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_split_pct}%${brokerageSplitNote}</span></span>
         <span style="font-weight: 500;">${data.brokerage_split}</span>

@@ -4188,6 +4188,17 @@ export default function AdminTransactionDetailPage() {
                       const agentNet = parseFloat(a.agent_net || calc?.agent_net || 0)
                       const amount1099 = a.amount_1099_reportable || (agentGross - processingFee - coachingFee - otherFees)
                       const isDeleting = deleteConfirm === a.id
+                      // A second-check co_agent row shares its agent_id with the
+                      // agent's primary/listing row. Statements and CDAs are now
+                      // aggregated per agent, so the extra card should not show
+                      // its own duplicate Statement/CDA/Send buttons.
+                      const isSecondCheckDuplicate =
+                        a.agent_role === 'co_agent' &&
+                        agents.some((o: any) =>
+                          o.id !== a.id &&
+                          o.agent_id === a.agent_id &&
+                          (o.agent_role === 'primary_agent' || o.agent_role === 'listing_agent')
+                        )
 
                       return (
                         <div key={a.id} className="inner-card">
@@ -4432,7 +4443,7 @@ export default function AdminTransactionDetailPage() {
                           )}
 
                           {/* Statement & CDA buttons -- per agent card */}
-                          {a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && (
+                          {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
                               <button
                                 onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}

@@ -74,7 +74,7 @@ export async function GET(
     const { data: txn } = await supabaseAdmin
       .from('transactions')
       .select(`
-        id, property_address, transaction_type, sales_price,
+        id, property_address, transaction_type, sales_price, monthly_rent,
         closing_date, closed_date, office_gross,
         listing_side_commission, buying_side_commission,
         listing_base_commission, buying_base_commission,
@@ -119,12 +119,13 @@ export async function GET(
     // agent_id) that carry agent_net only. Gather every row for this agent,
     // anchor role/BTSA/rebate on the primary row, and total the agent payout.
     const CDA_ROLE_PRIORITY: Record<string, number> = { primary_agent: 0, listing_agent: 1, co_agent: 2 }
-    const { data: agentTiaRowsRaw } = await supabaseAdmin
+    const PRODUCING_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
+    const { data: allTiaRowsRaw } = await supabaseAdmin
       .from('transaction_internal_agents')
-      .select('id, agent_role, agent_gross, agent_net, btsa_amount, rebate_amount, rebate_type, brokerage_split')
+      .select('id, agent_id, agent_role, agent_gross, agent_net, btsa_amount, rebate_amount, rebate_type, brokerage_split')
       .eq('transaction_id', id)
-      .eq('agent_id', tia.agent_id)
-    const agentTiaRows = (agentTiaRowsRaw && agentTiaRowsRaw.length > 0) ? agentTiaRowsRaw : [tia]
+    const allTiaRows = (allTiaRowsRaw && allTiaRowsRaw.length > 0) ? allTiaRowsRaw : [tia]
+    const agentTiaRows = allTiaRows.filter(r => r.agent_id === tia.agent_id)
     const primaryTiaRow = [...agentTiaRows].sort(
       (a, b) => (CDA_ROLE_PRIORITY[a.agent_role] ?? 9) - (CDA_ROLE_PRIORITY[b.agent_role] ?? 9)
     )[0]
@@ -134,6 +135,20 @@ export async function GET(
       return g > 0 ? g : Number(r.agent_net || 0)
     }
     const agentDisburseTotal = agentTiaRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
+    // Office net = the office side commission minus every producing agent's
+    // payout minus anything paid to outside brokerages. Because additional
+    // income is already folded into the side commissions, this figure includes
+    // the office's share of it automatically.
+    const allAgentsDisburseTotal = allTiaRows
+      .filter(r => PRODUCING_ROLES.includes(r.agent_role))
+      .reduce((s, r) => s + rowAgentDisburse(r), 0)
+    const { data: externalBrokerages } = await supabaseAdmin
+      .from('transaction_external_brokerages')
+      .select('amount_1099_reportable')
+      .eq('transaction_id', id)
+    const externalTotal = (externalBrokerages || []).reduce(
+      (s, e) => s + Number(e.amount_1099_reportable || 0), 0
+    )
 
     const role = formatRole(primaryTiaRow.agent_role)
     const disburseTotal = Number(tia.agent_gross || 0) + Number(tia.brokerage_split || 0)
@@ -149,8 +164,19 @@ export async function GET(
     const officeGross = Number(txn.office_gross || 0)
     const totalGrossCommission = Number(txn.gross_commission || officeGross + btsaTotal)
     const extraRows = (additionalIncomeRows || []) as { side: string; label: string; amount: number }[]
-    const salesPricePct = txn.sales_price && officeGross
-      ? ((officeGross / Number(txn.sales_price)) * 100).toFixed(2) + '%'
+    // Office net for the payees table: office side minus all agents and
+    // outside brokerages. Never negative.
+    const officeNet = Math.max(0, Math.round((officeGross - allAgentsDisburseTotal - externalTotal) * 100) / 100)
+    const officeSideLabel = buyingSide > 0 && listingSide === 0
+      ? 'Buying'
+      : listingSide > 0 && buyingSide === 0
+        ? 'Listing'
+        : 'Office'
+    // Sale price for display; leases use monthly rent.
+    const priceForDisplay = Number(txn.sales_price || 0) || Number(txn.monthly_rent || 0)
+    const priceLabel = Number(txn.sales_price || 0) > 0 ? 'Sales price' : 'Monthly rent'
+    const salesPricePct = priceForDisplay && officeGross
+      ? ((officeGross / priceForDisplay) * 100).toFixed(2) + '%'
       : null
 
     // Rebate (reduces agent payout)
@@ -226,7 +252,7 @@ export async function GET(
       <div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Property</div>
       <div style="font-size:12px;font-weight:600;color:#333;margin-bottom:2px">${propertyAddr}</div>
       <div style="font-size:10px;color:#666">Closing: ${fmtDate(txn.closing_date || txn.closed_date)}</div>
-      <div style="font-size:10px;color:#666">Sales price: ${fmt$(txn.sales_price)}</div>
+      <div style="font-size:10px;color:#666">${priceLabel}: ${fmt$(priceForDisplay)}</div>
       <div style="font-size:13px;font-weight:700;color:#333;margin-top:8px">Total Gross Commission: ${fmt$(totalGrossCommission)}</div>
       ${listingSide > 0 ? `<div style="font-size:10px;color:#666;margin-top:3px">Gross Commission: ${fmt$(listingSide + buyingSide)}${salesPricePct ? ' (' + salesPricePct + ')' : ''}</div>` : ''}
       ${btsaTotal > 0 ? `<div style="font-size:10px;color:#666">BTSA: ${fmt$(btsaTotal)}</div>` : ''}
@@ -259,8 +285,7 @@ export async function GET(
         </tr>
       </thead>
       <tbody>
-        ${listingSide > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">Listing office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(listingSide)}</td></tr>` : ''}
-        ${buyingSide > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">Buying office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(buyingSide)}</td></tr>` : ''}
+        ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeSideLabel} office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
         ${agentDisburseTotal > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(agentDisburseTotal)}</td></tr>` : ''}
         ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">(${fmt$(rebateAmount)})</td></tr>` : ''}
       </tbody>
