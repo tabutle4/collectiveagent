@@ -128,7 +128,7 @@ function buildFlyerHTML(d: FlyerData): string {
       .flyer { width: 1080px; height: 1350px; background: #fff; overflow: hidden; position: relative; font-size: 0; }
       .top-zone { height: 260px; padding: 52px 52px 0 52px; position: relative; }
       .logo { position: absolute; top: 34px; right: 52px; height: 180px; width: auto; display: block; }
-      .headline { display: flex; align-items: baseline; gap: 14px; padding-top: 8px; }
+      .headline { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
       .just-box { background: #000; padding: 10px 20px 12px 20px; display: inline-block; }
       .just-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #fff; line-height: 1; display: block; }
       .type-text { font-family: "TheSeasons", serif; font-style: normal; font-size: 82px; color: #000; line-height: 1; }
@@ -325,20 +325,33 @@ export default function FlyerPage() {
     setDownloading(true)
 
     try {
-      // Dynamically load html2canvas
+      // Dynamically load html2canvas-pro (a maintained fork of html2canvas).
+      // The original html2canvas 1.4.1 has an unfixed bug that vertically
+      // misaligns text when it sits inside an element with a background color,
+      // which distorted the white "Just" inside the black headline box on
+      // export (but not in the browser preview). html2canvas-pro includes the
+      // text-baseline fix. Its API and global name are identical to the
+      // original, so the call below is unchanged.
       const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+      script.src = 'https://cdn.jsdelivr.net/npm/html2canvas-pro@2.2.3/dist/html2canvas-pro.min.js'
       await new Promise<void>((resolve, reject) => {
         script.onload = () => resolve()
-        script.onerror = () => reject(new Error('Failed to load html2canvas'))
+        script.onerror = () => reject(new Error('Failed to load html2canvas-pro'))
         document.head.appendChild(script)
       })
 
       const scaleWrap = scaleWrapRef.current!
       const prevTransform = scaleWrap.style.transform
       const prevOrigin = scaleWrap.style.transformOrigin
-      scaleWrap.style.transform = 'scale(1)'
+      const prevMarginBottom = scaleWrap.style.marginBottom
+      // html2canvas 1.4.1 miscomputes child element positions when an ancestor
+      // has ANY CSS transform, including scale(1). Removing the transform
+      // entirely (not setting scale(1)) renders the flyer at full size with no
+      // transformed ancestor, which is what html2canvas needs to place the
+      // headline text correctly inside its box on export.
+      scaleWrap.style.transform = 'none'
       scaleWrap.style.transformOrigin = 'top left'
+      scaleWrap.style.marginBottom = '0px'
 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       if ('fonts' in document) {
@@ -360,6 +373,7 @@ export default function FlyerPage() {
 
       scaleWrap.style.transform = prevTransform
       scaleWrap.style.transformOrigin = prevOrigin
+      scaleWrap.style.marginBottom = prevMarginBottom
 
       const link = document.createElement('a')
       const label = FLYER_LABELS[flyerType] || FLYER_LABELS.just_sold
