@@ -155,6 +155,16 @@ export async function GET(
       .select('debt_type, description, amount_paid, date_incurred')
       .in('offset_transaction_agent_id', allTiaIds)
 
+    // Co-op paid to outside brokerages. office_gross includes both sides, so
+    // CRC's actual side is office_gross minus this.
+    const { data: externalBrokeragesStmt } = await supabase
+      .from('transaction_external_brokerages')
+      .select('amount_1099_reportable')
+      .eq('transaction_id', tia.transaction_id)
+    const externalTotal = (externalBrokeragesStmt || []).reduce(
+      (s, e) => s + parseFloat(e.amount_1099_reportable || 0), 0
+    )
+
     // Per-row 1099 helper. Prefer the stored reportable amount; fall back to
     // the canonical formula only when it is missing.
     const rowAmount1099 = (r: any): number => {
@@ -193,7 +203,6 @@ export async function GET(
     const agentDisburseTotal = agentGross + extraAgentAmount
     // Totals reflect every row for this agent on the deal.
     const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
-    const agentNet = agentRows.reduce((s, r) => s + parseFloat(r.agent_net || 0), 0)
     // Amount withheld = what was actually applied against this agent's cards on
     // the deal. Use the applied debt records so a withholding shows even when
     // the TIA debts_deducted column has not been stamped.
@@ -217,6 +226,9 @@ export async function GET(
 
     const grossCommission = parseFloat(txn?.gross_commission || baseTia.agent_basis || 0)
     const officeGross = parseFloat(txn?.office_gross || 0)
+    // CRC's actual side commission: office side minus the co-op paid to outside
+    // brokerages. This is what gets split between the agent and the brokerage.
+    const crcSide = Math.max(0, Math.round((officeGross - externalTotal) * 100) / 100)
     const btsaAmount = parseFloat(baseTia.btsa_amount || 0)
     // Commission percent: use the sale price, or the monthly rent for leases,
     // as the basis. Always compute when a basis is available (was showing 0%
@@ -226,14 +238,17 @@ export async function GET(
       ? ((grossCommission / commissionBasisForPct) * 100).toFixed(2)
       : '0'
     // Brokerage's cut for the commission-calculation section. When this agent
-    // is the only producing agent on the deal, derive it as the office side
-    // minus the agent's full payout so the section reconciles (Split +
-    // Additional + Brokerage = office side). With multiple producing agents the
-    // office side also covers the others, so fall back to this row's stored
-    // brokerage_split to avoid attributing their share to the brokerage.
+    // is the only producing agent on the deal, derive it as CRC's side minus
+    // the agent's full payout so the section reconciles (Split + Additional +
+    // Brokerage = CRC side). With multiple producing agents the side also covers
+    // the others, so fall back to this row's stored brokerage_split.
     const brokerageSplit = isSoleProducingAgent
-      ? Math.max(0, Math.round((officeGross - agentDisburseTotal) * 100) / 100)
+      ? Math.max(0, Math.round((crcSide - agentDisburseTotal) * 100) / 100)
       : parseFloat(baseTia.brokerage_split || 0)
+    // Net cash to the agent = taxable income minus anything withheld. The stored
+    // agent_net does not reflect withholdings recovered on this check (e.g. a
+    // monthly brokerage fee), so derive it here.
+    const netPayout = Math.round((amount1099 - debtsDeducted) * 100) / 100
 
     const debts = (appliedDebts || []).map(d => ({
       description: d.description || d.debt_type?.replace(/_/g, ' ') || 'Balance owed',
@@ -250,7 +265,7 @@ export async function GET(
       sales_price: fmt$(txn?.sales_price || txn?.monthly_rent),
       commission_plan: plan,
       gross_commission: fmt$(grossCommission),
-      office_gross: fmt$(officeGross),
+      office_gross: fmt$(crcSide),
       btsa_amount: btsaAmount > 0 ? fmt$(btsaAmount) : null,
       commission_pct: commissionPct,
       role: roleLabel,
@@ -270,7 +285,7 @@ export async function GET(
       has_debts: debtsDeducted > 0,
       total_debts_deducted: fmt$(debtsDeducted),
       debts,
-      agent_net: fmt$(agentNet),
+      agent_net: fmt$(netPayout),
       generated_date: new Date().toLocaleDateString('en-US', {
         month: 'long',
         day: 'numeric',

@@ -139,9 +139,8 @@ export async function GET(
     // payout minus anything paid to outside brokerages. Because additional
     // income is already folded into the side commissions, this figure includes
     // the office's share of it automatically.
-    const allAgentsDisburseTotal = allTiaRows
-      .filter(r => PRODUCING_ROLES.includes(r.agent_role))
-      .reduce((s, r) => s + rowAgentDisburse(r), 0)
+    const producingRows = allTiaRows.filter(r => PRODUCING_ROLES.includes(r.agent_role))
+    const allAgentsDisburseTotal = producingRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
     const { data: externalBrokerages } = await supabaseAdmin
       .from('transaction_external_brokerages')
       .select('amount_1099_reportable')
@@ -149,6 +148,26 @@ export async function GET(
     const externalTotal = (externalBrokerages || []).reduce(
       (s, e) => s + Number(e.amount_1099_reportable || 0), 0
     )
+    // Amounts withheld from agents on this deal (e.g. a monthly brokerage fee
+    // recovered from the check). These reduce the agent's disbursement and are
+    // kept by the brokerage, so they move from the agent line to the office
+    // line on the CDA.
+    const producingTiaIds = producingRows.map(r => r.id)
+    const { data: appliedDebtRows } = producingTiaIds.length > 0
+      ? await supabaseAdmin
+          .from('agent_debts')
+          .select('amount_paid, offset_transaction_agent_id')
+          .in('offset_transaction_agent_id', producingTiaIds)
+      : { data: [] as any[] }
+    const agentTiaIdSet = new Set(agentTiaRows.map(r => r.id))
+    const thisAgentDebts = (appliedDebtRows || []).reduce(
+      (s, d) => agentTiaIdSet.has(d.offset_transaction_agent_id) ? s + Number(d.amount_paid || 0) : s, 0
+    )
+    const allAgentsDebts = (appliedDebtRows || []).reduce(
+      (s, d) => s + Number(d.amount_paid || 0), 0
+    )
+    // What this agent actually receives after withholdings.
+    const agentNetPay = Math.max(0, Math.round((agentDisburseTotal - thisAgentDebts) * 100) / 100)
 
     const role = formatRole(primaryTiaRow.agent_role)
     const disburseTotal = Number(tia.agent_gross || 0) + Number(tia.brokerage_split || 0)
@@ -164,14 +183,19 @@ export async function GET(
     const officeGross = Number(txn.office_gross || 0)
     const totalGrossCommission = Number(txn.gross_commission || officeGross + btsaTotal)
     const extraRows = (additionalIncomeRows || []) as { side: string; label: string; amount: number }[]
-    // Office net for the payees table: office side minus all agents and
-    // outside brokerages. Never negative.
-    const officeNet = Math.max(0, Math.round((officeGross - allAgentsDisburseTotal - externalTotal) * 100) / 100)
+    // Office net for the payees table: office side minus all agents (net of
+    // their withholdings) minus outside brokerages. Withholdings kept by the
+    // brokerage stay on the office line. Never negative.
+    const officeNet = Math.max(
+      0,
+      Math.round((officeGross - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal) * 100) / 100
+    )
     const officeSideLabel = buyingSide > 0 && listingSide === 0
       ? 'Buying'
       : listingSide > 0 && buyingSide === 0
         ? 'Listing'
         : 'Office'
+    const officeLineLabel = officeSideLabel === 'Office' ? 'Office commission' : `${officeSideLabel} office commission`
     // Sale price for display; leases use monthly rent.
     const priceForDisplay = Number(txn.sales_price || 0) || Number(txn.monthly_rent || 0)
     const priceLabel = Number(txn.sales_price || 0) > 0 ? 'Sales price' : 'Monthly rent'
@@ -285,8 +309,8 @@ export async function GET(
         </tr>
       </thead>
       <tbody>
-        ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeSideLabel} office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
-        ${agentDisburseTotal > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(agentDisburseTotal)}</td></tr>` : ''}
+        ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeLineLabel}</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
+        ${agentNetPay > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(agentNetPay)}</td></tr>` : ''}
         ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">(${fmt$(rebateAmount)})</td></tr>` : ''}
       </tbody>
     </table>
