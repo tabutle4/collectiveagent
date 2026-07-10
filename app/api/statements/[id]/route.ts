@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
+import { AGENT_ROLE_OPTIONS } from '@/lib/transactions/constants'
+
+const formatRole = (role: string | null | undefined): string => {
+  if (!role) return 'Agent'
+  const match = AGENT_ROLE_OPTIONS.find(o => o.value === role)
+  return match ? match.label : role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
 
 const fmt$ = (n: number | null | undefined): string => {
   if (n == null) return '$0.00'
@@ -60,12 +67,16 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const format = searchParams.get('format') || 'html'
 
+    // NOTE: transaction_internal_agents has two foreign keys to users
+    // (agent_id and referred_agent_id), so the users embed must name the
+    // agent_id key explicitly. Without the hint PostgREST reports an ambiguous
+    // relationship, which surfaced to the browser as "Record not found".
     const { data: tia, error: tiaError } = await supabase
       .from('transaction_internal_agents')
       .select(`
         *,
         transaction:transactions(*),
-        agent:users(
+        agent:users!agent_id(
           id, first_name, last_name, preferred_first_name, preferred_last_name,
           commission_plan, office, qualifying_transaction_count, qualifying_transaction_target
         )
@@ -86,7 +97,33 @@ export async function GET(
 
     const txn = tia.transaction
     const agent = tia.agent
-    const plan = tia.commission_plan || agent?.commission_plan || '--'
+
+    // A statement must reflect ALL of this agent's commission on the deal, not
+    // just the card that was clicked. The additional-comp flow creates extra
+    // co_agent rows (same agent_id) that carry only agent_net + 1099. Gather
+    // every row for this agent on the transaction, anchor the breakdown on the
+    // primary row, and total the money across rows.
+    const ROLE_PRIORITY: Record<string, number> = {
+      primary_agent: 0, listing_agent: 1, co_agent: 2,
+    }
+    const { data: agentRowsRaw } = await supabase
+      .from('transaction_internal_agents')
+      .select('*')
+      .eq('transaction_id', tia.transaction_id)
+      .eq('agent_id', tia.agent_id)
+    const agentRows = (agentRowsRaw && agentRowsRaw.length > 0) ? agentRowsRaw : [tia]
+    const primaryRow = [...agentRows].sort(
+      (a, b) => (ROLE_PRIORITY[a.agent_role] ?? 9) - (ROLE_PRIORITY[b.agent_role] ?? 9)
+    )[0]
+    // Rows other than the anchor contribute their 1099/net as add-ons.
+    const extraRows = agentRows.filter(r => r.id !== primaryRow.id)
+    const allTiaIds = agentRows.map(r => r.id)
+
+    // Base the commission breakdown on the primary row so a second-check
+    // co_agent row never drives the layout or the displayed role.
+    const baseTia = primaryRow
+    const plan = baseTia.commission_plan || agent?.commission_plan || '--'
+    const roleLabel = formatRole(baseTia.agent_role)
 
     const currentYear = new Date().getFullYear()
     const { data: ytdData } = await supabase
@@ -116,32 +153,43 @@ export async function GET(
     const { data: appliedDebts } = await supabase
       .from('agent_debts')
       .select('debt_type, description, amount_paid, date_incurred')
-      .eq('offset_transaction_agent_id', internalAgentId)
+      .in('offset_transaction_agent_id', allTiaIds)
 
-    const agentGross = parseFloat(tia.agent_gross || 0)
-    const processingFee = parseFloat(tia.processing_fee || 0)
-    const coachingFee = parseFloat(tia.coaching_fee || 0)
-    const otherFees = parseFloat(tia.other_fees || 0)
+    // Per-row 1099 helper. Prefer the stored reportable amount; fall back to
+    // the canonical formula only when it is missing.
+    const rowAmount1099 = (r: any): number => {
+      // Match the original `stored || fallback` behavior: a non-zero stored
+      // amount wins, otherwise compute from the canonical formula.
+      const stored = parseFloat(r.amount_1099_reportable)
+      if (stored) return stored
+      return computeCommission({
+        agent_gross: r.agent_gross,
+        btsa_amount: r.btsa_amount,
+        processing_fee: r.processing_fee,
+        coaching_fee: r.coaching_fee,
+        other_fees: r.other_fees,
+        rebate_amount: r.rebate_amount,
+        credits_applied: 0,
+        debts_deducted: 0,
+      }).amount_1099
+    }
+
+    // Breakdown values come from the primary row.
+    const agentGross = parseFloat(baseTia.agent_gross || 0)
+    const processingFee = parseFloat(baseTia.processing_fee || 0)
+    const coachingFee = parseFloat(baseTia.coaching_fee || 0)
+    const otherFees = parseFloat(baseTia.other_fees || 0)
     const totalFees = processingFee + coachingFee + otherFees
-    // Display fallback when amount_1099_reportable not stored. Match canonical formula
-    // from lib/transactions/math.ts:
-    //   amount_1099 = agent_gross + btsa − processing − coaching − other_fees − rebate + credits
-    const fallback = computeCommission({
-      agent_gross: tia.agent_gross,
-      btsa_amount: tia.btsa_amount,
-      processing_fee: tia.processing_fee,
-      coaching_fee: tia.coaching_fee,
-      other_fees: tia.other_fees,
-      rebate_amount: tia.rebate_amount,
-      credits_applied: 0,
-      debts_deducted: 0,
-    })
-    const amount1099 = tia.amount_1099_reportable || fallback.amount_1099
-    const debtsDeducted = parseFloat(tia.debts_deducted || 0)
-    const agentNet = parseFloat(tia.agent_net || 0)
-    const brokerageSplit = parseFloat(tia.brokerage_split || 0)
-    const agentBasis = parseFloat(tia.agent_basis || 0)
-    const splitPct = parseFloat(tia.split_percentage || 0)
+    // Additional-comp rows (extra checks to the same agent) add their own 1099
+    // and net on top of the primary row.
+    const extraComp1099 = extraRows.reduce((s, r) => s + rowAmount1099(r), 0)
+    // Totals reflect every row for this agent on the deal.
+    const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
+    const debtsDeducted = agentRows.reduce((s, r) => s + parseFloat(r.debts_deducted || 0), 0)
+    const agentNet = agentRows.reduce((s, r) => s + parseFloat(r.agent_net || 0), 0)
+    const brokerageSplit = parseFloat(baseTia.brokerage_split || 0)
+    const agentBasis = parseFloat(baseTia.agent_basis || 0)
+    const splitPct = parseFloat(baseTia.split_percentage || 0)
     const brokerageSplitPct = 100 - splitPct
 
     const showCapProgress = isCapPlan(plan)
@@ -155,9 +203,9 @@ export async function GET(
       ? `${agent.preferred_first_name || agent.first_name} ${agent.preferred_last_name || agent.last_name}`
       : '--'
 
-    const grossCommission = parseFloat(txn?.gross_commission || tia.agent_basis || 0)
+    const grossCommission = parseFloat(txn?.gross_commission || baseTia.agent_basis || 0)
     const officeGross = parseFloat(txn?.office_gross || 0)
-    const btsaAmount = parseFloat(tia.btsa_amount || 0)
+    const btsaAmount = parseFloat(baseTia.btsa_amount || 0)
     const commissionPct = txn?.sales_price
       ? ((grossCommission / parseFloat(txn.sales_price)) * 100).toFixed(2)
       : '0'
@@ -180,8 +228,9 @@ export async function GET(
       office_gross: fmt$(officeGross),
       btsa_amount: btsaAmount > 0 ? fmt$(btsaAmount) : null,
       commission_pct: commissionPct,
-      payment_date: fmtDate(tia.payment_date),
-      payment_method: tia.payment_method || 'ACH',
+      role: roleLabel,
+      payment_date: fmtDate(baseTia.payment_date),
+      payment_method: baseTia.payment_method || 'ACH',
       ytd_volume: fmt$(ytdVolume),
       ytd_net: fmt$(ytdNet),
       agent_basis: fmt$(agentBasis),
@@ -193,6 +242,8 @@ export async function GET(
       coaching_fee: coachingFee > 0 ? fmt$(coachingFee) : null,
       other_fees: otherFees > 0 ? fmt$(otherFees) : null,
       amount_1099: fmt$(amount1099),
+      has_extra_comp: extraComp1099 > 0,
+      extra_comp_amount: fmt$(extraComp1099),
       has_debts: debtsDeducted > 0,
       total_debts_deducted: fmt$(debtsDeducted),
       debts,
@@ -218,7 +269,7 @@ export async function GET(
       return new NextResponse(html, {
         headers: {
           'Content-Type': 'text/html',
-          'X-PDF-Filename': `${agentName.replace(/\s+/g, '_')}_${fmtDate(tia.payment_date)}_STATEMENT.pdf`,
+          'X-PDF-Filename': `${agentName.replace(/\s+/g, '_')}_${fmtDate(baseTia.payment_date)}_STATEMENT.pdf`,
         },
       })
     }
@@ -298,6 +349,10 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span style="font-weight: 500; color: #333;">${data.agent_name}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 11px;">
+        <span style="color: #888; text-transform: uppercase; font-size: 9px;">Role</span>
+        <span style="font-weight: 500; color: #333;">${data.role}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 11px;">
         <span style="color: #888; text-transform: uppercase; font-size: 9px;">Represents</span>
         <span style="font-weight: 500; color: #333;">${data.representation}</span>
       </div>
@@ -374,6 +429,7 @@ function generateStatementHTML(data: Record<string, any>): string {
         ${data.processing_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Processing Fee</span><span style="color: #333;">- ${data.processing_fee}</span></div>` : ''}
         ${data.coaching_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Coaching Fee</span><span style="color: #333;">- ${data.coaching_fee}</span></div>` : ''}
         ${data.other_fees ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Other Fees</span><span style="color: #333;">- ${data.other_fees}</span></div>` : ''}
+        ${data.has_extra_comp ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Additional compensation</span><span style="color: #333;">+ ${data.extra_comp_amount}</span></div>` : ''}
       </div>
     </div>
 

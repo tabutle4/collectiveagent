@@ -95,8 +95,15 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
       if (paidRes.ok) {
         const data = await paidRes.json()
         const records: BillingRecord[] = data?.records || []
-        setAppliedDebts(records.filter(r => r.record_type !== 'credit'))
-        setAppliedCredits(records.filter(r => r.record_type === 'credit'))
+        // Only show records staged/applied to THIS card. When one agent has
+        // two commission cards on a deal (e.g. a second-check co_agent row),
+        // a debt staged to one card must not appear on the other. The null
+        // fallback keeps legacy rows (staged before offset_transaction_agent_id
+        // existed) visible so single-card agents do not lose them.
+        const forThisCard = (r: BillingRecord) =>
+          r.offset_transaction_agent_id === tiaId || r.offset_transaction_agent_id == null
+        setAppliedDebts(records.filter(r => r.record_type !== 'credit' && forThisCard(r)))
+        setAppliedCredits(records.filter(r => r.record_type === 'credit' && forThisCard(r)))
       }
       // Payload monthly fee invoices — show unpaid ones as stageable.
       // We pass the agentId (users.id) which the API maps to payload_payee_id.
@@ -117,7 +124,7 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
     } finally {
       setLoading(false)
     }
-  }, [agentId, transactionId])
+  }, [agentId, transactionId, tiaId])
 
   useEffect(() => {
     load()

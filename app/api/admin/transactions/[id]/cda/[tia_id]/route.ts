@@ -113,7 +113,29 @@ export async function GET(
     const agentName = `${agent.preferred_first_name || agent.first_name || ''} ${agent.preferred_last_name || agent.last_name || ''}`.trim()
     const agencyName = settings?.agency_name || 'Collective Realty Co.'
     const propertyAddr = txn.property_address || '--'
-    const role = formatRole(tia.agent_role)
+
+    // A CDA must show the total we pay each party on the deal, not just the
+    // clicked card. The additional-comp flow creates extra co_agent rows (same
+    // agent_id) that carry agent_net only. Gather every row for this agent,
+    // anchor role/BTSA/rebate on the primary row, and total the agent payout.
+    const CDA_ROLE_PRIORITY: Record<string, number> = { primary_agent: 0, listing_agent: 1, co_agent: 2 }
+    const { data: agentTiaRowsRaw } = await supabaseAdmin
+      .from('transaction_internal_agents')
+      .select('id, agent_role, agent_gross, agent_net, btsa_amount, rebate_amount, rebate_type, brokerage_split')
+      .eq('transaction_id', id)
+      .eq('agent_id', tia.agent_id)
+    const agentTiaRows = (agentTiaRowsRaw && agentTiaRowsRaw.length > 0) ? agentTiaRowsRaw : [tia]
+    const primaryTiaRow = [...agentTiaRows].sort(
+      (a, b) => (CDA_ROLE_PRIORITY[a.agent_role] ?? 9) - (CDA_ROLE_PRIORITY[b.agent_role] ?? 9)
+    )[0]
+    // Base rows carry agent_gross; additional co_agent rows carry agent_net.
+    const rowAgentDisburse = (r: any): number => {
+      const g = Number(r.agent_gross || 0)
+      return g > 0 ? g : Number(r.agent_net || 0)
+    }
+    const agentDisburseTotal = agentTiaRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
+
+    const role = formatRole(primaryTiaRow.agent_role)
     const disburseTotal = Number(tia.agent_gross || 0) + Number(tia.brokerage_split || 0)
     const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/logo.png`
     const generatedDate = fmtDate(new Date().toISOString())
@@ -123,7 +145,7 @@ export async function GET(
     const buyingBase = Number(txn.buying_base_commission ?? txn.buying_side_commission ?? 0)
     const listingSide = Number(txn.listing_side_commission || 0)
     const buyingSide = Number(txn.buying_side_commission || 0)
-    const btsaTotal = Number(tia.btsa_amount || 0)
+    const btsaTotal = Number(primaryTiaRow.btsa_amount || 0)
     const officeGross = Number(txn.office_gross || 0)
     const totalGrossCommission = Number(txn.gross_commission || officeGross + btsaTotal)
     const extraRows = (additionalIncomeRows || []) as { side: string; label: string; amount: number }[]
@@ -132,8 +154,8 @@ export async function GET(
       : null
 
     // Rebate (reduces agent payout)
-    const rebateAmount = Number(tia.rebate_amount || 0)
-    const rebateLabel = tia.rebate_type === 'buyer' ? 'Buyer Rebate' : tia.rebate_type === 'seller' ? 'Seller Rebate' : rebateAmount > 0 ? 'Client Rebate' : null
+    const rebateAmount = Number(primaryTiaRow.rebate_amount || 0)
+    const rebateLabel = primaryTiaRow.rebate_type === 'buyer' ? 'Buyer Rebate' : primaryTiaRow.rebate_type === 'seller' ? 'Seller Rebate' : rebateAmount > 0 ? 'Client Rebate' : null
 
     // Notes
     const notes: string | null = null
@@ -239,7 +261,7 @@ export async function GET(
       <tbody>
         ${listingSide > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">Listing office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(listingSide)}</td></tr>` : ''}
         ${buyingSide > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">Buying office commission</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(buyingSide)}</td></tr>` : ''}
-        ${tia.agent_gross && Number(tia.agent_gross) > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(tia.agent_gross)}</td></tr>` : ''}
+        ${agentDisburseTotal > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(agentDisburseTotal)}</td></tr>` : ''}
         ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">(${fmt$(rebateAmount)})</td></tr>` : ''}
       </tbody>
     </table>
