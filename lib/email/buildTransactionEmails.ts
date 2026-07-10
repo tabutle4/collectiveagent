@@ -1,6 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout, EMAIL_COLORS } from '@/lib/email/layout'
-import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
 
 const fmt$ = (n: number | null | undefined): string => {
   const v = parseFloat(String(n ?? 0))
@@ -70,16 +69,7 @@ export async function buildStatementEmail(
 ): Promise<EmailPreview> {
   const { data: tia } = await supabaseAdmin
     .from('transaction_internal_agents')
-    .select(
-      `
-        id, agent_id, agent_role, commission_plan, sales_volume,
-        agent_basis, split_percentage, agent_gross,
-        processing_fee, coaching_fee, other_fees, other_fees_description,
-        btsa_amount, team_lead_commission, brokerage_split,
-        agent_net, amount_1099_reportable, payment_status,
-        payment_date, payment_method, payment_reference
-      `
-    )
+    .select('id, agent_id')
     .eq('id', internalAgentId)
     .single()
   if (!tia) throw new Error('Agent row not found')
@@ -95,101 +85,51 @@ export async function buildStatementEmail(
 
   const { data: txn } = await supabaseAdmin
     .from('transactions')
-    .select('id, property_address, property_city, property_state, property_zip, transaction_type, closed_date, sales_price')
+    .select('id, property_address, transaction_type, closing_date, move_in_date')
     .eq('id', transactionId)
     .single()
   if (!txn) throw new Error('Transaction not found')
 
   const recipients = await resolveRecipients(agent)
   const firstName = agent.preferred_first_name || agent.first_name || 'there'
-  const propertyLabel = [txn.property_address, txn.property_city, txn.property_state]
-    .filter(Boolean)
-    .join(', ')
-  const typeLabel = getTransactionTypeLabel(txn.transaction_type)
+  const propertyLabel = txn.property_address || 'your recent transaction'
+  const closedLabel = txn.closing_date || txn.move_in_date
 
-  const feeRows: string[] = []
-  if (Number(tia.processing_fee) > 0) {
-    feeRows.push(feeRow('Processing fee', -Number(tia.processing_fee)))
-  }
-  if (Number(tia.coaching_fee) > 0) {
-    feeRows.push(feeRow('Coaching fee', -Number(tia.coaching_fee)))
-  }
-  if (Number(tia.other_fees) > 0) {
-    feeRows.push(
-      feeRow(tia.other_fees_description || 'Other fees', -Number(tia.other_fees))
-    )
-  }
-  if (Number(tia.btsa_amount) > 0) {
-    feeRows.push(feeRow('+ BTSA from buyer', Number(tia.btsa_amount)))
-  }
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+  const statementUrl = `${appUrl}/api/statements/${internalAgentId}`
+  const pdfUrl = `${statementUrl}?format=pdf`
 
   const content = `
-    <p class="email-greeting">Hi ${firstName},</p>
-    <p style="margin: 0 0 16px;">
-      Here is your commission statement for
-      <strong>${propertyLabel || 'your recent transaction'}</strong>${
-    txn.closed_date ? ` closed ${fmtDate(txn.closed_date)}` : ''
-  }.
+    <p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};">Hi ${firstName},</p>
+    <p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};">
+      Your commission statement for
+      <strong style="color:${EMAIL_COLORS.headingText};">${propertyLabel}</strong>${
+    closedLabel ? ` closed ${fmtDate(closedLabel)}` : ''
+  } is ready. View it online or download a PDF copy below.
     </p>
-
-    <div class="email-section">
-      <h3 style="margin-bottom: 10px;">Transaction summary</h3>
-      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Property</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${propertyLabel || '--'}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Type</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${typeLabel}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Sales price</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${fmt$(txn.sales_price)}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Closed</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${fmtDate(txn.closed_date)}</td></tr>
-      </table>
-    </div>
-
-    <div class="email-section">
-      <h3 style="margin-bottom: 10px;">Commission breakdown</h3>
-      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Commission basis</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${fmt$(tia.agent_basis)}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Split</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${tia.split_percentage || 0}%</td></tr>
-        <tr><td style="padding: 6px 0 4px; color: ${EMAIL_COLORS.headingText}; font-weight: 600;">Agent gross</td>
-            <td style="text-align: right; padding: 6px 0 4px; color: ${EMAIL_COLORS.headingText}; font-weight: 600;">${fmt$(tia.agent_gross)}</td></tr>
-        ${feeRows.join('')}
-      </table>
-      <table style="width: 100%; font-size: 14px; border-collapse: collapse; border-top: 1px solid ${EMAIL_COLORS.border}; margin-top: 12px; padding-top: 10px;">
-        <tr><td style="padding: 8px 0; color: ${EMAIL_COLORS.headingText}; font-weight: 600;">Agent net</td>
-            <td style="text-align: right; padding: 8px 0; color: ${EMAIL_COLORS.headingText}; font-weight: 600;">${fmt$(tia.agent_net)}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">1099 reportable</td>
-            <td style="text-align: right; padding: 4px 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">${fmt$(tia.amount_1099_reportable)}</td></tr>
-      </table>
-    </div>
-
-    ${
-      tia.payment_status === 'paid'
-        ? `<p style="margin: 16px 0 0; color: ${EMAIL_COLORS.bodyText}; font-size: 13px;">
-            Payment of <strong>${fmt$(tia.agent_net)}</strong> was sent on ${fmtDate(tia.payment_date)}${
-            tia.payment_method ? ` via ${tia.payment_method}` : ''
-          }${tia.payment_reference ? ` (ref: ${tia.payment_reference})` : ''}.
-          </p>`
-        : `<p style="margin: 16px 0 0; color: ${EMAIL_COLORS.bodyText}; font-size: 13px;">
-            Payment is being processed and will be sent soon.
-          </p>`
-    }
-
-    <p style="margin: 20px 0 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 0;">
+      <tr>
+        <td style="padding:0 6px;">
+          <a href="${statementUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Statement</a>
+        </td>
+        <td style="padding:0 6px;">
+          <a href="${pdfUrl}" style="display:inline-block;padding:12px 28px;background-color:#ffffff;color:#1a1a1a;text-decoration:none;border:1px solid #C5A278;border-radius:4px;font-size:14px;font-weight:600;">Download PDF</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:24px 0 0;color:${EMAIL_COLORS.lightText};font-size:12px;">
       Please let us know if anything looks incorrect so we can make it right.
     </p>
   `
 
-  const subject = `Commission statement: ${propertyLabel || 'Transaction'}`
+  const subject = `Commission statement: ${propertyLabel}`
 
   return {
     subject,
     html: getEmailLayout(content, {
       title: 'Commission Statement',
       subtitle: propertyLabel,
-      preheader: `Your commission breakdown for ${propertyLabel}`,
+      preheader: `Your commission statement for ${propertyLabel} is ready to view`,
     }),
     to: recipients.to,
     cc: recipients.cc,
@@ -323,11 +263,4 @@ export async function buildCdaEmail(
     cc: recipients.cc,
     replyTo: 'transactions@collectiverealtyco.com',
   }
-}
-
-function feeRow(label: string, amount: number): string {
-  const prefix = amount < 0 ? '−' : '+'
-  const display = fmt$(Math.abs(amount))
-  return `<tr><td style="padding: 3px 0 3px 14px; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">${prefix} ${label}</td>
-              <td style="text-align: right; padding: 3px 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">${prefix}${display}</td></tr>`
 }

@@ -165,6 +165,17 @@ export async function GET(
       (s, e) => s + parseFloat(e.amount_1099_reportable || 0), 0
     )
 
+    // Additional income folded into CRC's side. Shown as its own input to the
+    // compensation basis (base + additional = basis), matching how the deal is
+    // actually built.
+    const { data: additionalIncomeStmt } = await supabase
+      .from('transaction_additional_income')
+      .select('amount')
+      .eq('transaction_id', tia.transaction_id)
+    const additionalIncomeTotal = (additionalIncomeStmt || []).reduce(
+      (s, a) => s + parseFloat(a.amount || 0), 0
+    )
+
     // Per-row 1099 helper. Prefer the stored reportable amount; fall back to
     // the canonical formula only when it is missing.
     const rowAmount1099 = (r: any): number => {
@@ -245,6 +256,18 @@ export async function GET(
     const brokerageSplit = isSoleProducingAgent
       ? Math.max(0, Math.round((crcSide - agentDisburseTotal) * 100) / 100)
       : parseFloat(baseTia.brokerage_split || 0)
+    // Brokermint-style basis: base commission plus additional income equals the
+    // compensation basis that the split is calculated on. Base is the side less
+    // the additional that was folded into it.
+    const baseCommission = Math.max(0, Math.round((crcSide - additionalIncomeTotal) * 100) / 100)
+    // Effective split percentages derived from the actual dollars, so the label
+    // is always truthful even if an additional was entered at an off-plan rate.
+    const agentSplitPct = crcSide > 0
+      ? (agentDisburseTotal / crcSide * 100).toFixed(2).replace(/\.00$/, '')
+      : (splitPct.toString())
+    const brokeragePctEff = crcSide > 0
+      ? (brokerageSplit / crcSide * 100).toFixed(2).replace(/\.00$/, '')
+      : brokerageSplitPct.toString()
     // Net cash to the agent = taxable income minus anything withheld. The stored
     // agent_net does not reflect withholdings recovered on this check (e.g. a
     // monthly brokerage fee), so derive it here.
@@ -272,6 +295,14 @@ export async function GET(
       payment_date: fmtDate(baseTia.payment_date),
       payment_method: baseTia.payment_method || 'ACH',
       agent_basis: fmt$(agentBasis),
+      // Brokermint-style commission calculation
+      base_commission: fmt$(baseCommission),
+      has_additional_income: additionalIncomeTotal > 0,
+      additional_income: fmt$(additionalIncomeTotal),
+      compensation_basis: fmt$(crcSide),
+      agent_split_amount: fmt$(agentDisburseTotal),
+      agent_split_pct: agentSplitPct,
+      brokerage_pct: brokeragePctEff,
       split_percentage: splitPct.toString(),
       brokerage_split_pct: brokerageSplitPct.toString(),
       agent_gross: fmt$(agentGross),
@@ -304,7 +335,13 @@ export async function GET(
     })
 
     if (format === 'pdf') {
-      return new NextResponse(html, {
+      // Trigger the browser's print/save-as-PDF dialog on load so the "Download
+      // PDF" button produces a PDF the agent can save.
+      const printableHtml = html.replace(
+        '</body>',
+        `<script>window.addEventListener('load', function () { window.print(); });</script></body>`
+      )
+      return new NextResponse(printableHtml, {
         headers: {
           'Content-Type': 'text/html',
           'X-PDF-Filename': `${agentName.replace(/\s+/g, '_')}_${fmtDate(baseTia.payment_date)}_STATEMENT.pdf`,
@@ -422,9 +459,19 @@ function generateStatementHTML(data: Record<string, any>): string {
   <div style="margin-bottom: 20px;">
     <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Commission calculation</div>
     <div style="font-size: 11px; color: #333;">
+      ${data.has_additional_income ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Side Commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
-        <span style="font-weight: 500;">${data.office_gross}</span>
+        <span>Base commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span style="font-weight: 500;">${data.base_commission}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Additional income <span style="color: #999; font-size: 9px; margin-left: 6px;">shared income</span></span>
+        <span style="font-weight: 500;">${data.additional_income}</span>
+      </div>
+      ` : ''}
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span style="font-weight: 500;">${data.compensation_basis}</span>
       </div>
       ${data.btsa_amount ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
@@ -433,21 +480,11 @@ function generateStatementHTML(data: Record<string, any>): string {
       </div>
       ` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Gross Commission</span>
-        <span style="font-weight: 500;">${data.gross_commission}</span>
+        <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.agent_split_pct}% of basis</span></span>
+        <span style="font-weight: 500;">${data.agent_split_amount}</span>
       </div>
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.split_percentage}% of basis</span></span>
-        <span style="font-weight: 500;">${data.agent_gross}</span>
-      </div>
-      ${data.has_extra_comp ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Additional commission <span style="color: #999; font-size: 9px; margin-left: 6px;">paid to you</span></span>
-        <span style="font-weight: 500;">${data.extra_comp_amount}</span>
-      </div>
-      ` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-        <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_split_pct}%${brokerageSplitNote}</span></span>
+        <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_pct}%${brokerageSplitNote}</span></span>
         <span style="font-weight: 500;">${data.brokerage_split}</span>
       </div>
     </div>
@@ -463,13 +500,12 @@ function generateStatementHTML(data: Record<string, any>): string {
       <div style="font-size: 9px; color: #666; line-height: 1.4;">This is your <strong>taxable income</strong>. It goes on your 1099 at year end.</div>
       <div style="background: #f0f0f0; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 9px;">
         <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-          <span style="color: #666;">Your Split (${data.split_percentage}%)</span>
-          <span style="font-weight: 500; color: #333;">${data.agent_gross}</span>
+          <span style="color: #666;">Your Split (${data.agent_split_pct}%)</span>
+          <span style="font-weight: 500; color: #333;">${data.agent_split_amount}</span>
         </div>
         ${data.processing_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Processing Fee</span><span style="color: #333;">- ${data.processing_fee}</span></div>` : ''}
         ${data.coaching_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Coaching Fee</span><span style="color: #333;">- ${data.coaching_fee}</span></div>` : ''}
         ${data.other_fees ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Other Fees</span><span style="color: #333;">- ${data.other_fees}</span></div>` : ''}
-        ${data.has_extra_comp ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Additional compensation</span><span style="color: #333;">+ ${data.extra_comp_amount}</span></div>` : ''}
       </div>
     </div>
 
