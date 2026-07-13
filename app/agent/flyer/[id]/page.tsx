@@ -272,7 +272,13 @@ export default function FlyerPage() {
 
   // Derived flyer data
   const flyerType = flyer?.flyer_type || 'just_sold'
-  const cityRaw = flyer?.city || parseCityFromAddress(transaction?.property_address || '')
+  // City line: prefer the flyer's own override, then the transaction's structured
+  // city/state columns. parseCityFromAddress is only a fallback for older rows
+  // that predate the structured address fields.
+  const cityFromComponents = transaction?.city
+    ? `${transaction.city}${transaction.state ? `, ${transaction.state}` : ''}`
+    : ''
+  const cityRaw = flyer?.city || cityFromComponents || parseCityFromAddress(transaction?.property_address || '')
   const city = expandState(cityRaw)
   const divisionLine = flyer?.flyer_division || agent?.office || ''
   const agentName = agent?.name || ''

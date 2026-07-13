@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import AddressInput, { AddressFields } from '@/components/shared/AddressInput'
 import { ServiceConfiguration } from '@/types/listing-coordination'
 import { AlertCircle } from 'lucide-react'
 
@@ -37,7 +38,11 @@ export default function JustListedForm() {
   const [formData, setFormData] = useState({
     agent_id: '',
     agent_name: '',
-    property_address: '',
+    street_address: '',
+    unit: '',
+    city: '',
+    state: 'TX',
+    zip: '',
     transaction_type: 'sale' as 'sale' | 'lease',
     client_names: '',
     client_phone: '',
@@ -244,19 +249,27 @@ export default function JustListedForm() {
               {selectedAgent && <input type="hidden" name="agent_id" value={selectedAgent.id} />}
             </div>
 
-            <div>
-              <label className="block text-sm mb-2 text-luxury-gray-1">
-                Property Address <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.property_address}
-                onChange={e => setFormData({ ...formData, property_address: e.target.value })}
-                className="input-luxury"
-                placeholder="123 Main St, Houston, TX 77001"
-                required
-              />
-            </div>
+            <AddressInput
+
+              required
+
+              value={{
+
+                street_address: formData.street_address,
+
+                unit: formData.unit,
+
+                city: formData.city,
+
+                state: formData.state,
+
+                zip: formData.zip,
+
+              }}
+
+              onChange={(a: AddressFields) => setFormData({ ...formData, ...a })}
+
+            />
 
             <div>
               <label className="block text-sm mb-2 text-luxury-gray-1">

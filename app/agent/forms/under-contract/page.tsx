@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import AddressInput, { AddressFields } from '@/components/shared/AddressInput'
+import { buildDisplayAddress } from '@/lib/transactions/utils'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import AgentSelect, { AgentOption } from '@/components/forms/AgentSelect'
@@ -41,7 +43,7 @@ export default function UnderContractForm() {
 
   const [form, setForm] = useState({
     agent_name: '', agent_email: '', agent_phone: '',
-    property_address: '', sales_price: '', commission_rate: '', closing_date: '', mls_link: '',
+    street_address: '', unit: '', city: '', state: 'TX', zip: '', sales_price: '', commission_rate: '', closing_date: '', mls_link: '',
     flyer_choice: '', team_name: '', division_name: '',
     representing: '', client_name: '', client_phone: '', client_email: '', lead_source: '',
     other_agent_name: '', other_agent_phone: '', other_agent_email: '',
@@ -81,7 +83,7 @@ export default function UnderContractForm() {
     // Client-side required checks
     const req: Array<[string, any]> = [
       ['Agent name', form.agent_name], ['Agent email', form.agent_email], ['Agent phone', form.agent_phone],
-      ['Property address', form.property_address], ['Sales price', form.sales_price],
+      ['Street address', form.street_address], ['City', form.city], ['State', form.state], ['Zip', form.zip], ['Sales price', form.sales_price],
       ['Commission rate', form.commission_rate], ['Closing date', form.closing_date], ['MLS link', form.mls_link],
       ['Flyer choice', form.flyer_choice], ['Representation', form.representing],
       ['Client name', form.client_name], ['Client phone', form.client_phone], ['Client email', form.client_email],
@@ -210,7 +212,17 @@ export default function UnderContractForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
               <label className={labelCls}>Property Address {req}</label>
-              <input className={inputCls} value={form.property_address} onChange={e => setField('property_address', e.target.value)} placeholder="123 Main St, Houston, TX 77001" />
+              <AddressInput
+                required
+                value={{
+                  street_address: form.street_address,
+                  unit: form.unit,
+                  city: form.city,
+                  state: form.state,
+                  zip: form.zip,
+                }}
+                onChange={(a: AddressFields) => setForm((f: any) => ({ ...f, ...a }))}
+              />
             </div>
             <div>
               <label className={labelCls}>Sales Price {req}</label>
@@ -429,7 +441,7 @@ export default function UnderContractForm() {
               Submitting will create a transaction. Please confirm these details are correct.
             </p>
             <div className="space-y-2 text-xs text-luxury-gray-2 mb-5">
-              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Property</span><span className="text-right font-medium text-luxury-gray-1">{form.property_address}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Property</span><span className="text-right font-medium text-luxury-gray-1">{buildDisplayAddress(form)}</span></div>
               <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Client</span><span className="text-right">{form.client_name}</span></div>
               <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Agent</span><span className="text-right">{form.agent_name}</span></div>
               <div className="flex justify-between gap-4"><span className="text-luxury-gray-3">Representation</span><span className="text-right">{form.representing}</span></div>

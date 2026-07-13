@@ -39,6 +39,8 @@ export default function FormBuilderPage() {
   const [formDescription, setFormDescription] = useState('')
   const [formType, setFormType] = useState('pre-listing')
   const [notificationEmail, setNotificationEmail] = useState('')
+  const [triggersFlyer, setTriggersFlyer] = useState(false)
+  const [flyerType, setFlyerType] = useState('')
   const [formConfig, setFormConfig] = useState<FormConfig>({
     fields: [],
     submissionType: true,
@@ -66,6 +68,8 @@ export default function FormBuilderPage() {
         setFormName(data.form.name)
         setFormDescription(data.form.description || '')
         setFormType(data.form.form_type)
+        setTriggersFlyer(!!data.form.triggers_flyer)
+        setFlyerType(data.form.flyer_type || '')
         setNotificationEmail(data.form.notification_email || '')
         const loadedConfig = data.form.form_config || {
           fields: [],
@@ -182,6 +186,8 @@ export default function FormBuilderPage() {
           description: formDescription,
           form_type: formType,
           notification_email: notificationEmail || null,
+          triggers_flyer: triggersFlyer,
+          flyer_type: triggersFlyer ? (flyerType || null) : null,
           form_config: formConfig,
         }),
       })
@@ -294,6 +300,47 @@ export default function FormBuilderPage() {
                   Receives form submissions (optional)
                 </p>
               </div>
+
+              <div className="pt-3 border-t border-luxury-gray-5">
+                <label className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={triggersFlyer}
+                    onChange={e => setTriggersFlyer(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-xs font-semibold text-luxury-gray-1">
+                    This form creates a flyer
+                  </span>
+                </label>
+                <p className="text-xs text-luxury-gray-3 mt-1 ml-7">
+                  When an agent submits this form, a flyer is created on the transaction.
+                </p>
+
+                {triggersFlyer && (
+                  <div className="mt-3 ml-7">
+                    <label className="block text-xs font-semibold text-luxury-gray-3 mb-1">
+                      Flyer Type
+                    </label>
+                    <select
+                      value={flyerType}
+                      onChange={e => setFlyerType(e.target.value)}
+                      className="select-luxury"
+                    >
+                      <option value="">Decided by the form (sold or leased)</option>
+                      <option value="just_listed">Just Listed</option>
+                      <option value="under_contract">Under Contract</option>
+                      <option value="just_sold">Just Sold</option>
+                      <option value="just_leased">Just Leased</option>
+                    </select>
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      Leave as &quot;Decided by the form&quot; for the Compliance and CDA form, which
+                      creates a Just Sold or Just Leased flyer depending on the deal.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                   type="checkbox"

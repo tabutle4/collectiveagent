@@ -8,6 +8,8 @@ import { sendWelcomeEmail } from '@/lib/email/send'
 import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
+import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
+import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents } from '@/lib/transactions/utils'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
@@ -84,7 +86,7 @@ async function findOrCreateListingTransaction(
           .update({ legacy_listing_id: listing.id, updated_at: new Date().toISOString() })
           .eq('id', existing.id)
       }
-      await ensureJustListedFlyer(supabase, existing.id, agentId, body, formType)
+      await createJustListedFlyer(existing.id, agentId, body, formType)
       return existing.id
     }
 
@@ -96,6 +98,11 @@ async function findOrCreateListingTransaction(
       .from('transactions')
       .insert({
         property_address: listing.property_address,
+        street_address: body.street_address || null,
+        unit: body.unit || null,
+        city: body.city || null,
+        state: body.state || null,
+        zip: body.zip || null,
         status,
         transaction_type: listing.transaction_type || 'sale',
         client_name: body.client_names ? formatNameToTitleCase(String(body.client_names).trim()) : null,
@@ -135,7 +142,7 @@ async function findOrCreateListingTransaction(
       })
     }
 
-    await ensureJustListedFlyer(supabase, newTxn.id, agentId, body, formType)
+    await createJustListedFlyer(newTxn.id, agentId, body, formType)
 
     return newTxn.id
   } catch (err) {
@@ -150,53 +157,31 @@ async function findOrCreateListingTransaction(
 // re-submitting the form never spawns duplicates. Matches the exact insert
 // shape used by the compliance and under-contract routes so the flyer process
 // is identical across all types. Failures never block the listing.
-async function ensureJustListedFlyer(
-  supabase: any,
+async function createJustListedFlyer(
   transactionId: string,
   agentId: string | null,
   body: any,
   formType: string
 ): Promise<void> {
-  try {
-    if (formType !== 'just-listed' || !transactionId || !agentId) return
+  // Only the just-listed form produces a flyer here. Whether it actually does,
+  // and which flyer type, is read from the forms table (triggers_flyer /
+  // flyer_type) rather than hardcoded, so the behavior can be changed in the
+  // admin UI without a code change.
+  if (formType !== 'just-listed') return
 
-    const { data: existingFlyer } = await supabase
-      .from('transaction_flyers')
-      .select('id')
-      .eq('transaction_id', transactionId)
-      .eq('flyer_type', 'just_listed')
-      .maybeSingle()
-    if (existingFlyer) return
-
-    const toNum = (v: any) => {
-      if (v === '' || v === null || v === undefined) return null
-      const n = Number(v)
-      return Number.isNaN(n) || n < 0 ? null : n
-    }
-
-    let flyerDivision: string | null = null
-    if (body.flyer_display_type === 'team') flyerDivision = body.flyer_team_name || null
-    else if (body.flyer_display_type === 'division') flyerDivision = body.flyer_division || null
-    else if (body.flyer_display_type === 'office') {
-      const { data: prof } = await supabase.from('users').select('office').eq('id', agentId).single()
-      flyerDivision = prof?.office || null
-    }
-
-    await supabase.from('transaction_flyers').insert({
-      transaction_id: transactionId,
-      flyer_type: 'just_listed',
-      status: 'requested',
-      requested_by: agentId,
-      flyer_division: flyerDivision,
-      bedrooms: toNum(body.bedrooms),
-      bathrooms: toNum(body.bathrooms),
-      garage: toNum(body.garage),
-      sqft: toNum(body.sqft),
-      updated_at: new Date().toISOString(),
-    })
-  } catch (err) {
-    console.error('ensureJustListedFlyer error:', err)
-  }
+  const form = await getFormConfig('just_listed')
+  await createFlyerFromForm({
+    form,
+    transactionId,
+    agentId,
+    stats: {
+      bedrooms: body.bedrooms,
+      bathrooms: body.bathrooms,
+      garage: body.garage,
+      sqft: body.sqft,
+    },
+    flyerDivision: body.flyer_division || null,
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -209,7 +194,23 @@ export async function POST(request: NextRequest) {
 
     // Normalize the property address once, up front, so every downstream use
     // (storage, matching, coordination folder, contacts) uses the clean value.
-    if (body.property_address) {
+    // Address is now entered as structured parts (street/unit/city/state/zip).
+    // Normalize them, reject anything malformed, then GENERATE property_address
+    // so the display string can never be a free typed mess again. Older callers
+    // that still send only property_address keep working.
+    if (body.street_address || body.city || body.zip) {
+      const parts = normalizeAddressComponents(body)
+      const problems = validateAddressComponents(parts)
+      if (problems.length) {
+        return NextResponse.json({ error: problems.join('. ') }, { status: 400 })
+      }
+      body.street_address = parts.street_address
+      body.unit = parts.unit || null
+      body.city = parts.city
+      body.state = parts.state
+      body.zip = parts.zip
+      body.property_address = buildDisplayAddress(parts)
+    } else if (body.property_address) {
       body.property_address = normalizeAddressForStorage(body.property_address)
     }
 

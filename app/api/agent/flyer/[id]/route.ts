@@ -34,7 +34,7 @@ export async function GET(
     // Load transaction for address and property info
     const { data: txn, error: txnErr } = await supabaseAdmin
       .from('transactions')
-      .select('id, property_address, transaction_type, status, compliance_status')
+      .select('id, property_address, transaction_type, status, compliance_status, city, state')
       .eq('id', transactionId)
       .single()
 

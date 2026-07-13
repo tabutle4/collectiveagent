@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage, toTitleCase } from '@/lib/transactions/utils'
+import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export const dynamic = 'force-dynamic'
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
     const now = new Date().toISOString()
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
-    const { data: formRecord } = await supabaseAdmin.from('forms').select('id, name, notification_emails')
+    const { data: formRecord } = await supabaseAdmin.from('forms').select('id, name, notification_emails, triggers_flyer, flyer_type')
       .eq('linked_form_type', 'compliance_cda').eq('is_active', true).maybeSingle()
     const notificationEmails: string[] = formRecord?.notification_emails || []
 
@@ -450,7 +451,18 @@ export async function POST(request: NextRequest) {
     const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
       .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
       .select('id').single()
-    await supabaseAdmin.from('transaction_flyers').insert({ transaction_id: transactionId, flyer_type: flyerType, status: 'requested', requested_by: agentId, flyer_division: flyerDisplayLine, bedrooms: bedrooms || null, bathrooms: bathrooms || null, garage: garage || null, sqft: sqft || null, updated_at: now })
+    // Flyer: triggers_flyer on the forms row decides WHETHER a flyer is made.
+    // This form is the one case with a dynamic type (just_sold vs just_leased
+    // depending on the deal), so it passes the type as an override and its
+    // forms.flyer_type stays null.
+    await createFlyerFromForm({
+      form: formRecord as any,
+      transactionId,
+      agentId,
+      stats: { bedrooms, bathrooms, garage, sqft },
+      flyerDivision: flyerDisplayLine,
+      typeOverride: flyerType,
+    })
 
     const notifyHtml = getEmailLayout(
       `<p style="margin:0 0 16px;font-size:14px;color:#555555;">New compliance request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong>.</p>

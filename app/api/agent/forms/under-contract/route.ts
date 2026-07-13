@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
+import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents } from '@/lib/transactions/utils'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage } from '@/lib/transactions/utils'
@@ -36,7 +38,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       agent_name, agent_email, agent_phone,
-      property_address, sales_price, commission_rate, closing_date, mls_link,
+      property_address, street_address, unit, city, state, zip,
+      sales_price, commission_rate, closing_date, mls_link,
       flyer_choice, team_name, division_name,
       representing, client_name, client_phone, client_email, lead_source,
       other_agent_name, other_agent_phone, other_agent_email,
@@ -49,7 +52,19 @@ export async function POST(request: NextRequest) {
 
     // Normalize the address once so it is stored consistently (Title Case,
     // standard abbreviations, collapsed whitespace).
-    const normalizedAddress = normalizeAddressForStorage(property_address)
+    // Structured address in, generated display string out. Reject malformed.
+    let normalizedAddress: string
+    let addrParts = { street_address: '', unit: '', city: '', state: '', zip: '' }
+    if (street_address || city || zip) {
+      addrParts = normalizeAddressComponents({ street_address, unit, city, state, zip })
+      const problems = validateAddressComponents(addrParts)
+      if (problems.length) {
+        return NextResponse.json({ error: problems.join('. ') }, { status: 400 })
+      }
+      normalizedAddress = buildDisplayAddress(addrParts)
+    } else {
+      normalizedAddress = normalizeAddressForStorage(property_address)
+    }
 
     // Office staff may submit on behalf of an agent. Verify server-side.
     const STAFF_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
@@ -111,7 +126,7 @@ export async function POST(request: NextRequest) {
     // ── Load notification recipients from the forms row (set in the UI) ──────
     const { data: formRecord } = await supabaseAdmin
       .from('forms')
-      .select('id, notification_emails')
+      .select('id, notification_emails, triggers_flyer, flyer_type')
       .eq('linked_form_type', 'under_contract')
       .eq('is_active', true)
       .maybeSingle()
@@ -133,6 +148,11 @@ export async function POST(request: NextRequest) {
       .from('transactions')
       .insert({
         property_address: normalizedAddress,
+        street_address: addrParts.street_address || null,
+        unit: addrParts.unit || null,
+        city: addrParts.city || null,
+        state: addrParts.state || null,
+        zip: addrParts.zip || null,
         status: 'pending',
         transaction_type: isLease ? 'lease' : 'sale',
         representing: representing || null,
@@ -196,18 +216,15 @@ export async function POST(request: NextRequest) {
     ]
     await supabaseAdmin.from('transaction_contacts').insert(contactRows)
 
-    // ── Flyer (under_contract) with stats ────────────────────────────────────
-    await supabaseAdmin.from('transaction_flyers').insert({
-      transaction_id: transactionId,
-      flyer_type: 'under_contract',
-      status: 'requested',
-      requested_by: agentId,
-      flyer_division: flyerDivisionLine,
-      bedrooms: bedrooms || null,
-      bathrooms: bathrooms || null,
-      garage: garage || null,
-      sqft: sqft || null,
-      updated_at: now,
+    // ── Flyer ────────────────────────────────────────────────────────────────
+    // Whether this form makes a flyer, and which type, comes from the forms
+    // table (triggers_flyer / flyer_type), not from hardcoded values here.
+    await createFlyerFromForm({
+      form: formRecord as any,
+      transactionId,
+      agentId,
+      stats: { bedrooms, bathrooms, garage, sqft },
+      flyerDivision: flyerDivisionLine,
     })
 
     // ── Submission record ────────────────────────────────────────────────────
