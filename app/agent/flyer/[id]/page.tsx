@@ -172,6 +172,8 @@ export default function FlyerPage() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [flyers, setFlyers] = useState<any[]>([])
+  const [activeFlyerId, setActiveFlyerId] = useState<string | null>(null)
   const [flyer, setFlyer] = useState<any>(null)
   const [transaction, setTransaction] = useState<any>(null)
   const [agent, setAgent] = useState<any>(null)
@@ -222,25 +224,51 @@ export default function FlyerPage() {
       .then(r => r.json())
       .then(data => {
         if (data.error) { setError(data.error); return }
-        setFlyer(data.flyer)
+        const list: any[] = data.flyers || (data.flyer ? [data.flyer] : [])
+        setFlyers(list)
         setTransaction(data.transaction)
         setAgent(data.agent)
-        setPhotoUrl(data.flyer?.photo_url || null)
-        if (data.flyer) {
+        const initial = list[0] || null
+        setActiveFlyerId(initial?.id || null)
+        setFlyer(initial)
+        setPhotoUrl(initial?.photo_url || null)
+        if (initial) {
           setEditFields({
-            flyer_type: data.flyer.flyer_type || '',
-            city: data.flyer.city || '',
-            flyer_division: data.flyer.flyer_division || '',
-            bedrooms: data.flyer.bedrooms != null ? String(data.flyer.bedrooms) : '',
-            bathrooms: data.flyer.bathrooms != null ? String(data.flyer.bathrooms) : '',
-            garage: data.flyer.garage != null ? String(data.flyer.garage) : '',
-            sqft: data.flyer.sqft != null ? String(data.flyer.sqft) : '',
+            flyer_type: initial.flyer_type || '',
+            city: initial.city || '',
+            flyer_division: initial.flyer_division || '',
+            bedrooms: initial.bedrooms != null ? String(initial.bedrooms) : '',
+            bathrooms: initial.bathrooms != null ? String(initial.bathrooms) : '',
+            garage: initial.garage != null ? String(initial.garage) : '',
+            sqft: initial.sqft != null ? String(initial.sqft) : '',
           })
         }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [transactionId])
+
+  // Switch which flyer tab is active. Re-syncs the derived flyer, its photo,
+  // and the admin edit fields to the selected flyer.
+  const selectFlyer = useCallback((id: string) => {
+    const next = flyers.find(f => f.id === id)
+    if (!next) return
+    setActiveFlyerId(id)
+    setFlyer(next)
+    setPhotoUrl(next.photo_url || null)
+    setEditFields({
+      flyer_type: next.flyer_type || '',
+      city: next.city || '',
+      flyer_division: next.flyer_division || '',
+      bedrooms: next.bedrooms != null ? String(next.bedrooms) : '',
+      bathrooms: next.bathrooms != null ? String(next.bathrooms) : '',
+      garage: next.garage != null ? String(next.garage) : '',
+      sqft: next.sqft != null ? String(next.sqft) : '',
+    })
+    setEditing(false)
+    setUploadSuccess(false)
+    setSaveSuccess(false)
+  }, [flyers])
 
   // Derived flyer data
   const flyerType = flyer?.flyer_type || 'just_sold'
@@ -471,6 +499,34 @@ export default function FlyerPage() {
 
       {transaction && (
         <p className="text-xs text-luxury-gray-3 mb-4">{transaction.property_address}</p>
+      )}
+
+      {/* Flyer type tabs. One per flyer that exists for this transaction, so a
+          tab appears only after the corresponding form was submitted (Just
+          Listed, Under Contract, Compliance/CDA). */}
+      {flyers.length > 1 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {flyers.map(f => {
+            const info = FLYER_LABELS[f.flyer_type] || FLYER_LABELS.just_sold
+            const tabLabel = f.flyer_type === 'under_contract'
+              ? 'Under Contract'
+              : `${info.just} ${info.type}`
+            const active = f.id === activeFlyerId
+            return (
+              <button
+                key={f.id}
+                onClick={() => selectFlyer(f.id)}
+                className={`px-4 py-2 text-xs rounded transition-colors ${
+                  active
+                    ? 'bg-luxury-gray-1 text-white'
+                    : 'bg-white text-luxury-gray-2 border border-luxury-gray-5 hover:border-luxury-gray-4'
+                }`}
+              >
+                {tabLabel}
+              </button>
+            )
+          })}
+        </div>
       )}
 
       <div className="container-card space-y-6">

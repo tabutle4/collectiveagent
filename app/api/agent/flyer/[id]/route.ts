@@ -15,16 +15,21 @@ export async function GET(
   const { id: transactionId } = await params
 
   try {
-    // Load flyer record - most recent for this transaction
-    const { data: flyer, error: flyerErr } = await supabaseAdmin
+    // Load ALL flyer records for this transaction. Each form that creates a
+    // flyer (Just Listed, Under Contract, Compliance/CDA) inserts its own row on
+    // the same transaction, so a transaction can have several. The detail page
+    // renders one tab per flyer that exists. `flyer` (newest) is kept for any
+    // caller that still expects a single object.
+    const { data: flyerRows, error: flyerErr } = await supabaseAdmin
       .from('transaction_flyers')
-      .select('id, flyer_type, status, photo_url, bedrooms, bathrooms, garage, sqft, flyer_division, city, downloaded_at')
+      .select('id, flyer_type, status, photo_url, bedrooms, bathrooms, garage, sqft, flyer_division, city, downloaded_at, created_at')
       .eq('transaction_id', transactionId)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
 
     if (flyerErr) throw flyerErr
+
+    const flyers = flyerRows || []
+    const flyer = flyers[0] || null
 
     // Load transaction for address and property info
     const { data: txn, error: txnErr } = await supabaseAdmin
@@ -76,6 +81,7 @@ export async function GET(
 
     return NextResponse.json({
       flyer: flyer || null,
+      flyers,
       transaction: txn,
       agent: { name: agentName, email: agentEmail, office: agentUser?.office || '' },
     })

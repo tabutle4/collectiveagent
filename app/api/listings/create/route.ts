@@ -84,6 +84,7 @@ async function findOrCreateListingTransaction(
           .update({ legacy_listing_id: listing.id, updated_at: new Date().toISOString() })
           .eq('id', existing.id)
       }
+      await ensureJustListedFlyer(supabase, existing.id, agentId, body, formType)
       return existing.id
     }
 
@@ -134,10 +135,67 @@ async function findOrCreateListingTransaction(
       })
     }
 
+    await ensureJustListedFlyer(supabase, newTxn.id, agentId, body, formType)
+
     return newTxn.id
   } catch (err) {
     console.error('Option B: findOrCreateListingTransaction error:', err)
     return null
+  }
+}
+
+// Creates a Just Listed flyer row for the listing's transaction, once. Only
+// fires for the just-listed form (not pre-listing). Idempotent: if a
+// just_listed flyer already exists for this transaction it does nothing, so
+// re-submitting the form never spawns duplicates. Matches the exact insert
+// shape used by the compliance and under-contract routes so the flyer process
+// is identical across all types. Failures never block the listing.
+async function ensureJustListedFlyer(
+  supabase: any,
+  transactionId: string,
+  agentId: string | null,
+  body: any,
+  formType: string
+): Promise<void> {
+  try {
+    if (formType !== 'just-listed' || !transactionId || !agentId) return
+
+    const { data: existingFlyer } = await supabase
+      .from('transaction_flyers')
+      .select('id')
+      .eq('transaction_id', transactionId)
+      .eq('flyer_type', 'just_listed')
+      .maybeSingle()
+    if (existingFlyer) return
+
+    const toNum = (v: any) => {
+      if (v === '' || v === null || v === undefined) return null
+      const n = Number(v)
+      return Number.isNaN(n) || n < 0 ? null : n
+    }
+
+    let flyerDivision: string | null = null
+    if (body.flyer_display_type === 'team') flyerDivision = body.flyer_team_name || null
+    else if (body.flyer_display_type === 'division') flyerDivision = body.flyer_division || null
+    else if (body.flyer_display_type === 'office') {
+      const { data: prof } = await supabase.from('users').select('office').eq('id', agentId).single()
+      flyerDivision = prof?.office || null
+    }
+
+    await supabase.from('transaction_flyers').insert({
+      transaction_id: transactionId,
+      flyer_type: 'just_listed',
+      status: 'requested',
+      requested_by: agentId,
+      flyer_division: flyerDivision,
+      bedrooms: toNum(body.bedrooms),
+      bathrooms: toNum(body.bathrooms),
+      garage: toNum(body.garage),
+      sqft: toNum(body.sqft),
+      updated_at: new Date().toISOString(),
+    })
+  } catch (err) {
+    console.error('ensureJustListedFlyer error:', err)
   }
 }
 

@@ -49,6 +49,10 @@ export default function JustListedForm() {
     coordination_payment_method: '' as 'client_direct' | 'agent_pays' | '',
     coordination_payment_type: '' as 'zelle' | 'invoice' | '',
     is_broker_listing: false,
+    bedrooms: '',
+    bathrooms: '',
+    garage: '',
+    sqft: '',
   })
 
   useEffect(() => {
@@ -297,6 +301,62 @@ export default function JustListedForm() {
                 placeholder="John and Jane Doe or ABC LLC"
                 required
               />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-2 text-luxury-gray-1">
+                Property Details for Flyer
+              </label>
+              <p className="text-xs text-luxury-gray-3 mb-3">
+                These appear on the Just Listed flyer. Leave blank to omit.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1 text-luxury-gray-2">Bedrooms</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.bedrooms}
+                    onChange={e => setFormData({ ...formData, bedrooms: e.target.value })}
+                    className="input-luxury"
+                    placeholder="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1 text-luxury-gray-2">Bathrooms</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={formData.bathrooms}
+                    onChange={e => setFormData({ ...formData, bathrooms: e.target.value })}
+                    className="input-luxury"
+                    placeholder="2.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1 text-luxury-gray-2">Garage</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.garage}
+                    onChange={e => setFormData({ ...formData, garage: e.target.value })}
+                    className="input-luxury"
+                    placeholder="2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1 text-luxury-gray-2">Sq. Ft.</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.sqft}
+                    onChange={e => setFormData({ ...formData, sqft: e.target.value })}
+                    className="input-luxury"
+                    placeholder="1901"
+                  />
+                </div>
+              </div>
             </div>
 
             <div>

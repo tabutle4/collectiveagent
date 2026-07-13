@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/context/AuthContext'
-import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { Loader2, ExternalLink, Image as ImageIcon, AlertCircle, Lock, Mail, Plus, X, Check, ChevronDown, ChevronRight, RefreshCw, Search, ArrowUpDown, Link2 } from 'lucide-react'
 
 interface TrackerRow {
   id: string
@@ -146,6 +146,14 @@ export default function AdminCompliancePage() {
   const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
   const [needsWorkOnly, setNeedsWorkOnly] = useState(false)
+  const [search, setSearch] = useState('')
+  const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
+  const [sortBy, setSortBy] = useState<'recent' | 'closing' | 'agent' | 'status'>('recent')
+  const [linkPanelId, setLinkPanelId] = useState<string | null>(null)
+  const [linkQuery, setLinkQuery] = useState('')
+  const [linkResults, setLinkResults] = useState<any[]>([])
+  const [linkSearching, setLinkSearching] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // Status editing (per row)
@@ -186,7 +194,33 @@ export default function AdminCompliancePage() {
 
   const needsWork = (r: TrackerRow) => r.compliance_status !== 'complete'
   const needsWorkCount = rows.filter(needsWork).length
-  const visible = needsWorkOnly ? rows.filter(needsWork) : rows
+  const visible = (() => {
+    let list = needsWorkOnly ? rows.filter(needsWork) : [...rows]
+
+    if (linkFilter === 'linked') list = list.filter(r => r.transaction_id)
+    else if (linkFilter === 'unlinked') list = list.filter(r => !r.transaction_id)
+
+    const q = search.trim().toLowerCase()
+    if (q) {
+      list = list.filter(r =>
+        (r.agent_name || '').toLowerCase().includes(q) ||
+        (r.property_address || '').toLowerCase().includes(q) ||
+        (r.client_name || '').toLowerCase().includes(q)
+      )
+    }
+
+    const time = (s: string | null) => (s ? new Date(s).getTime() : 0)
+    list.sort((a, b) => {
+      if (sortBy === 'recent') return time(b.submitted_at) - time(a.submitted_at)
+      if (sortBy === 'closing') return time(b.closing_date) - time(a.closing_date)
+      if (sortBy === 'agent') return (a.agent_name || '').localeCompare(b.agent_name || '')
+      if (sortBy === 'status') return (a.compliance_status || '').localeCompare(b.compliance_status || '')
+      return 0
+    })
+    return list
+  })()
+
+  const unlinkedCount = rows.filter(r => !r.transaction_id).length
 
   const openExpand = (r: TrackerRow) => {
     if (expandedId === r.id) { setExpandedId(null); return }
@@ -220,6 +254,74 @@ export default function AdminCompliancePage() {
       setError(err.message)
     } finally {
       setSavingStatus(false)
+    }
+  }
+
+  const openLinkPanel = (rowId: string) => {
+    if (linkPanelId === rowId) { setLinkPanelId(null); return }
+    setLinkPanelId(rowId)
+    setLinkQuery('')
+    setLinkResults([])
+    setError('')
+  }
+
+  const runLinkSearch = async (rowId: string, query: string) => {
+    setLinkQuery(query)
+    if (query.trim().length < 2) { setLinkResults([]); return }
+    setLinkSearching(true)
+    try {
+      const res = await fetch('/api/admin/compliance/link-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'search', query }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Search failed')
+      setLinkResults(data.transactions || [])
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLinkSearching(false)
+    }
+  }
+
+  const linkToTransaction = async (submissionId: string, transactionId: string) => {
+    setLinkBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/link-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'link', submission_id: submissionId, transaction_id: transactionId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not link')
+      setLinkPanelId(null)
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  const createTransactionForRow = async (submissionId: string) => {
+    setLinkBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/link-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', submission_id: submissionId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not create transaction')
+      setLinkPanelId(null)
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLinkBusy(false)
     }
   }
 
@@ -463,6 +565,41 @@ export default function AdminCompliancePage() {
         >
           Needs work ({needsWorkCount})
         </button>
+
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search agent, property, or client"
+            className="input-luxury text-xs pl-7 py-1.5 w-full"
+          />
+        </div>
+
+        <select
+          value={linkFilter}
+          onChange={e => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
+          className="select-luxury text-xs py-1.5"
+        >
+          <option value="all">All rows</option>
+          <option value="linked">Linked only</option>
+          <option value="unlinked">Unlinked ({unlinkedCount})</option>
+        </select>
+
+        <div className="flex items-center gap-1">
+          <ArrowUpDown size={13} className="text-luxury-gray-4" />
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as 'recent' | 'closing' | 'agent' | 'status')}
+            className="select-luxury text-xs py-1.5"
+          >
+            <option value="recent">Most recent</option>
+            <option value="closing">Closing date</option>
+            <option value="agent">Agent name</option>
+            <option value="status">Status</option>
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -554,7 +691,7 @@ export default function AdminCompliancePage() {
                       {r.is_locked && <Lock size={11} className="inline-block ml-1.5 text-amber-600" />}
                     </td>
                     <td className="px-4 py-3">
-                      {r.transaction_id && (
+                      {r.transaction_id ? (
                         <a
                           href={`/admin/transactions/${r.transaction_id}?tab=documents`}
                           onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=documents`) }}
@@ -562,9 +699,84 @@ export default function AdminCompliancePage() {
                         >
                           Work Deal <ExternalLink size={11} />
                         </a>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); openLinkPanel(r.id) }}
+                          className="inline-flex items-center gap-1 text-xs text-luxury-gray-2 hover:text-luxury-gray-1 whitespace-nowrap"
+                        >
+                          <Link2 size={11} /> Link
+                        </button>
                       )}
                     </td>
                   </tr>
+
+                  {linkPanelId === r.id && !r.transaction_id && (
+                    <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
+                      <td colSpan={9} className="px-5 py-4">
+                        <div className="space-y-3 max-w-xl">
+                          <p className="text-xs font-semibold text-luxury-gray-1">
+                            Link this compliance submission to a transaction
+                          </p>
+                          <div className="relative">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
+                            <input
+                              type="text"
+                              value={linkQuery}
+                              onChange={e => runLinkSearch(r.id, e.target.value)}
+                              placeholder="Search by property address or client name"
+                              className="input-luxury text-xs pl-7 py-1.5 w-full"
+                              autoFocus
+                            />
+                          </div>
+
+                          {linkSearching ? (
+                            <p className="text-xs text-luxury-gray-3">Searching...</p>
+                          ) : linkResults.length > 0 ? (
+                            <div className="border border-luxury-gray-5 rounded divide-y divide-luxury-gray-5">
+                              {linkResults.map(t => (
+                                <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <span className="block text-xs text-luxury-gray-1 truncate">{t.property_address || 'No address'}</span>
+                                    <span className="block text-xs text-luxury-gray-3 truncate">
+                                      {[t.client_name, t.status].filter(Boolean).join(' - ')}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => linkToTransaction(r.id, t.id)}
+                                    disabled={linkBusy}
+                                    className="btn btn-secondary text-xs whitespace-nowrap disabled:opacity-50"
+                                  >
+                                    Link
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : linkQuery.trim().length >= 2 ? (
+                            <p className="text-xs text-luxury-gray-3">No matching transactions found.</p>
+                          ) : null}
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => createTransactionForRow(r.id)}
+                              disabled={linkBusy}
+                              className="btn btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <Plus size={12} /> Create new transaction
+                            </button>
+                            <button
+                              onClick={() => setLinkPanelId(null)}
+                              className="btn btn-secondary text-xs"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          <p className="text-xs text-luxury-gray-3">
+                            Creating a transaction uses this submission&apos;s address, client, and closing date.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
 
                   {expandedId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
