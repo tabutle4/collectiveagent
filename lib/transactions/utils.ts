@@ -301,3 +301,46 @@ export function validateAddressComponents(c: Partial<AddressComponents>): string
 
   return errors
 }
+
+// ===== Property Stats =====
+
+export interface PropertyStats {
+  bedrooms: number | null
+  bathrooms: number | null
+  garage: number | null
+  building_sqft: number | null
+}
+
+/**
+ * Normalize the property stats an agent types on a form into the columns that
+ * live on the transaction. transactions is the single source of truth for
+ * stats; the flyer reads them from there rather than keeping its own copies.
+ *
+ * Accepts messy input ("2.5", "1,901", "", null) and returns clean numbers or
+ * null. Never throws.
+ */
+export function normalizePropertyStats(input: {
+  bedrooms?: string | number | null
+  bathrooms?: string | number | null
+  garage?: string | number | null
+  sqft?: string | number | null
+}): PropertyStats {
+  const int = (v: string | number | null | undefined): number | null => {
+    if (v === null || v === undefined || v === '') return null
+    const n = Number(String(v).replace(/[^0-9.]/g, ''))
+    if (Number.isNaN(n) || n < 0) return null
+    return Math.round(n)
+  }
+  const num = (v: string | number | null | undefined): number | null => {
+    if (v === null || v === undefined || v === '') return null
+    const n = Number(String(v).replace(/[^0-9.]/g, ''))
+    if (Number.isNaN(n) || n < 0) return null
+    return n
+  }
+  return {
+    bedrooms: int(input.bedrooms),
+    bathrooms: num(input.bathrooms),
+    garage: int(input.garage),
+    building_sqft: num(input.sqft),
+  }
+}

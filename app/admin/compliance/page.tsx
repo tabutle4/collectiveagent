@@ -370,13 +370,13 @@ export default function AdminCompliancePage() {
     }
   }
 
-  const sendFlyerEmail = async (transactionId: string, mode: 'request_photo' | 'flyer_ready') => {
+  const sendFlyerEmail = async (transactionId: string, mode: 'request_photo' | 'flyer_ready', flyerId?: string | null) => {
     setSendingFlyer(transactionId)
     try {
       const res = await fetch('/api/admin/compliance/send-flyer-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction_id: transactionId, mode }),
+        body: JSON.stringify({ transaction_id: transactionId, mode, flyer_id: flyerId || null }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
@@ -951,7 +951,7 @@ export default function AdminCompliancePage() {
                               {r.flyer ? (
                                 r.flyer.has_photo ? (
                                   <button
-                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'flyer_ready')}
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'flyer_ready', r.flyer?.id)}
                                     disabled={sendingFlyer === r.transaction_id}
                                     className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
                                   >
@@ -959,7 +959,7 @@ export default function AdminCompliancePage() {
                                   </button>
                                 ) : (
                                   <button
-                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'request_photo')}
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'request_photo', r.flyer?.id)}
                                     disabled={sendingFlyer === r.transaction_id}
                                     className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
                                   >

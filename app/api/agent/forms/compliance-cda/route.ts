@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
-import { normalizeAddressForStorage, toTitleCase } from '@/lib/transactions/utils'
+import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats } from '@/lib/transactions/utils'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
@@ -376,8 +376,13 @@ export async function POST(request: NextRequest) {
     }
 
     let transactionId: string
+    const txnStats = normalizePropertyStats({ bedrooms, bathrooms, garage, sqft })
     const txnFields = {
       representing, tenant_transaction_type: tenant_transaction_type || null,
+      bedrooms: txnStats.bedrooms,
+      bathrooms: txnStats.bathrooms,
+      garage: txnStats.garage,
+      building_sqft: txnStats.building_sqft,
       lease_term: lease_term_months ? parseInt(lease_term_months) : null,
       closing_date: isLease ? null : closing_or_movein_date || null,
       move_in_date: isLease ? closing_or_movein_date || null : null,
@@ -459,7 +464,6 @@ export async function POST(request: NextRequest) {
       form: formRecord as any,
       transactionId,
       agentId,
-      stats: { bedrooms, bathrooms, garage, sqft },
       flyerDivision: flyerDisplayLine,
       typeOverride: flyerType,
     })

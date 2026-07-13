@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Pencil, Save } from 'lucide-react'
+import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Pencil, Save, Mail } from 'lucide-react'
 import { FLYER_FONT_CSS } from '@/lib/flyer-fonts'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -288,15 +288,17 @@ export default function FlyerPage() {
     flyerType,
     photoUrl,
     city,
-    bedrooms: flyer?.bedrooms ?? null,
-    bathrooms: flyer?.bathrooms ?? null,
-    garage: flyer?.garage ?? null,
-    sqft: flyer?.sqft ?? null,
+    // Stats live on the transaction. The flyer row is only a fallback for older
+    // flyers created before stats moved to the transaction.
+    bedrooms: transaction?.bedrooms ?? flyer?.bedrooms ?? null,
+    bathrooms: transaction?.bathrooms ?? flyer?.bathrooms ?? null,
+    garage: transaction?.garage ?? flyer?.garage ?? null,
+    sqft: transaction?.building_sqft ?? flyer?.sqft ?? null,
     agentName,
     agentEmail,
     divisionLine,
     logoB64,
-  }), [flyerType, photoUrl, city, flyer?.bedrooms, flyer?.bathrooms, flyer?.garage, flyer?.sqft, agentName, agentEmail, divisionLine, logoB64])
+  }), [flyerType, photoUrl, city, transaction?.bedrooms, transaction?.bathrooms, transaction?.garage, transaction?.building_sqft, flyer?.bedrooms, flyer?.bathrooms, flyer?.garage, flyer?.sqft, agentName, agentEmail, divisionLine, logoB64])
 
   // Inject flyer HTML into container whenever data changes
   useEffect(() => {
@@ -353,6 +355,36 @@ export default function FlyerPage() {
   }
 
   // Download via html2canvas
+  const [sending, setSending] = useState(false)
+  const [sendMsg, setSendMsg] = useState('')
+
+  // Emails the flyer that is currently open (the active tab), not whichever one
+  // happens to be newest.
+  const handleSendFlyer = async () => {
+    if (!flyer?.id) return
+    setSending(true)
+    setSendMsg('')
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/send-flyer-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_id: transactionId,
+          flyer_id: flyer.id,
+          mode: photoUrl ? 'flyer_ready' : 'request_photo',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not send the flyer email')
+      setSendMsg('Flyer email sent to the agent.')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
   const handleDownload = async () => {
     const flyerEl = flyerContainerRef.current?.querySelector('#flyer') as HTMLElement | null
     if (!flyerEl) return
@@ -580,6 +612,23 @@ export default function FlyerPage() {
                 <><Download size={13} /> Download Flyer (1080x1350)</>
               )}
             </button>
+
+            {isAdmin && flyer?.id && (
+              <button
+                onClick={handleSendFlyer}
+                disabled={sending}
+                className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50 mt-2"
+              >
+                {sending ? (
+                  <><Loader2 size={13} className="animate-spin" /> Sending...</>
+                ) : (
+                  <><Mail size={13} /> Email this flyer to the agent</>
+                )}
+              </button>
+            )}
+            {sendMsg && (
+              <p className="text-xs text-green-700 mt-2">{sendMsg}</p>
+            )}
           </div>
         </div>
 

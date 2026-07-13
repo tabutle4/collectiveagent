@@ -9,7 +9,7 @@ import { sendFormSubmissionNotification } from '@/lib/email'
 import { createClient } from '@/lib/supabase/server'
 import { validateFormToken } from '@/lib/magic-links'
 import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
-import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents } from '@/lib/transactions/utils'
+import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
@@ -91,6 +91,11 @@ async function findOrCreateListingTransaction(
     }
 
     // 2. No transaction yet: create one. Status by form type.
+    // Property stats live on the transaction, not the flyer.
+    const txnStats = normalizePropertyStats({
+      bedrooms: body.bedrooms, bathrooms: body.bathrooms,
+      garage: body.garage, sqft: body.sqft,
+    })
     const status = formType === 'just-listed' ? 'active_listing' : 'prospect'
     const isLease = listing.transaction_type === 'lease'
 
@@ -100,6 +105,10 @@ async function findOrCreateListingTransaction(
         property_address: listing.property_address,
         street_address: body.street_address || null,
         unit: body.unit || null,
+        bedrooms: txnStats.bedrooms,
+        bathrooms: txnStats.bathrooms,
+        garage: txnStats.garage,
+        building_sqft: txnStats.building_sqft,
         city: body.city || null,
         state: body.state || null,
         zip: body.zip || null,
@@ -174,12 +183,6 @@ async function createJustListedFlyer(
     form,
     transactionId,
     agentId,
-    stats: {
-      bedrooms: body.bedrooms,
-      bathrooms: body.bathrooms,
-      garage: body.garage,
-      sqft: body.sqft,
-    },
     flyerDivision: body.flyer_division || null,
   })
 }

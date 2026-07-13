@@ -34,7 +34,7 @@ export async function GET(
     // Load transaction for address and property info
     const { data: txn, error: txnErr } = await supabaseAdmin
       .from('transactions')
-      .select('id, property_address, transaction_type, status, compliance_status, city, state')
+      .select('id, property_address, transaction_type, status, compliance_status, city, state, bedrooms, bathrooms, garage, building_sqft')
       .eq('id', transactionId)
       .single()
 
@@ -228,13 +228,30 @@ export async function PUT(
     if (typeof body.flyer_division === 'string') {
       updates.flyer_division = body.flyer_division.trim() || null
     }
-    for (const numField of ['bedrooms', 'bathrooms', 'garage', 'sqft']) {
-      if (body[numField] === '' || body[numField] === null || body[numField] === undefined) {
-        updates[numField] = null
+
+    // Property stats belong to the transaction, not the flyer. Editing them here
+    // updates the transaction so every flyer on that deal stays consistent.
+    const statUpdates: Record<string, any> = {}
+    const statMap: Record<string, string> = {
+      bedrooms: 'bedrooms',
+      bathrooms: 'bathrooms',
+      garage: 'garage',
+      sqft: 'building_sqft',
+    }
+    for (const [field, column] of Object.entries(statMap)) {
+      if (!(field in body)) continue
+      if (body[field] === '' || body[field] === null || body[field] === undefined) {
+        statUpdates[column] = null
       } else {
-        const n = Number(body[numField])
-        if (!Number.isNaN(n) && n >= 0) updates[numField] = n
+        const n = Number(String(body[field]).replace(/[^0-9.]/g, ''))
+        if (!Number.isNaN(n) && n >= 0) {
+          statUpdates[column] = field === 'bedrooms' || field === 'garage' ? Math.round(n) : n
+        }
       }
+    }
+    if (Object.keys(statUpdates).length > 0) {
+      statUpdates.updated_at = new Date().toISOString()
+      await supabaseAdmin.from('transactions').update(statUpdates).eq('id', transactionId)
     }
 
     const query = supabaseAdmin.from('transaction_flyers').update(updates)
@@ -244,7 +261,7 @@ export async function PUT(
       await query.eq('transaction_id', transactionId)
     }
 
-    return NextResponse.json({ success: true, updates })
+    return NextResponse.json({ success: true, updates, stats: statUpdates })
   } catch (err: any) {
     console.error('flyer PUT error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

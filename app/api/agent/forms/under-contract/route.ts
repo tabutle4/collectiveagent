@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
-import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents } from '@/lib/transactions/utils'
+import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage } from '@/lib/transactions/utils'
@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
 
     // Normalize the address once so it is stored consistently (Title Case,
     // standard abbreviations, collapsed whitespace).
+    // Property stats live on the transaction, not the flyer.
+    const txnStats = normalizePropertyStats({ bedrooms, bathrooms, garage, sqft })
+
     // Structured address in, generated display string out. Reject malformed.
     let normalizedAddress: string
     let addrParts = { street_address: '', unit: '', city: '', state: '', zip: '' }
@@ -150,6 +153,10 @@ export async function POST(request: NextRequest) {
         property_address: normalizedAddress,
         street_address: addrParts.street_address || null,
         unit: addrParts.unit || null,
+        bedrooms: txnStats.bedrooms,
+        bathrooms: txnStats.bathrooms,
+        garage: txnStats.garage,
+        building_sqft: txnStats.building_sqft,
         city: addrParts.city || null,
         state: addrParts.state || null,
         zip: addrParts.zip || null,
@@ -223,7 +230,6 @@ export async function POST(request: NextRequest) {
       form: formRecord as any,
       transactionId,
       agentId,
-      stats: { bedrooms, bathrooms, garage, sqft },
       flyerDivision: flyerDivisionLine,
     })
 

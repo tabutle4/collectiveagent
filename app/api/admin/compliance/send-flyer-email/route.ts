@@ -27,10 +27,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Confirm a flyer exists for this transaction, and figure out sold vs leased.
-    const { data: flyer } = await supabaseAdmin
+    // A deal can now have several flyers (Just Listed, Under Contract, Just Sold),
+    // so the caller says which one to send. When no flyer_id is given we fall back
+    // to the newest, which keeps older callers working.
+    const requestedFlyerId = typeof body.flyer_id === 'string' ? body.flyer_id : null
+
+    let flyerQuery = supabaseAdmin
       .from('transaction_flyers')
       .select('id, flyer_type, photo_url')
       .eq('transaction_id', transactionId)
+
+    if (requestedFlyerId) {
+      flyerQuery = flyerQuery.eq('id', requestedFlyerId)
+    }
+
+    const { data: flyer } = await flyerQuery
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()

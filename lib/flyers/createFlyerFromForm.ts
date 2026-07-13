@@ -33,20 +33,6 @@ export async function getFormConfig(linkedFormType: string): Promise<FormFlyerCo
   return (data as FormFlyerConfig) || null
 }
 
-export interface FlyerStats {
-  bedrooms?: string | number | null
-  bathrooms?: string | number | null
-  garage?: string | number | null
-  sqft?: string | number | null
-}
-
-/** transaction_flyers stat columns are text, so store text. */
-function toText(v: string | number | null | undefined): string | null {
-  if (v === null || v === undefined || v === '') return null
-  const s = String(v).trim()
-  return s || null
-}
-
 /**
  * Create the flyer for a submitted form, if that form is configured to make one.
  *
@@ -58,7 +44,6 @@ export async function createFlyerFromForm(params: {
   form: FormFlyerConfig | null
   transactionId: string | null
   agentId: string | null
-  stats?: FlyerStats
   flyerDivision?: string | null
   typeOverride?: string | null
 }): Promise<void> {
@@ -88,10 +73,6 @@ export async function createFlyerFromForm(params: {
       status: 'requested',
       requested_by: agentId,
       flyer_division: flyerDivision || null,
-      bedrooms: toText(stats?.bedrooms),
-      bathrooms: toText(stats?.bathrooms),
-      garage: toText(stats?.garage),
-      sqft: toText(stats?.sqft),
       updated_at: new Date().toISOString(),
     })
   } catch (err) {
