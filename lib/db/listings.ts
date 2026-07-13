@@ -1,20 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { Listing, ListingFormData } from '@/types/listing-coordination'
-import { generateFormToken } from '@/lib/magic-links'
 
 export async function createListing(
   data: ListingFormData,
-  agentId: string | null,
-  skipTokenGeneration: boolean = false
+  agentId: string | null
 ): Promise<Listing | null> {
   const supabase = createClient()
-
-  let preListingToken = null
-  let justListedToken = null
-  if (!skipTokenGeneration) {
-    preListingToken = !data.mls_link ? await generateFormToken('pre-listing') : null
-    justListedToken = data.mls_link ? await generateFormToken('just-listed') : null
-  }
 
   const { data: listing, error } = await supabase
     .from('listings')
@@ -35,8 +26,6 @@ export async function createListing(
       dotloop_file_created: data.dotloop_file_created,
       listing_input_requested: data.listing_input_requested,
       photography_requested: data.photography_requested,
-      pre_listing_token: preListingToken,
-      just_listed_token: justListedToken,
       is_broker_listing: data.is_broker_listing || false,
     })
     .select()

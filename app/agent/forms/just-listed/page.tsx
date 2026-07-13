@@ -136,11 +136,14 @@ export default function JustListedForm() {
       const data = await response.json()
 
       if (data.success) {
-        // Redirect to user's dashboard based on role (simple string, not array)
+        // Redirect to the user's dashboard. Agents used to land on a public
+        // "you can close this window" page from the old token forms; now that
+        // every form is filled in inside the app, they go back to their
+        // dashboard like every other in-app form.
         if (user?.role === 'Admin') {
           router.push('/admin/dashboard')
         } else {
-          router.push('/forms/success')
+          router.push('/agent/dashboard')
         }
       } else {
         setError(data.error || 'Failed to submit form. Please try again.')

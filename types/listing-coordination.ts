@@ -18,8 +18,6 @@ export interface Listing {
   status: 'pre-listing' | 'active' | 'pending' | 'sold' | 'expired' | 'cancelled'
   pre_listing_form_completed: boolean
   just_listed_form_completed: boolean
-  pre_listing_token: string | null
-  just_listed_token: string | null
   dotloop_file_created: boolean
   photography_requested: boolean
   photography_scheduled_date: string | null

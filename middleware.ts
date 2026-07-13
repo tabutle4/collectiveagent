@@ -20,7 +20,6 @@ const PUBLIC_PATHS = [
   '/api/payload/confirm-transaction',
   '/api/pm/payload/landlord-activation-webhook',
   '/api/settings',
-  '/forms',
   '/roster',
   '/agent-roster.html',
   '/seller',

@@ -61,8 +61,6 @@ interface ListingResponse {
   status: string
   pre_listing_form_completed: boolean
   just_listed_form_completed: boolean
-  pre_listing_token: string | null
-  just_listed_token: string | null
   dotloop_file_created: boolean
   photography_requested: boolean
   listing_input_requested: boolean
@@ -86,8 +84,6 @@ const INTERNAL_FIELD_KEYS = [
   'listing_id',
   'user_id',
   'agent_id',
-  'pre_listing_token',
-  'just_listed_token',
   'pre_listing_form_completed',
   'just_listed_form_completed',
   'notes',
@@ -321,7 +317,6 @@ export default function FormResponsesPage() {
   const [notifLoading, setNotifLoading] = useState(false)
   const [notifSaving, setNotifSaving] = useState(false)
   const [notifError, setNotifError] = useState('')
-  const [formCopiedLink, setFormCopiedLink] = useState<string | null>(null)
   const [newFormData, setNewFormData] = useState<any>({
     agent_name: '',
     property_address: '',
@@ -771,12 +766,6 @@ export default function FormResponsesPage() {
   const preListingForms = listings.filter(l => l.pre_listing_form_completed)
   const justListedForms = listings.filter(l => l.just_listed_form_completed)
 
-  const handleCopyFormLink = (link: string, formId: string) => {
-    navigator.clipboard.writeText(link)
-    setFormCopiedLink(formId)
-    setTimeout(() => setFormCopiedLink(null), 2000)
-  }
-
   const loadForms = async () => {
     try {
       const response = await fetch('/api/forms/list')
@@ -1090,7 +1079,7 @@ export default function FormResponsesPage() {
 
       if (data.success) {
         alert(
-          `Form "${newFormDefinition.name}" created successfully! Shareable link: ${data.form.shareable_link_url}`
+          `Form "${newFormDefinition.name}" created successfully`
         )
         setCreateFormModalOpen(false)
         setEditingForm(null)
@@ -1786,9 +1775,6 @@ export default function FormResponsesPage() {
                       Status
                     </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
-                      Shareable Link
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-luxury-gray-1">
                       Actions
                     </th>
                   </tr>
@@ -1839,31 +1825,6 @@ export default function FormResponsesPage() {
                           >
                             {form.is_active ? 'Active' : 'Inactive'}
                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-sm" onClick={e => e.stopPropagation()}>
-                          {form.shareable_link_url ? (
-                            <button
-                              onClick={() => {
-                                handleCopyFormLink(form.shareable_link_url, form.id)
-                              }}
-                              className="flex items-center gap-1 text-xs text-luxury-black hover:text-luxury-gray-1 transition-colors"
-                              title="Copy shareable link"
-                            >
-                              {formCopiedLink === form.id ? (
-                                <>
-                                  <Check className="w-3 h-3" />
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  Copy Link
-                                </>
-                              )}
-                            </button>
-                          ) : (
-                            <span className="text-xs text-luxury-gray-2">No link</span>
-                          )}
                         </td>
                         <td className="py-3 px-4 text-sm" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2">

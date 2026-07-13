@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
-import { generateFormToken, getFormLinkUrl } from '@/lib/magic-links'
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_forms')
@@ -16,10 +15,6 @@ export async function POST(request: NextRequest) {
     if (!name || !form_type) {
       return NextResponse.json({ error: 'Name and form_type are required' }, { status: 400 })
     }
-
-    // Generate shareable token and link (supports any form type)
-    const token = await generateFormToken(form_type)
-    const linkUrl = getFormLinkUrl(token, form_type)
 
     // Get max display_order
     const { data: existingForms } = await supabase
@@ -38,8 +33,6 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         form_type,
-        shareable_token: token,
-        shareable_link_url: linkUrl,
         form_config: form_config || {},
         created_by: created_by || null,
         display_order: displayOrder,

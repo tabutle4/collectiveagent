@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-import { X, MessageSquare, FileText, ExternalLink, Copy, Check } from 'lucide-react'
+import { X, MessageSquare, FileText, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 interface Form {
@@ -11,7 +11,6 @@ interface Form {
   name: string
   description: string
   formType: string
-  shareableLink?: string
 }
 
 interface Submission {
@@ -101,7 +100,6 @@ export default function AgentFormsPage() {
           name: f.name,
           description: f.description || '',
           formType: f.form_type,
-          shareableLink: f.shareable_link_url,
         }))
         const defaults: Form[] = [
           {
@@ -351,23 +349,6 @@ export default function AgentFormsPage() {
                         <h3 className="text-sm font-semibold text-luxury-gray-1">{form.name}</h3>
                       </div>
                       <p className="text-xs text-luxury-gray-3 mb-2">{form.description}</p>
-                      {form.shareableLink && (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={form.shareableLink}
-                            readOnly
-                            className="input-luxury text-xs flex-1"
-                            onClick={e => (e.target as HTMLInputElement).select()}
-                          />
-                          <button
-                            onClick={() => handleCopyLink(form.shareableLink!, form.id)}
-                            className="text-luxury-gray-3 hover:text-luxury-gray-1 transition-colors flex-shrink-0"
-                          >
-                            {copiedLink === form.id ? <Check size={14} /> : <Copy size={14} />}
-                          </button>
-                        </div>
-                      )}
                     </div>
                     <div className="flex-shrink-0">
                       {form.formType === 'pre-listing' || form.formType === 'just-listed' || form.formType === 'compliance-cda' || form.formType === 'under-contract' ? (
@@ -385,15 +366,6 @@ export default function AgentFormsPage() {
                         >
                           Open <ExternalLink size={12} />
                         </Link>
-                      ) : form.shareableLink ? (
-                        <a
-                          href={form.shareableLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-primary flex items-center gap-1.5 text-xs"
-                        >
-                          Open <ExternalLink size={12} />
-                        </a>
                       ) : null}
                     </div>
                   </div>

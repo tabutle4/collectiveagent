@@ -277,8 +277,6 @@ function EmailPreview({ type }: { type: 'welcome' | 'weekly' }) {
     id: 'sample',
     agent_id: 'sample-agent',
     property_address: '123 Main Street, Houston, TX 77002',
-    pre_listing_token: null,
-    just_listed_token: null,
     status: 'active',
     transaction_type: 'sale',
     mls_type: 'HAR',

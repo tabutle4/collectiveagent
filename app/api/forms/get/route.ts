@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
+  // Was public so the old token forms could load their definition without a
+  // login. Those forms are gone, so this is admin only now, matching its
+  // sibling routes.
+  const auth = await requirePermission(request, 'can_manage_forms')
+  if (auth.error) return auth.error
+
   try {
     const supabase = createClient()
     const searchParams = request.nextUrl.searchParams
