@@ -21,19 +21,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single()
-
-    // Check role (simple string, not array)
-    const adminRoles = ['operations', 'broker']
-    if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
-
     // Get coordination and listing before deletion to archive the OneDrive folder
     const coordination = await getCoordinationById(coordinationId)
     if (coordination) {

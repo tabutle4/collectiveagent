@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
-import { createClient } from '@/lib/supabase/server'
 import { regenerateFolderSharingLink } from '@/lib/microsoft-graph'
 import { getListingById } from '@/lib/db/listings'
 import { getCoordinationById, updateCoordination } from '@/lib/db/coordination'
@@ -10,7 +9,6 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   try {
-    const supabase = createClient()
     const body = await request.json()
     const { coordinationId, userId } = body
 
@@ -19,19 +17,6 @@ export async function POST(request: NextRequest) {
         { error: 'Coordination ID and User ID are required' },
         { status: 400 }
       )
-    }
-
-    // Verify user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single()
-
-    // Check role (simple string, not array)
-    const adminRoles = ['operations', 'broker']
-    if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
     }
 
     // Get coordination and listing

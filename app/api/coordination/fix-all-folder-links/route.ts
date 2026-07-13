@@ -18,19 +18,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    // Verify user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single()
-
-    // Check role (simple string, not array)
-    const adminRoles = ['operations', 'broker']
-    if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
-      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-    }
-
     // Get all active coordinations
     const coordinations = await getAllActiveCoordinations()
     let fixed = 0

@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createClient()
 
-    // Get user_id from form data and verify admin role
+    // Get form data
     const formData = await request.formData()
 
     const coordination_id = formData.get('coordination_id') as string
@@ -22,18 +22,6 @@ export async function POST(request: NextRequest) {
     if (!user_id) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
     }
-
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user_id)
-      .single()
-
-    // Check role - allow operations and broker
-const adminRoles = ['operations', 'broker']
-if (!userData?.role || !adminRoles.includes(userData.role)) {
-  return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-}
 
     const report_date = formData.get('report_date') as string
 

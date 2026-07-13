@@ -17,19 +17,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Report ID and User ID are required' }, { status: 400 })
     }
 
-    // Verify user is admin
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', userId)
-      .single()
-
-    // Check role - allow operations and broker
-const adminRoles = ['operations', 'broker']
-if (userError || !userData?.role || !adminRoles.includes(userData.role)) {
-  return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 })
-}
-
     // First, get the report to find the file names
     const { data: report, error: reportFetchError } = await supabase
       .from('coordination_weekly_reports')
