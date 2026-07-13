@@ -26,6 +26,8 @@ export default function JustListedForm() {
     if (!user) fetchUser()
   }, [router, user])
   const [loading, setLoading] = useState(false)
+  // Address completeness, including the unit question.
+  const [addressComplete, setAddressComplete] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitResult, setSubmitResult] = useState<any>(null)
   const [error, setError] = useState('')
@@ -117,6 +119,11 @@ export default function JustListedForm() {
 
     if (!selectedAgent) {
       setError('Please select an agent from the dropdown.')
+      return
+    }
+
+    if (!addressComplete) {
+      setError('Complete the property address, including whether the property has a unit.')
       return
     }
 
@@ -297,7 +304,8 @@ export default function JustListedForm() {
 
               }}
 
-              onChange={(a: AddressFields) => setFormData({ ...formData, ...a })}
+              onValidityChange={setAddressComplete}
+                onChange={(a: AddressFields) => setFormData({ ...formData, ...a })}
 
             />
 

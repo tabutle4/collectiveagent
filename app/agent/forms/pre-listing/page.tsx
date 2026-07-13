@@ -27,6 +27,8 @@ export default function PreListingForm() {
     if (!user) fetchUser()
   }, [router, user])
   const [loading, setLoading] = useState(false)
+  // Address completeness, including the unit question.
+  const [addressComplete, setAddressComplete] = useState(false)
   const [error, setError] = useState('')
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
@@ -115,6 +117,11 @@ export default function PreListingForm() {
 
     if (!selectedAgent) {
       setError('Please select an agent from the dropdown.')
+      return
+    }
+
+    if (!addressComplete) {
+      setError('Complete the property address, including whether the property has a unit.')
       return
     }
 
@@ -270,7 +277,8 @@ export default function PreListingForm() {
 
               }}
 
-              onChange={(a: AddressFields) => setFormData({ ...formData, ...a })}
+              onValidityChange={setAddressComplete}
+                onChange={(a: AddressFields) => setFormData({ ...formData, ...a })}
 
             />
 

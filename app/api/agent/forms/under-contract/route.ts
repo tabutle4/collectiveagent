@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
+import { checkRequired, requiredFieldsError, UNDER_CONTRACT_RULES } from '@/lib/forms/requiredFields'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage } from '@/lib/transactions/utils'
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
     // standard abbreviations, collapsed whitespace).
     // Property stats live on the transaction, not the flyer.
     const txnStats = normalizePropertyStats({ bedrooms, bathrooms, garage, sqft })
+
+    // Server side required fields. The browser hints on the form are easily
+    // bypassed; this is the gate that holds.
+    const missing = checkRequired(body, UNDER_CONTRACT_RULES)
+    if (missing.length > 0) {
+      return NextResponse.json({ error: requiredFieldsError(missing) }, { status: 400 })
+    }
 
     // Structured address in, generated display string out. Reject malformed.
     let normalizedAddress: string
@@ -172,6 +180,7 @@ export async function POST(request: NextRequest) {
         client_name: client_name ? formatNameToTitleCase(String(client_name).trim()) : null,
         client_email: client_email || null,
         lead_source: lead_source || null,
+        title_officer_phone: title_phone || null,
         title_officer_name: title_contact_name || null,
         title_company: title_company || null,
         title_company_email: title_email || null,

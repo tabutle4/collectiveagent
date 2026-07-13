@@ -3,7 +3,8 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
-import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats } from '@/lib/transactions/utils'
+import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normalizeAddressComponents, buildDisplayAddress } from '@/lib/transactions/utils'
+import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
@@ -223,13 +224,19 @@ export async function POST(request: NextRequest) {
     }
 
     // ── FIND TRANSACTION (compliance + subsequent) ────────────────────────────
+    // The agent either searched and found one, or they are creating a new one
+    // and gave us the address in parts.
     const { property_address, transaction_id: clientTransactionId } = body
-    if (!property_address?.trim() && !clientTransactionId) return NextResponse.json({ error: 'Property address is required' }, { status: 400 })
+    const hasSearchAddress = !!property_address?.trim()
+    const hasNewAddress = !!(body.street_address || body.city || body.zip)
+    if (!hasSearchAddress && !hasNewAddress && !clientTransactionId) {
+      return NextResponse.json({ error: 'Property address is required' }, { status: 400 })
+    }
     let txn: any = null
     if (clientTransactionId) {
       const { data } = await supabaseAdmin.from('transactions').select('id, property_address, is_locked, compliance_status, transaction_type, representing, status').eq('id', clientTransactionId).single()
       txn = data
-    } else {
+    } else if (hasSearchAddress) {
       txn = await findTransactionByAddress(agentId, property_address)
     }
 
@@ -348,19 +355,43 @@ export async function POST(request: NextRequest) {
     if (!closing_or_movein_date) return NextResponse.json({ error: 'Closing or move-in date is required' }, { status: 400 })
 
     const { data: agentProfile } = await supabaseAdmin.from('users').select('office').eq('id', agentId).single()
-    const isLease = representing === 'tenant' || representing === 'landlord'
-    // Flyer type: for referred-out, base it on the type of client referred; otherwise on representation.
-    const flyerIsLease = representing === 'referred_out'
-      ? (referred_client_type === 'tenant' || referred_client_type === 'landlord')
-      : isLease
+    // A referred out deal is still a lease if the client referred was a tenant
+    // or landlord. Without this, a referred out lease was treated as a sale:
+    // the date landed in closing_date, move_in_date stayed null, and monthly
+    // rent was never written. The flyer logic below already handled this; the
+    // data did not.
+    const isLease = complianceIsLease({ representing, referred_client_type })
+    // Same rule as isLease above, so the flyer and the data can never disagree.
+    const flyerIsLease = isLease
     const flyerType = flyerIsLease ? 'just_leased' : 'just_sold'
     let flyerDisplayLine: string | null = null
     if (flyer_display_type === 'office') flyerDisplayLine = agentProfile?.office || null
     else if (flyer_display_type === 'team') flyerDisplayLine = flyer_team_name || null
     else if (flyer_display_type === 'division') flyerDisplayLine = flyer_division || null
 
+    // Server side required fields. The browser hints on the form are easily
+    // bypassed; this is the gate that actually holds. Address parts are only
+    // required when no transaction was found, because that is the only case
+    // where we create one.
+    const missing = checkRequired(body, complianceRules(!!txn))
+    if (missing.length > 0) {
+      return NextResponse.json({ error: requiredFieldsError(missing) }, { status: 400 })
+    }
+
+    // Address, normalized once and used for both the transaction and the
+    // submission record, so they can never disagree.
+    const addrParts = normalizeAddressComponents({
+      street_address: body.street_address,
+      unit: body.unit || unit,
+      city: body.city,
+      state: body.state,
+      zip: body.zip,
+    })
+    const resolvedAddress =
+      txn?.property_address || buildDisplayAddress(addrParts) || normalizeAddressForStorage(property_address || '')
+
     const submissionData = {
-      submission_mode: 'compliance', property_address: property_address || txn?.property_address,
+      submission_mode: 'compliance', property_address: resolvedAddress,
       team_or_office, unit: unit || null, in_matrix, mls_link, client_name, client_email, client_phone: client_phone || null,
       lead_source, closing_or_movein_date, acceptance_date: acceptance_date || null, representing,
       tenant_transaction_type: tenant_transaction_type || null, lease_term_months: lease_term_months || null,
@@ -402,12 +433,23 @@ export async function POST(request: NextRequest) {
       title_officer_name: title_officer_name ? formatNameToTitleCase(String(title_officer_name).trim()) : null,
       title_company: title_company ? toTitleCase(String(title_company).trim()) : null,
       title_company_email: title_company_email || null, flyer_division: flyerDisplayLine,
+      client_phone: client_phone || null,
+      title_officer_phone: title_phone || null,
+      unit: addrParts.unit || null,
+      expedite_requested: !!expedite_acknowledged,
       compliance_status: 'submitted', compliance_submitted_at: now, compliance_submitted_by: agentId, updated_at: now,
     }
 
     if (!txn) {
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-        .insert({ property_address: normalizeAddressForStorage(property_address), status: 'pending', submitted_by: agentId, transaction_type: isLease ? 'lease' : 'sale', ...txnFields })
+        .insert({
+          property_address: resolvedAddress,
+          street_address: addrParts.street_address || null,
+          city: addrParts.city || null,
+          state: addrParts.state || null,
+          zip: addrParts.zip || null,
+          status: 'pending', submitted_by: agentId, transaction_type: isLease ? 'lease' : 'sale', ...txnFields,
+        })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       transactionId = newTxn.id

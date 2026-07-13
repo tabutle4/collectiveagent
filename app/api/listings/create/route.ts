@@ -10,6 +10,7 @@ import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFrom
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
+import { checkRequired, requiredFieldsError, JUST_LISTED_RULES, PRE_LISTING_RULES } from '@/lib/forms/requiredFields'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
@@ -220,6 +221,18 @@ export async function POST(request: NextRequest) {
 
     // Normalize the property address once, up front, so every downstream use
     // (storage, matching, coordination folder, contacts) uses the clean value.
+    // Server side required fields. Just Listed is the form with an MLS link;
+    // Pre-Listing is the one without. The browser hints are easily bypassed, so
+    // this is the gate that holds.
+    // An update only touches a few fields, so it is not held to the full list.
+    if (body.submission_type !== 'update') {
+      const rules = body.mls_link ? JUST_LISTED_RULES : PRE_LISTING_RULES
+      const missing = checkRequired(body, rules)
+      if (missing.length > 0) {
+        return NextResponse.json({ error: requiredFieldsError(missing) }, { status: 400 })
+      }
+    }
+
     // Address is now entered as structured parts (street/unit/city/state/zip).
     // Normalize them, reject anything malformed, then GENERATE property_address
     // so the display string can never be a free typed mess again. Older callers

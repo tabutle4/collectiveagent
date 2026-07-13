@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Search, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
 import { LEAD_SOURCES, LOAN_TYPES, FLYER_DIVISIONS } from '@/lib/transactions/constants'
 import AgentSelect, { AgentOption } from '@/components/forms/AgentSelect'
+import AddressInput, { AddressFields } from '@/components/shared/AddressInput'
 
 const TEAM_OR_OFFICE_OPTIONS = [
   'Houston Office', 'Dallas Office', 'Clutch City Realty Group',
@@ -78,6 +79,14 @@ export default function ComplianceCdaForm() {
   const [foundTransaction, setFoundTransaction] = useState<any>(null)
   const [lastSubmission, setLastSubmission] = useState<any>(null)
   const [searchDone, setSearchDone] = useState(false)
+  // Only used when no transaction is linked and we are about to create one.
+  // Searching stays a fast free text box; creating requires a real address.
+  const [newAddress, setNewAddress] = useState<AddressFields>({
+    street_address: '', unit: '', city: '', state: 'TX', zip: '',
+  })
+  // The address component reports completeness, which includes having answered
+  // the unit question. Without this, an agent could submit having skipped it.
+  const [newAddressComplete, setNewAddressComplete] = useState(false)
 
   // Compliance form state
   const [form, setForm] = useState({
@@ -216,10 +225,22 @@ export default function ComplianceCdaForm() {
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
+      if (!foundTransaction && !newAddressComplete) {
+        setError('No existing transaction is linked, so a new one will be created. Complete the property address, including whether it has a unit.')
+        return
+      }
+
       payload = {
         ...payload, ...form,
         property_address: foundTransaction?.property_address || addressSearch,
         transaction_id: foundTransaction?.id || null,
+        ...(foundTransaction ? {} : {
+          street_address: newAddress.street_address,
+          unit: newAddress.unit,
+          city: newAddress.city,
+          state: newAddress.state,
+          zip: newAddress.zip,
+        }),
         additional_compensation: comps.map(c => ({ amount: parseFloat(c.amount) || 0, fee_type: c.fee_type, fee_type_other: c.fee_type_other || null, paid_by: c.paid_by, paid_by_other: c.paid_by_other || null })),
         flyer_team_name: agentTeam?.team_name || null,
       }
@@ -588,7 +609,24 @@ export default function ComplianceCdaForm() {
               </div>
               {searchDone && (
                 <div className={`mt-3 p-3 rounded text-xs ${foundTransaction ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/30 text-luxury-gray-3'}`}>
-                  {foundTransaction ? `Found: ${foundTransaction.property_address} - Status: ${foundTransaction.status}` : 'No existing transaction found. A new one will be created on submit.'}
+                  {foundTransaction ? `Found: ${foundTransaction.property_address} - Status: ${foundTransaction.status}` : 'No existing transaction found. Enter the full address below and we will create one.'}
+                </div>
+              )}
+
+              {/* Nothing linked, so this submission will create a transaction.
+                  Ask for the address in parts, the same way every other form
+                  does, so a new transaction can never be created with a partial
+                  address. Shown whenever nothing is linked, including when the
+                  agent skips the search. */}
+              {!foundTransaction && (
+                <div className="mt-4 p-4 border border-luxury-gray-5 rounded space-y-3">
+                  <p className="text-xs font-semibold text-luxury-gray-1">Property address for the new transaction</p>
+                  <AddressInput
+                    required
+                    value={newAddress}
+                    onChange={(a: AddressFields) => setNewAddress(a)}
+                    onValidityChange={setNewAddressComplete}
+                  />
                 </div>
               )}
             </section>

@@ -54,6 +54,9 @@ export default function UnderContractForm() {
     documents_uploaded_ack: false,
   })
 
+  // Address completeness, including whether the unit question was answered.
+  const [addressComplete, setAddressComplete] = useState(false)
+
   const setField = (k: keyof typeof form, v: any) => setForm(prev => ({ ...prev, [k]: v }))
 
   useEffect(() => {
@@ -97,6 +100,11 @@ export default function UnderContractForm() {
     for (const [label, val] of req) {
       if (!val || String(val).trim() === '') { setError(`${label} is required.`); return }
     }
+    if (!addressComplete) {
+      setError('Complete the property address, including whether the property has a unit.')
+      return
+    }
+
     if (showTeam && !form.team_name.trim()) { setError('Team name is required.'); return }
     if (showDivision && !form.division_name.trim()) { setError('Division name is required.'); return }
     if (!form.add_transaction_coordination) { setError('Please answer the transaction coordination question.'); return }
@@ -221,6 +229,7 @@ export default function UnderContractForm() {
                   state: form.state,
                   zip: form.zip,
                 }}
+                onValidityChange={setAddressComplete}
                 onChange={(a: AddressFields) => setForm((f: any) => ({ ...f, ...a }))}
               />
             </div>
