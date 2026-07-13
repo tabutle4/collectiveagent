@@ -7,6 +7,8 @@ import { createListingFolder } from '@/lib/microsoft-graph'
 import { sendWelcomeEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
 import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
+import { getEmailLayout } from '@/lib/email/layout'
+import { Resend } from 'resend'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
@@ -183,6 +185,29 @@ async function createJustListedFlyer(
     agentId,
     flyerDivision: body.flyer_division || null,
   })
+}
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+const NOTIFY_FROM = 'Collective Realty Co. <transactions@coachingbrokeragetools.com>'
+
+// Emails the office when a Pre-Listing or Just Listed form comes in. The
+// recipients come from the forms table (notification_emails), the same way the
+// under-contract and compliance forms do it. Never throws: a failed notification
+// must not fail the submission.
+async function sendListingNotifications(emails: string[], subject: string, html: string, identifier: string) {
+  for (const email of emails) {
+    if (!email?.trim()) continue
+    try {
+      await resend.emails.send({
+        from: NOTIFY_FROM,
+        to: [email.trim()],
+        subject: `${subject} - ${identifier}`,
+        html,
+      })
+    } catch (err) {
+      console.error(`Failed to notify ${email}:`, err)
+    }
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -452,6 +477,68 @@ export async function POST(request: NextRequest) {
       listing,
       listingFormType
     )
+
+    // Unified submission record, and the office notification.
+    //
+    // Both of these used to live inside the old public token path. When those
+    // forms were removed they went with it, which silently stopped logging these
+    // two forms and stopped notifying the office about them. They belong here,
+    // in the authenticated path, where every submission now lands.
+    //
+    // Neither one is allowed to fail the submission.
+    if (finalAgentId) {
+      const formConfig = await getFormConfig(
+        listingFormType === 'just-listed' ? 'just_listed' : 'pre_listing'
+      )
+
+      // Audit trail: every form submission is logged in agent_form_submissions
+      // so the office has one place to see them all.
+      try {
+        await supabase.from('agent_form_submissions').insert({
+          form_id: formConfig?.id || null,
+          agent_id: finalAgentId,
+          submitted_at: new Date().toISOString(),
+          status: 'submitted',
+          listing_id: listing.id,
+          transaction_id: linkedTransactionId,
+          data: { ...body, submission_mode: listingFormType },
+          updated_at: new Date().toISOString(),
+        })
+      } catch (subErr) {
+        console.error('Error writing submission record:', subErr)
+      }
+
+      // Office notification. Recipients come from the forms table, the same way
+      // the under-contract and compliance forms do it.
+      try {
+        const notificationEmails: string[] = formConfig?.notification_emails || []
+        if (notificationEmails.length > 0) {
+          const isJustListed = listingFormType === 'just-listed'
+          const formLabel = isJustListed ? 'Just Listed' : 'Pre-Listing'
+          const address = listing.property_address || 'a property'
+          const mlsLine = body.mls_link
+            ? `<p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">MLS:</strong> ${body.mls_link}</p>`
+            : ''
+          const coordinationLine = body.coordination_requested
+            ? '<p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Listing Coordination:</strong> Requested</p>'
+            : ''
+          const notifyHtml = getEmailLayout(
+            `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A ${formLabel} form has been submitted for <strong style="color:#1a1a1a;">${address}</strong>.</p>
+             <div style="background-color:#f9f9f9;padding:16px 20px;margin:0 0 20px;border-left:3px solid #C5A278;">
+               <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Agent:</strong> ${listing.agent_name || 'Unknown'}</p>
+               <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Client:</strong> ${listing.client_names || 'N/A'}</p>
+               <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Type:</strong> ${listing.transaction_type || 'N/A'}</p>
+               ${mlsLine}
+               ${coordinationLine}
+             </div>`,
+            { title: `${formLabel} Form Submitted`, preheader: `${formLabel}: ${address}` }
+          )
+          await sendListingNotifications(notificationEmails, formLabel, notifyHtml, address)
+        }
+      } catch (notifyErr) {
+        console.error('Error sending listing notification:', notifyErr)
+      }
+    }
 
     if (body.coordination_requested) {
       // If broker listing, fee is $0 and payment method is not required
