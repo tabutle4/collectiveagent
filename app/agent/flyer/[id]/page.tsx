@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Loader2, Pencil, Save, Mail } from 'lucide-react'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import { Upload, Download, ArrowLeft, AlertCircle, CheckCircle2, Circle, Loader2, Pencil, Save, Mail } from 'lucide-react'
 import { FLYER_FONT_CSS } from '@/lib/flyer-fonts'
 import { useAuth } from '@/lib/context/AuthContext'
 
@@ -168,6 +168,10 @@ function buildFlyerHTML(d: FlyerData): string {
 export default function FlyerPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
+  // A form can deep link straight to the flyer it just created, e.g.
+  // /agent/flyer/<txn>?type=just_listed, so the correct tab opens.
+  const requestedType = searchParams.get('type')
   const transactionId = params.id as string
 
   const [loading, setLoading] = useState(true)
@@ -228,7 +232,10 @@ export default function FlyerPage() {
         setFlyers(list)
         setTransaction(data.transaction)
         setAgent(data.agent)
-        const initial = list[0] || null
+        const initial =
+          (requestedType ? list.find(f => f.flyer_type === requestedType) : null) ||
+          list[0] ||
+          null
         setActiveFlyerId(initial?.id || null)
         setFlyer(initial)
         setPhotoUrl(initial?.photo_url || null)
@@ -246,7 +253,7 @@ export default function FlyerPage() {
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [transactionId])
+  }, [transactionId, requestedType])
 
   // Switch which flyer tab is active. Re-syncs the derived flyer, its photo,
   // and the admin edit fields to the selected flyer.
@@ -299,6 +306,19 @@ export default function FlyerPage() {
     divisionLine,
     logoB64,
   }), [flyerType, photoUrl, city, transaction?.bedrooms, transaction?.bathrooms, transaction?.garage, transaction?.building_sqft, flyer?.bedrooms, flyer?.bathrooms, flyer?.garage, flyer?.sqft, agentName, agentEmail, divisionLine, logoB64])
+
+  // Which property stats are still missing, in plain words. Garage is left out
+  // on purpose: most homes do not have one, so flagging it would be noise.
+  const missingStats = useMemo(() => {
+    const missing: string[] = []
+    const beds = transaction?.bedrooms ?? flyer?.bedrooms
+    const baths = transaction?.bathrooms ?? flyer?.bathrooms
+    const sqft = transaction?.building_sqft ?? flyer?.sqft
+    if (beds === null || beds === undefined || beds === '') missing.push('bedrooms')
+    if (baths === null || baths === undefined || baths === '') missing.push('bathrooms')
+    if (sqft === null || sqft === undefined || sqft === '') missing.push('square feet')
+    return missing
+  }, [transaction?.bedrooms, transaction?.bathrooms, transaction?.building_sqft, flyer?.bedrooms, flyer?.bathrooms, flyer?.sqft])
 
   // Inject flyer HTML into container whenever data changes
   useEffect(() => {
@@ -568,6 +588,47 @@ export default function FlyerPage() {
       )}
 
       <div className="container-card space-y-6">
+
+        {/* What this flyer still needs. Agents land here straight from the form
+            they submitted, so spell out the remaining steps instead of making
+            them work it out. */}
+        {flyer && (missingStats.length > 0 || !photoUrl) && (
+          <div className="p-4 bg-luxury-gray-5/30 border border-luxury-gray-5 rounded space-y-2">
+            <p className="text-xs font-semibold text-luxury-gray-1">
+              Finish your flyer
+            </p>
+            <ul className="space-y-1.5">
+              <li className="flex items-start gap-2 text-xs">
+                <span className={photoUrl ? 'text-green-700' : 'text-luxury-gray-3'}>
+                  {photoUrl ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                </span>
+                <span className={photoUrl ? 'text-luxury-gray-3 line-through' : 'text-luxury-gray-1'}>
+                  Upload a property photo
+                </span>
+              </li>
+              <li className="flex items-start gap-2 text-xs">
+                <span className={missingStats.length === 0 ? 'text-green-700' : 'text-luxury-gray-3'}>
+                  {missingStats.length === 0 ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                </span>
+                <span className={missingStats.length === 0 ? 'text-luxury-gray-3 line-through' : 'text-luxury-gray-1'}>
+                  {missingStats.length === 0
+                    ? 'Property details added'
+                    : `Missing property details: ${missingStats.join(', ')}`}
+                </span>
+              </li>
+            </ul>
+            {missingStats.length > 0 && (
+              <p className="text-xs text-luxury-gray-3">
+                {isAdmin
+                  ? 'Use Edit Flyer below to fill these in.'
+                  : 'Contact the office to add these. You can still download the flyer without them.'}
+              </p>
+            )}
+            <p className="text-xs text-luxury-gray-3">
+              Then download the flyer and post it.
+            </p>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-3">

@@ -445,7 +445,7 @@ export async function POST(request: NextRequest) {
     // Derive form type the same way createListing does: an MLS link means the
     // property is already listed (just-listed), otherwise it is a pre-listing.
     const listingFormType = body.mls_link ? 'just-listed' : 'pre-listing'
-    await findOrCreateListingTransaction(
+    const linkedTransactionId = await findOrCreateListingTransaction(
       supabase,
       body,
       finalAgentId,
@@ -559,10 +559,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Just Listed makes a flyer, Pre-Listing does not. Hand the agent a link
+    // straight to the flyer tab so they can add the photo and download it.
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+    const flyerUrl =
+      listingFormType === 'just-listed' && linkedTransactionId
+        ? `${appUrl}/agent/flyer/${linkedTransactionId}?type=just_listed`
+        : null
+
     return NextResponse.json({
       success: true,
       listing,
-      message: 'Listing created successfully',
+      transaction_id: linkedTransactionId,
+      flyer_url: flyerUrl,
+      message: flyerUrl
+        ? 'Your listing has been submitted. Upload a property photo to finish your Just Listed flyer.'
+        : 'Your pre-listing has been submitted. The office will follow up shortly.',
     })
   } catch (error: any) {
     console.error('Error creating listing:', error)

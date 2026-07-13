@@ -269,7 +269,8 @@ export async function POST(request: NextRequest) {
     await sendNotifications(notificationEmails, 'New Contract', notifyHtml, property_address)
 
     // ── Agent confirmation with flyer link ───────────────────────────────────
-    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
+    // Deep link to this form's own flyer tab, not just whichever is newest.
+    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}?type=under_contract`
     try {
       await resend.emails.send({
         from: FROM_EMAIL, to: [agent_email], subject: `New Contract Received - ${normalizedAddress}`,

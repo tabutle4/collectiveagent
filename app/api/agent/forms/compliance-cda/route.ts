@@ -479,7 +479,8 @@ export async function POST(request: NextRequest) {
       { title: 'New Compliance Request', preheader: `Compliance for ${submissionData.property_address}` }
     )
     await sendNotifications(notificationEmails, 'Compliance & CDA Request', notifyHtml, submissionData.property_address || '')
-    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
+    // Deep link to this form's own flyer tab (just_sold or just_leased).
+    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}?type=${flyerType}`
     try {
       const ccList = notificationEmails.filter(e => e?.trim()).map(e => e.trim())
       await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], ...(ccList.length ? { cc: ccList } : {}), subject: `Compliance Request Received - ${submissionData.property_address}`,

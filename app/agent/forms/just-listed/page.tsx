@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import AddressInput, { AddressFields } from '@/components/shared/AddressInput'
 import { ServiceConfiguration } from '@/types/listing-coordination'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function JustListedForm() {
   const router = useRouter()
@@ -26,6 +26,8 @@ export default function JustListedForm() {
     if (!user) fetchUser()
   }, [router, user])
   const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [submitResult, setSubmitResult] = useState<any>(null)
   const [error, setError] = useState('')
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
@@ -136,15 +138,11 @@ export default function JustListedForm() {
       const data = await response.json()
 
       if (data.success) {
-        // Redirect to the user's dashboard. Agents used to land on a public
-        // "you can close this window" page from the old token forms; now that
-        // every form is filled in inside the app, they go back to their
-        // dashboard like every other in-app form.
-        if (user?.role === 'Admin') {
-          router.push('/admin/dashboard')
-        } else {
-          router.push('/agent/dashboard')
-        }
+        // Show the success screen with a link straight to the Just Listed flyer
+        // tab, so the agent knows a flyer was made and what to do next.
+        setSubmitResult(data)
+        setSubmitted(true)
+        setLoading(false)
       } else {
         setError(data.error || 'Failed to submit form. Please try again.')
         setLoading(false)
@@ -154,6 +152,35 @@ export default function JustListedForm() {
       setError('Failed to submit form. Please try again.')
       setLoading(false)
     }
+  }
+
+  // Success screen. Tells the agent a flyer was created and links straight to
+  // its tab so they can upload the photo and download it.
+  if (submitted && submitResult) {
+    return (
+      <div className="min-h-screen bg-luxury-light py-8 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="container-card">
+            <div className="flex flex-col items-center py-12 text-center gap-4">
+              <CheckCircle2 size={40} className="text-green-600" />
+              <p className="text-sm font-semibold text-luxury-gray-1">Submitted successfully</p>
+              <p className="text-xs text-luxury-gray-3 max-w-sm">{submitResult.message}</p>
+              {submitResult.flyer_url && (
+                <a href={submitResult.flyer_url} className="btn btn-primary text-xs mt-2">
+                  Upload Photo &amp; Get Your Flyer
+                </a>
+              )}
+              <button
+                onClick={() => router.push('/agent/forms')}
+                className="btn btn-secondary text-xs"
+              >
+                Back to Forms
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
