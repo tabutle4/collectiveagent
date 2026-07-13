@@ -6,11 +6,13 @@ export const dynamic = 'force-dynamic'
 
 // POST /api/admin/compliance/generate-flyer
 // Body: { transaction_id }
-// Creates a transaction_flyers row for an existing transaction so an admin can
-// generate a flyer from a prior submission (used when seeding historical
-// submissions). Idempotent: if a flyer already exists for the transaction, it
-// returns that one instead of creating a duplicate. The sold/leased type is
-// derived from the transaction so the admin does not have to re-enter it.
+// Creates the compliance flyer (just_sold or just_leased) for an existing
+// transaction so an admin can generate one from a prior submission.
+//
+// Idempotent PER TYPE: a deal can legitimately carry several flyers (Just
+// Listed, Under Contract, Just Sold), so this only skips creation when a flyer
+// OF THE SAME TYPE already exists. Checking for any flyer at all meant a deal
+// that already had a Just Listed flyer could never get its Just Sold one.
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_review_compliance')
   if (auth.error) return auth.error
@@ -33,19 +35,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
-    // If a flyer already exists for this transaction, do not create another.
-    const { data: existing } = await supabaseAdmin
-      .from('transaction_flyers')
-      .select('id, flyer_type, status')
-      .eq('transaction_id', transactionId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (existing) {
-      return NextResponse.json({ success: true, flyer_id: existing.id, already_existed: true })
-    }
-
     // Derive sold vs leased the same way the compliance form does: lease when
     // the type code or representation indicates a tenant/landlord/lease deal.
     const t = String(txn.transaction_type || '').toLowerCase()
@@ -54,6 +43,25 @@ export async function POST(request: NextRequest) {
       t.includes('lease') || t.includes('tenant') || t.includes('landlord') || t.includes('apartment') ||
       rep === 'tenant' || rep === 'landlord'
     const flyerType = isLease ? 'just_leased' : 'just_sold'
+
+    // Only skip if a flyer OF THIS TYPE already exists. Other types (Just
+    // Listed, Under Contract) are separate flyers on the same deal and must not
+    // block the compliance flyer from being created.
+    const { data: existing } = await supabaseAdmin
+      .from('transaction_flyers')
+      .select('id, flyer_type, status')
+      .eq('transaction_id', transactionId)
+      .eq('flyer_type', flyerType)
+      .maybeSingle()
+
+    if (existing) {
+      return NextResponse.json({
+        success: true,
+        flyer_id: existing.id,
+        flyer_type: existing.flyer_type,
+        already_existed: true,
+      })
+    }
 
     const now = new Date().toISOString()
     const { data: flyer, error: flyerErr } = await supabaseAdmin

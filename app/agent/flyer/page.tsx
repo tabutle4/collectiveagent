@@ -69,7 +69,7 @@ export default function AgentFlyerListPage() {
           {flyers.map(f => (
             <Link
               key={f.id}
-              href={`/agent/flyer/${f.transaction_id}`}
+              href={`/agent/flyer/${f.transaction_id}?type=${f.flyer_type}`}
               className="container-card flex items-center justify-between gap-4 hover:border-luxury-gray-3 transition-colors"
             >
               <div className="flex items-center gap-4 min-w-0">

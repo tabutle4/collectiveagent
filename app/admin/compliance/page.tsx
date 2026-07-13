@@ -17,7 +17,7 @@ interface TrackerRow {
   completed_at: string | null
   paid: boolean
   cda_sent: boolean
-  flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean } | null
+  flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean; sent: boolean } | null
   recheck_requested: boolean
   recheck_at: string | null
   recheck_changed_fields: string[] | null
@@ -677,7 +677,13 @@ export default function AdminCompliancePage() {
                       {r.flyer ? (
                         <span className="inline-flex items-center gap-1 text-xs text-luxury-gray-3">
                           <ImageIcon size={12} className={r.flyer.has_photo ? 'text-green-600' : 'text-luxury-gray-4'} />
-                          {r.flyer.has_photo ? (r.flyer.downloaded ? 'Downloaded' : 'Ready') : 'No photo'}
+                          {r.flyer.downloaded
+                            ? 'Downloaded'
+                            : r.flyer.has_photo
+                            ? 'Ready'
+                            : r.flyer.sent
+                            ? 'Photo requested'
+                            : 'No photo'}
                         </span>
                       ) : (
                         <span className="text-luxury-gray-4 text-xs">-</span>

@@ -62,16 +62,31 @@ export async function GET(request: NextRequest) {
       for (const t of txns || []) txnMap[t.id] = t
     }
 
-    // Batch: flyers
+    // Batch: flyers.
+    // A deal can carry several flyers (Just Listed, Under Contract, Just Sold).
+    // The compliance tracker is about the COMPLIANCE flyer, so prefer
+    // just_sold / just_leased. Only fall back to the newest of any other type
+    // when the compliance flyer has not been generated yet, so the row can still
+    // show "Generate Flyer".
+    const COMPLIANCE_FLYER_TYPES = ['just_sold', 'just_leased']
     const flyerMap: Record<string, any> = {}
     if (txnIds.length) {
       const { data: flyers } = await supabaseAdmin
         .from('transaction_flyers')
-        .select('id, transaction_id, flyer_type, status, photo_url, downloaded_at')
+        .select('id, transaction_id, flyer_type, status, photo_url, downloaded_at, sent_date')
         .in('transaction_id', txnIds)
         .order('created_at', { ascending: false })
+
+      const fallbackMap: Record<string, any> = {}
       for (const f of flyers || []) {
-        if (!flyerMap[f.transaction_id]) flyerMap[f.transaction_id] = f
+        if (COMPLIANCE_FLYER_TYPES.includes(f.flyer_type)) {
+          if (!flyerMap[f.transaction_id]) flyerMap[f.transaction_id] = f
+        } else if (!fallbackMap[f.transaction_id]) {
+          fallbackMap[f.transaction_id] = f
+        }
+      }
+      for (const [txnId, f] of Object.entries(fallbackMap)) {
+        if (!flyerMap[txnId]) flyerMap[txnId] = f
       }
     }
 
@@ -147,7 +162,13 @@ export async function GET(request: NextRequest) {
         paid: !!(r.transaction_id && r.agent_id && paidByTxnAgent[`${r.transaction_id}:${r.agent_id}`]),
         cda_sent: txn?.cda_status === 'sent',
         flyer: flyer
-          ? { id: flyer.id, flyer_type: flyer.flyer_type, has_photo: !!flyer.photo_url, downloaded: !!flyer.downloaded_at }
+          ? {
+              id: flyer.id,
+              flyer_type: flyer.flyer_type,
+              has_photo: !!flyer.photo_url,
+              downloaded: !!flyer.downloaded_at,
+              sent: !!flyer.sent_date,
+            }
           : null,
         recheck_requested: !!recheck,
         recheck_at: recheck?.submitted_at || null,

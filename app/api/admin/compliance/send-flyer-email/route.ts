@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
     const isLease = flyer.flyer_type === 'just_leased'
     const soldLeased = isLease ? 'Leased' : 'Sold'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
-    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}`
+    // Deep link to the exact flyer being sent, so the agent lands on the right
+    // tab rather than whichever flyer happens to be newest.
+    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}?type=${flyer.flyer_type}`
 
     const subject = mode === 'flyer_ready'
       ? `Your Just ${soldLeased} flyer is ready - ${address}`
@@ -122,7 +124,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to send the email. Please try again.' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, sent_to: agentEmail })
+    // Record the send on the flyer itself. sent_date is the last time the ready
+    // email went out; nudge_sent_at is the last photo chase. Without this there
+    // is no way to tell which flyer was emailed, or when.
+    const nowIso = new Date().toISOString()
+    await supabaseAdmin
+      .from('transaction_flyers')
+      .update(
+        mode === 'flyer_ready'
+          ? { sent_date: nowIso, updated_at: nowIso }
+          : { nudge_sent_at: nowIso, updated_at: nowIso }
+      )
+      .eq('id', flyer.id)
+
+    return NextResponse.json({
+      success: true,
+      sent_to: agentEmail,
+      flyer_id: flyer.id,
+      flyer_type: flyer.flyer_type,
+    })
   } catch (err: any) {
     console.error('send-flyer-email error:', err)
     return NextResponse.json({ error: err.message || 'Unexpected error' }, { status: 500 })

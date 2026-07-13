@@ -145,12 +145,12 @@ export async function POST(
     if (flyerId) {
       await supabaseAdmin
         .from('transaction_flyers')
-        .update({ photo_url: photoUrl, photo_uploaded_at: now, photo_uploaded_by: auth.user.id, updated_at: now })
+        .update({ photo_url: photoUrl, photo_uploaded_at: now, photo_uploaded_by: auth.user.id, status: 'photo_added', updated_at: now })
         .eq('id', flyerId)
     } else {
       await supabaseAdmin
         .from('transaction_flyers')
-        .update({ photo_url: photoUrl, photo_uploaded_at: now, photo_uploaded_by: auth.user.id, updated_at: now })
+        .update({ photo_url: photoUrl, photo_uploaded_at: now, photo_uploaded_by: auth.user.id, status: 'photo_added', updated_at: now })
         .eq('transaction_id', transactionId)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -179,7 +179,7 @@ export async function PATCH(
 
     const query = supabaseAdmin
       .from('transaction_flyers')
-      .update({ downloaded_at: now, downloaded_by: auth.user.id, updated_at: now })
+      .update({ downloaded_at: now, downloaded_by: auth.user.id, status: 'downloaded', updated_at: now })
 
     if (flyer_id) {
       await query.eq('id', flyer_id)
