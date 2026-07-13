@@ -285,17 +285,37 @@ export default function AdminCompliancePage() {
     }
   }
 
-  const linkToTransaction = async (submissionId: string, transactionId: string) => {
+  const linkToTransaction = async (submissionId: string, transactionId: string, relink = false) => {
     setLinkBusy(true)
     setError('')
     try {
       const res = await fetch('/api/admin/compliance/link-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'link', submission_id: submissionId, transaction_id: transactionId }),
+        body: JSON.stringify({ action: 'link', submission_id: submissionId, transaction_id: transactionId, relink }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Could not link')
+      setLinkPanelId(null)
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  const unlinkTransaction = async (submissionId: string) => {
+    setLinkBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/link-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unlink', submission_id: submissionId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not unlink')
       setLinkPanelId(null)
       await loadRows()
     } catch (err: any) {
@@ -692,13 +712,22 @@ export default function AdminCompliancePage() {
                     </td>
                     <td className="px-4 py-3">
                       {r.transaction_id ? (
-                        <a
-                          href={`/admin/transactions/${r.transaction_id}?tab=documents`}
-                          onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=documents`) }}
-                          className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline whitespace-nowrap"
-                        >
-                          Work Deal <ExternalLink size={11} />
-                        </a>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <a
+                            href={`/admin/transactions/${r.transaction_id}?tab=documents`}
+                            onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=documents`) }}
+                            className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
+                          >
+                            Work Deal <ExternalLink size={11} />
+                          </a>
+                          <button
+                            onClick={e => { e.stopPropagation(); openLinkPanel(r.id) }}
+                            className="inline-flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1"
+                            title="Link this submission to a different transaction"
+                          >
+                            <Link2 size={11} /> Re-link
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={e => { e.stopPropagation(); openLinkPanel(r.id) }}
@@ -710,13 +739,20 @@ export default function AdminCompliancePage() {
                     </td>
                   </tr>
 
-                  {linkPanelId === r.id && !r.transaction_id && (
+                  {linkPanelId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
                       <td colSpan={9} className="px-5 py-4">
                         <div className="space-y-3 max-w-xl">
                           <p className="text-xs font-semibold text-luxury-gray-1">
-                            Link this compliance submission to a transaction
+                            {r.transaction_id
+                              ? 'Re-link this compliance submission to a different transaction'
+                              : 'Link this compliance submission to a transaction'}
                           </p>
+                          {r.transaction_id && (
+                            <p className="text-xs text-luxury-gray-3">
+                              Currently linked to: {r.property_address || 'this transaction'}
+                            </p>
+                          )}
                           <div className="relative">
                             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
                             <input
@@ -742,7 +778,7 @@ export default function AdminCompliancePage() {
                                     </span>
                                   </div>
                                   <button
-                                    onClick={() => linkToTransaction(r.id, t.id)}
+                                    onClick={() => linkToTransaction(r.id, t.id, !!r.transaction_id)}
                                     disabled={linkBusy}
                                     className="btn btn-secondary text-xs whitespace-nowrap disabled:opacity-50"
                                   >
@@ -756,13 +792,24 @@ export default function AdminCompliancePage() {
                           ) : null}
 
                           <div className="flex items-center gap-2 pt-1">
-                            <button
-                              onClick={() => createTransactionForRow(r.id)}
-                              disabled={linkBusy}
-                              className="btn btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-50"
-                            >
-                              <Plus size={12} /> Create new transaction
-                            </button>
+                            {!r.transaction_id && (
+                              <button
+                                onClick={() => createTransactionForRow(r.id)}
+                                disabled={linkBusy}
+                                className="btn btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-50"
+                              >
+                                <Plus size={12} /> Create new transaction
+                              </button>
+                            )}
+                            {r.transaction_id && (
+                              <button
+                                onClick={() => unlinkTransaction(r.id)}
+                                disabled={linkBusy}
+                                className="btn btn-secondary text-xs inline-flex items-center gap-1 text-red-600 disabled:opacity-50"
+                              >
+                                <X size={12} /> Remove link
+                              </button>
+                            )}
                             <button
                               onClick={() => setLinkPanelId(null)}
                               className="btn btn-secondary text-xs"
@@ -770,9 +817,11 @@ export default function AdminCompliancePage() {
                               Cancel
                             </button>
                           </div>
-                          <p className="text-xs text-luxury-gray-3">
-                            Creating a transaction uses this submission&apos;s address, client, and closing date.
-                          </p>
+                          {!r.transaction_id && (
+                            <p className="text-xs text-luxury-gray-3">
+                              Creating a transaction uses this submission&apos;s address, client, and closing date.
+                            </p>
+                          )}
                         </div>
                       </td>
                     </tr>

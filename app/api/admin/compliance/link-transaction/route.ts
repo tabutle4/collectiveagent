@@ -36,18 +36,21 @@ export async function POST(request: NextRequest) {
     if (action === 'link') {
       const submissionId = String(body.submission_id || '')
       const transactionId = String(body.transaction_id || '')
+      // relink: true means the caller knows the submission is already linked and
+      // wants to point it at a different transaction (used to fix bad matches).
+      const relink = body.relink === true
       if (!submissionId || !transactionId) {
         return NextResponse.json({ error: 'Missing submission_id or transaction_id' }, { status: 400 })
       }
 
-      // Confirm the submission exists and is actually unlinked before writing.
+      // Confirm the submission exists before writing.
       const { data: sub, error: subErr } = await supabaseAdmin
         .from('agent_form_submissions')
         .select('id, transaction_id')
         .eq('id', submissionId)
         .single()
       if (subErr || !sub) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
-      if (sub.transaction_id) {
+      if (sub.transaction_id && !relink) {
         return NextResponse.json({ error: 'Submission is already linked' }, { status: 409 })
       }
 
@@ -66,6 +69,29 @@ export async function POST(request: NextRequest) {
       if (updErr) throw updErr
 
       return NextResponse.json({ success: true, transaction_id: transactionId })
+    }
+
+    if (action === 'unlink') {
+      const submissionId = String(body.submission_id || '')
+      if (!submissionId) return NextResponse.json({ error: 'Missing submission_id' }, { status: 400 })
+
+      const { data: sub, error: subErr } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('id, transaction_id')
+        .eq('id', submissionId)
+        .single()
+      if (subErr || !sub) return NextResponse.json({ error: 'Submission not found' }, { status: 404 })
+      if (!sub.transaction_id) {
+        return NextResponse.json({ error: 'Submission is not linked' }, { status: 409 })
+      }
+
+      const { error: updErr } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .update({ transaction_id: null, updated_at: new Date().toISOString() })
+        .eq('id', submissionId)
+      if (updErr) throw updErr
+
+      return NextResponse.json({ success: true, unlinked: true })
     }
 
     if (action === 'create') {
