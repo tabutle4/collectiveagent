@@ -47,7 +47,7 @@ export async function createFlyerFromForm(params: {
   flyerDivision?: string | null
   typeOverride?: string | null
 }): Promise<void> {
-  const { form, transactionId, agentId, stats, flyerDivision, typeOverride } = params
+  const { form, transactionId, agentId, flyerDivision, typeOverride } = params
 
   try {
     if (!form || !transactionId || !agentId) return
