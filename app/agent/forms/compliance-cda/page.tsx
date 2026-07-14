@@ -130,6 +130,15 @@ export default function ComplianceCdaForm() {
     fetchUser()
   }, [router])
 
+  // Deep link support: /agent/forms/compliance-cda?mode=subsequent opens the
+  // right mode directly. The retired subsequent-compliance page redirects here
+  // with this parameter. Read from window.location instead of useSearchParams
+  // so the page needs no Suspense boundary.
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get('mode')
+    if (m === 'subsequent' || m === 'retainer' || m === 'compliance') setMode(m)
+  }, [])
+
   useEffect(() => {
     if (!user?.id) return
     fetch(`/api/users/profile?id=${user.id}`).then(r => r.json()).then(d => {
