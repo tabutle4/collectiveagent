@@ -1603,9 +1603,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Update check ─────────────────────────────────────────────────────────
     if (action === 'update_check') {
       const { check_id, updates } = body
-      const DATE_FIELDS = ['received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
+      const DATE_FIELDS = ['check_date', 'received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
+      // A number input that the user typed in and then cleared sends '' , not
+      // undefined. Postgres rejects '' for a numeric column (22P02), so these
+      // get the same empty-to-null treatment the date fields already get.
+      const NUMERIC_FIELDS = ['check_amount', 'brokerage_amount', 'hold_amount']
       const cleanUpdates: any = { ...updates }
       for (const f of DATE_FIELDS) {
+        if (cleanUpdates[f] === '') cleanUpdates[f] = null
+      }
+      for (const f of NUMERIC_FIELDS) {
         if (cleanUpdates[f] === '') cleanUpdates[f] = null
       }
       const { error } = await supabase
@@ -1659,9 +1666,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Create check linked to transaction ───────────────────────────────────
     if (action === 'create_check') {
       const { check } = body
+      // Same empty-to-null rule as update_check: this object is spread straight
+      // into the insert, so a cleared number or date input would reach Postgres
+      // as '' and be rejected.
+      const cleanCheck: any = { ...check }
+      for (const f of ['received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date', 'check_date', 'check_amount', 'brokerage_amount', 'hold_amount']) {
+        if (cleanCheck[f] === '') cleanCheck[f] = null
+      }
       const { data, error } = await supabase
         .from('checks_received')
-        .insert({ ...check, transaction_id: id })
+        .insert({ ...cleanCheck, transaction_id: id })
         .select()
         .single()
       if (error) throw error
