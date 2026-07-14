@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePermission } from '@/lib/api-auth'
+import { requireAuth } from '@/lib/api-auth'
 import { createListing, updateListing } from '@/lib/db/listings'
 import { createCoordination } from '@/lib/db/coordination'
 import { getServiceConfig } from '@/lib/db/service-config'
@@ -212,7 +212,12 @@ async function sendListingNotifications(emails: string[], subject: string, html:
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_listings')
+  // Agents submit their own Just Listed and Pre-Listing forms here, so this is
+  // requireAuth, not requirePermission: the agent role does not carry
+  // can_manage_listings (that permission gates the admin listing routes:
+  // update, delete, search). Identity comes from the session, and submitting
+  // on behalf of a different agent is enforced below as staff-only.
+  const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
@@ -321,12 +326,10 @@ export async function POST(request: NextRequest) {
 
 
     // Original authenticated flow
-    // Get user_id from request body (sent from client)
-    const userId = body.user_id
-
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 401 })
-    }
+    // Identity comes from the session. The old body.user_id was only safe
+    // while this route was staff-only; an agent-callable route must never
+    // trust a client-supplied identity.
+    const userId = auth.user.id
 
     const { data: userData } = await supabase.from('users').select('*').eq('id', userId).single()
 
@@ -388,6 +391,13 @@ export async function POST(request: NextRequest) {
     } else if (isAgent) {
       // Only use submitting user's ID if they're an agent (not an admin)
       finalAgentId = userId
+    }
+
+    // Submitting on behalf of a different agent is staff-only, same rule as
+    // the compliance and under-contract routes. An agent picking themselves in
+    // the selector resolves to their own id and passes.
+    if (finalAgentId && finalAgentId !== userId && !isAdmin) {
+      return NextResponse.json({ error: 'Not permitted to submit on behalf of another agent' }, { status: 403 })
     }
 
     // Check if this is an update to an existing transaction (authenticated flow)
