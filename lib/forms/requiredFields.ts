@@ -79,6 +79,17 @@ export function complianceIsLease(b: any): boolean {
   return rep === 'tenant' || rep === 'landlord'
 }
 
+/**
+ * Title and loan only apply to a sale the agent is closing themselves.
+ * This mirrors showTitleLoan on the compliance form, which hides those five
+ * fields for leases and referred-out deals. The validator must never require a
+ * field the agent cannot see.
+ */
+function complianceShowsTitleAndLoan(b: any): boolean {
+  const rep = b.representing
+  return rep !== 'tenant' && rep !== 'landlord' && rep !== 'referred_out'
+}
+
 // ── Rules per form ───────────────────────────────────────────────────────────
 
 export const JUST_LISTED_RULES: FieldRule[] = [
@@ -176,7 +187,7 @@ export function complianceRules(hasExistingTransaction: boolean): FieldRule[] {
     { key: 'closing_or_movein_date', label: 'Closing or move-in date' },
     { key: 'acceptance_date', label: 'Acceptance date' },
     { key: 'lead_source', label: 'Lead source' },
-    { key: 'loan_type', label: 'Loan type' },
+    { key: 'loan_type', label: 'Loan type', when: complianceShowsTitleAndLoan },
     { key: 'team_or_office', label: 'Team or office' },
 
     { key: 'tenant_transaction_type', label: 'Tenant transaction type', when: complianceIsLease },
@@ -194,10 +205,10 @@ export function complianceRules(hasExistingTransaction: boolean): FieldRule[] {
     { key: 'commission_rate', label: 'Commission rate' },
     { key: 'total_sales_rent_price', label: 'Total sales or rent price' },
 
-    { key: 'title_officer_name', label: 'Title officer name' },
-    { key: 'title_company', label: 'Title company' },
-    { key: 'title_company_email', label: 'Title company email' },
-    { key: 'title_phone', label: 'Title phone' },
+    { key: 'title_officer_name', label: 'Title officer name', when: complianceShowsTitleAndLoan },
+    { key: 'title_company', label: 'Title company', when: complianceShowsTitleAndLoan },
+    { key: 'title_company_email', label: 'Title company email', when: complianceShowsTitleAndLoan },
+    { key: 'title_phone', label: 'Title phone', when: complianceShowsTitleAndLoan },
 
     { key: 'flyer_display_type', label: 'What to show on your flyer' },
     {
