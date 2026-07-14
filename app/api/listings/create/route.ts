@@ -499,10 +499,12 @@ export async function POST(request: NextRequest) {
     // in the authenticated path, where every submission now lands.
     //
     // Neither one is allowed to fail the submission.
+    // The form config is loaded here, outside the block, because the flyer
+    // link at the bottom of this handler is gated on triggers_flyer too.
+    const formConfig = await getFormConfig(
+      listingFormType === 'just-listed' ? 'just_listed' : 'pre_listing'
+    )
     if (finalAgentId) {
-      const formConfig = await getFormConfig(
-        listingFormType === 'just-listed' ? 'just_listed' : 'pre_listing'
-      )
 
       // Audit trail: every form submission is logged in agent_form_submissions
       // so the office has one place to see them all.
@@ -659,11 +661,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Just Listed makes a flyer, Pre-Listing does not. Hand the agent a link
-    // straight to the flyer tab so they can add the photo and download it.
+    // Whether a flyer link goes back to the agent is decided by the forms
+    // table (triggers_flyer), the same switch that decides whether the flyer
+    // row is created. Hand the agent a link straight to the flyer tab so they
+    // can add the photo and download it.
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
     const flyerUrl =
-      listingFormType === 'just-listed' && linkedTransactionId
+      listingFormType === 'just-listed' && linkedTransactionId && formConfig?.triggers_flyer
         ? `${appUrl}/agent/flyer/${linkedTransactionId}?type=just_listed`
         : null
 

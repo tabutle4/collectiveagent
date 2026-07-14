@@ -80,12 +80,22 @@ export function complianceIsLease(b: any): boolean {
 }
 
 /**
- * Title and loan only apply to a sale the agent is closing themselves.
- * This mirrors showTitleLoan on the compliance form, which hides those five
- * fields for leases and referred-out deals. The validator must never require a
- * field the agent cannot see.
+ * A lease the agent handled themselves. The lease detail fields (tenant
+ * transaction type, lease term) only exist on the form for these, not for
+ * referred-out leases, where the agent may not know the terms.
  */
-function complianceShowsTitleAndLoan(b: any): boolean {
+export function complianceIsDirectLease(b: any): boolean {
+  return b.representing === 'tenant' || b.representing === 'landlord'
+}
+
+/**
+ * Title and loan only apply to a sale the agent is closing themselves.
+ * This mirrors showTitleLoan on the compliance form, which hides those
+ * fields for leases and referred-out deals. The validator must never require a
+ * field the agent cannot see. Exported because the form imports it, so the two
+ * can never drift apart again.
+ */
+export function complianceShowsTitleAndLoan(b: any): boolean {
   const rep = b.representing
   return rep !== 'tenant' && rep !== 'landlord' && rep !== 'referred_out'
 }
@@ -190,8 +200,8 @@ export function complianceRules(hasExistingTransaction: boolean): FieldRule[] {
     { key: 'loan_type', label: 'Loan type', when: complianceShowsTitleAndLoan },
     { key: 'team_or_office', label: 'Team or office' },
 
-    { key: 'tenant_transaction_type', label: 'Tenant transaction type', when: complianceIsLease },
-    { key: 'lease_term_months', label: 'Lease term in months', when: complianceIsLease },
+    { key: 'tenant_transaction_type', label: 'Tenant transaction type', when: complianceIsDirectLease },
+    { key: 'lease_term_months', label: 'Lease term in months', when: complianceIsDirectLease },
     {
       key: 'referred_client_type',
       label: 'Referred client type',
@@ -208,7 +218,6 @@ export function complianceRules(hasExistingTransaction: boolean): FieldRule[] {
     { key: 'title_officer_name', label: 'Title officer name', when: complianceShowsTitleAndLoan },
     { key: 'title_company', label: 'Title company', when: complianceShowsTitleAndLoan },
     { key: 'title_company_email', label: 'Title company email', when: complianceShowsTitleAndLoan },
-    { key: 'title_phone', label: 'Title phone', when: complianceShowsTitleAndLoan },
 
     { key: 'flyer_display_type', label: 'What to show on your flyer' },
     {

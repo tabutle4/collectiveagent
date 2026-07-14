@@ -261,8 +261,13 @@ export async function POST(request: NextRequest) {
         .select('id').single()
       if (!txn.is_locked && changedFields.length > 0) {
         // Only write the fields that actually changed plus the compliance status fields
-        const isLease = (formFields.representing || txn.representing) === 'tenant' ||
-                        (formFields.representing || txn.representing) === 'landlord'
+        // Same rule as the first submission: a referred-out lease is still a
+        // lease. When the resubmission does not say what kind of client was
+        // referred, trust what the transaction already is instead of guessing.
+        const rep = formFields.representing || txn.representing
+        const isLease = rep === 'referred_out' && !formFields.referred_client_type
+          ? txn.transaction_type === 'lease'
+          : complianceIsLease({ representing: rep, referred_client_type: formFields.referred_client_type })
         const fieldMap: Record<string, any> = {
           representing:          formFields.representing || null,
           tenant_transaction_type: formFields.tenant_transaction_type || null,
@@ -378,8 +383,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: requiredFieldsError(missing) }, { status: 400 })
     }
 
+    // Before creating a fresh transaction, look for a retainer prospect this
+    // agent already has for the same client. Without this, the deal a retainer
+    // was collected for gets a brand new transaction and the prospect (and its
+    // retainer payout row) is orphaned forever. Mirrors the retainer path's
+    // duplicate check: same query, same response shape, and the form shows the
+    // matches so the agent decides.
+    if (!txn && !body.confirm_new_deal && client_name?.trim()) {
+      const { data: retainerTias } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .select('transaction_id')
+        .eq('agent_id', agentId)
+        .eq('installment_kind', 'retainer')
+      if (retainerTias?.length) {
+        const retainerIds = retainerTias.map((r: any) => r.transaction_id)
+        const { data: prospectTxns } = await supabaseAdmin
+          .from('transactions')
+          .select('id, client_name, property_address, created_at, status')
+          .in('id', retainerIds)
+          .ilike('client_name', `%${client_name.trim().split(' ')[0]}%`)
+          .eq('status', 'prospect')
+        if (prospectTxns?.length) {
+          return NextResponse.json({
+            success: false,
+            duplicate_check: true,
+            matches: prospectTxns.map((t: any) => ({
+              id: t.id,
+              client_name: t.client_name || t.property_address,
+              created_at: t.created_at,
+              is_prospect: true,
+            })),
+          })
+        }
+      }
+    }
+
     // Address, normalized once and used for both the transaction and the
-    // submission record, so they can never disagree.
+    // submission record, so they can never disagree. A prospect's
+    // property_address is a placeholder (the client's name from the retainer),
+    // so when attaching to one, the address the agent just entered wins.
     const addrParts = normalizeAddressComponents({
       street_address: body.street_address,
       unit: body.unit || unit,
@@ -388,7 +430,10 @@ export async function POST(request: NextRequest) {
       zip: body.zip,
     })
     const resolvedAddress =
-      txn?.property_address || buildDisplayAddress(addrParts) || normalizeAddressForStorage(property_address || '')
+      (txn && txn.status !== 'prospect' ? txn.property_address : null) ||
+      buildDisplayAddress(addrParts) ||
+      normalizeAddressForStorage(property_address || '') ||
+      txn?.property_address
 
     const submissionData = {
       submission_mode: 'compliance', property_address: resolvedAddress,
@@ -462,7 +507,27 @@ export async function POST(request: NextRequest) {
         await sendNotifications(notificationEmails, 'Compliance Submission (Locked)', notifyHtml, txn.property_address)
         return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
       }
-      await supabaseAdmin.from('transactions').update(txnFields).eq('id', transactionId)
+      // Attaching to a retainer prospect: give it the real property address the
+      // agent just entered, the deal's actual type, and move it out of prospect
+      // status so it shows up as a live deal. A regular existing transaction
+      // keeps its address and status untouched, exactly as before.
+      const attachAddress = txn.status === 'prospect' ? buildDisplayAddress(addrParts) : null
+      const attachFields = txn.status === 'prospect'
+        ? {
+            ...(attachAddress
+              ? {
+                  property_address: attachAddress,
+                  street_address: addrParts.street_address || null,
+                  city: addrParts.city || null,
+                  state: addrParts.state || null,
+                  zip: addrParts.zip || null,
+                }
+              : {}),
+            status: 'pending',
+            transaction_type: isLease ? 'lease' : 'sale',
+          }
+        : {}
+      await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)
     }
 
     // ── Contacts: upsert client + title for both new and existing transactions ─
@@ -521,15 +586,20 @@ export async function POST(request: NextRequest) {
       { title: 'New Compliance Request', preheader: `Compliance for ${submissionData.property_address}` }
     )
     await sendNotifications(notificationEmails, 'Compliance & CDA Request', notifyHtml, submissionData.property_address || '')
-    // Deep link to this form's own flyer tab (just_sold or just_leased).
-    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}?type=${flyerType}`
+    // Deep link to this form's own flyer tab (just_sold or just_leased). Only
+    // when the form actually creates a flyer; otherwise the email and the
+    // success screen would promise one that never exists.
+    const flyerUrl = formRecord?.triggers_flyer ? `${appUrl}/agent/flyer/${transactionId}?type=${flyerType}` : null
     try {
       const ccList = notificationEmails.filter(e => e?.trim()).map(e => e.trim())
+      const flyerParagraphs = flyerUrl
+        ? `<p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${flyerIsLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>
+           <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`
+        : ''
       await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], ...(ccList.length ? { cc: ccList } : {}), subject: `Compliance Request Received - ${submissionData.property_address}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your compliance review and CDA request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong> has been received. Our team will review your documents and follow up shortly.</p>
-           <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Just ${flyerIsLease ? 'Leased' : 'Sold'} flyer, please upload a property photo.</p>
-           <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`,
+           ${flyerParagraphs}`,
           { title: 'Compliance Request Received', preheader: `Request received for ${submissionData.property_address}` }
         ),
       })

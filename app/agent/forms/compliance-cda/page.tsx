@@ -6,6 +6,7 @@ import { Plus, Trash2, Search, AlertCircle, CheckCircle2, Info, ExternalLink } f
 import { LEAD_SOURCES, LOAN_TYPES, FLYER_DIVISIONS } from '@/lib/transactions/constants'
 import AgentSelect, { AgentOption } from '@/components/forms/AgentSelect'
 import AddressInput, { AddressFields } from '@/components/shared/AddressInput'
+import { complianceIsLease, complianceIsDirectLease, complianceShowsTitleAndLoan } from '@/lib/forms/requiredFields'
 
 const TEAM_OR_OFFICE_OPTIONS = [
   'Houston Office', 'Dallas Office', 'Clutch City Realty Group',
@@ -72,6 +73,8 @@ export default function ComplianceCdaForm() {
   const [error, setError] = useState('')
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
+  // Compliance mode: attach this submission to a retainer prospect the agent picked
+  const [attachTo, setAttachTo] = useState<{ id: string; client_name: string } | null>(null)
 
   // Transaction search
   const [addressSearch, setAddressSearch] = useState('')
@@ -137,14 +140,14 @@ export default function ComplianceCdaForm() {
     }).catch(() => {})
   }, [user?.id])
 
-  const isLease = form.representing === 'tenant' || form.representing === 'landlord'
+  // All three flags come from the same predicates the server validator uses,
+  // so what the form shows and what the server requires can never disagree.
+  const isLease = complianceIsDirectLease(form)
   const isReferredOut = form.representing === 'referred_out'
   // Title + Loan only apply to sales the agent is closing (not leases, not referred-out)
-  const showTitleLoan = !isLease && !isReferredOut
+  const showTitleLoan = complianceShowsTitleAndLoan(form)
   // Flyer type: for referred-out, use the referred client type; otherwise use representation
-  const flyerIsLease = isReferredOut
-    ? (form.referred_client_type === 'tenant' || form.referred_client_type === 'landlord')
-    : isLease
+  const flyerIsLease = complianceIsLease(form)
   const setField = (k: keyof typeof form, v: any) => setForm(prev => ({ ...prev, [k]: v }))
   const setRField = (k: keyof typeof retainer, v: any) => setRetainer(prev => ({ ...prev, [k]: v }))
 
@@ -233,7 +236,11 @@ export default function ComplianceCdaForm() {
       payload = {
         ...payload, ...form,
         property_address: foundTransaction?.property_address || addressSearch,
-        transaction_id: foundTransaction?.id || null,
+        // Attaching to a retainer prospect counts as an existing transaction,
+        // but the address parts still go along: the prospect has no real
+        // address yet and the server writes this one onto it.
+        transaction_id: foundTransaction?.id || attachTo?.id || null,
+        confirm_new_deal: confirmedNewDeal,
         ...(foundTransaction ? {} : {
           street_address: newAddress.street_address,
           unit: newAddress.unit,
@@ -325,7 +332,7 @@ export default function ComplianceCdaForm() {
           ] as const).map(opt => (
             <button
               key={opt.value}
-              onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false) }}
+              onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false); setAttachTo(null) }}
               className={`text-left p-4 rounded border transition-colors ${mode === opt.value ? 'border-luxury-accent bg-luxury-accent/5' : 'border-luxury-gray-5/50 hover:border-luxury-gray-3'}`}
             >
               <p className={`text-sm font-semibold mb-1 ${mode === opt.value ? 'text-luxury-accent' : 'text-luxury-gray-1'}`}>{opt.label}</p>
@@ -595,6 +602,45 @@ export default function ComplianceCdaForm() {
         {/* ────────────────────────────────────────────────────────────────────
             COMPLIANCE MODE - full form
         ──────────────────────────────────────────────────────────────────── */}
+        {mode === 'compliance' && duplicateMatches.length > 0 && (
+          <section>
+            <div className="inner-card border-luxury-accent/40 bg-luxury-accent/5 space-y-4">
+              <p className="text-sm font-semibold text-luxury-gray-1">We found a retainer you submitted for a client with a similar name.</p>
+              <p className="text-xs text-luxury-gray-3">Attaching adds this property and deal to that retainer instead of creating a separate transaction.</p>
+              <div className="space-y-2">
+                {duplicateMatches.map((m: any) => (
+                  <div key={m.id} className="inner-card flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">{m.client_name}</p>
+                      <p className="text-xs text-luxury-gray-3">Created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                    </div>
+                    <button
+                      onClick={() => { setAttachTo({ id: m.id, client_name: m.client_name }); setDuplicateMatches([]) }}
+                      className="btn btn-primary text-xs flex-shrink-0"
+                    >
+                      This is the same deal - attach
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3 pt-2 border-t border-luxury-gray-5/50">
+                <button
+                  onClick={() => { setConfirmedNewDeal(true); setDuplicateMatches([]) }}
+                  className="btn btn-secondary text-xs"
+                >
+                  Not the same - create new
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+        {mode === 'compliance' && attachTo && (
+          <div className="flex items-start gap-2 p-3 bg-luxury-accent/5 border border-luxury-accent/40 rounded text-xs text-luxury-gray-2">
+            <Info size={13} className="flex-shrink-0 mt-0.5 text-luxury-accent" />
+            <span>This submission will be attached to your retainer for <strong className="text-luxury-gray-1">{attachTo.client_name}</strong>. Submit again to finish.</span>
+            <button onClick={() => setAttachTo(null)} className="ml-auto text-luxury-gray-3 underline flex-shrink-0">Undo</button>
+          </div>
+        )}
         {mode === 'compliance' && (
           <>
             {/* Transaction search */}

@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
+import { complianceIsLease } from '@/lib/forms/requiredFields'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
     // ── Fetch transaction ─────────────────────────────────────────────────────
     const { data: txn } = await supabaseAdmin
       .from('transactions')
-      .select('id, property_address, is_locked, compliance_status')
+      .select('id, property_address, is_locked, compliance_status, transaction_type, representing')
       .eq('id', transaction_id)
       .single()
 
@@ -168,7 +169,13 @@ export async function POST(request: NextRequest) {
       loan_type,
     } = formFields
 
-    const isLease = representing === 'tenant' || representing === 'landlord'
+    // A referred-out lease is still a lease. When the resubmission does not
+    // say what kind of client was referred, trust what the transaction
+    // already is instead of guessing.
+    const rep = representing || txn.representing
+    const isLease = rep === 'referred_out' && !(formFields as any).referred_client_type
+      ? txn.transaction_type === 'lease'
+      : complianceIsLease({ representing: rep, referred_client_type: (formFields as any).referred_client_type })
 
     await supabaseAdmin
       .from('transactions')

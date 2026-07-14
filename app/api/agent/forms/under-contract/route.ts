@@ -279,14 +279,19 @@ export async function POST(request: NextRequest) {
 
     // ── Agent confirmation with flyer link ───────────────────────────────────
     // Deep link to this form's own flyer tab, not just whichever is newest.
-    const flyerUrl = `${appUrl}/agent/flyer/${transactionId}?type=under_contract`
+    // Only when the form actually creates a flyer; otherwise the email and the
+    // success screen would promise one that never exists.
+    const flyerUrl = formRecord?.triggers_flyer ? `${appUrl}/agent/flyer/${transactionId}?type=under_contract` : null
     try {
+      const flyerParagraphs = flyerUrl
+        ? `<p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Under Contract flyer, please upload a property photo.</p>
+           <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`
+        : ''
       await resend.emails.send({
         from: FROM_EMAIL, to: [agent_email], subject: `New Contract Received - ${normalizedAddress}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your new contract for <strong style="color:#1a1a1a;">${normalizedAddress}</strong> has been received and the transaction has been created.</p>
-           <p style="margin:0 0 16px;font-size:14px;color:#555555;">To receive your Under Contract flyer, please upload a property photo.</p>
-           <p style="text-align:center;margin:24px 0 0;"><a href="${flyerUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Upload Photo &amp; Get Your Flyer</a></p>`,
+           ${flyerParagraphs}`,
           { title: 'New Contract Received', preheader: `Contract received for ${normalizedAddress}` }
         ),
       })
@@ -296,7 +301,9 @@ export async function POST(request: NextRequest) {
       success: true,
       transaction_id: transactionId,
       flyer_url: flyerUrl,
-      message: 'Your new contract has been received and the transaction has been created. Upload a property photo to get your Under Contract flyer.',
+      message: flyerUrl
+        ? 'Your new contract has been received and the transaction has been created. Upload a property photo to get your Under Contract flyer.'
+        : 'Your new contract has been received and the transaction has been created.',
     })
   } catch (err: any) {
     console.error('under-contract POST error:', err)
