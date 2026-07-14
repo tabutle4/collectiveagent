@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     // ── Required-field validation (server side) ──────────────────────────────
     const required: Record<string, any> = {
       'Agent name': agent_name, 'Agent email': agent_email, 'Agent phone': agent_phone,
-      'Property address': property_address, 'Sales price': sales_price,
+      'Property address': normalizedAddress, 'Sales price': sales_price,
       'Commission rate': commission_rate, 'Closing date': closing_date, 'MLS link': mls_link,
       'Flyer choice': flyer_choice, 'Representation': representing,
       'Client name': client_name, 'Client phone': client_phone, 'Client email': client_email,
@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
     const submissionData = {
       submission_mode: 'under_contract',
       agent_name, agent_email, agent_phone,
-      property_address, sales_price, commission_rate, closing_date, mls_link,
+      property_address: normalizedAddress, sales_price, commission_rate, closing_date, mls_link,
       flyer_choice, team_name: team_name || null, division_name: division_name || null,
       representing, client_name, client_phone, client_email, lead_source,
       other_agent_name, other_agent_phone, other_agent_email,
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
        <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Admin</a></p>`,
       { title: 'New Contract Submitted', preheader: `Under contract: ${normalizedAddress}` }
     )
-    await sendNotifications(notificationEmails, 'New Contract', notifyHtml, property_address)
+    await sendNotifications(notificationEmails, 'New Contract', notifyHtml, normalizedAddress)
 
     // ── Agent confirmation with flyer link ───────────────────────────────────
     // Deep link to this form's own flyer tab, not just whichever is newest.
