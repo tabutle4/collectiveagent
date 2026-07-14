@@ -14,12 +14,13 @@ const LEAD_SOURCES = [
   'Family/Friend', 'Social Media/Other',
 ]
 
+// Sales only. This form requires title company and mortgage lender details,
+// which lease deals do not have. Leases are submitted through the Compliance
+// form, which handles tenant and landlord representation.
 const REPRESENTING = [
   { value: 'buyer', label: 'Buyer' },
   { value: 'new_construction_buyer', label: 'New Construction Buyer' },
   { value: 'seller', label: 'Seller' },
-  { value: 'tenant', label: 'Tenant' },
-  { value: 'landlord', label: 'Landlord' },
 ]
 
 const FLYER_CHOICES = [
