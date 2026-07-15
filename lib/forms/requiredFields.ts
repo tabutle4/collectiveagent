@@ -108,7 +108,6 @@ export const JUST_LISTED_RULES: FieldRule[] = [
   { key: 'state', label: 'State' },
   { key: 'zip', label: 'Zip' },
   { key: 'transaction_type', label: 'Sale or lease' },
-  { key: 'lead_source', label: 'Lead source' },
   { key: 'client_names', label: 'Client name' },
   { key: 'client_phone', label: 'Client phone' },
   { key: 'client_email', label: 'Client email' },
