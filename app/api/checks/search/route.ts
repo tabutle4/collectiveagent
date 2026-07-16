@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows, type FetchAllRowsOptions } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
 import { getCentralDateString } from '@/lib/timezone'
+import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -205,6 +206,13 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Compliance is single-sourced from the compliance request page.
+    // Derive per transaction and use it in place of the stored per-check
+    // compliance_complete_date column.
+    const complianceByTxn = await deriveComplianceForTransactions(
+      results.map((r: any) => r.transaction_id).filter(Boolean)
+    )
+
     // Shape the response
     const shaped = results.map(r => {
       const txn = (r as any).transactions
@@ -253,7 +261,12 @@ export async function GET(request: NextRequest) {
         paid_self: paidSelf,
         paid_count: paidCount,
         paid_total: paidTotal,
-        compliance_complete_date: r.compliance_complete_date,
+        compliance_complete_date: r.transaction_id
+          ? (complianceByTxn[r.transaction_id]?.complete_date?.split('T')[0] ?? null)
+          : null,
+        compliance_status: r.transaction_id
+          ? (complianceByTxn[r.transaction_id]?.status ?? null)
+          : null,
         notes: r.notes,
         agents,
         contacts,

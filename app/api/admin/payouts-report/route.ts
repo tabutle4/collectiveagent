@@ -240,6 +240,11 @@ export async function GET(request: NextRequest) {
           : sideStatuses.some(s => s === 'in_review' || s === 'submitted')
             ? 'in_review'
             : 'complete'
+      // Single source: sidesDerived comes from compliance submissions and
+      // txn.compliance_status is dual-written by the compliance page. The
+      // stored per-check compliance_complete_date is consulted only as a
+      // last resort for historical deals with no compliance submissions,
+      // matching the fallback in lib/compliance/derive.ts.
       const complianceStatus = sidesDerived || txn?.compliance_status || (check.compliance_complete_date ? 'complete' : 'not_submitted')
 
       // Standalone check with direct agent
@@ -501,50 +506,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    // Update compliance status for a specific check (original behavior)
-    const { check_id, compliance_status } = body
-
-    if (!check_id) {
-      return NextResponse.json({ error: 'check_id is required' }, { status: 400 })
-    }
-
-    // Update the check's compliance status (stored on checks_received or via compliance_complete_date)
-    const updates: Record<string, any> = {}
-    
-    if (compliance_status === 'complete') {
-      // Central date, not UTC: after ~7pm Texas time UTC has rolled to tomorrow,
-      // which would stamp the wrong completion date.
-      updates.compliance_complete_date = getCentralDateString()
-    } else if (compliance_status === 'not_submitted') {
-      updates.compliance_complete_date = null
-    }
-    
-    // Also store the explicit status if there's a column for it
-    // For now, we'll use compliance_complete_date to indicate completion
-    // and null to indicate not submitted
-    
-    const { error } = await supabaseAdmin
-      .from('checks_received')
-      .update(updates)
-      .eq('id', check_id)
-
-    if (error) throw error
-
-    // If there's a linked transaction, update its compliance_status too
-    const { data: check } = await supabaseAdmin
-      .from('checks_received')
-      .select('transaction_id')
-      .eq('id', check_id)
-      .single()
-
-    if (check?.transaction_id) {
-      await supabaseAdmin
-        .from('transactions')
-        .update({ compliance_status })
-        .eq('id', check.transaction_id)
-    }
-
-    return NextResponse.json({ success: true })
+    // Compliance status is set only from the compliance request page.
+    // The old per-check manual write (compliance_complete_date stamp plus
+    // transactions.compliance_status update) was removed intentionally as
+    // part of single-sourcing compliance. Unknown actions now error.
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

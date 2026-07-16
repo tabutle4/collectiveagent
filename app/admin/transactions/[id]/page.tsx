@@ -4697,13 +4697,13 @@ export default function AdminTransactionDetailPage() {
                               </div>
                               <div>
                                 <label className="field-label">Compliance Complete</label>
-                                <input
-                                  type="date"
-                                  className="input-luxury text-xs"
-                                  value={checkEdit.compliance_complete_date || ''}
-                                  onChange={e => updateCheckField(check.id, 'compliance_complete_date', e.target.value)}
-                                  onBlur={() => updateCheck(check.id, { compliance_complete_date: checkEdit.compliance_complete_date })}
-                                />
+                                <div className="input-luxury text-xs flex items-center" title="Set from the compliance request page">
+                                  <span className="text-luxury-gray-2">
+                                    {check.compliance_complete_date
+                                      ? new Date(check.compliance_complete_date + 'T12:00:00').toLocaleDateString()
+                                      : 'Not complete'}
+                                  </span>
+                                </div>
                               </div>
                               <div>
                                 <label className="field-label">Brokerage Amount</label>
@@ -4760,28 +4760,17 @@ export default function AdminTransactionDetailPage() {
                               </div>
                               <div>
                                 <label className="field-label">Compliance Status</label>
-                                <select
-                                  className="select-luxury text-xs"
-                                  value={txn.compliance_status || 'not_submitted'}
-                                  onChange={async e => {
-                                    const status = e.target.value
-                                    await updateTransaction({ compliance_status: status })
-                                    const updates: any = {}
-                                    if (status === 'complete') {
-                                      updates.compliance_complete_date = new Date().toISOString().split('T')[0]
-                                    } else if (status === 'not_submitted') {
-                                      updates.compliance_complete_date = null
-                                    }
-                                    if (Object.keys(updates).length > 0) {
-                                      await updateCheck(check.id, updates)
-                                    }
-                                  }}
-                                >
-                                  <option value="not_submitted">Not Requested</option>
-                                  <option value="in_review">In Review</option>
-                                  <option value="incomplete">Incomplete</option>
-                                  <option value="complete">Complete</option>
-                                </select>
+                                <div className="input-luxury text-xs flex items-center" title="Set from the compliance request page">
+                                  <span className={`font-medium capitalize ${
+                                    txn.compliance_status === 'complete' ? 'text-green-600' :
+                                    txn.compliance_status === 'incomplete' ? 'text-red-500' :
+                                    txn.compliance_status === 'in_review' ? 'text-amber-600' : 'text-luxury-gray-3'
+                                  }`}>
+                                    {txn.compliance_status === 'not_submitted' || !txn.compliance_status
+                                      ? 'Not Requested'
+                                      : txn.compliance_status.replace('_', ' ')}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 

@@ -625,13 +625,9 @@ export async function POST(
         .update({ compliance_status: 'complete', updated_at: nowIso })
         .eq('id', id)
 
-      // Set compliance_complete_date on all checks for this transaction that don't have one yet
-      await supabase
-        .from('checks_received')
-        .update({ compliance_complete_date: today, updated_at: new Date().toISOString() })
-        .eq('transaction_id', id)
-        .is('compliance_complete_date', null)
-
+      // The per-check compliance_complete_date column is retired. Every
+      // reader now derives the completion date from the submissions'
+      // reviewed_at (set above), so there is nothing to stamp on checks.
       return NextResponse.json({ success: true, compliance_status: 'complete', compliance_complete_date: today })
     }
 

@@ -177,10 +177,9 @@ function groupByTransaction(rows: PayoutRow[]): PayoutRow[] {
 
 // Mobile card - clean stacked layout
 
-function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
+function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
-  onUpdateCompliance?: (checkId: string, status: string) => void
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
@@ -271,21 +270,7 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
           {dateVal && (
             <span className={`text-xs tabular-nums ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</span>
           )}
-          {onUpdateCompliance ? (
-            <select
-              value={row.compliance_status || 'not_submitted'}
-              onChange={e => onUpdateCompliance(row.check_id, e.target.value)}
-              className={`text-xs border-0 bg-transparent p-0 pr-4 cursor-pointer focus:ring-0 ${cls}`}
-              onClick={e => e.stopPropagation()}
-            >
-              <option value="not_submitted">not requested</option>
-              <option value="in_review">in review</option>
-              <option value="incomplete">incomplete</option>
-              <option value="complete">complete</option>
-            </select>
-          ) : (
-            label && <span className={`text-xs ${cls}`}>{label}</span>
-          )}
+          {label && <span className={`text-xs ${cls}`}>{label}</span>}
           {row.pay_by_date && (
             <span className="text-xs text-luxury-gray-3">pay by {fmtDate(row.pay_by_date)}</span>
           )}
@@ -307,10 +292,9 @@ function PayoutCard({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkE
 
 // Desktop table row - all columns visible, table scrolls horizontally if needed
 
-function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: { 
+function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
-  onUpdateCompliance?: (checkId: string, status: string) => void
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
@@ -388,20 +372,7 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
       </td>
       <td className={`py-2 px-2 text-xs whitespace-nowrap ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
-        {onUpdateCompliance ? (
-          <select
-            value={row.compliance_status || 'not_submitted'}
-            onChange={e => onUpdateCompliance(row.check_id, e.target.value)}
-            className={`text-xs border border-luxury-gray-5 rounded px-1 py-0.5 bg-white cursor-pointer focus:ring-1 focus:ring-luxury-accent ${cls}`}
-          >
-            <option value="not_submitted">not requested</option>
-            <option value="in_review">in review</option>
-            <option value="incomplete">incomplete</option>
-            <option value="complete">complete</option>
-          </select>
-        ) : (
-          <span className={cls}>{label}</span>
-        )}
+        <span className={cls}>{label}</span>
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(row.pay_by_date)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
@@ -421,10 +392,9 @@ function PayoutTableRow({ row, dateKey, onUpdateCompliance, onMarkAgentPaid, onM
 type SortKey = 'date' | 'compliance' | null
 type SortDir = 'asc' | 'desc'
 
-function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onUpdateCompliance, onMarkAgentPaid, onMarkExternalPaid }: {
+function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
   rows: PayoutRow[]; title: string; collapsed: boolean; onToggle: () => void
   dateLabel: string; dateKey: 'cleared_date' | 'received_date'
-  onUpdateCompliance?: (checkId: string, status: string) => void
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
@@ -478,7 +448,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
             {displayRows.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
             ) : (
-              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
             )}
             {rows.length > 0 && (
               <div className="container-card rounded-lg flex items-center justify-between px-4 py-2 mt-1">
@@ -523,7 +493,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                 {displayRows.length === 0 ? (
                   <tr><td colSpan={14} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
                 ) : (
-                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onUpdateCompliance={onUpdateCompliance} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
                 )}
               </tbody>
               {rows.length > 0 && (
@@ -702,23 +672,6 @@ export default function PayoutsReportPage() {
     })
   }
 
-  const updateCompliance = async (checkId: string, status: string) => {
-    setRows(prev => prev.map(r => 
-      r.check_id === checkId ? { ...r, compliance_status: status } : r
-    ))
-    
-    try {
-      const res = await fetch('/api/admin/payouts-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ check_id: checkId, compliance_status: status }),
-      })
-      if (!res.ok) load()
-    } catch {
-      load()
-    }
-  }
-
   const openAgentMarkPaid = (tiaId: string, checkId: string) => {
     const row = rows.find(r => r.check_id === checkId)
     if (!row?.transaction_id) return
@@ -856,8 +809,8 @@ export default function PayoutsReportPage() {
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onUpdateCompliance={updateCompliance} onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
         </div>
 
         {/* Landlord Disbursements */}

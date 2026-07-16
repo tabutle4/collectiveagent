@@ -5,6 +5,7 @@ import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit } from '@/lib/transactions/cascade'
+import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import {
   buildStatementEmail,
@@ -503,7 +504,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .select(`*, check_payouts (*)`)
         .eq('transaction_id', id)
         .order('created_at', { ascending: true })
-      const checks = checksData || []
+      // Compliance is single-sourced from the compliance request page
+      // (submission statuses + reviewed_at). Override the stored per-check
+      // compliance_complete_date with the derived value so pay-by math and
+      // the check rows always reflect what Leah set on the compliance page.
+      const complianceByTxn = await deriveComplianceForTransactions([id])
+      const derivedCompliance = complianceByTxn[id] || { status: null, complete_date: null }
+      const checks = (checksData || []).map((c: any) => ({
+        ...c,
+        compliance_complete_date: derivedCompliance.complete_date
+          ? derivedCompliance.complete_date.split('T')[0]
+          : null,
+      }))
 
       // Checklist
       const { data: completions } = await supabase
@@ -894,7 +906,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Update check ─────────────────────────────────────────────────────────
     if (action === 'update_check') {
       const { check_id, updates } = body
-      const DATE_FIELDS = ['check_date', 'received_date', 'deposited_date', 'cleared_date', 'compliance_complete_date']
+      // compliance_complete_date is single-sourced from the compliance
+      // request page and derived at read time. Strip it so no client can
+      // write a stale copy onto the check.
+      if (updates && 'compliance_complete_date' in updates) {
+        delete updates.compliance_complete_date
+      }
+      const DATE_FIELDS = ['check_date', 'received_date', 'deposited_date', 'cleared_date']
       // A number input that the user typed in and then cleared sends '' , not
       // undefined. Postgres rejects '' for a numeric column (22P02), so these
       // get the same empty-to-null treatment the date fields already get.
