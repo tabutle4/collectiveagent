@@ -19,6 +19,47 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const action = body.action as string
 
+    if (action === 'list_unlinked') {
+      const { data: subs, error: listErr } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('id, agent_id, submitted_at, data')
+        .filter('data->>submission_mode', 'eq', 'compliance')
+        .is('transaction_id', null)
+        .order('submitted_at', { ascending: false })
+      if (listErr) throw listErr
+      const items = (subs || []).map((s: any) => {
+        const d = s.data || {}
+        const rawType = String(d.transaction_type || '').toLowerCase()
+        const isLease = rawType.includes('tenant') || rawType.includes('landlord') || rawType.includes('lease')
+        const pnum = (v: any): number | null => {
+          if (v === null || v === undefined || v === '') return null
+          const m = String(v).replace(/,/g, '').match(/-?\d+\.?\d*/)
+          return m ? parseFloat(m[0]) : null
+        }
+        const rent = pnum(d.commission_basis_price)
+        const term = pnum(d.lease_term_months)
+        const price = pnum(d.total_sales_rent_price)
+        const volume = isLease ? (rent && term ? rent * term : null) : price
+        return {
+          submission_id: s.id,
+          agent_id: s.agent_id,
+          submitted_at: s.submitted_at,
+          agent_name: d.agent_name || null,
+          property_address: d.property_address || null,
+          client_name: d.client_name || null,
+          transaction_type: d.transaction_type || null,
+          is_lease: isLease,
+          monthly_rent: rent,
+          lease_term: term,
+          sales_price: price,
+          sales_volume: volume,
+          date: d.closing_or_movein_date || null,
+          commission_rate: d.commission_rate || null,
+        }
+      })
+      return NextResponse.json({ items })
+    }
+
     if (action === 'search') {
       const q = String(body.query || '').trim()
       if (q.length < 2) return NextResponse.json({ transactions: [] })
@@ -131,17 +172,51 @@ export async function POST(request: NextRequest) {
       const rawType = String(d.transaction_type || '').toLowerCase()
       const isLease = rawType.includes('tenant') || rawType.includes('landlord') || rawType.includes('lease')
 
+      // Overview data can be overridden by the review page; fall back to the
+      // submission JSON when the client does not supply a field. Numbers are
+      // parsed defensively because backfilled Book data can carry stray text
+      // ("12 months", "10k") in these fields.
+      const ov = body.overview || {}
+      const parseNum = (v: any): number | null => {
+        if (v === null || v === undefined || v === '') return null
+        const m = String(v).replace(/,/g, '').match(/-?\d+\.?\d*/)
+        return m ? parseFloat(m[0]) : null
+      }
+      const rent = ov.monthly_rent !== undefined ? parseNum(ov.monthly_rent) : parseNum(d.commission_basis_price)
+      const term = ov.lease_term !== undefined ? parseNum(ov.lease_term) : parseNum(d.lease_term_months)
+      const salesPrice = ov.sales_price !== undefined ? parseNum(ov.sales_price) : parseNum(d.total_sales_rent_price)
+      let salesVolume = ov.sales_volume !== undefined ? parseNum(ov.sales_volume) : null
+      if (salesVolume === null) {
+        salesVolume = isLease
+          ? (rent && term ? rent * term : null)
+          : salesPrice
+      }
+      const dateVal = ov.date !== undefined ? (ov.date || null) : (d.closing_or_movein_date || null)
+
+      const insertRow: Record<string, any> = {
+        property_address: propertyAddress,
+        status: 'active',
+        transaction_type: isLease ? 'lease' : 'sale',
+        client_name: (ov.client_name !== undefined ? ov.client_name : d.client_name) || null,
+        client_email: d.client_email || null,
+        sales_volume: salesVolume,
+        gross_commission: parseNum(d.commission_basis_price),
+        submitted_by: sub.agent_id || null,
+        compliance_status: 'complete',
+        updated_at: new Date().toISOString(),
+      }
+      if (isLease) {
+        insertRow.move_in_date = dateVal
+        insertRow.monthly_rent = rent
+        insertRow.lease_term = term
+      } else {
+        insertRow.closing_date = dateVal
+        insertRow.sales_price = salesPrice
+      }
+
       const { data: newTxn, error: txnErr } = await supabaseAdmin
         .from('transactions')
-        .insert({
-          property_address: propertyAddress,
-          status: 'active',
-          transaction_type: isLease ? 'lease' : 'sale',
-          client_name: d.client_name || null,
-          closing_date: d.closing_or_movein_date || null,
-          submitted_by: sub.agent_id || null,
-          updated_at: new Date().toISOString(),
-        })
+        .insert(insertRow)
         .select('id')
         .single()
       if (txnErr || !newTxn) throw (txnErr || new Error('Failed to create transaction'))
@@ -153,6 +228,8 @@ export async function POST(request: NextRequest) {
           agent_id: sub.agent_id,
           agent_role: 'primary_agent',
           payment_status: 'pending',
+          funding_source: 'crc',
+          uses_canonical_math: true,
           updated_at: new Date().toISOString(),
         })
       }
