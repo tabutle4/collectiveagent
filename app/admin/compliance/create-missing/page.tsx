@@ -40,6 +40,8 @@ export default function CreateMissingPage() {
   const [busy, setBusy] = useState<Record<string, boolean>>({})
   const [done, setDone] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -79,7 +81,7 @@ export default function CreateMissingPage() {
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
   }
 
-  const createOne = async (it: UnlinkedItem) => {
+  const createOne = async (it: UnlinkedItem): Promise<boolean> => {
     setBusy(prev => ({ ...prev, [it.submission_id]: true }))
     setErrors(prev => ({ ...prev, [it.submission_id]: '' }))
     const e = edits[it.submission_id]
@@ -104,15 +106,33 @@ export default function CreateMissingPage() {
       const data = await res.json()
       if (!res.ok) {
         setErrors(prev => ({ ...prev, [it.submission_id]: data.error || 'Failed' }))
-      } else {
-        setDone(prev => ({ ...prev, [it.submission_id]: data.transaction_id }))
-        setItems(prev => prev.filter(x => x.submission_id !== it.submission_id))
+        return false
       }
+      setDone(prev => ({ ...prev, [it.submission_id]: data.transaction_id }))
+      setItems(prev => prev.filter(x => x.submission_id !== it.submission_id))
+      return true
     } catch (err: any) {
       setErrors(prev => ({ ...prev, [it.submission_id]: err.message || 'Network error' }))
+      return false
     } finally {
       setBusy(prev => ({ ...prev, [it.submission_id]: false }))
     }
+  }
+
+  const createAll = async () => {
+    if (bulkRunning) return
+    const queue = [...items]
+    if (queue.length === 0) return
+    if (!window.confirm(`Create ${queue.length} transactions with the values currently shown? Each one links its submission and recalculates commission.`)) return
+    setBulkRunning(true)
+    setBulkProgress({ done: 0, total: queue.length })
+    let completed = 0
+    for (const it of queue) {
+      await createOne(it)
+      completed += 1
+      setBulkProgress({ done: completed, total: queue.length })
+    }
+    setBulkRunning(false)
   }
 
   if (authLoading || loading) {
@@ -134,9 +154,20 @@ export default function CreateMissingPage() {
             submission, and recalculates commission.
           </p>
         </div>
-        <button onClick={load} className="btn flex items-center gap-2 text-sm">
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={createAll}
+            disabled={bulkRunning || items.length === 0}
+            className="btn btn-primary flex items-center gap-2 text-sm"
+          >
+            {bulkRunning
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating {bulkProgress.done} of {bulkProgress.total}</>
+              : <><Check className="w-4 h-4" /> Create All ({items.length})</>}
+          </button>
+          <button onClick={load} disabled={bulkRunning} className="btn flex items-center gap-2 text-sm">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
+        </div>
       </div>
 
       {items.length === 0 && (
