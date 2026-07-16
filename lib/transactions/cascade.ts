@@ -719,3 +719,117 @@ export async function cascadePrimarySplit(args: {
  * Falls back through the same custom-plan parser the cascade uses, then
  * to 85 as a final safety net (matching the cascade's `?? 85` default).
  */
+
+/**
+ * ensurePrimaryTia - guarantee a primary tia row exists for an agent on a
+ * transaction. Used by the auto-cascade entry points (form submissions,
+ * link-transaction) so a deal always has a complete row set even before a
+ * commission amount is known. Commission fields are inserted as explicit
+ * NULL (not zero) so the UI shows them as awaiting data and the first
+ * cascade with a real basis fills them in. Returns the tia row id, or null
+ * on failure. Never throws.
+ */
+export async function ensurePrimaryTia(
+  transactionId: string,
+  agentId: string,
+  opts?: { leadSource?: string | null }
+): Promise<string | null> {
+  try {
+    const { data: existing } = await supabase
+      .from('transaction_internal_agents')
+      .select('id')
+      .eq('transaction_id', transactionId)
+      .eq('agent_id', agentId)
+      .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
+      .limit(1)
+      .maybeSingle()
+    if (existing) return existing.id
+
+    const { data: created, error } = await supabase
+      .from('transaction_internal_agents')
+      .insert({
+        transaction_id: transactionId,
+        agent_id: agentId,
+        agent_role: 'primary_agent',
+        payment_status: 'pending',
+        funding_source: 'crc',
+        uses_canonical_math: true,
+        lead_source: opts?.leadSource || 'own',
+        agent_basis: null,
+        split_percentage: null,
+        agent_gross: null,
+        agent_net: null,
+        amount_1099_reportable: null,
+        brokerage_split: null,
+        sales_volume: null,
+        units: null,
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+    if (error) {
+      console.error('ensurePrimaryTia insert failed for', transactionId, agentId, error)
+      return null
+    }
+    return created?.id || null
+  } catch (err) {
+    console.error('ensurePrimaryTia failed for', transactionId, agentId, err)
+    return null
+  }
+}
+
+/**
+ * autoCascadeTransaction - run the commission cascade for every primary-role
+ * row on a transaction, resolving each row's basis the same way the admin
+ * add_internal_agent auto-stamp does (side commission, then office_gross),
+ * extended with a final fallback to transactions.gross_commission because
+ * agent form submissions write the commission basis there before any side
+ * commissions exist.
+ *
+ * Safe to call from any entry point after commission inputs may have
+ * changed: cascadePrimarySplit itself skips paid rows, closed transactions,
+ * and retainer rows, and this wrapper skips rows with no resolvable basis
+ * (leaving their NULL commission fields for a later run). Never throws -
+ * a cascade failure must not fail the submission that triggered it.
+ */
+export async function autoCascadeTransaction(transactionId: string): Promise<void> {
+  try {
+    const { data: txn } = await supabase
+      .from('transactions')
+      .select('status, listing_side_commission, buying_side_commission, office_gross, gross_commission')
+      .eq('id', transactionId)
+      .single()
+    if (!txn || txn.status === 'closed') return
+
+    const { data: rows } = await supabase
+      .from('transaction_internal_agents')
+      .select('id, agent_role, side, payment_status, installment_kind, lead_source, referred_agent_id')
+      .eq('transaction_id', transactionId)
+      .in('agent_role', ['primary_agent', 'listing_agent', 'co_agent'])
+
+    for (const row of rows || []) {
+      if (row.payment_status === 'paid') continue
+      if (row.installment_kind === 'retainer') continue
+
+      let basis = 0
+      if (row.side === 'seller' || row.side === 'landlord') {
+        basis = num(txn.listing_side_commission)
+      } else if (row.side === 'buyer' || row.side === 'tenant') {
+        basis = num(txn.buying_side_commission)
+      }
+      if (!basis) basis = num(txn.office_gross)
+      if (!basis) basis = num(txn.gross_commission)
+      if (basis <= 0) continue
+
+      await cascadePrimarySplit({
+        transactionId,
+        internalAgentId: row.id,
+        commissionAmount: basis,
+        leadSource: row.lead_source || 'own',
+        referredAgentId: row.referred_agent_id || null,
+      })
+    }
+  } catch (err) {
+    console.error('autoCascadeTransaction failed for', transactionId, err)
+  }
+}

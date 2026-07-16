@@ -6,6 +6,7 @@ import { Resend } from 'resend'
 import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normalizeAddressComponents, buildDisplayAddress } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
+import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 export const dynamic = 'force-dynamic'
@@ -325,6 +326,9 @@ export async function POST(request: NextRequest) {
           }
         }
         await supabaseAdmin.from('transactions').update(partialUpdate).eq('id', txn.id)
+        // Commission inputs may have changed - re-run the cascade so tia rows
+        // and TL/momentum payouts stay in sync with the resubmitted values.
+        await autoCascadeTransaction(txn.id)
       }
       const formatLabel = (k: string) => k.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
       const changedHtml = changedFields.length
@@ -499,6 +503,9 @@ export async function POST(request: NextRequest) {
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       transactionId = newTxn.id
       await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', updated_at: now })
+      // New deal from a compliance submission: cascade immediately so the
+      // commission tab is populated without waiting for a manual Recalculate.
+      await autoCascadeTransaction(transactionId)
     } else {
       transactionId = txn.id
       if (txn.is_locked) {
@@ -528,6 +535,11 @@ export async function POST(request: NextRequest) {
           }
         : {}
       await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)
+      // Attaching a compliance submission to an existing deal: make sure the
+      // submitting agent has a primary tia row (NULL commission fields until
+      // a basis exists), then cascade with the freshly written inputs.
+      await ensurePrimaryTia(transactionId, agentId)
+      await autoCascadeTransaction(transactionId)
     }
 
     // ── Contacts: upsert client + title for both new and existing transactions ─

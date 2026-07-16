@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, UNDER_CONTRACT_RULES } from '@/lib/forms/requiredFields'
@@ -201,6 +202,9 @@ export async function POST(request: NextRequest) {
     await supabaseAdmin.from('transaction_internal_agents').insert({
       transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', updated_at: now,
     })
+    // Cascade if a commission basis already exists on the deal; otherwise the
+    // row stays until a later entry point supplies the basis.
+    await autoCascadeTransaction(transactionId)
 
     // ── Contacts: client, title, lender, cooperating (other) agent ───────────
     const clientContactType =

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows, supabaseAdmin } from '@/lib/supabase'
+import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions, PermissionCode } from '@/lib/permissions'
 
@@ -205,6 +206,10 @@ export async function POST(request: NextRequest) {
       if (tiaError) {
         console.error('Auto-add agent to TIA failed:', tiaError.message)
       }
+
+      // Cascade immediately if the create payload carried a commission basis
+      // (side commissions or gross); no-op when the basis arrives later.
+      await autoCascadeTransaction(newTransaction.id)
     } catch (err: any) {
       console.error('Auto-add agent block error:', err?.message || err)
       // best-effort: transaction was created, agent can be added manually

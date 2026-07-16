@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 
 // Actions for an unlinked compliance submission on the compliance tracker:
 //   action: 'search'  -> find existing transactions to link to (by address/client)
@@ -67,6 +68,19 @@ export async function POST(request: NextRequest) {
         .update({ transaction_id: transactionId, updated_at: new Date().toISOString() })
         .eq('id', submissionId)
       if (updErr) throw updErr
+
+      // Linking a compliance submission to a deal: guarantee the submitting
+      // agent has a primary tia row, then cascade with whatever commission
+      // inputs the deal already carries.
+      const { data: subAgent } = await supabaseAdmin
+        .from('agent_form_submissions')
+        .select('agent_id')
+        .eq('id', submissionId)
+        .single()
+      if (subAgent?.agent_id) {
+        await ensurePrimaryTia(transactionId, subAgent.agent_id)
+      }
+      await autoCascadeTransaction(transactionId)
 
       return NextResponse.json({ success: true, transaction_id: transactionId })
     }
@@ -148,6 +162,10 @@ export async function POST(request: NextRequest) {
         .update({ transaction_id: newTxn.id, updated_at: new Date().toISOString() })
         .eq('id', submissionId)
       if (updErr) throw updErr
+
+      // New deal created from a submission: cascade so the commission tab is
+      // populated the moment a basis exists on the submission data.
+      await autoCascadeTransaction(newTxn.id)
 
       return NextResponse.json({ success: true, transaction_id: newTxn.id, created: true })
     }

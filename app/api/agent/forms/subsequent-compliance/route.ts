@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { complianceIsLease } from '@/lib/forms/requiredFields'
@@ -205,6 +206,10 @@ export async function POST(request: NextRequest) {
         updated_at: now,
       })
       .eq('id', transaction_id)
+
+    // Commission inputs may have changed - re-run the cascade so tia rows
+    // and TL/momentum payouts stay in sync with the resubmitted values.
+    await autoCascadeTransaction(transaction_id)
 
     await sendSubsequentNotification(txn, submissionData, changedFields, false)
 

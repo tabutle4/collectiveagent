@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase, fetchAllRows } from '@/lib/supabase'
 import { addressMatchKey } from '@/lib/transactions/utils'
+import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
 
@@ -265,6 +266,10 @@ export async function POST(request: NextRequest) {
           .single()
         if (error) throw error
         console.log('Pay-link commission check created:', check.id, 'txn:', matchedTxn.id)
+
+        // A Payload payment landing as a check can complete the deal's
+        // commission picture: cascade so tia rows populate automatically.
+        await autoCascadeTransaction(matchedTxn.id)
 
         // Best-effort: record the payer as a title contact on the deal.
         if (payerName || payerEmail) {

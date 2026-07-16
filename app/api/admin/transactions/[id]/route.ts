@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { computeCommission } from '@/lib/transactions/math'
-import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit } from '@/lib/transactions/cascade'
+import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import {
@@ -967,6 +967,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
           }
         }
+        // A check amount is a commission basis signal: cascade so tia rows
+        // reflect the new numbers without a manual Recalculate.
+        await autoCascadeTransaction(id)
       }
 
       return NextResponse.json({ success: true })
@@ -988,6 +991,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .select()
         .single()
       if (error) throw error
+      // A new check may carry the deal's first commission amount: cascade so
+      // tia rows populate without a manual Recalculate.
+      await autoCascadeTransaction(id)
       return NextResponse.json({ check: data })
     }
 
@@ -999,6 +1005,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .update({ transaction_id: id, updated_at: new Date().toISOString() })
         .eq('id', check_id)
       if (error) throw error
+      // Linking an existing check can complete a deal's commission picture:
+      // cascade so tia rows reflect it.
+      await autoCascadeTransaction(id)
       return NextResponse.json({ success: true })
     }
 
