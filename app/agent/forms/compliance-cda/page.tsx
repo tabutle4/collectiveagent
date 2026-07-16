@@ -531,7 +531,7 @@ export default function ComplianceCdaForm() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price</label>
-                      <input type="number" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate</label>
@@ -791,7 +791,7 @@ export default function ComplianceCdaForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price <span className="text-red-500">*</span></label>
-                  <input type="number" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                  <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate <span className="text-red-500">*</span></label>
