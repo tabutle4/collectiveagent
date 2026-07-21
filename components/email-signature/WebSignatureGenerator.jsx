@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase/client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Cropper from "react-easy-crop";
