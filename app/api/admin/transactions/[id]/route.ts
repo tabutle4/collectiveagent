@@ -999,6 +999,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // compliance date stamped on it too, or it would never get a pay-by date.
       await syncCheckComplianceDate(id)
       return NextResponse.json({ check: data })
+    }
 
     // ── Link existing check to transaction ───────────────────────────────────
     if (action === 'link_check') {
