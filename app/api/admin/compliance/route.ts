@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
 
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
         transaction_type: txn?.transaction_type || null,
         is_locked: txn?.is_locked || false,
         // Post closing compliance, tracked per deal
-        post_closing_status: txn?.transaction_type === 'lease' ? 'complete' : (postClosing?.status || 'not_started'),
+        post_closing_status: isLeaseTransactionType(txn?.transaction_type) ? 'complete' : (postClosing?.status || 'not_started'),
         post_closing_completed_at: postClosing?.completed_at || null,
         post_closing_notes: postClosing?.notes || null,
         // The full form responses for the expandable detail
