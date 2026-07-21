@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (sub.transaction_id) {
       const { data: allSides } = await supabaseAdmin
         .from('agent_form_submissions')
-        .select('id, status')
+        .select('id, status, reviewed_at')
         .eq('transaction_id', sub.transaction_id)
         .filter('data->>submission_mode', 'eq', 'compliance')
       const statuses = (allSides || []).map((s: any) => (s.id === submission_id ? status : s.status))
@@ -85,6 +85,26 @@ export async function POST(request: NextRequest) {
           .update({ compliance_status: derived, updated_at: nowIso })
           .eq('id', sub.transaction_id)
       }
+
+      // This page is the source of truth for compliance, so it also owns the
+      // compliance_complete_date on the deal's checks. That date is what the
+      // payouts report and the transaction detail page use to compute the
+      // agent pay-by deadline, so it must never disagree with what Leah set
+      // here. A deal counts as complete only when every side is complete, and
+      // the completion date is the latest side's date.
+      const completeDate = (() => {
+        if (derived !== 'complete') return null
+        const dates = (allSides || [])
+          .map((sd: any) => (sd.id === submission_id ? patch.reviewed_at : sd.reviewed_at))
+          .filter(Boolean)
+          .map((d: string) => String(d).slice(0, 10))
+          .sort()
+        return dates.length ? dates[dates.length - 1] : null
+      })()
+      await supabaseAdmin
+        .from('checks_received')
+        .update({ compliance_complete_date: completeDate, updated_at: nowIso })
+        .eq('transaction_id', sub.transaction_id)
     }
 
     return NextResponse.json({ success: true, status, completed_at: patch.reviewed_at || null })
