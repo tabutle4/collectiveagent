@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { computeCommission } from '@/lib/transactions/math'
@@ -994,8 +995,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // A new check may carry the deal's first commission amount: cascade so
       // tia rows populate without a manual Recalculate.
       await autoCascadeTransaction(id)
+      // A check added to a deal whose compliance is already complete needs the
+      // compliance date stamped on it too, or it would never get a pay-by date.
+      await syncCheckComplianceDate(id)
       return NextResponse.json({ check: data })
-    }
 
     // ── Link existing check to transaction ───────────────────────────────────
     if (action === 'link_check') {
