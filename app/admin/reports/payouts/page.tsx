@@ -398,7 +398,9 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>(null)
+  // Pay by is the default sort, oldest first, so the deals closest to their
+  // deadline are at the top. Rows with no pay-by date sort to the bottom.
+  const [sortKey, setSortKey] = useState<SortKey>('pay_by')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const toggleSort = (key: SortKey) => {

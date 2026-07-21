@@ -305,7 +305,13 @@ export async function GET(request: NextRequest) {
         standalone_agent: standaloneAgentName,
         cleared_date: check.cleared_date,
         received_date: check.received_date,
-        pay_by_date: payByDateFor[check.transaction_id || `check:${check.id}`] || null,
+        // Only promise a pay-by date once compliance is actually complete.
+        // The date is gated on the same complianceStatus shown in the column,
+        // not on the check's own compliance_complete_date, so a deal can never
+        // display "not requested" next to a pay-by deadline.
+        pay_by_date: complianceStatus === 'complete'
+          ? (payByDateFor[check.transaction_id || `check:${check.id}`] || null)
+          : null,
         compliance_status: complianceStatus,
         crc_transferred: check.crc_transferred || false,
         agents_paid: check.agents_paid || false,
