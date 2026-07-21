@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
@@ -56,22 +56,22 @@ export async function GET(request: NextRequest) {
     const txnIds = Array.from(new Set(rows.map((r: any) => r.transaction_id).filter(Boolean)))
     const txnMap: Record<string, any> = {}
     if (txnIds.length) {
-      const { data: txns } = await supabaseAdmin
-        .from('transactions')
-        .select('id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date')
-        .in('id', txnIds)
+      const txns = await fetchAllRows<any>(
+        'transactions',
+        'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date',
+        { filters: [{ type: 'in', column: 'id', value: txnIds }] }
+      )
       for (const t of txns || []) txnMap[t.id] = t
-    }
 
     // Batch: post closing compliance, one row per transaction.
     const postClosingMap: Record<string, any> = {}
     if (txnIds.length) {
-      const { data: pcRows } = await supabaseAdmin
-        .from('transaction_post_closing')
-        .select('transaction_id, status, completed_at, notes')
-        .in('transaction_id', txnIds)
+      const pcRows = await fetchAllRows<any>(
+        'transaction_post_closing',
+        'transaction_id, status, completed_at, notes',
+        { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
+      )
       for (const p of pcRows || []) postClosingMap[p.transaction_id] = p
-    }
 
     // Batch: flyers.
     // A deal can carry several flyers (Just Listed, Under Contract, Just Sold).
