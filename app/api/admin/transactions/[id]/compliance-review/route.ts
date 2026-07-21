@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
@@ -235,6 +236,9 @@ export async function POST(
         updated_at: nowIso,
       })
       .eq('id', id)
+
+    // The pay-by deadline follows the sign-off, whichever screen it came from.
+    await syncCheckComplianceDate(id)
 
     await supabase.from('compliance_reviews').insert({
       transaction_id: id,

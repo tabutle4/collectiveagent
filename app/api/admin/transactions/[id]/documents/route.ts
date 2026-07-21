@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { requirePermission, requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 
@@ -87,6 +88,9 @@ async function syncComplianceStatus(transactionId: string): Promise<void> {
       .update({ compliance_status: derived, updated_at: nowIso })
       .eq('id', transactionId)
   }
+
+  // The pay-by deadline follows the sign-off, whichever screen it came from.
+  await syncCheckComplianceDate(transactionId)
 }
 
 export async function GET(
