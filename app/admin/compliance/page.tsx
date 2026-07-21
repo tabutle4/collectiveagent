@@ -698,6 +698,7 @@ export default function AdminCompliancePage() {
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Flyer</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Closing</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Compliance</th>
+                <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Post Closing</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Property / Client</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Type</th>
@@ -748,6 +749,14 @@ export default function AdminCompliancePage() {
                         {r.cda_sent && <span className="text-xs text-luxury-gray-3">CDA sent</span>}
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1 items-start">
+                        {statusBadge(r.post_closing_status || 'not_started')}
+                        {r.post_closing_completed_at && r.post_closing_status === 'complete' && (
+                          <span className="text-xs text-luxury-gray-3">{fmtDate(r.post_closing_completed_at)}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {r.agent_name}
                       {r.side && <span className="block text-luxury-gray-3 capitalize">{r.side}</span>}
@@ -791,7 +800,7 @@ export default function AdminCompliancePage() {
 
                   {linkPanelId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={9} className="px-5 py-4">
+                      <td colSpan={10} className="px-5 py-4">
                         <div className="space-y-3 max-w-xl">
                           <p className="text-xs font-semibold text-luxury-gray-1">
                             {r.transaction_id
@@ -879,7 +888,7 @@ export default function AdminCompliancePage() {
 
                   {expandedId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={9} className="px-5 py-4">
+                      <td colSpan={10} className="px-5 py-4">
                         <div className="space-y-4">
 
                           <div className="flex items-center gap-3 flex-wrap">
