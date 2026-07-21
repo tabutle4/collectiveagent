@@ -5,6 +5,21 @@ import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 
 export const dynamic = 'force-dynamic'
 
+// Fetch rows whose id is in a large list, in small chunks. Avoids both the
+// 1,000-row query cap and the oversized-request error a giant .in() list throws
+// once there are many deals.
+async function fetchByIds(table: string, cols: string, idColumn: string, ids: string[]) {
+  const rows: any[] = []
+  const CHUNK = 200
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from(table).select(cols).in(idColumn, ids.slice(i, i + CHUNK))
+    if (error) throw error
+    if (data) rows.push(...data)
+  }
+  return rows
+}
+
 // GET /api/admin/compliance
 // Leah's compliance tracker. Compliance is per side: each row is one compliance
 // submission (one agent, one side of a deal). The submission holds the truth:
@@ -56,23 +71,25 @@ export async function GET(request: NextRequest) {
     const txnIds = Array.from(new Set(rows.map((r: any) => r.transaction_id).filter(Boolean)))
     const txnMap: Record<string, any> = {}
     if (txnIds.length) {
-      const txns = await fetchAllRows<any>(
+      const txns = await fetchByIds(
         'transactions',
         'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date',
-        { filters: [{ type: 'in', column: 'id', value: txnIds }] }
+        'id',
+        txnIds
       )
-      for (const t of txns || []) txnMap[t.id] = t
-    }  
+      for (const t of txns) txnMap[t.id] = t
+    }
     // Batch: post closing compliance, one row per transaction.
     const postClosingMap: Record<string, any> = {}
     if (txnIds.length) {
-      const pcRows = await fetchAllRows<any>(
+      const pcRows = await fetchByIds(
         'transaction_post_closing',
         'transaction_id, status, completed_at, notes',
-        { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
+        'transaction_id',
+        txnIds
       )
-      for (const p of pcRows || []) postClosingMap[p.transaction_id] = p
-    } 
+      for (const p of pcRows) postClosingMap[p.transaction_id] = p
+    }
     // Batch: flyers.
     // A deal can carry several flyers (Just Listed, Under Contract, Just Sold).
     // The compliance tracker is about the COMPLIANCE flyer, so prefer
