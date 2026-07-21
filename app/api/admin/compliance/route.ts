@@ -62,6 +62,16 @@ export async function GET(request: NextRequest) {
       for (const t of txns || []) txnMap[t.id] = t
     }
 
+    // Batch: post closing compliance, one row per transaction.
+    const postClosingMap: Record<string, any> = {}
+    if (txnIds.length) {
+      const { data: pcRows } = await supabaseAdmin
+        .from('transaction_post_closing')
+        .select('transaction_id, status, completed_at, notes')
+        .in('transaction_id', txnIds)
+      for (const p of pcRows || []) postClosingMap[p.transaction_id] = p
+    }
+
     // Batch: flyers.
     // A deal can carry several flyers (Just Listed, Under Contract, Just Sold).
     // The compliance tracker is about the COMPLIANCE flyer, so prefer
@@ -147,6 +157,7 @@ export async function GET(request: NextRequest) {
         ...(r.transaction_id ? rejectedShared[r.transaction_id] || [] : []),
       ]
       const recheck = r.transaction_id ? recheckByTxn[r.transaction_id] || null : null
+      const postClosing = r.transaction_id ? postClosingMap[r.transaction_id] || null : null
       return {
         id: r.id,
         transaction_id: r.transaction_id,
@@ -180,6 +191,10 @@ export async function GET(request: NextRequest) {
         closing_date: d.closing_or_movein_date || txn?.closing_date || txn?.move_in_date || null,
         transaction_type: txn?.transaction_type || null,
         is_locked: txn?.is_locked || false,
+        // Post closing compliance, tracked per deal
+        post_closing_status: postClosing?.status || 'not_started',
+        post_closing_completed_at: postClosing?.completed_at || null,
+        post_closing_notes: postClosing?.notes || null,
         // The full form responses for the expandable detail
         form_data: d,
       }

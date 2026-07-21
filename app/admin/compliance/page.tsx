@@ -13,6 +13,9 @@ interface TrackerRow {
   submitted_at: string
   side: string | null
   compliance_status: string
+  post_closing_status: string
+  post_closing_completed_at: string | null
+  post_closing_notes: string | null
   missing_notes: string | null
   completed_at: string | null
   paid: boolean
@@ -32,6 +35,15 @@ interface TrackerRow {
 
 const STATUS_OPTIONS = [
   { value: 'submitted', label: 'Submitted' },
+  { value: 'in_review', label: 'In review' },
+  { value: 'complete', label: 'Complete' },
+  { value: 'incomplete', label: 'Incomplete' },
+]
+
+// Post closing compliance is tracked per deal and starts before anyone has
+// looked at it, so it carries a not-started state the pre-closing list does not.
+const POST_CLOSING_STATUS_OPTIONS = [
+  { value: 'not_started', label: 'Not started' },
   { value: 'in_review', label: 'In review' },
   { value: 'complete', label: 'Complete' },
   { value: 'incomplete', label: 'Incomplete' },
@@ -161,6 +173,10 @@ export default function AdminCompliancePage() {
   const [editDate, setEditDate] = useState<string>('')
   const [editNotes, setEditNotes] = useState<string>('')
   const [savingStatus, setSavingStatus] = useState(false)
+  const [pcStatus, setPcStatus] = useState<string>('')
+  const [pcDate, setPcDate] = useState<string>('')
+  const [pcNotes, setPcNotes] = useState<string>('')
+  const [savingPc, setSavingPc] = useState(false)
 
   // Flyer actions
   const [generatingFlyer, setGeneratingFlyer] = useState<string | null>(null)
@@ -231,6 +247,34 @@ export default function AdminCompliancePage() {
       r.missing_notes ||
       r.missing_items.map(m => `${m.name}${m.notes ? `: ${m.notes}` : ''}`).join('\n')
     )
+    setPcStatus(r.post_closing_status || 'not_started')
+    setPcDate(r.post_closing_completed_at ? r.post_closing_completed_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
+    setPcNotes(r.post_closing_notes || '')
+  }
+
+  const savePostClosing = async (r: TrackerRow) => {
+    if (!r.transaction_id) { setError('Link this submission to a transaction before tracking post closing compliance.'); return }
+    setSavingPc(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-post-closing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_id: r.transaction_id,
+          status: pcStatus,
+          completed_at: pcStatus === 'complete' && pcDate ? new Date(`${pcDate}T12:00:00`).toISOString() : undefined,
+          notes: pcStatus === 'incomplete' ? pcNotes : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not save post closing status')
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSavingPc(false)
+    }
   }
 
   const saveStatus = async (r: TrackerRow) => {
@@ -909,6 +953,65 @@ export default function AdminCompliancePage() {
                             {r.completed_at && r.compliance_status === 'complete' && (
                               <span className="text-[11px] text-luxury-gray-3 pb-2">
                                 Completed {fmtDate(r.completed_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Post closing compliance: tracked per deal, same shape as above */}
+                          <div
+                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div>
+                              <label className="field-label block mb-1">Post closing compliance</label>
+                              <select
+                                value={pcStatus}
+                                onChange={e => setPcStatus(e.target.value)}
+                                className="select-luxury text-xs"
+                              >
+                                {POST_CLOSING_STATUS_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            {pcStatus === 'complete' && (
+                              <div>
+                                <label className="field-label block mb-1">Date completed</label>
+                                <input
+                                  type="date"
+                                  value={pcDate}
+                                  onChange={e => setPcDate(e.target.value)}
+                                  className="input-luxury text-xs"
+                                />
+                              </div>
+                            )}
+                            {pcStatus === 'incomplete' && (
+                              <div className="flex-1 min-w-[240px]">
+                                <label className="field-label block mb-1">Missing / incomplete items</label>
+                                <textarea
+                                  value={pcNotes}
+                                  onChange={e => setPcNotes(e.target.value)}
+                                  rows={2}
+                                  className="input-luxury text-xs w-full resize-none"
+                                  placeholder="Missing: Final Settlement Statement, Survey"
+                                />
+                              </div>
+                            )}
+                            <button
+                              onClick={() => savePostClosing(r)}
+                              disabled={savingPc || !r.transaction_id}
+                              className="btn btn-primary text-xs disabled:opacity-50"
+                            >
+                              {savingPc ? 'Saving...' : 'Save'}
+                            </button>
+                            {!r.transaction_id && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Link a transaction first
+                              </span>
+                            )}
+                            {r.post_closing_completed_at && r.post_closing_status === 'complete' && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Completed {fmtDate(r.post_closing_completed_at)}
                               </span>
                             )}
                           </div>
