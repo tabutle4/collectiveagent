@@ -109,12 +109,15 @@ export default function CheckFieldsForm({ value, onChange }: Props) {
         </div>
         <div>
           <label className="field-label">Compliance Complete</label>
-          <input
-            type="date"
-            className="input-luxury text-xs"
-            value={value.compliance_complete_date || ''}
-            onChange={e => onChange('compliance_complete_date', e.target.value)}
-          />
+          {/* Read only: the compliance page owns this date. It is written when
+              a deal's compliance is marked complete there, and cleared when it
+              is reopened, so the pay-by deadline always matches the sign-off. */}
+          <p className="text-xs text-luxury-gray-1 py-2">
+            {value.compliance_complete_date
+              ? new Date(value.compliance_complete_date + 'T12:00:00').toLocaleDateString('en-US')
+              : '-'}
+          </p>
+          <p className="text-[11px] text-luxury-gray-3">Set on the compliance page</p>
         </div>
         <div>
           <label className="field-label">Brokerage Amount</label>
@@ -164,15 +167,13 @@ export default function CheckFieldsForm({ value, onChange }: Props) {
         </div>
         <div>
           <label className="field-label">Compliance Status</label>
-          <select
-            className="select-luxury text-xs"
-            value={value.compliance_status || 'not_submitted'}
-            onChange={e => onChange('compliance_status', e.target.value)}
-          >
-            {COMPLIANCE_STATUS_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          {/* Read only: the compliance page owns this status. */}
+          <p className="text-xs text-luxury-gray-1 py-2">
+            {COMPLIANCE_STATUS_OPTIONS.find(o => o.value === (value.compliance_status || 'not_submitted'))?.label
+              || value.compliance_status
+              || 'Not submitted'}
+          </p>
+          <p className="text-[11px] text-luxury-gray-3">Set on the compliance page</p>
         </div>
       </div>
 

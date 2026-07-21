@@ -292,7 +292,11 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
     try {
       const cid = await ensureCheck()
       if (!cid) throw new Error('No check to save')
-      const { compliance_status, ...checkUpdates } = fields
+      // compliance_status and compliance_complete_date are owned by the
+      // compliance page, so they are displayed read only here and never
+      // written back from this modal. Writing them would overwrite whatever
+      // Leah set while this modal was open.
+      const { compliance_status, compliance_complete_date, ...checkUpdates } = fields
       const res = await fetch(`/api/admin/transactions/${selectedTxn.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -303,13 +307,6 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || 'Failed to save check')
-      }
-      if (compliance_status) {
-        await fetch(`/api/admin/transactions/${selectedTxn.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update_transaction', updates: { compliance_status } }),
-        })
       }
 
       // Non-base checks fire the same actions the transaction page uses.
