@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         { filters: [{ type: 'in', column: 'id', value: txnIds }] }
       )
       for (const t of txns || []) txnMap[t.id] = t
-
+    }  
     // Batch: post closing compliance, one row per transaction.
     const postClosingMap: Record<string, any> = {}
     if (txnIds.length) {
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
       )
       for (const p of pcRows || []) postClosingMap[p.transaction_id] = p
-
+    } 
     // Batch: flyers.
     // A deal can carry several flyers (Just Listed, Under Contract, Just Sold).
     // The compliance tracker is about the COMPLIANCE flyer, so prefer
