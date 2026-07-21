@@ -12,6 +12,20 @@ function isLeaseType(t: string | null): boolean {
   return isLeaseTransactionType(t)
 }
 
+// Pay-by date: 10 business days after the later of the check being received
+// and compliance being complete. Same rule as the transaction detail page's
+// checks and payouts tab, so both surfaces always agree.
+function addBusinessDays(date: Date, days: number): Date {
+  const d = new Date(date)
+  let added = 0
+  while (added < days) {
+    d.setDate(d.getDate() + 1)
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) added++
+  }
+  return d
+}
+
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -184,6 +198,31 @@ export async function GET(request: NextRequest) {
     }
     const roleOrder = (r: string) => ROLE_PRIORITY[r] ?? 99
 
+    // Pay-by per transaction. The detail page takes the latest received_date
+    // and the latest compliance_complete_date across every check on the deal,
+    // then adds 10 business days to whichever is later. Both dates must exist.
+    // Standalone checks (no transaction) are keyed by their own check id.
+    const payByKey = (c: any) => c.transaction_id || `check:${c.id}`
+    const dateSpan: Record<string, { received: Date | null; compliance: Date | null }> = {}
+    for (const c of allChecks) {
+      const k = payByKey(c)
+      if (!dateSpan[k]) dateSpan[k] = { received: null, compliance: null }
+      if (c.received_date) {
+        const d = new Date(c.received_date)
+        if (!dateSpan[k].received || d > (dateSpan[k].received as Date)) dateSpan[k].received = d
+      }
+      if (c.compliance_complete_date) {
+        const d = new Date(c.compliance_complete_date)
+        if (!dateSpan[k].compliance || d > (dateSpan[k].compliance as Date)) dateSpan[k].compliance = d
+      }
+    }
+    const payByDateFor: Record<string, string | null> = {}
+    for (const [k, span] of Object.entries(dateSpan)) {
+      if (!span.received || !span.compliance) { payByDateFor[k] = null; continue }
+      const base = span.compliance > span.received ? span.compliance : span.received
+      payByDateFor[k] = addBusinessDays(base, 10).toISOString().split('T')[0]
+    }
+
     // Assemble rows
     const rows = allChecks.map(check => {
       const txn = check.transaction_id ? txnMap[check.transaction_id] : null
@@ -266,6 +305,7 @@ export async function GET(request: NextRequest) {
         standalone_agent: standaloneAgentName,
         cleared_date: check.cleared_date,
         received_date: check.received_date,
+        pay_by_date: payByDateFor[check.transaction_id || `check:${check.id}`] || null,
         compliance_status: complianceStatus,
         crc_transferred: check.crc_transferred || false,
         agents_paid: check.agents_paid || false,

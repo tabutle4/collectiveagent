@@ -389,7 +389,7 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
 
 // Section component - cards on mobile, scrollable table on desktop
 
-type SortKey = 'date' | 'compliance' | null
+type SortKey = 'date' | 'compliance' | 'pay_by' | null
 type SortDir = 'asc' | 'desc'
 
 function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
@@ -411,6 +411,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
     let av = '', bv = ''
     if (sortKey === 'date') { av = a.cleared_date || a.received_date || ''; bv = b.cleared_date || b.received_date || '' }
     else if (sortKey === 'compliance') { av = a.compliance_status || ''; bv = b.compliance_status || '' }
+    else if (sortKey === 'pay_by') { av = a.pay_by_date || '9999-12-31'; bv = b.pay_by_date || '9999-12-31' }
     return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
   })
 
@@ -484,7 +485,12 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                   >
                     Compliance {sortKey === 'compliance' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
                   </th>
-                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Pay By</th>
+                  <th
+                    className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left cursor-pointer select-none hover:text-luxury-gray-1"
+                    onClick={() => toggleSort('pay_by')}
+                  >
+                    Pay By {sortKey === 'pay_by' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                  </th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Transferred</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
                 </tr>
