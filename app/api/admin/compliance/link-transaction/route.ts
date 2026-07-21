@@ -222,11 +222,35 @@ export async function POST(request: NextRequest) {
       if (txnErr || !newTxn) throw (txnErr || new Error('Failed to create transaction'))
 
       // Attach the submitting agent as an internal agent on the new transaction.
+      // Stamp the full canonical field set so the row is complete before the
+      // cascade below runs: side lets autoCascadeTransaction resolve the right
+      // side commission as basis, and plan / units / counts_toward_progress
+      // mirror app/api/transactions/route.ts. Side is derived from the
+      // submission's transaction_type the same way the canonical route derives
+      // it (null when the type carries no side, which the cascade tolerates).
       if (sub.agent_id) {
+        const linkAgentSide =
+          rawType.includes('landlord') ? 'landlord'
+          : rawType.includes('seller') ? 'seller'
+          : rawType.includes('tenant') ? 'tenant'
+          : rawType.includes('buyer') ? 'buyer'
+          : null
+        const { data: linkAgentUser } = await supabaseAdmin
+          .from('users')
+          .select('commission_plan, lease_commission_plan')
+          .eq('id', sub.agent_id)
+          .single()
+        const linkCommissionPlan = isLease
+          ? (linkAgentUser?.lease_commission_plan || linkAgentUser?.commission_plan || '')
+          : (linkAgentUser?.commission_plan || '')
         await supabaseAdmin.from('transaction_internal_agents').insert({
           transaction_id: newTxn.id,
           agent_id: sub.agent_id,
           agent_role: 'primary_agent',
+          side: linkAgentSide,
+          commission_plan: linkCommissionPlan,
+          counts_toward_progress: !isLease,
+          units: 1,
           payment_status: 'pending',
           funding_source: 'crc',
           uses_canonical_math: true,

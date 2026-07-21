@@ -6,6 +6,8 @@ import { getServiceConfig } from '@/lib/db/service-config'
 import { createListingFolder } from '@/lib/microsoft-graph'
 import { sendWelcomeEmail } from '@/lib/email/send'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
+import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
@@ -132,12 +134,32 @@ async function findOrCreateListingTransaction(
       return null
     }
 
-    // 3. Listing agent row.
+    // 3. Listing agent row. Carries the full canonical field set so this is a
+    // real commission-bearing TIA, not a stub: uses_canonical_math drives the
+    // auto-calc cascade once a commission basis exists, and side / plan / units
+    // / counts_toward_progress mirror what app/api/transactions/route.ts stamps.
+    // The plan is read with the admin client because the listing agent can
+    // differ from the caller and RLS on users would block a session-scoped read
+    // (same reason the canonical create route uses supabaseAdmin here).
+    const { data: listingAgentUser } = await supabaseAdmin
+      .from('users')
+      .select('commission_plan, lease_commission_plan')
+      .eq('id', agentId)
+      .single()
+    const listingCommissionPlan = isLease
+      ? (listingAgentUser?.lease_commission_plan || listingAgentUser?.commission_plan || '')
+      : (listingAgentUser?.commission_plan || '')
     await supabase.from('transaction_internal_agents').insert({
       transaction_id: newTxn.id,
       agent_id: agentId,
       agent_role: 'listing_agent',
+      side: isLease ? 'landlord' : 'seller',
+      commission_plan: listingCommissionPlan,
+      counts_toward_progress: !isLease,
+      units: 1,
+      funding_source: 'crc',
       payment_status: 'pending',
+      uses_canonical_math: true,
       updated_at: new Date().toISOString(),
     })
 
@@ -153,6 +175,13 @@ async function findOrCreateListingTransaction(
     }
 
     await createJustListedFlyer(newTxn.id, agentId, body, formType)
+
+    // Run the commission cascade so office_net and the TIA money fields
+    // populate the same way every other create path does. This is a no-op
+    // while the listing has no commission basis yet (autoCascadeTransaction
+    // skips rows whose basis resolves to 0), and takes over automatically the
+    // moment a side commission or gross is entered on the deal.
+    await autoCascadeTransaction(newTxn.id)
 
     return newTxn.id
   } catch (err) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { updateListing } from '@/lib/db/listings'
 import { createClient } from '@/lib/supabase/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_listings')
@@ -67,11 +68,36 @@ export async function POST(request: NextRequest) {
               .update({ agent_id: newAgentId })
               .eq('id', existingAgent.id)
           } else {
+            // New listing_agent row: stamp the full canonical field set so it
+            // is a real commission-bearing TIA (not a stub), matching the
+            // listing create route and app/api/transactions/route.ts. The plan
+            // is read with the admin client because the agent can differ from
+            // the caller and RLS on users would block a session-scoped read.
+            const { data: listingTxn } = await supabase
+              .from('transactions')
+              .select('transaction_type')
+              .eq('id', listing_id)
+              .single()
+            const isLease = listingTxn?.transaction_type === 'lease'
+            const { data: newAgentUser } = await supabaseAdmin
+              .from('users')
+              .select('commission_plan, lease_commission_plan')
+              .eq('id', newAgentId)
+              .single()
+            const listingCommissionPlan = isLease
+              ? (newAgentUser?.lease_commission_plan || newAgentUser?.commission_plan || '')
+              : (newAgentUser?.commission_plan || '')
             await supabase.from('transaction_internal_agents').insert({
               transaction_id: listing_id,
               agent_id: newAgentId,
               agent_role: 'listing_agent',
+              side: isLease ? 'landlord' : 'seller',
+              commission_plan: listingCommissionPlan,
+              counts_toward_progress: !isLease,
+              units: 1,
+              funding_source: 'crc',
               payment_status: 'pending',
+              uses_canonical_math: true,
             })
           }
         }
