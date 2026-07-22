@@ -212,6 +212,9 @@ export async function GET(
         admin_notes: s.admin_notes,
         reviewed_at: s.reviewed_at,
         submitted_at: s.submitted_at,
+        // Full compliance form answers, so the Documents tab can show the request
+        // details inline (read-only) without opening the Compliance Requests page.
+        form_data: s.data || {},
         required_docs: (code && requiredDocsByCode[code]) || requiredDocs,
       }
     })

@@ -42,6 +42,7 @@ import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
 import AgentCardFinancials, { OverridableField } from '@/components/transactions/AgentCardFinancials'
 import { AGENT_ROLE_OPTIONS, SIDE_OPTIONS } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
+import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1489,6 +1490,36 @@ function ComplianceDocumentsTab({
             }`}>{String(side.status || '').replace(/_/g, ' ')}</span>
           </div>
         )}
+      {/* Compliance request details, read-only, rendered from the submission's
+          raw form JSON so the coordinator sees what the agent requested before
+          working the document slots below. */}
+      {side?.form_data && FIELD_GROUPS.some(group => group.fields.some(f => hasValue(side.form_data[f.key]))) && (
+        <div className="container-card">
+          <p className="section-title mb-3">Compliance Request</p>
+          <div className="space-y-3">
+            {FIELD_GROUPS.map(group => {
+              const filled = group.fields.filter(f => hasValue(side.form_data[f.key]))
+              if (filled.length === 0) return null
+              return (
+                <div key={group.title}>
+                  <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wider mb-1.5">{group.title}</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
+                    {filled.map(f => {
+                      const raw = side.form_data[f.key]
+                      return (
+                        <div key={f.key} className={f.key === 'additional_notes' ? 'col-span-2 md:col-span-4' : ''}>
+                          <span className="text-luxury-gray-3 block">{f.label}</span>
+                          <span className="text-luxury-gray-1 break-words">{f.fmt ? f.fmt(raw, side.form_data) : String(raw)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
       {/* Required document slots */}
       {sideRequiredDocs.length > 0 && (
         <div className="container-card">
