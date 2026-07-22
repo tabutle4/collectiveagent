@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 
 // Actions for an unlinked compliance submission on the compliance tracker:
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
       const insertRow: Record<string, any> = {
         property_address: propertyAddress,
         status: 'active',
-        transaction_type: isLease ? 'lease' : 'sale',
+        transaction_type: feeCodeFromRepresenting(d.representing, d.tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
         client_name: (ov.client_name !== undefined ? ov.client_name : d.client_name) || null,
         client_email: d.client_email || null,
         sales_volume: salesVolume,

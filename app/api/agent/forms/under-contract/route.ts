@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
+import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, UNDER_CONTRACT_RULES } from '@/lib/forms/requiredFields'
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
         state: addrParts.state || null,
         zip: addrParts.zip || null,
         status: 'pending',
-        transaction_type: isLease ? 'lease' : 'sale',
+        transaction_type: feeCodeFromRepresenting(representing) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
         representing: representing || null,
         sales_price: isLease ? null : salesPriceNum,
         monthly_rent: isLease ? salesPriceNum : null,

@@ -5,6 +5,7 @@ import { getEmailLayout } from '@/lib/email/layout'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normalizeAddressComponents, buildDisplayAddress } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
+import { feeCodeFromRepresenting, feeCodeFromRetainerType } from '@/lib/transactions/feeCode'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
@@ -190,7 +191,7 @@ export async function POST(request: NextRequest) {
       }
 
       const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-        .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: isLease ? 'lease' : 'sale', submitted_by: agentId, updated_at: now })
+        .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), submitted_by: agentId, updated_at: now })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create retainer transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       const transactionId = newTxn.id
@@ -497,7 +498,7 @@ export async function POST(request: NextRequest) {
           city: addrParts.city || null,
           state: addrParts.state || null,
           zip: addrParts.zip || null,
-          status: 'pending', submitted_by: agentId, transaction_type: isLease ? 'lease' : 'sale', ...txnFields,
+          status: 'pending', submitted_by: agentId, transaction_type: feeCodeFromRepresenting(representing, tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), ...txnFields,
         })
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
@@ -531,7 +532,7 @@ export async function POST(request: NextRequest) {
                 }
               : {}),
             status: 'pending',
-            transaction_type: isLease ? 'lease' : 'sale',
+            transaction_type: feeCodeFromRepresenting(representing, tenant_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
           }
         : {}
       await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)

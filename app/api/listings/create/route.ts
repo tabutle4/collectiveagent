@@ -116,7 +116,7 @@ async function findOrCreateListingTransaction(
         state: body.state || null,
         zip: body.zip || null,
         status,
-        transaction_type: listing.transaction_type || 'sale',
+        transaction_type: isLease ? 'landlord_v2' : 'seller_v2',
         client_name: body.client_names ? formatNameToTitleCase(String(body.client_names).trim()) : null,
         client_email: body.client_email || null,
         client_phone: body.client_phone || null,
