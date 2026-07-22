@@ -240,6 +240,14 @@ export default function AdminCompliancePage() {
   const pendingChecklistCount = rows.filter(r => statusPasses(r) && pendingChecklist(r)).length
   const needsCdaCount = rows.filter(r => statusPasses(r) && needsCda(r)).length
   const needsPayoutCount = rows.filter(r => statusPasses(r) && needsPayout(r)).length
+  // Where the "Work Deal" link lands, per tab: Pending checklist opens the
+  // Check & Payouts tab (where the checklist lives); Needs CDA / Needs payout
+  // open the Commissions tab (where the CDA and payout are worked); All and
+  // Pending compliance open the Documents tab for review.
+  const workTab =
+    tab === 'pending_checklist' ? 'check_payouts'
+    : (tab === 'needs_cda' || tab === 'needs_payout') ? 'commissions'
+    : 'documents'
   const visible = (() => {
     let list = rows.filter(statusPasses)
     if (tab !== 'all') list = list.filter(tabPredicate[tab])
@@ -817,8 +825,8 @@ export default function AdminCompliancePage() {
                       {r.transaction_id ? (
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <a
-                            href={`/admin/transactions/${r.transaction_id}?tab=documents`}
-                            onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=documents`) }}
+                            href={`/admin/transactions/${r.transaction_id}?tab=${workTab}`}
+                            onClick={e => { e.stopPropagation(); e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=${workTab}`) }}
                             className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
                           >
                             Work Deal <ExternalLink size={11} />
