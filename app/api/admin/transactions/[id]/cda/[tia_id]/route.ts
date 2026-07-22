@@ -122,17 +122,23 @@ export async function GET(
     const PRODUCING_ROLES = ['primary_agent', 'listing_agent', 'co_agent']
     const { data: allTiaRowsRaw } = await supabaseAdmin
       .from('transaction_internal_agents')
-      .select('id, agent_id, agent_role, agent_gross, agent_net, btsa_amount, rebate_amount, rebate_type, brokerage_split')
+      .select('id, agent_id, agent_role, agent_gross, agent_net, amount_1099_reportable, btsa_amount, rebate_amount, rebate_type, brokerage_split')
       .eq('transaction_id', id)
     const allTiaRows = (allTiaRowsRaw && allTiaRowsRaw.length > 0) ? allTiaRowsRaw : [tia]
     const agentTiaRows = allTiaRows.filter(r => r.agent_id === tia.agent_id)
     const primaryTiaRow = [...agentTiaRows].sort(
       (a, b) => (CDA_ROLE_PRIORITY[a.agent_role] ?? 9) - (CDA_ROLE_PRIORITY[b.agent_role] ?? 9)
     )[0]
-    // Base rows carry agent_gross; additional co_agent rows carry agent_net.
+    // What the agent is actually disbursed. Base rows pay amount_1099 (the split
+    // AFTER processing/coaching/other fees, BTSA and rebate) - NOT agent_gross,
+    // which is the raw split before fees. Debts are subtracted separately below
+    // and moved to the office line, so we use the pre-debt 1099 here (1099 minus
+    // debts = agent_net). Additional co_agent rows carry their net amount
+    // directly. Fall back to agent_net only if 1099 wasn't stored.
     const rowAgentDisburse = (r: any): number => {
       const g = Number(r.agent_gross || 0)
-      return g > 0 ? g : Number(r.agent_net || 0)
+      if (g <= 0) return Number(r.agent_net || 0)
+      return r.amount_1099_reportable != null ? Number(r.amount_1099_reportable) : Number(r.agent_net || 0)
     }
     const agentDisburseTotal = agentTiaRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
     // Office net = the office side commission minus every producing agent's
