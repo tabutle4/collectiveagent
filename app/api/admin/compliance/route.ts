@@ -166,6 +166,35 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Batch: checklist completeness per transaction. Sales use the 'cda'
+    // checklist, leases use the 'payouts' checklist. Complete = every active
+    // item on the transaction's template has a completion row.
+    const checklistCompleteByTxn: Record<string, boolean> = {}
+    if (txnIds.length) {
+      const templates = await fetchByIds('checklist_templates', 'id, slug', 'slug', ['cda', 'payouts'])
+      const cdaTemplateId = templates.find((t: any) => t.slug === 'cda')?.id || null
+      const payoutTemplateId = templates.find((t: any) => t.slug === 'payouts')?.id || null
+      const { data: itemRows } = await supabaseAdmin
+        .from('checklist_items')
+        .select('id, checklist_template_id')
+        .eq('is_active', true)
+        .in('checklist_template_id', [cdaTemplateId, payoutTemplateId].filter(Boolean))
+      const cdaItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === cdaTemplateId).map((i: any) => i.id)
+      const payoutItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === payoutTemplateId).map((i: any) => i.id)
+      const completions = await fetchByIds('checklist_completions', 'transaction_id, checklist_item_id', 'transaction_id', txnIds)
+      const doneByTxn: Record<string, Set<string>> = {}
+      for (const c of completions) {
+        if (!doneByTxn[c.transaction_id]) doneByTxn[c.transaction_id] = new Set()
+        doneByTxn[c.transaction_id].add(c.checklist_item_id)
+      }
+      for (const t of Object.values(txnMap) as any[]) {
+        const lease = isLeaseTransactionType(t.transaction_type)
+        const required = lease ? payoutItemIds : cdaItemIds
+        const done = doneByTxn[t.id] || new Set<string>()
+        checklistCompleteByTxn[t.id] = required.length > 0 && required.every((iid: string) => done.has(iid))
+      }
+    }
+
     const result = rows.map((r: any) => {
       const txn = txnMap[r.transaction_id] || null
       const flyer = flyerMap[r.transaction_id] || null
@@ -209,6 +238,9 @@ export async function GET(request: NextRequest) {
         closing_date: d.closing_or_movein_date || txn?.closing_date || txn?.move_in_date || null,
         transaction_type: txn?.transaction_type || null,
         is_locked: txn?.is_locked || false,
+        is_lease: isLeaseTransactionType(txn?.transaction_type),
+        checklist_complete: r.transaction_id ? (checklistCompleteByTxn[r.transaction_id] || false) : false,
+        transaction_status: txn?.status || null,
         // Post closing compliance, tracked per deal
         post_closing_status: isLeaseTransactionType(txn?.transaction_type) ? 'complete' : (postClosing?.status || 'not_started'),
         post_closing_completed_at: postClosing?.completed_at || null,

@@ -30,6 +30,9 @@ interface TrackerRow {
   closing_date: string | null
   transaction_type: string | null
   is_locked: boolean
+  is_lease: boolean
+  checklist_complete: boolean
+  transaction_status: string | null
   form_data: Record<string, any>
 }
 
@@ -157,7 +160,8 @@ export default function AdminCompliancePage() {
   const [error, setError] = useState('')
   const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
-  const [needsWorkOnly, setNeedsWorkOnly] = useState(false)
+  const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda' | 'needs_payout'>('all')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'closed' | 'cancelled'>('active')
   const [search, setSearch] = useState('')
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
   const [sortBy, setSortBy] = useState<'recent' | 'closing' | 'agent' | 'status'>('recent')
@@ -208,10 +212,33 @@ export default function AdminCompliancePage() {
 
   useEffect(() => { loadRows() }, [loadRows])
 
-  const needsWork = (r: TrackerRow) => r.compliance_status !== 'complete'
-  const needsWorkCount = rows.filter(needsWork).length
+  const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
+  const pendingChecklist = (r: TrackerRow) => !r.checklist_complete
+  const needsCda = (r: TrackerRow) => !r.is_lease && r.checklist_complete && !r.cda_sent
+  const needsPayout = (r: TrackerRow) => r.is_lease && r.checklist_complete && !r.paid
+  const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
+    pending_compliance: pendingCompliance,
+    pending_checklist: pendingChecklist,
+    needs_cda: needsCda,
+    needs_payout: needsPayout,
+  }
+  // Transaction status filter. Both "cancelled" and "canceled" spellings exist
+  // in the data, so the active view excludes all of closed/cancelled/canceled.
+  const CLOSED_CANCELLED = ['closed', 'cancelled', 'canceled']
+  const txnStatus = (r: TrackerRow) => (r.transaction_status || '').toLowerCase()
+  const statusPasses = (r: TrackerRow) => {
+    if (statusFilter === 'all') return true
+    if (statusFilter === 'closed') return txnStatus(r) === 'closed'
+    if (statusFilter === 'cancelled') return txnStatus(r) === 'cancelled' || txnStatus(r) === 'canceled'
+    return !CLOSED_CANCELLED.includes(txnStatus(r)) // 'active' (default): all except closed/cancelled
+  }
+  const pendingComplianceCount = rows.filter(r => statusPasses(r) && pendingCompliance(r)).length
+  const pendingChecklistCount = rows.filter(r => statusPasses(r) && pendingChecklist(r)).length
+  const needsCdaCount = rows.filter(r => statusPasses(r) && needsCda(r)).length
+  const needsPayoutCount = rows.filter(r => statusPasses(r) && needsPayout(r)).length
   const visible = (() => {
-    let list = needsWorkOnly ? rows.filter(needsWork) : [...rows]
+    let list = rows.filter(statusPasses)
+    if (tab !== 'all') list = list.filter(tabPredicate[tab])
 
     if (linkFilter === 'linked') list = list.filter(r => r.transaction_id)
     else if (linkFilter === 'unlinked') list = list.filter(r => !r.transaction_id)
@@ -609,26 +636,35 @@ export default function AdminCompliancePage() {
       )}
 
       <div className="flex gap-2 mb-6 flex-wrap items-center">
-        <button
-          onClick={() => setNeedsWorkOnly(false)}
-          className={`text-xs px-3 py-1.5 rounded border transition-colors ${
-            !needsWorkOnly
-              ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
-              : 'bg-white text-luxury-gray-2 border-luxury-gray-5 hover:border-luxury-gray-3'
-          }`}
+        {([
+          { key: 'all', label: `All (${rows.filter(statusPasses).length})` },
+          { key: 'pending_compliance', label: `Pending compliance (${pendingComplianceCount})` },
+          { key: 'pending_checklist', label: `Pending checklist (${pendingChecklistCount})` },
+          { key: 'needs_cda', label: `Needs CDA (${needsCdaCount})` },
+          { key: 'needs_payout', label: `Needs payout (${needsPayoutCount})` },
+        ] as const).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+              tab === t.key
+                ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
+                : 'bg-white text-luxury-gray-2 border-luxury-gray-5 hover:border-luxury-gray-3'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+          className="select-luxury text-xs py-1.5"
         >
-          All ({rows.length})
-        </button>
-        <button
-          onClick={() => setNeedsWorkOnly(true)}
-          className={`text-xs px-3 py-1.5 rounded border transition-colors ${
-            needsWorkOnly
-              ? 'bg-red-600 text-white border-red-600'
-              : 'bg-white text-red-600 border-red-200 hover:border-red-400'
-          }`}
-        >
-          Needs work ({needsWorkCount})
-        </button>
+          <option value="active">Active deals</option>
+          <option value="all">All statuses</option>
+          <option value="closed">Closed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
 
         <div className="relative flex-1 min-w-[200px]">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
@@ -685,7 +721,7 @@ export default function AdminCompliancePage() {
       ) : visible.length === 0 ? (
         <div className="container-card text-center py-12">
           <p className="text-sm text-luxury-gray-3">
-            {needsWorkOnly ? 'Nothing needs work right now.' : 'No compliance submissions yet.'}
+            {tab !== 'all' || statusFilter !== 'active' ? 'Nothing in this view right now.' : 'No compliance submissions yet.'}
           </p>
         </div>
       ) : (
