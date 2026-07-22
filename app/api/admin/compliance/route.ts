@@ -8,12 +8,13 @@ export const dynamic = 'force-dynamic'
 // Fetch rows whose id is in a large list, in small chunks. Avoids both the
 // 1,000-row query cap and the oversized-request error a giant .in() list throws
 // once there are many deals.
-async function fetchByIds(table: string, cols: string, idColumn: string, ids: string[]) {
+async function fetchByIds(table: string, cols: string, idColumn: string, ids: string[], extra?: (q: any) => any) {
   const rows: any[] = []
   const CHUNK = 200
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const { data, error } = await supabaseAdmin
-      .from(table).select(cols).in(idColumn, ids.slice(i, i + CHUNK))
+    let q: any = supabaseAdmin.from(table).select(cols).in(idColumn, ids.slice(i, i + CHUNK))
+    if (extra) q = extra(q)
+    const { data, error } = await q
     if (error) throw error
     if (data) rows.push(...data)
   }
@@ -58,10 +59,12 @@ export async function GET(request: NextRequest) {
     const agentIds = Array.from(new Set(rows.map((r: any) => r.agent_id).filter(Boolean)))
     const agentMap: Record<string, string> = {}
     if (agentIds.length) {
-      const { data: agents } = await supabaseAdmin
-        .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
-        .in('id', agentIds)
+      const agents = await fetchByIds(
+        'users',
+        'id, first_name, last_name, preferred_first_name, preferred_last_name',
+        'id',
+        agentIds
+      )
       for (const a of agents || []) {
         agentMap[a.id] = `${a.preferred_first_name || a.first_name || ''} ${a.preferred_last_name || a.last_name || ''}`.trim()
       }
@@ -99,11 +102,13 @@ export async function GET(request: NextRequest) {
     const COMPLIANCE_FLYER_TYPES = ['just_sold', 'just_leased']
     const flyerMap: Record<string, any> = {}
     if (txnIds.length) {
-      const { data: flyers } = await supabaseAdmin
-        .from('transaction_flyers')
-        .select('id, transaction_id, flyer_type, status, photo_url, downloaded_at, sent_date')
-        .in('transaction_id', txnIds)
-        .order('created_at', { ascending: false })
+      const flyers = await fetchByIds(
+        'transaction_flyers',
+        'id, transaction_id, flyer_type, status, photo_url, downloaded_at, sent_date',
+        'transaction_id',
+        txnIds,
+        q => q.order('created_at', { ascending: false })
+      )
 
       const fallbackMap: Record<string, any> = {}
       for (const f of flyers || []) {
@@ -123,20 +128,19 @@ export async function GET(request: NextRequest) {
     const rejectedBySub: Record<string, { name: string; notes: string | null }[]> = {}
     const rejectedShared: Record<string, { name: string; notes: string | null }[]> = {}
     if (txnIds.length) {
-      const { data: rejectedDocs } = await supabaseAdmin
-        .from('transaction_documents')
-        .select('transaction_id, submission_id, file_name, compliance_notes, required_document_id')
-        .in('transaction_id', txnIds)
-        .eq('compliance_status', 'rejected')
+      const rejectedDocs = await fetchByIds(
+        'transaction_documents',
+        'transaction_id, submission_id, file_name, compliance_notes, required_document_id',
+        'transaction_id',
+        txnIds,
+        q => q.eq('compliance_status', 'rejected')
+      )
       const rdIds = Array.from(
         new Set((rejectedDocs || []).filter((d: any) => d.required_document_id).map((d: any) => d.required_document_id))
       )
       const rdMap: Record<string, string> = {}
       if (rdIds.length) {
-        const { data: rds } = await supabaseAdmin
-          .from('required_documents')
-          .select('id, name')
-          .in('id', rdIds)
+        const rds = await fetchByIds('required_documents', 'id, name', 'id', rdIds)
         for (const rd of rds || []) rdMap[rd.id] = rd.name
       }
       for (const d of rejectedDocs || []) {
@@ -155,10 +159,12 @@ export async function GET(request: NextRequest) {
     // Batch: paid per agent per deal (the side's own agent got paid)
     const paidByTxnAgent: Record<string, boolean> = {}
     if (txnIds.length) {
-      const { data: internalAgents } = await supabaseAdmin
-        .from('transaction_internal_agents')
-        .select('transaction_id, agent_id, payment_status')
-        .in('transaction_id', txnIds)
+      const internalAgents = await fetchByIds(
+        'transaction_internal_agents',
+        'transaction_id, agent_id, payment_status',
+        'transaction_id',
+        txnIds
+      )
       for (const ia of internalAgents || []) {
         if (ia.payment_status === 'paid') {
           paidByTxnAgent[`${ia.transaction_id}:${ia.agent_id}`] = true
@@ -174,11 +180,13 @@ export async function GET(request: NextRequest) {
       const templates = await fetchByIds('checklist_templates', 'id, slug', 'slug', ['cda', 'payouts'])
       const cdaTemplateId = templates.find((t: any) => t.slug === 'cda')?.id || null
       const payoutTemplateId = templates.find((t: any) => t.slug === 'payouts')?.id || null
-      const { data: itemRows } = await supabaseAdmin
-        .from('checklist_items')
-        .select('id, checklist_template_id')
-        .eq('is_active', true)
-        .in('checklist_template_id', [cdaTemplateId, payoutTemplateId].filter(Boolean))
+      const itemRows = await fetchByIds(
+        'checklist_items',
+        'id, checklist_template_id',
+        'checklist_template_id',
+        [cdaTemplateId, payoutTemplateId].filter(Boolean) as string[],
+        q => q.eq('is_active', true)
+      )
       const cdaItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === cdaTemplateId).map((i: any) => i.id)
       const payoutItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === payoutTemplateId).map((i: any) => i.id)
       const completions = await fetchByIds('checklist_completions', 'transaction_id, checklist_item_id', 'transaction_id', txnIds)
