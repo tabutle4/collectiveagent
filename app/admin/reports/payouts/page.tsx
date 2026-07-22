@@ -39,6 +39,7 @@ interface PayoutRow {
   cleared_date: string | null
   received_date: string | null
   compliance_status: string
+  checklist_complete: boolean
   pay_by_date: string | null
   crc_transferred: boolean
   agents_paid: boolean
@@ -264,7 +265,7 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
         </div>
       )}
 
-      {/* Footer - date, compliance, pay by, transferred */}
+      {/* Footer - date, compliance, pay by, checklist */}
       <div className="border-t border-luxury-gray-5/40 px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           {dateVal && (
@@ -275,8 +276,8 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
             <span className="text-xs text-luxury-gray-3">pay by {fmtDate(row.pay_by_date)}</span>
           )}
         </div>
-        <span className={`text-xs font-medium flex-shrink-0 ${row.crc_transferred ? 'text-green-700' : 'text-red-400'}`}>
-          {row.crc_transferred ? '✓ transferred' : 'not transferred'}
+        <span className={`text-xs font-medium flex-shrink-0 ${row.checklist_complete ? 'text-green-700' : 'text-luxury-gray-3'}`}>
+          {row.checklist_complete ? '✓ checklist' : 'checklist pending'}
         </span>
       </div>
 
@@ -376,8 +377,8 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(row.pay_by_date)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
-        <span className={`font-medium ${row.crc_transferred ? 'text-green-700' : 'text-red-500'}`}>
-          {row.crc_transferred ? 'yes' : 'no'}
+        <span className={`font-medium ${row.checklist_complete ? 'text-green-700' : 'text-luxury-gray-3'}`}>
+          {row.checklist_complete ? '✓ done' : 'pending'}
         </span>
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[130px]">
@@ -493,7 +494,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                   >
                     Pay By {sortKey === 'pay_by' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
                   </th>
-                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Transferred</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Checklist</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
                 </tr>
               </thead>

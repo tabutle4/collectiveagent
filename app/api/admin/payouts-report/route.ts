@@ -175,6 +175,42 @@ export async function GET(request: NextRequest) {
     // Build txn lookup
     const txnMap = Object.fromEntries(transactions.map(t => [t.id, t]))
 
+    // Checklist completeness per transaction, for the payouts report indicator.
+    // Sales use the 'cda' checklist, leases use the 'payouts' checklist; complete
+    // = every active item on the transaction's template has a completion row.
+    // Same rule the compliance tracker uses, so both surfaces agree.
+    const checklistCompleteByTxn: Record<string, boolean> = {}
+    if (txnIds.length) {
+      const { data: templates } = await supabaseAdmin
+        .from('checklist_templates')
+        .select('id, slug')
+        .in('slug', ['cda', 'payouts'])
+      const cdaTemplateId = (templates || []).find((t: any) => t.slug === 'cda')?.id || null
+      const payoutTemplateId = (templates || []).find((t: any) => t.slug === 'payouts')?.id || null
+      const { data: itemRows } = await supabaseAdmin
+        .from('checklist_items')
+        .select('id, checklist_template_id')
+        .eq('is_active', true)
+        .in('checklist_template_id', [cdaTemplateId, payoutTemplateId].filter(Boolean))
+      const cdaItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === cdaTemplateId).map((i: any) => i.id)
+      const payoutItemIds = (itemRows || []).filter((i: any) => i.checklist_template_id === payoutTemplateId).map((i: any) => i.id)
+      const completions = await fetchAllRows(
+        'checklist_completions',
+        'transaction_id, checklist_item_id',
+        { filters: [{ type: 'in', column: 'transaction_id', value: txnIds }] }
+      )
+      const doneByTxn: Record<string, Set<string>> = {}
+      for (const c of completions as any[]) {
+        if (!doneByTxn[c.transaction_id]) doneByTxn[c.transaction_id] = new Set()
+        doneByTxn[c.transaction_id].add(c.checklist_item_id)
+      }
+      for (const t of transactions) {
+        const required = isLeaseType(t.transaction_type) ? payoutItemIds : cdaItemIds
+        const done = doneByTxn[t.id] || new Set<string>()
+        checklistCompleteByTxn[t.id] = required.length > 0 && required.every((iid: string) => done.has(iid))
+      }
+    }
+
     // Multi-check support: office net and payouts belong to the transaction, not
     // to each check. Pick one anchor check per transaction (earliest received,
     // then lowest id) to carry them. Sibling checks of the same transaction show
@@ -315,6 +351,7 @@ export async function GET(request: NextRequest) {
           ? (payByDateFor[check.transaction_id || `check:${check.id}`] || null)
           : null,
         compliance_status: complianceStatus,
+        checklist_complete: check.transaction_id ? (checklistCompleteByTxn[check.transaction_id] || false) : false,
         crc_transferred: check.crc_transferred || false,
         agents_paid: check.agents_paid || false,
         status: check.status,
