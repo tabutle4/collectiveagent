@@ -209,7 +209,10 @@ const tcNavEntries: NavEntry[] = [
     group: {
       key: 'financials',
       label: 'Financials',
-      items: [{ href: '/admin/billing', label: 'Billing', icon: Wallet }],
+      items: [
+        { href: '/admin/billing', label: 'Billing', icon: Wallet },
+        { href: '/admin/reports/payouts', label: 'Payouts Report', icon: BarChart3 },
+      ],
     },
   },
   {

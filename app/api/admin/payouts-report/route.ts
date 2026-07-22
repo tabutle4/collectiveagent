@@ -38,7 +38,9 @@ function periodLabel(month: number | null, year: number | null): string {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requirePermission(request, 'can_manage_checks')
+  // Reading the payouts report is view-only, so it needs can_view_checks (which
+  // TC holds). Writes below stay on can_manage_checks so viewers cannot edit.
+  const auth = await requirePermission(request, 'can_view_checks')
   if (auth.error) return auth.error
 
   try {
