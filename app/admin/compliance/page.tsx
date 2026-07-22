@@ -55,6 +55,9 @@ const POST_CLOSING_STATUS_OPTIONS = [
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
+const fmtDateTime = (d: string | null) =>
+  d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
+
 const fmtMoney = (v: any) => {
   const n = parseFloat(v)
   if (isNaN(n)) return String(v)
@@ -214,23 +217,24 @@ export default function AdminCompliancePage() {
 
   const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
   const pendingChecklist = (r: TrackerRow) => !r.checklist_complete
-  const needsCda = (r: TrackerRow) => !r.is_lease && r.checklist_complete && !r.cda_sent
-  const needsPayout = (r: TrackerRow) => r.is_lease && r.checklist_complete && !r.paid
+  const needsCda = (r: TrackerRow) => !r.is_lease && r.compliance_status === 'complete' && !r.cda_sent
+  const needsPayout = (r: TrackerRow) => r.compliance_status === 'complete' && !r.paid
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
     needs_cda: needsCda,
     needs_payout: needsPayout,
   }
-  // Transaction status filter. Both "cancelled" and "canceled" spellings exist
-  // in the data, so the active view excludes all of closed/cancelled/canceled.
-  const CLOSED_CANCELLED = ['closed', 'cancelled', 'canceled']
+  // Transaction status filter. "Active deals" = the working set: active or
+  // pending, plus submissions not yet linked to a transaction. Prospect, closed,
+  // and cancelled (either spelling) are hidden unless explicitly chosen.
   const txnStatus = (r: TrackerRow) => (r.transaction_status || '').toLowerCase()
   const statusPasses = (r: TrackerRow) => {
+    const s = txnStatus(r)
     if (statusFilter === 'all') return true
-    if (statusFilter === 'closed') return txnStatus(r) === 'closed'
-    if (statusFilter === 'cancelled') return txnStatus(r) === 'cancelled' || txnStatus(r) === 'canceled'
-    return !CLOSED_CANCELLED.includes(txnStatus(r)) // 'active' (default): all except closed/cancelled
+    if (statusFilter === 'closed') return s === 'closed'
+    if (statusFilter === 'cancelled') return s === 'cancelled' || s === 'canceled'
+    return s === 'active' || s === 'pending' || s === '' // 'active' (default)
   }
   const pendingComplianceCount = rows.filter(r => statusPasses(r) && pendingCompliance(r)).length
   const pendingChecklistCount = rows.filter(r => statusPasses(r) && pendingChecklist(r)).length
@@ -783,6 +787,9 @@ export default function AdminCompliancePage() {
                           </span>
                         )}
                         {r.cda_sent && <span className="text-xs text-luxury-gray-3">CDA sent</span>}
+                        <span className={`text-xs ${r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}`}>
+                          {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -796,6 +803,7 @@ export default function AdminCompliancePage() {
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {r.agent_name}
                       {r.side && <span className="block text-luxury-gray-3 capitalize">{r.side}</span>}
+                      <span className="block text-luxury-gray-3">Submitted {fmtDateTime(r.submitted_at)}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-luxury-gray-1">
                       <span className="block">{r.property_address || '-'}</span>
