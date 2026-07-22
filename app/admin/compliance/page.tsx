@@ -184,6 +184,8 @@ export default function AdminCompliancePage() {
   const [pcDate, setPcDate] = useState<string>('')
   const [pcNotes, setPcNotes] = useState<string>('')
   const [savingPc, setSavingPc] = useState(false)
+  const [editClosingDate, setEditClosingDate] = useState<string>('')
+  const [savingClosing, setSavingClosing] = useState(false)
 
   // Flyer actions
   const [generatingFlyer, setGeneratingFlyer] = useState<string | null>(null)
@@ -289,6 +291,7 @@ export default function AdminCompliancePage() {
     setPcStatus(r.post_closing_status || 'not_started')
     setPcDate(r.post_closing_completed_at ? r.post_closing_completed_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
     setPcNotes(r.post_closing_notes || '')
+    setEditClosingDate(r.closing_date ? r.closing_date.slice(0, 10) : '')
   }
 
   const savePostClosing = async (r: TrackerRow) => {
@@ -337,6 +340,29 @@ export default function AdminCompliancePage() {
       setError(err.message)
     } finally {
       setSavingStatus(false)
+    }
+  }
+
+  const saveClosingDate = async (r: TrackerRow) => {
+    if (!r.transaction_id) { setError('Link this submission to a transaction before setting the closing date.'); return }
+    setSavingClosing(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-closing-date', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submission_id: r.id,
+          closing_date: editClosingDate || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not save closing date')
+      await loadRows()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSavingClosing(false)
     }
   }
 
@@ -562,6 +588,339 @@ export default function AdminCompliancePage() {
     )
   }
 
+  const renderLinkPanel = (r: TrackerRow) => (
+                        <div className="space-y-3 max-w-xl">
+                          <p className="text-xs font-semibold text-luxury-gray-1">
+                            {r.transaction_id
+                              ? 'Re-link this compliance submission to a different transaction'
+                              : 'Link this compliance submission to a transaction'}
+                          </p>
+                          {r.transaction_id && (
+                            <p className="text-xs text-luxury-gray-3">
+                              Currently linked to: {r.property_address || 'this transaction'}
+                            </p>
+                          )}
+                          <div className="relative">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
+                            <input
+                              type="text"
+                              value={linkQuery}
+                              onChange={e => runLinkSearch(r.id, e.target.value)}
+                              placeholder="Search by property address or client name"
+                              className="input-luxury text-xs pl-7 py-1.5 w-full"
+                              autoFocus
+                            />
+                          </div>
+
+                          {linkSearching ? (
+                            <p className="text-xs text-luxury-gray-3">Searching...</p>
+                          ) : linkResults.length > 0 ? (
+                            <div className="border border-luxury-gray-5 rounded divide-y divide-luxury-gray-5">
+                              {linkResults.map(t => (
+                                <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <span className="block text-xs text-luxury-gray-1 truncate">{t.property_address || 'No address'}</span>
+                                    <span className="block text-xs text-luxury-gray-3 truncate">
+                                      {[t.client_name, t.status].filter(Boolean).join(' - ')}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => linkToTransaction(r.id, t.id, !!r.transaction_id)}
+                                    disabled={linkBusy}
+                                    className="btn btn-secondary text-xs whitespace-nowrap disabled:opacity-50"
+                                  >
+                                    Link
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : linkQuery.trim().length >= 2 ? (
+                            <p className="text-xs text-luxury-gray-3">No matching transactions found.</p>
+                          ) : null}
+
+                          <div className="flex items-center gap-2 pt-1">
+                            {!r.transaction_id && (
+                              <button
+                                onClick={() => createTransactionForRow(r.id)}
+                                disabled={linkBusy}
+                                className="btn btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-50"
+                              >
+                                <Plus size={12} /> Create new transaction
+                              </button>
+                            )}
+                            {r.transaction_id && (
+                              <button
+                                onClick={() => unlinkTransaction(r.id)}
+                                disabled={linkBusy}
+                                className="btn btn-secondary text-xs inline-flex items-center gap-1 text-red-600 disabled:opacity-50"
+                              >
+                                <X size={12} /> Remove link
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setLinkPanelId(null)}
+                              className="btn btn-secondary text-xs"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {!r.transaction_id && (
+                            <p className="text-xs text-luxury-gray-3">
+                              Creating a transaction uses this submission&apos;s address, client, and closing date.
+                            </p>
+                          )}
+                        </div>
+  )
+
+  const renderExpandedDetail = (r: TrackerRow) => (
+                        <div className="space-y-4">
+
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-xs font-semibold text-luxury-gray-1">
+                              {r.property_address || 'Deal'}
+                            </span>
+                            <span className="text-[11px] text-luxury-gray-3">Submitted {fmtDate(r.submitted_at)}</span>
+                            {r.recheck_requested && (
+                              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700">
+                                <RefreshCw size={10} /> Recheck requested {r.recheck_at ? fmtDate(r.recheck_at) : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {r.recheck_requested && r.recheck_changed_fields && r.recheck_changed_fields.length > 0 && (
+                            <div className="text-xs">
+                              <span className="font-medium text-luxury-gray-1">Recheck changed fields: </span>
+                              <span className="text-luxury-gray-2">
+                                {r.recheck_changed_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Editable compliance status: the submission is the truth */}
+                          <div
+                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div>
+                              <label className="field-label block mb-1">Compliance status</label>
+                              <select
+                                value={editStatus}
+                                onChange={e => setEditStatus(e.target.value)}
+                                className="select-luxury text-xs"
+                              >
+                                {STATUS_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            {editStatus === 'complete' && (
+                              <div>
+                                <label className="field-label block mb-1">Date completed</label>
+                                <input
+                                  type="date"
+                                  value={editDate}
+                                  onChange={e => setEditDate(e.target.value)}
+                                  className="input-luxury text-xs"
+                                />
+                              </div>
+                            )}
+                            {editStatus === 'incomplete' && (
+                              <div className="flex-1 min-w-[240px]">
+                                <label className="field-label block mb-1">Missing / incomplete items</label>
+                                <textarea
+                                  value={editNotes}
+                                  onChange={e => setEditNotes(e.target.value)}
+                                  rows={2}
+                                  className="input-luxury text-xs w-full resize-none"
+                                  placeholder="Missing: Settlement Statement, Survey"
+                                />
+                              </div>
+                            )}
+                            <button
+                              onClick={() => saveStatus(r)}
+                              disabled={savingStatus}
+                              className="btn btn-primary text-xs disabled:opacity-50"
+                            >
+                              {savingStatus ? 'Saving...' : 'Save'}
+                            </button>
+                            {r.completed_at && r.compliance_status === 'complete' && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Completed {fmtDate(r.completed_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Post closing compliance: tracked per deal, same shape as above */}
+                          <div
+                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div>
+                              <label className="field-label block mb-1">Post closing compliance</label>
+                              <select
+                                value={pcStatus}
+                                onChange={e => setPcStatus(e.target.value)}
+                                className="select-luxury text-xs"
+                              >
+                                {POST_CLOSING_STATUS_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            {pcStatus === 'complete' && (
+                              <div>
+                                <label className="field-label block mb-1">Date completed</label>
+                                <input
+                                  type="date"
+                                  value={pcDate}
+                                  onChange={e => setPcDate(e.target.value)}
+                                  className="input-luxury text-xs"
+                                />
+                              </div>
+                            )}
+                            {pcStatus === 'incomplete' && (
+                              <div className="flex-1 min-w-[240px]">
+                                <label className="field-label block mb-1">Missing / incomplete items</label>
+                                <textarea
+                                  value={pcNotes}
+                                  onChange={e => setPcNotes(e.target.value)}
+                                  rows={2}
+                                  className="input-luxury text-xs w-full resize-none"
+                                  placeholder="Missing: Final Settlement Statement, Survey"
+                                />
+                              </div>
+                            )}
+                            <button
+                              onClick={() => savePostClosing(r)}
+                              disabled={savingPc || !r.transaction_id}
+                              className="btn btn-primary text-xs disabled:opacity-50"
+                            >
+                              {savingPc ? 'Saving...' : 'Save'}
+                            </button>
+                            {!r.transaction_id && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Link a transaction first
+                              </span>
+                            )}
+                            {r.post_closing_completed_at && r.post_closing_status === 'complete' && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Completed {fmtDate(r.post_closing_completed_at)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Editable closing date: two-way synced to the transaction */}
+                          <div
+                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <div>
+                              <label className="field-label block mb-1">Closing date</label>
+                              <input
+                                type="date"
+                                value={editClosingDate}
+                                onChange={e => setEditClosingDate(e.target.value)}
+                                className="input-luxury text-xs"
+                              />
+                            </div>
+                            <button
+                              onClick={() => saveClosingDate(r)}
+                              disabled={savingClosing || !r.transaction_id}
+                              className="btn btn-primary text-xs disabled:opacity-50"
+                            >
+                              {savingClosing ? 'Saving...' : 'Save'}
+                            </button>
+                            {!r.transaction_id && (
+                              <span className="text-[11px] text-luxury-gray-3 pb-2">
+                                Link a transaction first
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Missing items from Leah's document review */}
+                          {r.missing_items.length > 0 && (
+                            <div className="text-xs">
+                              <span className="font-medium text-luxury-gray-1">Missing / needs correction (from review): </span>
+                              <ul className="mt-1 ml-4 list-disc space-y-0.5">
+                                {r.missing_items.map((m, i) => (
+                                  <li key={i} className="text-luxury-gray-2">
+                                    {m.name}
+                                    {m.notes ? <span className="text-luxury-gray-3"> - {m.notes}</span> : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Every form answer with a value, smart-grouped */}
+                          {FIELD_GROUPS.map(group => {
+                            const filled = group.fields.filter(f => hasValue(r.form_data?.[f.key]))
+                            if (filled.length === 0) return null
+                            return (
+                              <div key={group.title}>
+                                <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wider mb-1.5">{group.title}</p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
+                                  {filled.map(f => {
+                                    const raw = r.form_data[f.key]
+                                    const val = f.fmt ? f.fmt(raw, r.form_data) : String(raw)
+                                    return (
+                                      <div key={f.key} className={f.key === 'additional_notes' ? 'col-span-2 md:col-span-4' : ''}>
+                                        <span className="text-luxury-gray-3 block">{f.label}</span>
+                                        <span className="text-luxury-gray-1 break-words">{val}</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+
+                          {/* Flyer actions */}
+                          {r.transaction_id && (
+                            <div className="flex items-center gap-3 pt-2 border-t border-luxury-gray-5/50" onClick={e => e.stopPropagation()}>
+                              {r.flyer ? (
+                                r.flyer.has_photo ? (
+                                  <button
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'flyer_ready', r.flyer?.id)}
+                                    disabled={sendingFlyer === r.transaction_id}
+                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                  >
+                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: flyer ready'}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'request_photo', r.flyer?.id)}
+                                    disabled={sendingFlyer === r.transaction_id}
+                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                  >
+                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: request photo'}
+                                  </button>
+                                )
+                              ) : (
+                                <button
+                                  onClick={() => generateFlyer(r.transaction_id!)}
+                                  disabled={generatingFlyer === r.transaction_id}
+                                  className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
+                                >
+                                  {generatingFlyer === r.transaction_id ? 'Generating...' : 'Generate flyer'}
+                                </button>
+                              )}
+                              {r.flyer && (
+                                <a
+                                  href={`/agent/flyer/${r.transaction_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
+                                >
+                                  <ImageIcon size={12} /> Open flyer page <ExternalLink size={11} />
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                        </div>
+  )
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -737,7 +1096,8 @@ export default function AdminCompliancePage() {
           </p>
         </div>
       ) : (
-        <div className="container-card overflow-x-auto p-0">
+        <>
+        <div className="container-card overflow-x-auto p-0 hidden md:block">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-luxury-gray-5">
@@ -853,87 +1213,7 @@ export default function AdminCompliancePage() {
                   {linkPanelId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
                       <td colSpan={10} className="px-5 py-4">
-                        <div className="space-y-3 max-w-xl">
-                          <p className="text-xs font-semibold text-luxury-gray-1">
-                            {r.transaction_id
-                              ? 'Re-link this compliance submission to a different transaction'
-                              : 'Link this compliance submission to a transaction'}
-                          </p>
-                          {r.transaction_id && (
-                            <p className="text-xs text-luxury-gray-3">
-                              Currently linked to: {r.property_address || 'this transaction'}
-                            </p>
-                          )}
-                          <div className="relative">
-                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
-                            <input
-                              type="text"
-                              value={linkQuery}
-                              onChange={e => runLinkSearch(r.id, e.target.value)}
-                              placeholder="Search by property address or client name"
-                              className="input-luxury text-xs pl-7 py-1.5 w-full"
-                              autoFocus
-                            />
-                          </div>
-
-                          {linkSearching ? (
-                            <p className="text-xs text-luxury-gray-3">Searching...</p>
-                          ) : linkResults.length > 0 ? (
-                            <div className="border border-luxury-gray-5 rounded divide-y divide-luxury-gray-5">
-                              {linkResults.map(t => (
-                                <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                                  <div className="min-w-0">
-                                    <span className="block text-xs text-luxury-gray-1 truncate">{t.property_address || 'No address'}</span>
-                                    <span className="block text-xs text-luxury-gray-3 truncate">
-                                      {[t.client_name, t.status].filter(Boolean).join(' - ')}
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() => linkToTransaction(r.id, t.id, !!r.transaction_id)}
-                                    disabled={linkBusy}
-                                    className="btn btn-secondary text-xs whitespace-nowrap disabled:opacity-50"
-                                  >
-                                    Link
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : linkQuery.trim().length >= 2 ? (
-                            <p className="text-xs text-luxury-gray-3">No matching transactions found.</p>
-                          ) : null}
-
-                          <div className="flex items-center gap-2 pt-1">
-                            {!r.transaction_id && (
-                              <button
-                                onClick={() => createTransactionForRow(r.id)}
-                                disabled={linkBusy}
-                                className="btn btn-primary text-xs inline-flex items-center gap-1 disabled:opacity-50"
-                              >
-                                <Plus size={12} /> Create new transaction
-                              </button>
-                            )}
-                            {r.transaction_id && (
-                              <button
-                                onClick={() => unlinkTransaction(r.id)}
-                                disabled={linkBusy}
-                                className="btn btn-secondary text-xs inline-flex items-center gap-1 text-red-600 disabled:opacity-50"
-                              >
-                                <X size={12} /> Remove link
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setLinkPanelId(null)}
-                              className="btn btn-secondary text-xs"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                          {!r.transaction_id && (
-                            <p className="text-xs text-luxury-gray-3">
-                              Creating a transaction uses this submission&apos;s address, client, and closing date.
-                            </p>
-                          )}
-                        </div>
+                        {renderLinkPanel(r)}
                       </td>
                     </tr>
                   )}
@@ -941,224 +1221,7 @@ export default function AdminCompliancePage() {
                   {expandedId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
                       <td colSpan={10} className="px-5 py-4">
-                        <div className="space-y-4">
-
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-xs font-semibold text-luxury-gray-1">
-                              {r.property_address || 'Deal'}
-                            </span>
-                            <span className="text-[11px] text-luxury-gray-3">Submitted {fmtDate(r.submitted_at)}</span>
-                            {r.recheck_requested && (
-                              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700">
-                                <RefreshCw size={10} /> Recheck requested {r.recheck_at ? fmtDate(r.recheck_at) : ''}
-                              </span>
-                            )}
-                          </div>
-
-                          {r.recheck_requested && r.recheck_changed_fields && r.recheck_changed_fields.length > 0 && (
-                            <div className="text-xs">
-                              <span className="font-medium text-luxury-gray-1">Recheck changed fields: </span>
-                              <span className="text-luxury-gray-2">
-                                {r.recheck_changed_fields.map(f => f.replace(/_/g, ' ')).join(', ')}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Editable compliance status: the submission is the truth */}
-                          <div
-                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <div>
-                              <label className="field-label block mb-1">Compliance status</label>
-                              <select
-                                value={editStatus}
-                                onChange={e => setEditStatus(e.target.value)}
-                                className="select-luxury text-xs"
-                              >
-                                {STATUS_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            {editStatus === 'complete' && (
-                              <div>
-                                <label className="field-label block mb-1">Date completed</label>
-                                <input
-                                  type="date"
-                                  value={editDate}
-                                  onChange={e => setEditDate(e.target.value)}
-                                  className="input-luxury text-xs"
-                                />
-                              </div>
-                            )}
-                            {editStatus === 'incomplete' && (
-                              <div className="flex-1 min-w-[240px]">
-                                <label className="field-label block mb-1">Missing / incomplete items</label>
-                                <textarea
-                                  value={editNotes}
-                                  onChange={e => setEditNotes(e.target.value)}
-                                  rows={2}
-                                  className="input-luxury text-xs w-full resize-none"
-                                  placeholder="Missing: Settlement Statement, Survey"
-                                />
-                              </div>
-                            )}
-                            <button
-                              onClick={() => saveStatus(r)}
-                              disabled={savingStatus}
-                              className="btn btn-primary text-xs disabled:opacity-50"
-                            >
-                              {savingStatus ? 'Saving...' : 'Save'}
-                            </button>
-                            {r.completed_at && r.compliance_status === 'complete' && (
-                              <span className="text-[11px] text-luxury-gray-3 pb-2">
-                                Completed {fmtDate(r.completed_at)}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Post closing compliance: tracked per deal, same shape as above */}
-                          <div
-                            className="flex items-end gap-3 flex-wrap p-3 bg-white border border-luxury-gray-5 rounded-lg"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <div>
-                              <label className="field-label block mb-1">Post closing compliance</label>
-                              <select
-                                value={pcStatus}
-                                onChange={e => setPcStatus(e.target.value)}
-                                className="select-luxury text-xs"
-                              >
-                                {POST_CLOSING_STATUS_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </select>
-                            </div>
-                            {pcStatus === 'complete' && (
-                              <div>
-                                <label className="field-label block mb-1">Date completed</label>
-                                <input
-                                  type="date"
-                                  value={pcDate}
-                                  onChange={e => setPcDate(e.target.value)}
-                                  className="input-luxury text-xs"
-                                />
-                              </div>
-                            )}
-                            {pcStatus === 'incomplete' && (
-                              <div className="flex-1 min-w-[240px]">
-                                <label className="field-label block mb-1">Missing / incomplete items</label>
-                                <textarea
-                                  value={pcNotes}
-                                  onChange={e => setPcNotes(e.target.value)}
-                                  rows={2}
-                                  className="input-luxury text-xs w-full resize-none"
-                                  placeholder="Missing: Final Settlement Statement, Survey"
-                                />
-                              </div>
-                            )}
-                            <button
-                              onClick={() => savePostClosing(r)}
-                              disabled={savingPc || !r.transaction_id}
-                              className="btn btn-primary text-xs disabled:opacity-50"
-                            >
-                              {savingPc ? 'Saving...' : 'Save'}
-                            </button>
-                            {!r.transaction_id && (
-                              <span className="text-[11px] text-luxury-gray-3 pb-2">
-                                Link a transaction first
-                              </span>
-                            )}
-                            {r.post_closing_completed_at && r.post_closing_status === 'complete' && (
-                              <span className="text-[11px] text-luxury-gray-3 pb-2">
-                                Completed {fmtDate(r.post_closing_completed_at)}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Missing items from Leah's document review */}
-                          {r.missing_items.length > 0 && (
-                            <div className="text-xs">
-                              <span className="font-medium text-luxury-gray-1">Missing / needs correction (from review): </span>
-                              <ul className="mt-1 ml-4 list-disc space-y-0.5">
-                                {r.missing_items.map((m, i) => (
-                                  <li key={i} className="text-luxury-gray-2">
-                                    {m.name}
-                                    {m.notes ? <span className="text-luxury-gray-3"> - {m.notes}</span> : null}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {/* Every form answer with a value, smart-grouped */}
-                          {FIELD_GROUPS.map(group => {
-                            const filled = group.fields.filter(f => hasValue(r.form_data?.[f.key]))
-                            if (filled.length === 0) return null
-                            return (
-                              <div key={group.title}>
-                                <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wider mb-1.5">{group.title}</p>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
-                                  {filled.map(f => {
-                                    const raw = r.form_data[f.key]
-                                    const val = f.fmt ? f.fmt(raw, r.form_data) : String(raw)
-                                    return (
-                                      <div key={f.key} className={f.key === 'additional_notes' ? 'col-span-2 md:col-span-4' : ''}>
-                                        <span className="text-luxury-gray-3 block">{f.label}</span>
-                                        <span className="text-luxury-gray-1 break-words">{val}</span>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )
-                          })}
-
-                          {/* Flyer actions */}
-                          {r.transaction_id && (
-                            <div className="flex items-center gap-3 pt-2 border-t border-luxury-gray-5/50" onClick={e => e.stopPropagation()}>
-                              {r.flyer ? (
-                                r.flyer.has_photo ? (
-                                  <button
-                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'flyer_ready', r.flyer?.id)}
-                                    disabled={sendingFlyer === r.transaction_id}
-                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
-                                  >
-                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: flyer ready'}
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => sendFlyerEmail(r.transaction_id!, 'request_photo', r.flyer?.id)}
-                                    disabled={sendingFlyer === r.transaction_id}
-                                    className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
-                                  >
-                                    {sendingFlyer === r.transaction_id ? 'Sending...' : 'Email agent: request photo'}
-                                  </button>
-                                )
-                              ) : (
-                                <button
-                                  onClick={() => generateFlyer(r.transaction_id!)}
-                                  disabled={generatingFlyer === r.transaction_id}
-                                  className="text-xs text-luxury-accent hover:underline disabled:opacity-50"
-                                >
-                                  {generatingFlyer === r.transaction_id ? 'Generating...' : 'Generate flyer'}
-                                </button>
-                              )}
-                              {r.flyer && (
-                                <a
-                                  href={`/agent/flyer/${r.transaction_id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
-                                >
-                                  <ImageIcon size={12} /> Open flyer page <ExternalLink size={11} />
-                                </a>
-                              )}
-                            </div>
-                          )}
-
-                        </div>
+                        {renderExpandedDetail(r)}
                       </td>
                     </tr>
                   )}
@@ -1167,6 +1230,76 @@ export default function AdminCompliancePage() {
             </tbody>
           </table>
         </div>
+        <div className="md:hidden space-y-3">
+          {visible.map(r => (
+            <div key={r.id} className="container-card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="block text-sm text-luxury-gray-1 font-medium">{r.agent_name || '-'}</span>
+                  {r.side && <span className="block text-xs text-luxury-gray-3 capitalize">{r.side}</span>}
+                  <span className="block text-xs text-luxury-gray-3">Submitted {fmtDateTime(r.submitted_at)}</span>
+                </div>
+                <div className="flex-shrink-0">{statusBadge(r.compliance_status)}</div>
+              </div>
+              <div className="mt-2 text-xs text-luxury-gray-1">
+                <span className="block">{r.property_address || '-'}</span>
+                {r.client_name && <span className="block text-luxury-gray-3">{r.client_name}</span>}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-2">
+                <span>{r.transaction_type ? r.transaction_type.replace(/_v2$/, '').replace(/_/g, ' ') : '-'}</span>
+                {r.is_locked && <Lock size={11} className="text-amber-600" />}
+                <span>Closing: {fmtDate(r.closing_date) || '-'}</span>
+                {r.paid && <span className="inline-flex items-center gap-1 text-green-600"><Check size={12} /> Paid</span>}
+                <span className={r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}>
+                  {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
+                </span>
+                {r.cda_sent && <span className="text-luxury-gray-3">CDA sent</span>}
+              </div>
+              {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
+                <div className="mt-1 text-xs text-red-600">{r.missing_items.length} missing</div>
+              )}
+              <div className="mt-3 flex items-center gap-3 flex-wrap">
+                {r.transaction_id ? (
+                  <>
+                    <a
+                      href={`/admin/transactions/${r.transaction_id}?tab=${workTab}`}
+                      onClick={e => { e.preventDefault(); router.push(`/admin/transactions/${r.transaction_id}?tab=${workTab}`) }}
+                      className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
+                    >
+                      Work Deal <ExternalLink size={11} />
+                    </a>
+                    <button
+                      onClick={() => openLinkPanel(r.id)}
+                      className="inline-flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1"
+                    >
+                      <Link2 size={11} /> Re-link
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => openLinkPanel(r.id)}
+                    className="inline-flex items-center gap-1 text-xs text-luxury-gray-2 hover:text-luxury-gray-1"
+                  >
+                    <Link2 size={11} /> Link
+                  </button>
+                )}
+                <button
+                  onClick={() => openExpand(r)}
+                  className="inline-flex items-center gap-1 text-xs text-luxury-gray-3 hover:text-luxury-gray-1 ml-auto"
+                >
+                  {expandedId === r.id ? <>Hide <ChevronDown size={12} /></> : <>Details <ChevronRight size={12} /></>}
+                </button>
+              </div>
+              {linkPanelId === r.id && (
+                <div className="mt-3 pt-3 border-t border-luxury-gray-5/50">{renderLinkPanel(r)}</div>
+              )}
+              {expandedId === r.id && (
+                <div className="mt-3 pt-3 border-t border-luxury-gray-5/50">{renderExpandedDetail(r)}</div>
+              )}
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </div>
   )

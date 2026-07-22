@@ -243,7 +243,10 @@ export async function GET(request: NextRequest) {
         // Deal display fields
         property_address: d.property_address || txn?.property_address || null,
         client_name: d.client_name || txn?.client_name || null,
-        closing_date: d.closing_or_movein_date || txn?.closing_date || txn?.move_in_date || null,
+        // Transaction is the source of truth for the closing date (two-way sync
+        // with the tracker's editable field); fall back to the submission's own
+        // date only when the deal has neither closing_date nor move_in_date set.
+        closing_date: txn?.closing_date || txn?.move_in_date || d.closing_or_movein_date || null,
         transaction_type: txn?.transaction_type || null,
         is_locked: txn?.is_locked || false,
         is_lease: isLeaseTransactionType(txn?.transaction_type),
