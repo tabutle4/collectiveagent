@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
+import { recomputeOfficeNet } from '@/lib/transactions/cascade'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,57 +33,11 @@ async function recomputeSide(transactionId: string, side: 'listing' | 'buying') 
     .update({ [sideField]: sideTotal, updated_at: new Date().toISOString() })
     .eq('id', transactionId)
 
-  // Recompute office_gross, gross_commission, AND office_net (full cascade).
-  // Mirrors recomputeGrossAndOffice + recomputeOfficeNet from the main route.
-  const { data: bothSides } = await supabase
-    .from('transactions')
-    .select('listing_side_commission, buying_side_commission')
-    .eq('id', transactionId)
-    .single()
-
-  const [{ data: tias }, { data: tebs }, { data: stagedRecs }] = await Promise.all([
-    supabase.from('transaction_internal_agents')
-      .select('btsa_amount, brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross')
-      .eq('transaction_id', transactionId),
-    supabase.from('transaction_external_brokerages')
-      .select('amount_1099_reportable')
-      .eq('transaction_id', transactionId),
-    supabase.from('agent_debts')
-      .select('record_type, amount_owed, amount_remaining')
-      .eq('offset_transaction_id', transactionId),
-  ])
-
-  if (bothSides) {
-    const listing = parseFloat(String(bothSides.listing_side_commission ?? 0)) || 0
-    const buying = parseFloat(String(bothSides.buying_side_commission ?? 0)) || 0
-    const btsa = (tias || []).reduce((s: number, t: any) => s + (parseFloat(String(t.btsa_amount ?? 0)) || 0), 0)
-    const officeGross = listing + buying
-    const grossCommission = officeGross + btsa
-    await supabase.from('transactions')
-      .update({ office_gross: officeGross, gross_commission: grossCommission, updated_at: new Date().toISOString() })
-      .eq('id', transactionId)
-
-    // office_net -- same formula as recomputeOfficeNet in main route
-    const brokerageSplitTotal = (tias || []).reduce((s: number, t: any) => s + (parseFloat(String(t.brokerage_split ?? 0)) || 0), 0)
-    const feesTotal = (tias || []).reduce((s: number, t: any) =>
-      s + (parseFloat(String(t.processing_fee ?? 0)) || 0)
-        + (parseFloat(String(t.coaching_fee ?? 0)) || 0)
-        + (parseFloat(String(t.other_fees ?? 0)) || 0), 0)
-    const momentumPayoutsTotal = (tias || []).reduce((s: number, t: any) =>
-      t.agent_role === 'momentum_partner' ? s + (parseFloat(String(t.agent_gross ?? 0)) || 0) : s, 0)
-    const externalTotal = (tebs || []).reduce((s: number, e: any) => s + (parseFloat(String(e.amount_1099_reportable ?? 0)) || 0), 0)
-    let stagedDebts = 0
-    let stagedCredits = 0
-    for (const r of (stagedRecs || [])) {
-      const applied = Math.max(0, (parseFloat(String((r as any).amount_owed ?? 0)) || 0) - (parseFloat(String((r as any).amount_remaining ?? 0)) || 0))
-      if ((r as any).record_type === 'credit') stagedCredits += applied
-      else stagedDebts += applied
-    }
-    const officeNet = Math.round((brokerageSplitTotal + feesTotal + stagedDebts - stagedCredits - externalTotal - momentumPayoutsTotal) * 100) / 100
-    await supabase.from('transactions')
-      .update({ office_net: officeNet, updated_at: new Date().toISOString() })
-      .eq('id', transactionId)
-  }
+  // Recompute office_gross, gross_commission, AND office_net from the single
+  // source of truth (recomputeOfficeNet -> recomputeGrossAndOffice). This
+  // replaces a duplicated copy of the office_net formula so the math can never
+  // drift between the two routes again.
+  await recomputeOfficeNet(transactionId)
 }
 
 export async function GET(

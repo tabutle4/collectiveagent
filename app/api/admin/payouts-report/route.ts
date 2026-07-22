@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
           .in('transaction_id', txnIds),
         supabaseAdmin
           .from('transactions')
-          .select('id, property_address, compliance_status, transaction_type, office_net')
+          .select('id, property_address, compliance_status, transaction_type, office_net, office_gross')
           .in('id', txnIds),
       ])
       internalAgents = agentsRes.data || []
@@ -331,10 +331,19 @@ export async function GET(request: NextRequest) {
         check_id: check.id,
         transaction_id: check.transaction_id,
         address,
-        // office net for commission deals; hand-entered amount for retainers and
-        // other transactions with no commission math (office_net null)
+        // CRC's cut for a commission deal always comes from the deal's
+        // brokerage net (office_net), never from the check's hand-entered
+        // brokerage_amount. The check amount is used only when the linked
+        // transaction has no commission math at all (office_gross 0/null,
+        // e.g. a retainer), because such a transaction has no office_net to
+        // show. A commission deal (office_gross > 0) whose office_net has not
+        // been computed yet shows 0 rather than falling back to the check.
         crc_amount: check.transaction_id
-          ? (isAnchor ? (txn?.office_net != null ? Number(txn.office_net) : (check.brokerage_amount || 0)) : 0)
+          ? (isAnchor
+              ? (txn?.office_net != null
+                  ? Number(txn.office_net)
+                  : ((Number(txn?.office_gross) || 0) > 0 ? 0 : (check.brokerage_amount || 0)))
+              : 0)
           : (check.brokerage_amount || 0),
         is_anchor: isAnchor,
         check_amount: check.check_amount,

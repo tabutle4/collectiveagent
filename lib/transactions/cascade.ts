@@ -280,6 +280,9 @@ export async function computeCommissionBreakdown(args: {
  *     - sum(staged credits applied against this txn) -- credits paid out here
  *     - sum(TEB.amount_1099_reportable)              -- paid to other brokerages
  *     - sum(momentum_partner TIA.agent_gross)        -- paid to referrers
+ *     + other-side income (a side commission in office_gross with no internal
+ *       agent - money CRC collected and passes through to the other brokerage;
+ *       cancels the external payout, so pass-through deals net correctly)
  *
  * Why momentum gets subtracted explicitly:
  *   Momentum partner rows have brokerage_split = 0 by construction (linked
@@ -311,10 +314,10 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
   // reads brokerage_split/fees (not office_gross), so there is no cycle.
   await recomputeGrossAndOffice(transactionId)
   try {
-    const [{ data: tias }, { data: tebs }, { data: stagedRecs }] = await Promise.all([
+    const [{ data: tias }, { data: tebs }, { data: stagedRecs }, { data: txnSides }] = await Promise.all([
       supabase
         .from('transaction_internal_agents')
-        .select('brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross')
+        .select('brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross, side')
         .eq('transaction_id', transactionId),
       supabase
         .from('transaction_external_brokerages')
@@ -328,6 +331,14 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
         .from('agent_debts')
         .select('record_type, amount_owed, amount_remaining')
         .eq('offset_transaction_id', transactionId),
+      // Side commissions feed the pass-through calc below: office_gross =
+      // listing_side_commission + buying_side_commission, and a side with no
+      // internal agent is money CRC collected and passes through.
+      supabase
+        .from('transactions')
+        .select('listing_side_commission, buying_side_commission')
+        .eq('id', transactionId)
+        .single(),
     ])
 
     const brokerageSplitTotal = (tias || []).reduce(
@@ -364,6 +375,25 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
       0
     )
 
+    // Pass-through other-side income. office_gross includes BOTH sides
+    // (listing_side_commission + buying_side_commission), but a side with no
+    // internal agent is commission CRC collected and passes straight through to
+    // the other brokerage (paid out as an external 1099 above). That side's
+    // commission is not on any TIA brokerage_split, so add it back here: it
+    // cancels the external payout for a pure pass-through, and for a side CRC
+    // keeps outright it correctly lands in office_net. Side->commission mapping
+    // matches autoCascadeTransaction (seller/landlord = listing, buyer/tenant = buying).
+    const hasListingAgent = (tias || []).some(
+      (t: any) => t.side === 'seller' || t.side === 'landlord'
+    )
+    const hasBuyingAgent = (tias || []).some(
+      (t: any) => t.side === 'buyer' || t.side === 'tenant' || t.side === 'nc_buyer'
+    )
+    const listingComm = parseFloat(String(txnSides?.listing_side_commission ?? 0)) || 0
+    const buyingComm = parseFloat(String(txnSides?.buying_side_commission ?? 0)) || 0
+    const otherSideIncome =
+      (hasListingAgent ? 0 : listingComm) + (hasBuyingAgent ? 0 : buyingComm)
+
     let stagedDebtsTotal = 0
     let stagedCreditsTotal = 0
     for (const r of stagedRecs || []) {
@@ -381,7 +411,8 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
           stagedDebtsTotal -
           stagedCreditsTotal -
           externalTotal -
-          momentumPayoutsTotal) *
+          momentumPayoutsTotal +
+          otherSideIncome) *
           100
       ) / 100
 
