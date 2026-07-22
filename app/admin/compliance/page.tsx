@@ -163,7 +163,7 @@ export default function AdminCompliancePage() {
   const [error, setError] = useState('')
   const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
-  const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda' | 'needs_payout'>('all')
+  const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda'>('all')
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'closed' | 'cancelled'>('active')
   const [search, setSearch] = useState('')
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
@@ -220,12 +220,10 @@ export default function AdminCompliancePage() {
   const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
   const pendingChecklist = (r: TrackerRow) => !r.checklist_complete
   const needsCda = (r: TrackerRow) => !r.is_lease && r.compliance_status === 'complete' && !r.cda_sent
-  const needsPayout = (r: TrackerRow) => r.compliance_status === 'complete' && !r.paid
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
     needs_cda: needsCda,
-    needs_payout: needsPayout,
   }
   // Transaction status filter. "Active deals" = the working set: active or
   // pending, plus submissions not yet linked to a transaction. Prospect, closed,
@@ -241,14 +239,13 @@ export default function AdminCompliancePage() {
   const pendingComplianceCount = rows.filter(r => statusPasses(r) && pendingCompliance(r)).length
   const pendingChecklistCount = rows.filter(r => statusPasses(r) && pendingChecklist(r)).length
   const needsCdaCount = rows.filter(r => statusPasses(r) && needsCda(r)).length
-  const needsPayoutCount = rows.filter(r => statusPasses(r) && needsPayout(r)).length
   // Where the "Work Deal" link lands, per tab: Pending checklist opens the
-  // Check & Payouts tab (where the checklist lives); Needs CDA / Needs payout
-  // open the Commissions tab (where the CDA and payout are worked); All and
-  // Pending compliance open the Documents tab for review.
+  // Check & Payouts tab (where the checklist lives); Needs CDA opens the
+  // Commissions tab (where the CDA is worked); All and Pending compliance open
+  // the Documents tab for review.
   const workTab =
     tab === 'pending_checklist' ? 'check_payouts'
-    : (tab === 'needs_cda' || tab === 'needs_payout') ? 'commissions'
+    : tab === 'needs_cda' ? 'commissions'
     : 'documents'
   const visible = (() => {
     let list = rows.filter(statusPasses)
@@ -1012,7 +1009,6 @@ export default function AdminCompliancePage() {
           { key: 'pending_compliance', label: `Pending compliance (${pendingComplianceCount})` },
           { key: 'pending_checklist', label: `Pending checklist (${pendingChecklistCount})` },
           { key: 'needs_cda', label: `Needs CDA (${needsCdaCount})` },
-          { key: 'needs_payout', label: `Needs payout (${needsPayoutCount})` },
         ] as const).map(t => (
           <button
             key={t.key}
