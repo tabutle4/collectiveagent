@@ -2,7 +2,7 @@
 
 export const TRANSACTION_STATUSES = [
   'prospect',
-  'active_listing',
+  'active',
   'pending',
   'submitted',
   'in_review',
@@ -21,7 +21,7 @@ export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
 export const STATUS_LABELS: Record<TransactionStatus, string> = {
   prospect: 'Prospect',
-  active_listing: 'Active Listing',
+  active: 'Active',
   pending: 'Pending',
   submitted: 'Submitted',
   in_review: 'In Review',
@@ -38,7 +38,7 @@ export const STATUS_LABELS: Record<TransactionStatus, string> = {
 
 export const STATUS_COLORS: Record<TransactionStatus, string> = {
   prospect: 'text-luxury-gray-3',
-  active_listing: 'text-blue-600',
+  active: 'text-blue-600',
   pending: 'text-yellow-600',
   submitted: 'text-purple-600',
   in_review: 'text-purple-600',
@@ -69,7 +69,7 @@ export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number]
 
 export const AGENT_EDITABLE_STATUSES: TransactionStatus[] = [
   'prospect',
-  'active_listing',
+  'active',
   'pending',
 ]
 export const AGENT_LIMITED_EDIT_STATUSES: TransactionStatus[] = ['revision_requested']

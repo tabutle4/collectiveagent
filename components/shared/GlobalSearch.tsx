@@ -160,7 +160,7 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
   const getTransactionStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       prospect: 'bg-gray-100 text-gray-600',
-      active_listing: 'bg-blue-100 text-blue-600',
+      active: 'bg-blue-100 text-blue-600',
       pending: 'bg-yellow-100 text-yellow-700',
       submitted: 'bg-purple-100 text-purple-600',
       in_review: 'bg-purple-100 text-purple-600',

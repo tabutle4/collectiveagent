@@ -305,7 +305,7 @@ export const CREATION_SLIDES: LegacySlideConfig[] = [
 // ===== Status Groups (for filtering) =====
 
 export const STATUS_GROUPS = {
-  active: ['prospect', 'active_listing', 'pending'] as TransactionStatus[],
+  active: ['prospect', 'active', 'pending'] as TransactionStatus[],
   compliance: ['submitted', 'in_review', 'revision_requested', 'compliant'] as TransactionStatus[],
   processing: ['cda_in_progress', 'payout_in_progress', 'broker_review'] as TransactionStatus[],
   complete: ['cda_sent', 'payout_processed', 'closed'] as TransactionStatus[],

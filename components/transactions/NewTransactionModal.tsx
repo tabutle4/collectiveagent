@@ -14,7 +14,7 @@ interface NewTransactionModalProps {
 
 const STATUS_OPTIONS = [
   { value: 'prospect', label: 'Prospect' },
-  { value: 'active_listing', label: 'Active Listing' },
+  { value: 'active', label: 'Active' },
   { value: 'pending', label: 'Pending' },
 ] as const
 

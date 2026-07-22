@@ -107,7 +107,7 @@ export default function AgentDashboard() {
           ].includes(t.status)
         ) {
           pendingCount++
-        } else if (['prospect', 'active_listing'].includes(t.status)) {
+        } else if (['prospect', 'active'].includes(t.status)) {
           activeCount++
         }
         if (['submitted', 'in_review', 'revision_requested'].includes(t.status)) complianceCount++

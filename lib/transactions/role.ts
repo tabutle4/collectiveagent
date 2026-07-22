@@ -81,7 +81,7 @@ export function canEditTransaction(role: AppRole, status: string): boolean {
     // TC can edit up through compliant status
     const tcEditableStatuses = [
       'prospect',
-      'active_listing',
+      'active',
       'pending',
       'submitted',
       'in_review',
@@ -91,7 +91,7 @@ export function canEditTransaction(role: AppRole, status: string): boolean {
     return tcEditableStatuses.includes(status)
   }
   // Agent can edit early statuses only
-  const agentEditableStatuses = ['prospect', 'active_listing', 'pending']
+  const agentEditableStatuses = ['prospect', 'active', 'pending']
   const agentLimitedStatuses = ['revision_requested']
   return agentEditableStatuses.includes(status) || agentLimitedStatuses.includes(status)
 }

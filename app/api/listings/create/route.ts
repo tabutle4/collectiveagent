@@ -99,7 +99,7 @@ async function findOrCreateListingTransaction(
       bedrooms: body.bedrooms, bathrooms: body.bathrooms,
       garage: body.garage, sqft: body.sqft,
     })
-    const status = formType === 'just-listed' ? 'active_listing' : 'prospect'
+    const status = formType === 'just-listed' ? 'active' : 'prospect'
     const isLease = listing.transaction_type === 'lease'
 
     const { data: newTxn, error: txnErr } = await supabase
