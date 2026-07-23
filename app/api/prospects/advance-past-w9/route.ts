@@ -36,8 +36,11 @@ export async function POST(request: NextRequest) {
     if (error || !prospect) {
       return NextResponse.json({ error: 'Prospect not found' }, { status: 404 })
     }
-    if (prospect.status !== 'prospect') {
-      return NextResponse.json({ error: 'User is no longer a prospect' }, { status: 400 })
+    // Allow prospect OR active: existing agents converting to Referral are
+    // 'active' while mid-onboarding (verify route allows both), and the widget
+    // path (complete-w9) has no status gate. Only block users who are neither.
+    if (prospect.status !== 'prospect' && prospect.status !== 'active') {
+      return NextResponse.json({ error: 'User is not in onboarding' }, { status: 400 })
     }
 
     const isReferralAgent = prospect.mls_choice === 'Referral Collective (No MLS)'

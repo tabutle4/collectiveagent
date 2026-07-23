@@ -491,6 +491,14 @@ export default function OnboardingPage() {
   // the button and show a status message: the office finishes the W-9 request
   // and advances the agent manually once the W-9 is complete.
   const [w9Submitted, setW9Submitted] = useState(false)
+  // Restore the "request received" state across reloads (see the click handler).
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && token && localStorage.getItem(`w9_submitted_${token}`)) {
+        setW9Submitted(true)
+      }
+    } catch {}
+  }, [token])
   const payloadScriptLoaded = useRef(false)
   
   // Referral settings from company_settings
@@ -1605,6 +1613,10 @@ const checkout = new window.Payload.Checkout({
                   <button
                     onClick={async () => {
                       setW9Submitted(true)
+                      // Persist so a page reload keeps the button hidden and the
+                      // status message showing, instead of letting them click
+                      // again and fire a second W-9 request + office error email.
+                      try { if (typeof window !== 'undefined') localStorage.setItem(`w9_submitted_${token}`, '1') } catch {}
                       const notifyW9Error = async (errorDetail: string) => {
                         await fetch('/api/onboarding/w9-error-notify', {
                           method: 'POST',
@@ -1643,6 +1655,10 @@ const checkout = new window.Payload.Checkout({
                                   signed_at: attrs?.signed_at || null,
                                 }),
                               })
+                              // Mark the W-9 step complete client-side so a Back
+                              // navigation shows the completed state, not the
+                              // "request received" message.
+                              setCompletedSteps(prev => ({ ...prev, [isReferralAgent ? 5 : 6]: true }))
                               setCurrentStep(isReferralAgent ? 6 : 7)
                               window.scrollTo({ top: 0, behavior: 'smooth' })
                             },

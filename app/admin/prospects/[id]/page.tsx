@@ -100,6 +100,16 @@ export default function ProspectDetailPage() {
     )
   }
 
+  // Broker co-signature status. The agent signs their own docs during
+  // onboarding; activation (and the office "Create Accounts" checklist email)
+  // only fires once Courtney co-signs. Referral needs the ICA; standard needs
+  // ICA + commission plan. "Awaiting" = agent has signed but broker has not.
+  const isReferralProspect = prospect.mls_choice === 'Referral Collective (No MLS)'
+  const agentDocsSigned = isReferralProspect
+    ? !!prospect.ica_signed_at
+    : !!prospect.ica_signed_at && !!prospect.commission_plan_agreement_signed_at
+  const awaitingCoSignature = agentDocsSigned && !prospect.broker_signed_at
+
   return (
     <div>
       {convertModalOpen && (
@@ -135,6 +145,11 @@ export default function ProspectDetailPage() {
             <p className="text-luxury-gray-2">
               {prospect.email} • {prospect.phone}
             </p>
+            {awaitingCoSignature && (
+              <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded px-2.5 py-1">
+                Awaiting broker co-signature
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
