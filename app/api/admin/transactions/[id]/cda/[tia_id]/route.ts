@@ -78,7 +78,7 @@ export async function GET(
         closing_date, closed_date, office_gross,
         listing_side_commission, buying_side_commission,
         listing_base_commission, buying_base_commission,
-        gross_commission
+        gross_commission, broker_approved_at, cda_status
       `)
       .eq('id', id)
       .single()
@@ -194,7 +194,10 @@ export async function GET(
     // brokerage stay on the office line. Never negative.
     const officeNet = Math.max(
       0,
-      Math.round((officeGross - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal) * 100) / 100
+      // BTSA passes through to the agent (it's inside each agent's amount_1099),
+      // so it must be added into the office pool too, or it gets subtracted from
+      // the brokerage line without ever being added -- zeroing the office row.
+      Math.round((officeGross + btsaTotal - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal) * 100) / 100
     )
     const officeSideLabel = buyingSide > 0 && listingSide === 0
       ? 'Buying'
@@ -347,6 +350,13 @@ export async function GET(
     <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Company</span><span style="font-weight:500">${titleContact.company || titleContact.name || '--'}</span></div>
     ${titleContact.name && titleContact.company ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Contact</span><span style="font-weight:500">${titleContact.name}</span></div>` : ''}
     ${titleContact.email ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:#777">Email</span><span style="font-weight:500">${Array.isArray(titleContact.email) ? titleContact.email[0]?.value || '--' : titleContact.email}</span></div>` : ''}
+  </div>` : ''}
+
+  ${txn.broker_approved_at ? `
+  <div style="margin-bottom:20px;padding:10px 12px;border:1px solid #C5A278;border-radius:4px">
+    <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:6px">Broker Approval</div>
+    <img src="${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/courtney-signature.png" alt="Broker signature" style="height:44px;display:block;margin-bottom:4px" />
+    <div style="font-size:10px;color:#666">Courtney Okanlomo, Broker &middot; Approved ${fmtDate(txn.broker_approved_at)}</div>
   </div>` : ''}
 
   <div style="border-left:3px solid #4a7c59;padding:8px 12px;font-size:10px;color:#2d4a35;margin-bottom:20px">

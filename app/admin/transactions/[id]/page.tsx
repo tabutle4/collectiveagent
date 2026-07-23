@@ -2501,6 +2501,27 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+  const sendCdaForApproval = async (tiaId: string) => {
+    window.open(`/api/admin/transactions/${id}/cda/${tiaId}`, '_blank')
+    if (!confirm('Review the CDA that just opened in a new tab. Send it to operations and the broker for approval?')) return
+    setSendingDoc(tiaId + 'approval')
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send_cda_for_approval' }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Failed to send for approval')
+      alert(`Sent for approval to: ${(result.sent_to || []).join(', ')}`)
+      await loadData()
+    } catch (err: any) {
+      alert(err.message || 'Failed to send for approval')
+    } finally {
+      setSendingDoc(null)
+    }
+  }
+
   const updateTransaction = async (updates: any) => {
     setSaving(true)
     try {
@@ -4477,18 +4498,12 @@ export default function AdminTransactionDetailPage() {
                           {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
                               <button
-                                onClick={() => window.open(`/api/statements/${a.id}`, '_blank')}
-                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                                onClick={() => sendCdaForApproval(a.id)}
+                                disabled={sendingDoc === a.id + 'approval'}
+                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
                               >
                                 <FileText size={12} />
-                                Statement
-                              </button>
-                              <button
-                                onClick={() => window.open(`/api/admin/transactions/${id}/cda/${a.id}`, '_blank')}
-                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
-                              >
-                                <FileText size={12} />
-                                CDA
+                                {sendingDoc === a.id + 'approval' ? 'Sending...' : 'Send CDA for approval'}
                               </button>
                               {userPermissions.includes('can_generate_cda') && (
                                 <>
@@ -4502,7 +4517,8 @@ export default function AdminTransactionDetailPage() {
                                   </button>
                                   <button
                                     onClick={() => sendDocument(a.id, 'cda')}
-                                    disabled={sendingDoc === a.id + 'cda'}
+                                    disabled={sendingDoc === a.id + 'cda' || !(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
+                                    title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
                                     className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
                                   >
                                     <Send size={12} />

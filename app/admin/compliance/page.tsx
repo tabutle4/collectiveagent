@@ -20,6 +20,7 @@ interface TrackerRow {
   completed_at: string | null
   paid: boolean
   cda_sent: boolean
+  cda_status?: string | null
   flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean; sent: boolean } | null
   recheck_requested: boolean
   recheck_at: string | null
@@ -1151,6 +1152,8 @@ export default function AdminCompliancePage() {
                           </span>
                         )}
                         {r.cda_sent && <span className="text-xs text-luxury-gray-3">CDA sent</span>}
+                        {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-xs text-amber-700">CDA pending approval</span>}
+                        {!r.cda_sent && r.cda_status === 'approved' && <span className="text-xs text-green-600">CDA approved</span>}
                         <span className={`text-xs ${r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}`}>
                           {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
                         </span>
@@ -1250,6 +1253,8 @@ export default function AdminCompliancePage() {
                   {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
                 </span>
                 {r.cda_sent && <span className="text-luxury-gray-3">CDA sent</span>}
+                {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-amber-700">CDA pending approval</span>}
+                {!r.cda_sent && r.cda_status === 'approved' && <span className="text-green-600">CDA approved</span>}
               </div>
               {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
                 <div className="mt-1 text-xs text-red-600">{r.missing_items.length} missing</div>

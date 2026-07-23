@@ -193,60 +193,27 @@ export async function buildCdaEmail(
     .maybeSingle()
   const agencyName = agencySettings?.agency_name || 'Collective Realty Co.'
 
-  const disburseAmount = Number(tia.agent_gross || 0) + Number(tia.brokerage_split || 0)
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+  const cdaUrl = `${appUrl}/api/admin/transactions/${transactionId}/cda/${internalAgentId}`
+  const firstName = agent.preferred_first_name || agent.first_name || 'there'
 
   const content = `
-    <p class="email-greeting">CDA: Commission Disbursement Authorization</p>
-    <p style="margin: 0 0 16px; color: ${EMAIL_COLORS.bodyText};">
-      This Commission Disbursement Authorization is for the transaction below.
-      Title company may disburse commission per the breakdown.
+    <p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};">Hi ${firstName},</p>
+    <p style="margin:0 0 16px;font-size:14px;color:${EMAIL_COLORS.bodyText};">
+      Your Commission Disbursement Authorization (CDA) for
+      <strong style="color:${EMAIL_COLORS.headingText};">${propertyLabel || 'your recent transaction'}</strong>${
+    txn.closing_date || txn.closed_date ? ` closed ${fmtDate(txn.closing_date || txn.closed_date)}` : ''
+  } is ready. View it online below; you can print or save a copy for your records.
     </p>
-
-    <div class="email-section">
-      <h3 style="margin-bottom: 10px;">Property</h3>
-      <p style="margin: 0; color: ${EMAIL_COLORS.headingText};">${propertyLabel || '--'}</p>
-      <table style="width: 100%; font-size: 13px; border-collapse: collapse; margin-top: 10px;">
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Sales price</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${fmt$(txn.sales_price)}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Closing</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${fmtDate(txn.closing_date || txn.closed_date)}</td></tr>
-      </table>
-    </div>
-
-    <div class="email-section">
-      <h3 style="margin-bottom: 10px;">Agent</h3>
-      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Name</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${agentName}</td></tr>
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">Role</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText};">${String(tia.agent_role || '').replace(/_/g, ' ')}</td></tr>
-      </table>
-    </div>
-
-    <div class="email-section">
-      <h3 style="margin-bottom: 10px;">Disbursement</h3>
-      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-        <tr><td style="padding: 4px 0; color: ${EMAIL_COLORS.lightText};">To ${agencyName}</td>
-            <td style="text-align: right; color: ${EMAIL_COLORS.headingText}; font-weight: 600;">${fmt$(disburseAmount)}</td></tr>
-      </table>
-      <p style="margin: 10px 0 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">
-        Please make check payable to ${agencyName} and deliver per the
-        instructions we'll provide at closing.
-      </p>
-    </div>
-
-    ${
-      txn.title_company_name
-        ? `<p style="margin: 16px 0 0; color: ${EMAIL_COLORS.bodyText}; font-size: 13px;">
-            Title company: ${txn.title_company_name}${
-            txn.title_company_contact_name ? ` · ${txn.title_company_contact_name}` : ''
-          }${txn.title_company_email ? ` · ${txn.title_company_email}` : ''}
-          </p>`
-        : ''
-    }
-
-    <p style="margin: 20px 0 0; color: ${EMAIL_COLORS.lightText}; font-size: 12px;">
-      Questions? Reply to this email or contact the brokerage.
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 0;">
+      <tr>
+        <td style="padding:0 6px;">
+          <a href="${cdaUrl}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View CDA</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:24px 0 0;color:${EMAIL_COLORS.lightText};font-size:12px;">
+      Please let us know if anything looks incorrect so we can make it right.
     </p>
   `
 

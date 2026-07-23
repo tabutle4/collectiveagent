@@ -227,6 +227,7 @@ export async function GET(request: NextRequest) {
         // Auto-derived, read-only
         paid: !!(r.transaction_id && r.agent_id && paidByTxnAgent[`${r.transaction_id}:${r.agent_id}`]),
         cda_sent: txn?.cda_status === 'sent',
+        cda_status: txn?.cda_status || null,
         flyer: flyer
           ? {
               id: flyer.id,
