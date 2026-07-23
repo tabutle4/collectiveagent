@@ -111,7 +111,7 @@ function SendDocumentInner() {
       if (!res.ok) throw new Error(json.error || 'Send failed')
 
       if (mode === 'approval') {
-        setDoneMsg(`Sent for approval to: ${(json.sent_to || []).join(', ')}`)
+        setDoneMsg(json.warning || `Sent for approval to: ${(json.sent_to || []).join(', ')}`)
       } else if (mode === 'title') {
         setDoneMsg(`Sent to ${json.sent_to}${json.cc?.length ? ` (cc: ${json.cc.join(', ')})` : ''}`)
       } else {

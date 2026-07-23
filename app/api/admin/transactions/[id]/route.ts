@@ -3419,30 +3419,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { data: txnRow } = await supabase
         .from('transactions').select('id, property_address').eq('id', id).single()
       if (!txnRow) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
-      const { data: approvers } = await supabase
-        .from('users').select('email').in('role', ['operations', 'broker'])
-      const approverEmails = (approvers || []).map((a: any) => a.email).filter(Boolean)
-      if (approverEmails.length === 0) {
-        return NextResponse.json({ error: 'No operations/broker approver email on file' }, { status: 400 })
-      }
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
-      const propertyLabel = txnRow.property_address || 'Transaction'
-      const { error: apprSendError } = await resend.emails.send({
-        from: 'Collective Realty Co. <notifications@coachingbrokeragetools.com>',
-        to: approverEmails,
-        subject: `CDA needs approval: ${propertyLabel}`,
-        html: getEmailLayout(
-          `<p>A CDA is ready for your approval.</p>
-           <p style="margin:0 0 16px;"><strong>${propertyLabel}</strong></p>
-           <p style="text-align:center;margin:24px 0;">
-             <a href="${appUrl}/admin/cda-approval/${id}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Review &amp; Approve</a>
-           </p>
-           <p style="font-size:13px;color:#888888;">You can also approve it from the Needs CDA tab on the Compliance page.</p>`,
-          { title: 'CDA Approval Needed', subtitle: propertyLabel, preheader: `CDA approval needed for ${propertyLabel}` }
-        ),
-      })
-      if (apprSendError) return NextResponse.json({ error: apprSendError.message || 'Send failed' }, { status: 500 })
-      await supabase.from('transactions')
+
+      // Flip the status FIRST so the approval request always registers (shows
+      // on the Needs CDA tab and can be approved) even if the notification
+      // email can't be sent. Clearing the prior approval here also drops a
+      // stale broker signature when a CDA is re-requested after edits.
+      const { error: statusErr } = await supabase.from('transactions')
         .update({
           cda_status: 'pending_approval',
           cda_sent_for_approval_at: new Date().toISOString(),
@@ -3450,7 +3432,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           broker_approved_by: null,
         })
         .eq('id', id)
-      return NextResponse.json({ success: true, sent_to: approverEmails })
+      if (statusErr) return NextResponse.json({ error: statusErr.message }, { status: 500 })
+
+      // Notify approvers (operations + broker) — best effort. Resolve by
+      // office_email first (their real CRC mailbox), then personal email.
+      const { data: approvers } = await supabase
+        .from('users').select('email, office_email').in('role', ['operations', 'broker'])
+      const approverEmails = Array.from(new Set(
+        (approvers || []).map((a: any) => a.office_email || a.email).filter(Boolean)
+      )) as string[]
+
+      let warning: string | null = null
+      if (approverEmails.length === 0) {
+        warning = 'Marked pending approval, but no operations/broker approver email was found to notify. Approve it from the Needs CDA tab.'
+      } else {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
+        const propertyLabel = txnRow.property_address || 'Transaction'
+        try {
+          const { error: apprSendError } = await resend.emails.send({
+            from: 'Collective Realty Co. <notifications@coachingbrokeragetools.com>',
+            to: approverEmails,
+            subject: `CDA needs approval: ${propertyLabel}`,
+            html: getEmailLayout(
+              `<p>A CDA is ready for your approval.</p>
+               <p style="margin:0 0 16px;"><strong>${propertyLabel}</strong></p>
+               <p style="text-align:center;margin:24px 0;">
+                 <a href="${appUrl}/admin/cda-approval/${id}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">Review &amp; Approve</a>
+               </p>
+               <p style="font-size:13px;color:#888888;">You can also approve it from the Needs CDA tab on the Compliance page.</p>`,
+              { title: 'CDA Approval Needed', subtitle: propertyLabel, preheader: `CDA approval needed for ${propertyLabel}` }
+            ),
+          })
+          if (apprSendError) warning = `Marked pending approval, but the notification email failed: ${apprSendError.message || 'send error'}`
+        } catch (e: any) {
+          warning = `Marked pending approval, but the notification email failed: ${e?.message || 'send error'}`
+        }
+      }
+      return NextResponse.json({ success: true, sent_to: approverEmails, warning })
     }
 
     // ── Approve a CDA (broker sign-off, per deal) ────────────────────────────
