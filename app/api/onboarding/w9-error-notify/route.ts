@@ -7,11 +7,18 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, type, error_detail } = body
+    const { name, email, type, error_detail, prospect_id } = body
 
     if (!name || !email || !type) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+
+    // Link straight to this prospect's page, where the office can send the
+    // Track1099 request and use "Advance Past W-9" once the W-9 is complete.
+    // Same base URL convention as sendNewProspectNotification in lib/email.ts.
+    const prospectLink = prospect_id
+      ? `https://agent.collectiverealtyco.com/admin/prospects/${prospect_id}`
+      : null
 
     const timestamp = new Date().toLocaleDateString('en-US', {
       month: 'long',
@@ -34,7 +41,10 @@ export async function POST(request: NextRequest) {
           <p style="margin:0 0 6px;font-size:13px;color:${EMAIL_COLORS.bodyText};"><strong style="color:${EMAIL_COLORS.headingText};">Error:</strong> ${error_detail || 'Form failed to load'}</p>
           <p style="margin:0;font-size:13px;color:${EMAIL_COLORS.bodyText};"><strong style="color:${EMAIL_COLORS.headingText};">Time:</strong> ${timestamp}</p>
         </div>
-        <p style="margin:0;font-size:13px;color:${EMAIL_COLORS.lightText};">Please send a W-9 request directly to this person via Track1099.</p>`,
+        <p style="margin:0 0 16px;font-size:13px;color:${EMAIL_COLORS.lightText};">Please send a W-9 request directly to this person via Track1099. Once their W-9 is complete, open their prospect page and use "Advance Past W-9" to move them to the final step and email them next steps.</p>
+        ${prospectLink ? `<div style="text-align:center;margin:8px 0 0;">
+          <a href="${prospectLink}" style="display:inline-block;padding:12px 24px;background:${EMAIL_COLORS.headingText};color:#ffffff;text-decoration:none;font-size:13px;letter-spacing:1px;text-transform:uppercase;">Open Prospect Page</a>
+        </div>` : ''}`,
         { title: 'W-9 Form Error', preheader: `W-9 error for ${name} -- manual send required` }
       ),
     })

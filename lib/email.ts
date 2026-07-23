@@ -740,3 +740,51 @@ export async function sendW9TrecReadyEmail(agent: {
     html,
   })
 }
+
+// Sent when the office advances an agent past the W-9 step. Mirrors the
+// "You're Almost There" screen shown after the W-9 in the onboarding portal,
+// since by the time the office advances the agent they have usually left the
+// page. Graph send (real mailbox) because the recipient is a not-yet-agent
+// whose inbox is outside the CRC M365 tenant.
+export async function sendAlmostThereEmail(agent: {
+  preferred_first_name: string
+  first_name: string
+  email: string
+}) {
+  const firstName = agent.preferred_first_name || agent.first_name
+
+  const html = getLuxuryEmailTemplate({
+    greeting: `Hi ${firstName}!`,
+    content: `
+      <p class="intro-text">You're almost there! Your onboarding documents have been completed and saved. The final step is your TREC sponsorship. We will submit your sponsorship request and notify you by email once it has been accepted.</p>
+      <div class="section-box">
+        <h2 class="section-title">What Happens Next</h2>
+        <p style="color:#555;font-size:14px;margin:0 0 8px;line-height:1.6;">We submit your TREC sponsorship request.</p>
+        <p style="color:#555;font-size:14px;margin:0 0 8px;line-height:1.6;">You will receive a TREC invitation email to accept.</p>
+        <p style="color:#555;font-size:14px;margin:0 0 8px;line-height:1.6;">Once accepted, we will send your welcome email with next steps.</p>
+        <p style="color:#555;font-size:14px;margin:0;line-height:1.6;">You will gain full access to the agent portal.</p>
+      </div>
+      <p class="intro-text">Let us know if you have any questions as you proceed!</p>
+    `,
+    darkSection: `
+      <h2 class="dark-section-title">Questions? We Are Here.</h2>
+      <div class="option-box">
+        <h3 class="option-title">Contact the Office</h3>
+        <p class="option-description">Reach out any time and we will help you through it.</p>
+        <div style="text-align: center; display: flex; gap: 12px; justify-content: center;">
+          <a href="mailto:office@collectiverealtyco.com" class="btn btn-white">Email Office</a>
+          <a href="tel:2816389407" class="btn btn-white">Call Office</a>
+        </div>
+      </div>
+    `,
+    closing: ``,
+  })
+
+  return sendMailAs({
+    fromUpn: UPN_TARA,
+    to: agent.email,
+    replyTo: REPLY_TO_OFFICE,
+    subject: "You're Almost There",
+    html,
+  })
+}

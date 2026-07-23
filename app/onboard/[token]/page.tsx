@@ -486,6 +486,11 @@ export default function OnboardingPage() {
   const [isConversion, setIsConversion] = useState(false) // True if existing agent converting to referral
   const [step1Completed, setStep1Completed] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({})
+  // True once the agent has clicked "Complete W-9 Now" at least once. The
+  // embedded widget request is unreliable, so after the first click we hide
+  // the button and show a status message: the office finishes the W-9 request
+  // and advances the agent manually once the W-9 is complete.
+  const [w9Submitted, setW9Submitted] = useState(false)
   const payloadScriptLoaded = useRef(false)
   
   // Referral settings from company_settings
@@ -1571,6 +1576,23 @@ const checkout = new window.Payload.Checkout({
                   Continue &rarr;
                 </button>
               </>
+            ) : w9Submitted ? (
+              <>
+                <div className="text-center mb-8">
+                  <h1 className="text-2xl font-semibold text-luxury-gray-1 mb-2">W-9 Request Received</h1>
+                  <p className="text-sm text-luxury-gray-3 max-w-md mx-auto">
+                    Thank you. Your W-9 request has been submitted and the office has been notified.
+                  </p>
+                </div>
+                <div className="container-card text-left space-y-3 max-w-md mx-auto">
+                  <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest">What happens next</p>
+                  <div className="space-y-2 text-sm text-luxury-gray-2">
+                    <p>The office will send you your W-9 to complete, so please watch for a W-9 Request email from Track1099.</p>
+                    <p>Once your W-9 is complete, the office will move you to the final step and email you what happens next.</p>
+                    <p>You can safely close this page now. There is nothing else for you to do here.</p>
+                  </div>
+                </div>
+              </>
             ) : (
               <>
                 <div className="text-center mb-8">
@@ -1582,6 +1604,7 @@ const checkout = new window.Payload.Checkout({
                 <div className="container-card text-center space-y-4">
                   <button
                     onClick={async () => {
+                      setW9Submitted(true)
                       const notifyW9Error = async (errorDetail: string) => {
                         await fetch('/api/onboarding/w9-error-notify', {
                           method: 'POST',
@@ -1591,6 +1614,7 @@ const checkout = new window.Payload.Checkout({
                             email: joinForm.email || prospect?.email || 'Unknown',
                             type: 'Agent Onboarding',
                             error_detail: errorDetail,
+                            prospect_id: prospect?.id || null,
                           }),
                         })
                       }

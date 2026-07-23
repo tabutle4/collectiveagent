@@ -16,6 +16,7 @@ export default function ProspectDetailPage() {
   const [selectedSteps, setSelectedSteps] = useState<number[]>([])
   const [resetting, setResetting] = useState(false)
   const [resetResult, setResetResult] = useState<'success' | 'error' | null>(null)
+  const [advancingW9, setAdvancingW9] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -54,6 +55,31 @@ export default function ProspectDetailPage() {
       alert('Failed to update status')
     }
     setUpdating(false)
+  }
+
+  const advancePastW9 = async () => {
+    if (!prospect) return
+    const name = prospect.preferred_first_name || prospect.first_name || 'this agent'
+    if (!confirm(`Advance ${name} past the W-9 step and email them the "You're Almost There" message? Only do this after their W-9 is complete.`)) return
+    setAdvancingW9(true)
+    try {
+      const res = await fetch('/api/prospects/advance-past-w9', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prospect_id: prospect.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to advance')
+      alert(
+        data.email_sent === false
+          ? 'Advanced past the W-9 step, but the email failed to send. Please follow up with the agent.'
+          : "Advanced past the W-9 step and emailed the agent the You're Almost There message."
+      )
+    } catch (error: any) {
+      console.error('Error advancing past W-9:', error)
+      alert(error.message || 'Failed to advance past the W-9 step')
+    }
+    setAdvancingW9(false)
   }
 
   if (loading) {
@@ -139,6 +165,14 @@ export default function ProspectDetailPage() {
               className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary"
             >
               Convert to Agent
+            </button>
+
+            <button
+              onClick={advancePastW9}
+              disabled={advancingW9}
+              className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {advancingW9 ? 'Advancing...' : 'Advance Past W-9'}
             </button>
           </div>
         </div>
