@@ -2142,7 +2142,6 @@ export default function AdminTransactionDetailPage() {
     listing: { label: '', amount: '' },
     buying: { label: '', amount: '' },
   })
-  const [sendingDoc, setSendingDoc] = useState<string | null>(null)
 
   // Auth
   useEffect(() => {
@@ -2479,27 +2478,6 @@ export default function AdminTransactionDetailPage() {
       .then(r => r.ok ? r.json() : null)
       .then(json => { if (json) setData(json) })
       .catch(() => {})
-  }
-
-  const sendCdaForApproval = async (tiaId?: string) => {
-    if (tiaId) window.open(`/api/admin/transactions/${id}/cda/${tiaId}`, '_blank')
-    if (!confirm('Review the CDA that just opened in a new tab. Send it to operations and the broker for approval?')) return
-    setSendingDoc('approval')
-    try {
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send_cda_for_approval' }),
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to send for approval')
-      alert(`Sent for approval to: ${(result.sent_to || []).join(', ')}`)
-      await loadData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to send for approval')
-    } finally {
-      setSendingDoc(null)
-    }
   }
 
   const updateTransaction = async (updates: any) => {
@@ -4193,12 +4171,11 @@ export default function AdminTransactionDetailPage() {
                         <span className="text-xs text-green-600 self-center">CDA approved</span>
                       )}
                       <button
-                        onClick={() => sendCdaForApproval(producingAgents[0]?.id)}
-                        disabled={sendingDoc === 'approval'}
-                        className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                        onClick={() => router.push(`/admin/transactions/${id}/send/${producingAgents[0]?.id}?type=approval`)}
+                        className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
                       >
                         <FileText size={12} />
-                        {sendingDoc === 'approval' ? 'Sending...' : 'Send CDA for approval'}
+                        Send CDA for approval
                       </button>
                     </>
                   )}
@@ -4529,6 +4506,15 @@ export default function AdminTransactionDetailPage() {
                               >
                                 <Send size={12} />
                                 Send CDA
+                              </button>
+                              <button
+                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=title`)}
+                                disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
+                                title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending to title' : ''}
+                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                              >
+                                <Send size={12} />
+                                Send to Title
                               </button>
                               {a.agent_statement_sent_date && (
                                 <span className="text-xs text-luxury-gray-3 self-center">

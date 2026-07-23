@@ -52,6 +52,17 @@ export interface SendMailInput {
   replyTo?: string
   /** Whether Graph should save a copy in the sender's Sent Items. Default true. */
   saveToSentItems?: boolean
+  /** Optional file attachments (e.g., a CDA PDF + wiring instructions). */
+  attachments?: MailAttachment[]
+}
+
+export interface MailAttachment {
+  /** File name shown in the email, e.g., "123 Main St._2026-07-23_CDA.pdf". */
+  filename: string
+  /** MIME type, e.g., "application/pdf". */
+  contentType: string
+  /** Raw file bytes. Base64-encoded internally before sending to Graph. */
+  content: Uint8Array | Buffer
 }
 
 export interface SendMailResult {
@@ -75,6 +86,7 @@ export async function sendMailAs(input: SendMailInput): Promise<SendMailResult> 
     bcc,
     replyTo,
     saveToSentItems = true,
+    attachments,
   } = input
 
   const token = await getGraphToken()
@@ -96,6 +108,15 @@ export async function sendMailAs(input: SendMailInput): Promise<SendMailResult> 
 
   if (replyTo) {
     message.replyTo = [{ emailAddress: { address: replyTo } }]
+  }
+
+  if (attachments && attachments.length > 0) {
+    message.attachments = attachments.map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: a.filename,
+      contentType: a.contentType,
+      contentBytes: Buffer.from(a.content).toString('base64'),
+    }))
   }
 
   const res = await fetch(

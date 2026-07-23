@@ -163,10 +163,62 @@ export default function SettingsPage() {
   const [editingPlan, setEditingPlan] = useState<CommissionPlan | null>(null)
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null)
 
+  // Commission wiring instructions (firm-wide PDF, attached to title CDA emails)
+  const [wiringStatus, setWiringStatus] = useState<{ filename: string | null; updated_at: string | null }>({ filename: null, updated_at: null })
+  const [wiringBusy, setWiringBusy] = useState(false)
+
   useEffect(() => {
     fetchSettings()
     fetchProcessingFees()
+    fetchWiringStatus()
   }, [])
+
+  async function fetchWiringStatus() {
+    try {
+      const res = await fetch('/api/admin/settings/wiring-instructions')
+      const data = await res.json()
+      if (res.ok) setWiringStatus({ filename: data.filename || null, updated_at: data.updated_at || null })
+    } catch {
+      // Silent — page renders without it.
+    }
+  }
+
+  async function uploadWiring(file: File) {
+    setWiringBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/admin/settings/wiring-instructions', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Upload failed')
+      setWiringStatus({ filename: data.filename, updated_at: data.updated_at })
+      setSuccess('Wiring instructions uploaded.')
+    } catch (err: any) {
+      setError(err.message || 'Upload failed')
+    } finally {
+      setWiringBusy(false)
+    }
+  }
+
+  async function deleteWiring() {
+    if (!confirm('Remove the stored commission wiring instructions?')) return
+    setWiringBusy(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch('/api/admin/settings/wiring-instructions', { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Remove failed')
+      setWiringStatus({ filename: null, updated_at: null })
+      setSuccess('Wiring instructions removed.')
+    } catch (err: any) {
+      setError(err.message || 'Remove failed')
+    } finally {
+      setWiringBusy(false)
+    }
+  }
 
   async function fetchSettings() {
     try {
@@ -543,6 +595,35 @@ export default function SettingsPage() {
                       <input type="text" value={settings.canva_url || ''} onChange={(e) => updateSetting('canva_url', e.target.value)} className="input-luxury" />
                       <p className="text-xs text-luxury-gray-3 mt-1">Emailed to new agents about 24 hours after their first login. Changing the password here emails the new login to agents@collectiverealtyco.com. Click Save Changes above to apply.</p>
                     </div>
+                  </div>
+                </div>
+                {/* Commission Wiring Instructions */}
+                <div className="mt-8 pt-6 border-t border-luxury-gray-5/30">
+                  <h3 className="section-title mb-2">Commission Wiring Instructions</h3>
+                  <p className="text-xs text-luxury-gray-3 mb-4">
+                    Firm-wide PDF attached to every CDA sent to a title company. Stored privately, not in a public link.
+                  </p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label className={`btn btn-secondary text-sm cursor-pointer ${wiringBusy ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {wiringStatus.filename ? 'Replace PDF' : 'Upload PDF'}
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        disabled={wiringBusy}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadWiring(f); e.currentTarget.value = '' }}
+                      />
+                    </label>
+                    {wiringStatus.filename ? (
+                      <>
+                        <span className="text-sm text-luxury-gray-1">{wiringStatus.filename}</span>
+                        <button onClick={deleteWiring} disabled={wiringBusy} className="text-xs text-red-600 hover:text-red-700 disabled:opacity-50">
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-sm text-luxury-gray-3">No file uploaded</span>
+                    )}
                   </div>
                 </div>
               </div>
