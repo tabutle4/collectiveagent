@@ -24,7 +24,7 @@ export function buildCanvaAccessEmail(opts: {
        <strong>Password:</strong> ${canvaPassword}
      </p>
      <p style="text-align: center; margin: 24px 0;">
-       <a href="${canvaUrl}" style="display: inline-block; padding: 12px 28px; background-color: #C5A278; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">Open Shared Canva Account</a>
+       <a href="https://www.canva.com/login" style="display: inline-block; padding: 12px 28px; background-color: #C5A278; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: 600;">Open Shared Canva Account</a>
      </p>
      <p style="font-size: 13px; color: #888888;">This account is shared by the whole team, so please review the <a href="${canvaUrl}" style="color: #C5A278;">usage policy</a> and follow it for effective and fair use. Please do not change the password or account settings.</p>`,
     {
