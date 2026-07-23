@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
       throw new Error('No email in Microsoft token')
     }
 
-    const userSelect = 'id, email, role, is_active, status, first_name, last_name, preferred_first_name, preferred_last_name, ms_oid'
+    const userSelect = 'id, email, role, is_active, status, first_name, last_name, preferred_first_name, preferred_last_name, ms_oid, first_login_at'
 
     // Look up by oid first (stable), fall back to email for existing users
     let user: any = null
@@ -138,6 +138,14 @@ export async function GET(request: NextRequest) {
         .then(({ error }) => {
           if (error) console.error('Microsoft callback - failed to backfill ms_oid:', error)
         })
+    }
+
+    // Stamp first login -- used to schedule the shared Canva access email ~24h later
+    if (!user.first_login_at) {
+      await supabaseAdmin
+        .from('users')
+        .update({ first_login_at: new Date().toISOString() })
+        .eq('id', user.id)
     }
 
     // Create session

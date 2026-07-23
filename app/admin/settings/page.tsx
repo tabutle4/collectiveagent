@@ -35,6 +35,10 @@ interface CompanySettings {
   brokerage_main_email: string
   executive_email: string
   website?: string
+  // Shared accounts
+  canva_username?: string
+  canva_password?: string
+  canva_url?: string
   // Offices — Houston / DFW / Referral Collective (used by email signature)
   houston_address_line1?: string
   houston_address_line2?: string
@@ -520,6 +524,25 @@ export default function SettingsPage() {
                     <p className="text-xs text-luxury-gray-3 mt-1">
                       CC'd on commission statements and CDAs. Owner and ops only.
                     </p>
+                  </div>
+                </div>
+                {/* Shared Canva Pro Account */}
+                <div className="mt-8 pt-6 border-t border-luxury-gray-5/30">
+                  <h3 className="section-title mb-4">Shared Canva Pro Account</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="field-label">Canva Username</label>
+                      <input type="text" value={settings.canva_username || ''} onChange={(e) => updateSetting('canva_username', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div>
+                      <label className="field-label">Canva Password</label>
+                      <input type="text" value={settings.canva_password || ''} onChange={(e) => updateSetting('canva_password', e.target.value)} className="input-luxury" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="field-label">Canva Account Link</label>
+                      <input type="text" value={settings.canva_url || ''} onChange={(e) => updateSetting('canva_url', e.target.value)} className="input-luxury" />
+                      <p className="text-xs text-luxury-gray-3 mt-1">Emailed to new agents about 24 hours after their first login. Changing the password here emails the new login to agents@collectiverealtyco.com. Click Save Changes above to apply.</p>
+                    </div>
                   </div>
                 </div>
               </div>

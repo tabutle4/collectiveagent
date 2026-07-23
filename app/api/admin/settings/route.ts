@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import { Resend } from 'resend'
+import { buildCanvaAccessEmail } from '@/lib/email/canvaAccessEmail'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,7 +152,7 @@ export async function POST(request: NextRequest) {
     // Check if settings row exists
     const { data: existing } = await supabaseAdmin
       .from('company_settings')
-      .select('id')
+      .select('id, canva_password')
       .single()
 
     if (existing) {
@@ -165,6 +167,29 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         throw error
+      }
+
+      // If the shared Canva password changed, email the current login to the
+      // agents distribution list so everyone stays current. Non-fatal.
+      try {
+        const newPw = settings.canva_password
+        if (newPw && newPw !== existing.canva_password && settings.canva_username && settings.canva_url) {
+          const resend = new Resend(process.env.RESEND_API_KEY)
+          const { subject, html } = buildCanvaAccessEmail({
+            canvaUser: settings.canva_username,
+            canvaPassword: settings.canva_password,
+            canvaUrl: settings.canva_url,
+            isUpdate: true,
+          })
+          await resend.emails.send({
+            from: 'Collective Realty Co. <notifications@coachingbrokeragetools.com>',
+            to: 'agents@collectiverealtyco.com',
+            subject,
+            html,
+          })
+        }
+      } catch (e) {
+        console.error('Settings POST - failed to send Canva update email:', e)
       }
     } else {
       // Insert new
