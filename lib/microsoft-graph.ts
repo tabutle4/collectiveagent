@@ -657,12 +657,14 @@ export async function createM365User({
   tempPassword,
   personalPhone,
   officeLocation,
+  mlsChoice,
 }: {
   firstName: string
   lastName: string
   tempPassword: string
   personalPhone?: string | null
   officeLocation?: string | null
+  mlsChoice?: string | null
 }): Promise<{ officeEmail: string; stepErrors: string[] }> {
   const token = await getGraphToken()
   const domain = 'collectiverealtyco.com'
@@ -882,8 +884,16 @@ export async function createM365User({
     { id: GROUP_AGENTS, name: 'Agents' },
     { id: GROUP_ONBOARDING, name: 'Onboarding' },
   ]
-  if (officeLocation === 'Houston') groupsToJoin.push({ id: GROUP_HOUSTON, name: 'Houston Agents' })
-  if (officeLocation === 'DFW') groupsToJoin.push({ id: GROUP_DFW, name: 'DFW Agents' })
+  // Office-group membership is driven by MLS choice (an agent on both MLSs joins
+  // both office groups); officeLocation is a fallback for older/partial records.
+  const office = (officeLocation || '').toLowerCase()
+  const mls = (mlsChoice || '').toLowerCase()
+  const isHouston = mls === 'har' || mls === 'both' || office.includes('houston')
+  const isDfw =
+    mls === 'both' || mls.includes('ntreis') || mls.includes('metrotex') ||
+    office.includes('dfw') || office.includes('dallas')
+  if (isHouston) groupsToJoin.push({ id: GROUP_HOUSTON, name: 'Houston Agents' })
+  if (isDfw) groupsToJoin.push({ id: GROUP_DFW, name: 'DFW Agents' })
 
   for (const group of groupsToJoin) {
     try {

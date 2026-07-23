@@ -255,14 +255,17 @@ export async function POST(request: NextRequest) {
       // Get referral settings for dynamic fee in checklist email
       const referralFee = isReferralAgent ? (await getReferralSettings()).referral_annual_fee : 0
 
-      // Derive office from location/mls_choice
+      // Derive office (canonical 'Houston' | 'DFW') from location/mls_choice.
+      // DFW only when clearly DFW; everything else (incl. Houston-ish and 'Both') -> Houston.
+      const loc = (agent.location || '').toLowerCase()
+      const mls = agent.mls_choice || ''
       const officeValue =
-        agent.location === 'Houston' || agent.mls_choice === 'HAR'
-          ? 'Houston'
-          : agent.location === 'DFW' ||
-              (agent.mls_choice && agent.mls_choice.includes('NTREIS'))
-            ? 'DFW'
-            : agent.location || 'DFW'
+        loc.includes('dfw') ||
+        loc.includes('dallas') ||
+        mls.includes('NTREIS') ||
+        mls.includes('MetroTex')
+          ? 'DFW'
+          : 'Houston'
 
       // Generate a temporary password meeting M365 complexity requirements:
       // must contain uppercase, lowercase, digit, and special character (min 8 chars)
@@ -285,6 +288,7 @@ export async function POST(request: NextRequest) {
           tempPassword,
           personalPhone: (agent as any).personal_phone || null,
           officeLocation: officeValue,
+          mlsChoice: agent.mls_choice,
         })
         officeEmail = m365.officeEmail
         if (m365.stepErrors.length > 0) {

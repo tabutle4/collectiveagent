@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
         personal_phone: formData.personal_phone,
         business_phone: formData.business_phone || null,
         date_of_birth: formData.date_of_birth || null,
+        // Derive birth_month (full month name) from DOB so birthday campaigns have it
+        birth_month: formData.date_of_birth
+          ? ['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(String(formData.date_of_birth).slice(5, 7), 10) - 1] || null
+          : null,
         shipping_address_line1: formData.shipping_address_line1,
         shipping_address_line2: formData.shipping_address_line2 || null,
         shipping_city: formData.shipping_city,
