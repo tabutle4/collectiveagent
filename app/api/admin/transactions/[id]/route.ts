@@ -325,7 +325,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               waive_seller_processing_fees, waive_coaching_fee,
               cap_amount_override, post_cap_split_override,
               special_commission_notes, headshot_url,
-              monthly_fee_paid_through
+              monthly_fee_paid_through, bank_connected
             )
           `).eq('transaction_id', id),
           supabase

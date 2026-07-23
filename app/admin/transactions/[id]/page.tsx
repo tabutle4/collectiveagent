@@ -5699,6 +5699,17 @@ export default function AdminTransactionDetailPage() {
                         )}
                       </div>
                     )}
+                    {/* Connected bank for payouts */}
+                    <div className="mt-2 p-2 bg-luxury-light rounded">
+                      <p className="text-xs font-semibold text-luxury-gray-2 mb-1 flex items-center gap-1.5">
+                        <DollarSign size={11} /> Bank for Payouts
+                      </p>
+                      {u.bank_connected ? (
+                        <p className="text-xs font-medium text-green-600">Connected</p>
+                      ) : (
+                        <p className="text-xs text-luxury-gray-3">Not connected</p>
+                      )}
+                    </div>
                   </>
                 )}
               </div>
