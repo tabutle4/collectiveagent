@@ -2481,30 +2481,10 @@ export default function AdminTransactionDetailPage() {
       .catch(() => {})
   }
 
-  const sendDocument = async (tiaId: string, emailType: 'statement' | 'cda') => {
-    if (!confirm(`Send ${emailType === 'statement' ? 'commission statement' : 'CDA'} to agent?`)) return
-    setSendingDoc(tiaId + emailType)
-    try {
-      const res = await fetch(`/api/admin/transactions/${id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send_email', email_type: emailType, internal_agent_id: tiaId }),
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Send failed')
-      alert(`Sent to ${result.sent_to}${result.cc ? ` (cc: ${result.cc})` : ''}`)
-      await loadData()
-    } catch (err: any) {
-      alert(err.message || 'Failed to send')
-    } finally {
-      setSendingDoc(null)
-    }
-  }
-
-  const sendCdaForApproval = async (tiaId: string) => {
-    window.open(`/api/admin/transactions/${id}/cda/${tiaId}`, '_blank')
+  const sendCdaForApproval = async (tiaId?: string) => {
+    if (tiaId) window.open(`/api/admin/transactions/${id}/cda/${tiaId}`, '_blank')
     if (!confirm('Review the CDA that just opened in a new tab. Send it to operations and the broker for approval?')) return
-    setSendingDoc(tiaId + 'approval')
+    setSendingDoc('approval')
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
@@ -3362,6 +3342,20 @@ export default function AdminTransactionDetailPage() {
   const settings = data?.company_settings
   const agents = data?.agents || []
 
+  // Producing agents on this deal — the rows that get a CDA/statement.
+  // Mirrors the per-card filter: excludes team lead / momentum / referral
+  // rows and the second-check co_agent duplicate that shares an agent_id
+  // with the primary/listing row. Used for the deal-level "Send CDA for
+  // approval" button (approval is per deal, not per agent).
+  const producingAgents = agents.filter((a: any) => {
+    if (a.agent_role === 'team_lead' || a.agent_role === 'momentum_partner' || a.agent_role === 'referral_agent') return false
+    const isDup = a.agent_role === 'co_agent' && agents.some((o: any) =>
+      o.id !== a.id && o.agent_id === a.agent_id &&
+      (o.agent_role === 'primary_agent' || o.agent_role === 'listing_agent')
+    )
+    return !isDup
+  })
+
   // Pay-by date calculation - requires BOTH received date and compliance complete date
   const payByDate = (() => {
     if (checks.length === 0) return null
@@ -4187,14 +4181,34 @@ export default function AdminTransactionDetailPage() {
           {/* ── COMMISSIONS TAB ──────────────────────────────────────────── */}
           {activeTab === 'commissions' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h1 className="page-title">COMMISSIONS</h1>
-                <button
-                  onClick={() => setShowAddAgentModal(true)}
-                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
-                >
-                  + Add Agent
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {producingAgents.length > 0 && (
+                    <>
+                      {txn.cda_status === 'pending_approval' && (
+                        <span className="text-xs text-luxury-gray-3 self-center">CDA pending approval</span>
+                      )}
+                      {(txn.cda_status === 'approved' || txn.cda_status === 'sent') && (
+                        <span className="text-xs text-green-600 self-center">CDA approved</span>
+                      )}
+                      <button
+                        onClick={() => sendCdaForApproval(producingAgents[0]?.id)}
+                        disabled={sendingDoc === 'approval'}
+                        className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <FileText size={12} />
+                        {sendingDoc === 'approval' ? 'Sending...' : 'Send CDA for approval'}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setShowAddAgentModal(true)}
+                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                  >
+                    + Add Agent
+                  </button>
+                </div>
               </div>
 
               {/* Summary cards */}
@@ -4494,38 +4508,28 @@ export default function AdminTransactionDetailPage() {
                             </div>
                           )}
 
-                          {/* Statement & CDA buttons -- per agent card */}
-                          {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && (
+                          {/* Statement & CDA buttons -- per agent card.
+                              These open a preview page (the doc + a Send button)
+                              instead of sending blind. CDA send stays gated on
+                              deal-level approval. */}
+                          {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && userPermissions.includes('can_generate_cda') && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
                               <button
-                                onClick={() => sendCdaForApproval(a.id)}
-                                disabled={sendingDoc === a.id + 'approval'}
+                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=statement`)}
+                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
+                              >
+                                <Send size={12} />
+                                {a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
+                              </button>
+                              <button
+                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=cda`)}
+                                disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
+                                title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
                                 className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
                               >
-                                <FileText size={12} />
-                                {sendingDoc === a.id + 'approval' ? 'Sending...' : 'Send CDA for approval'}
+                                <Send size={12} />
+                                Send CDA
                               </button>
-                              {userPermissions.includes('can_generate_cda') && (
-                                <>
-                                  <button
-                                    onClick={() => sendDocument(a.id, 'statement')}
-                                    disabled={sendingDoc === a.id + 'statement'}
-                                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                                  >
-                                    <Send size={12} />
-                                    {sendingDoc === a.id + 'statement' ? 'Sending...' : a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
-                                  </button>
-                                  <button
-                                    onClick={() => sendDocument(a.id, 'cda')}
-                                    disabled={sendingDoc === a.id + 'cda' || !(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
-                                    title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
-                                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                                  >
-                                    <Send size={12} />
-                                    {sendingDoc === a.id + 'cda' ? 'Sending...' : 'Send CDA'}
-                                  </button>
-                                </>
-                              )}
                               {a.agent_statement_sent_date && (
                                 <span className="text-xs text-luxury-gray-3 self-center">
                                   Sent {new Date(a.agent_statement_sent_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
