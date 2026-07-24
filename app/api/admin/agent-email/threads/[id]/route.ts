@@ -9,12 +9,12 @@ export const dynamic = 'force-dynamic'
 // Gated by can_view_agent_email.
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_view_agent_email')
   if (auth.error) return auth.error
 
-  const threadId = params.id
+  const { id: threadId } = await params
   if (!threadId) {
     return NextResponse.json({ error: 'Missing thread id' }, { status: 400 })
   }
