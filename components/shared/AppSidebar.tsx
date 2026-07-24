@@ -84,6 +84,7 @@ interface AppSidebarProps {
 
 const adminNavEntries: NavEntry[] = [
   { type: 'item', item: { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard } },
+  { type: 'item', item: { href: '/admin/agent-email', label: 'Agent Email', icon: Inbox } },
   {
     type: 'group',
     group: {
@@ -167,6 +168,7 @@ const adminNavEntries: NavEntry[] = [
 
 const tcNavEntries: NavEntry[] = [
   { type: 'item', item: { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard } },
+  { type: 'item', item: { href: '/admin/agent-email', label: 'Agent Email', icon: Inbox } },
   {
     type: 'group',
     group: {
@@ -233,6 +235,7 @@ const tcNavEntries: NavEntry[] = [
 
 const supportNavEntries: NavEntry[] = [
   { type: 'item', item: { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard } },
+  { type: 'item', item: { href: '/admin/agent-email', label: 'Agent Email', icon: Inbox } },
   {
     type: 'group',
     group: {

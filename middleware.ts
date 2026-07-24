@@ -42,6 +42,7 @@ const PUBLIC_PATHS = [
   '/api/transactions/email-inbound',
   '/api/pm/email-webhook',
   '/api/checks/email-inbound',
+  '/api/agent-email/webhook',
   '/coaching-schedule',
   '/api/public',
 ]

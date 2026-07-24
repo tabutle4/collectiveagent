@@ -119,6 +119,9 @@ export type PermissionCode =
   | 'can_manage_pm_invoices'
   | 'can_manage_pm_repairs'
   | 'can_process_pm_disbursements'
+  // Agent Email Dashboard
+  | 'can_view_agent_email'
+  | 'can_manage_agent_email'
 
 // Role names as defined in the database
 export type RoleName = 'agent' | 'tc' | 'operations' | 'broker' | 'support'
@@ -340,6 +343,9 @@ export async function getPermissionsObject(
     'can_manage_pm_invoices',
     'can_manage_pm_repairs',
     'can_process_pm_disbursements',
+    // Agent Email Dashboard
+    'can_view_agent_email',
+    'can_manage_agent_email',
   ]
 
   for (const perm of allPermissions) {
