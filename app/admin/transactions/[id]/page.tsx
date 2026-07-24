@@ -2037,6 +2037,9 @@ export default function AdminTransactionDetailPage() {
     Record<string, { count: number; total: number; invoices: any[] }>
   >({})
 
+  // Which agent's bank activation is currently being sent from the sidebar.
+  const [sendingBankAgentId, setSendingBankAgentId] = useState<string | null>(null)
+
   // Retainer modal state - opens from the agent card's "+ Add Retainer" button.
   // Creates a new TIA row with installment_kind='retainer' for this agent on
   // this transaction. Retainer rows have simple math: basis - retainer_fee.
@@ -3448,6 +3451,25 @@ export default function AdminTransactionDetailPage() {
   }
   const toggleCheckExpanded = (checkId: string) => {
     setExpandedChecks(prev => ({ ...prev, [checkId]: !prev[checkId] }))
+  }
+
+  // Admin-initiated: create the agent's Payload bank activation and send the
+  // branded heads-up email. Same endpoint the billing page uses.
+  const sendBankActivation = async (agentId: string) => {
+    setSendingBankAgentId(agentId)
+    try {
+      const res = await fetch(`/api/admin/agents/${agentId}/send-bank-activation`, { method: 'POST' })
+      const result = await res.json()
+      if (res.ok && result.success) {
+        alert(result.message || 'Bank activation sent to the agent.')
+      } else {
+        alert(result.error || 'Failed to send bank activation. Please try again or contact office@collectiverealtyco.com.')
+      }
+    } catch {
+      alert('Failed to send bank activation. Please try again or contact office@collectiverealtyco.com.')
+    } finally {
+      setSendingBankAgentId(null)
+    }
   }
 
   // Pre-fill email draft when modal opens
@@ -5713,7 +5735,19 @@ export default function AdminTransactionDetailPage() {
                       {u.bank_connected ? (
                         <p className="text-xs font-medium text-green-600">Connected</p>
                       ) : (
-                        <p className="text-xs text-luxury-gray-3">Not connected</p>
+                        <>
+                          <p className="text-xs text-luxury-gray-3 mb-1.5">Not connected</p>
+                          {a.agent_id && userPermissions.includes('can_process_payouts') && (
+                            <button
+                              onClick={() => sendBankActivation(a.agent_id)}
+                              disabled={sendingBankAgentId === a.agent_id}
+                              className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                              <Send size={11} />
+                              {sendingBankAgentId === a.agent_id ? 'Sending...' : 'Send Bank Connect'}
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </>

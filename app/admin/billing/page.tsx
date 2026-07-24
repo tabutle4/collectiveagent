@@ -35,6 +35,7 @@ const MARK_PAID_METHODS = [
 export default function AdminBillingPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [userPermissions, setUserPermissions] = useState<string[]>([])
   const [agents, setAgents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -45,6 +46,10 @@ export default function AdminBillingPage() {
   >({})
   const [loadingAgent, setLoadingAgent] = useState<string | null>(null)
   const [sending, setSending] = useState<string | null>(null)
+  // Bank-connect sending state. sendingBank holds the agent id of a single
+  // in-flight send; sendingBankAll is true while the bulk send runs.
+  const [sendingBank, setSendingBank] = useState<string | null>(null)
+  const [sendingBankAll, setSendingBankAll] = useState(false)
   const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null)
   const [customAmount, setCustomAmount] = useState('')
   const [customDesc, setCustomDesc] = useState('')
@@ -110,6 +115,7 @@ export default function AdminBillingPage() {
         }
         const data = await res.json()
         setUser(data.user)
+        setUserPermissions(data.permissions || [])
       } catch {
         router.push('/auth/login')
       }
@@ -315,6 +321,74 @@ export default function AdminBillingPage() {
     })
     if (!res.ok) throw new Error(`Billing action failed: ${action}`)
     return res.json()
+  }
+
+  // Create the agent's Payload bank activation + send the branded heads-up
+  // email. Same endpoint the transaction sidebar uses.
+  const sendBankActivation = async (agentId: string) => {
+    setSendingBank(agentId)
+    try {
+      const res = await fetch(`/api/admin/agents/${agentId}/send-bank-activation`, { method: 'POST' })
+      const result = await res.json()
+      if (res.ok && result.success) {
+        alert(result.message || 'Bank activation sent to the agent.')
+      } else {
+        alert(result.error || 'Failed to send bank activation. Please try again or contact office@collectiverealtyco.com.')
+      }
+    } catch {
+      alert('Failed to send bank activation. Please try again or contact office@collectiverealtyco.com.')
+    } finally {
+      setSendingBank(null)
+    }
+    await loadAgents()
+  }
+
+  // Bulk: send a bank-connect request to every active agent who is not already
+  // connected. Reuses the single-agent endpoint one request at a time so the
+  // server logic stays in one place.
+  const sendBankActivationToAll = async () => {
+    const targets = agents.filter((a: any) => !a.bank_connected)
+    if (targets.length === 0) {
+      alert('All agents already have a connected bank account.')
+      return
+    }
+    if (
+      !confirm(
+        `Send a bank connect request to ${targets.length} agent(s) who are not yet connected? Each will receive a Payload activation and a heads-up email.`
+      )
+    ) {
+      return
+    }
+    setSendingBankAll(true)
+    let sent = 0
+    let skipped = 0
+    const failed: string[] = []
+    const label = (a: any) => `${a.first_name || ''} ${a.last_name || ''}`.trim() || a.email || 'Unknown'
+    try {
+      for (const a of targets) {
+        try {
+          const res = await fetch(`/api/admin/agents/${a.id}/send-bank-activation`, { method: 'POST' })
+          const result = await res.json()
+          if (res.ok && result.success) {
+            sent++
+          } else if (res.status === 400) {
+            // Already connected or already pending between load and send — not a failure.
+            skipped++
+          } else {
+            failed.push(label(a))
+          }
+        } catch {
+          failed.push(label(a))
+        }
+      }
+    } finally {
+      setSendingBankAll(false)
+    }
+    await loadAgents()
+    const parts = [`Sent to ${sent} agent(s).`]
+    if (skipped > 0) parts.push(`${skipped} already connected or pending (skipped).`)
+    if (failed.length > 0) parts.push(`${failed.length} could not be sent: ${failed.join(', ')}`)
+    alert(parts.join(' '))
   }
 
   const sendInvoice = async (agentId: string, invoiceId: string) => {
@@ -724,7 +798,22 @@ export default function AdminBillingPage() {
 
   return (
     <div>
-      <h1 className="page-title mb-6">BILLING</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="page-title">BILLING</h1>
+        {userPermissions.includes('can_process_payouts') &&
+          agents.filter((a: any) => !a.bank_connected).length > 0 && (
+          <button
+            onClick={sendBankActivationToAll}
+            disabled={sendingBankAll}
+            className="btn btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Send size={12} />
+            {sendingBankAll
+              ? 'Sending...'
+              : `Send Bank Connect to ${agents.filter((a: any) => !a.bank_connected).length} Unconnected`}
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
         <div
@@ -948,6 +1037,27 @@ export default function AdminBillingPage() {
                       >
                         <Plus size={11} />
                         {creatingMissing === agent.id ? 'Creating...' : 'Create Invoice'}
+                      </button>
+                    )}
+                    <span className="text-xs text-luxury-gray-3">
+                      Bank:{' '}
+                      {agent.bank_connected ? (
+                        <span className="text-green-600 font-medium">Connected</span>
+                      ) : (
+                        <span className="text-amber-600 font-medium">Not connected</span>
+                      )}
+                    </span>
+                    {!agent.bank_connected && userPermissions.includes('can_process_payouts') && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          sendBankActivation(agent.id)
+                        }}
+                        disabled={sendingBank === agent.id || sendingBankAll}
+                        className="btn btn-secondary text-xs flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Send size={11} />
+                        {sendingBank === agent.id ? 'Sending...' : 'Send Bank Connect'}
                       </button>
                     )}
                   </div>
