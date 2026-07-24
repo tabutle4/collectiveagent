@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { RefreshCcw, Filter, Inbox, User, ChevronRight } from 'lucide-react'
+import { RefreshCcw, Filter, Inbox, User, ChevronRight, DownloadCloud } from 'lucide-react'
 
 type StatusKey = 'new' | 'in_progress' | 'waiting_on_agent' | 'waiting_on_admin' | 'closed'
 
@@ -142,6 +142,9 @@ export default function AgentEmailDashboardPage() {
   const [detail, setDetail] = useState<ThreadDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
+  const [backfillState, setBackfillState] = useState<'idle' | 'running'>('idle')
+  const [backfillMessage, setBackfillMessage] = useState<string | null>(null)
+
   const loadList = useCallback(async () => {
     setLoadingList(true)
     setError(null)
@@ -194,6 +197,40 @@ export default function AgentEmailDashboardPage() {
     if (selectedId) loadDetail(selectedId)
     else setDetail(null)
   }, [selectedId, loadDetail])
+
+  const runBackfill = useCallback(
+    async (hours: number) => {
+      if (backfillState === 'running') return
+      const label = hours === 24 ? '24 hours' : hours === 72 ? '3 days' : `${hours} hours`
+      if (!confirm(`Backfill agent emails from the last ${label}? Existing threads will not be duplicated.`)) return
+      setBackfillState('running')
+      setBackfillMessage(`Running backfill for the last ${label}. This takes a minute...`)
+      try {
+        const res = await fetch(`/api/admin/agent-email/backfill?hours=${hours}`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Backfill failed')
+        const total = json?.report?.totalIngested ?? 0
+        const errors = (json?.report?.perMailbox || []).reduce(
+          (a: number, m: any) => a + (m.errors?.length || 0),
+          0
+        )
+        setBackfillMessage(
+          `Backfill complete. ${total} new message${total === 1 ? '' : 's'} ingested` +
+            (errors > 0 ? ` (${errors} error${errors === 1 ? '' : 's'} logged in console).` : '.')
+        )
+        if (errors > 0) console.log('Backfill errors:', JSON.stringify(json.report, null, 2))
+        await loadList()
+      } catch (e: any) {
+        setBackfillMessage(`Backfill failed: ${e?.message || 'unknown error'}`)
+      } finally {
+        setBackfillState('idle')
+      }
+    },
+    [backfillState, loadList]
+  )
 
   return (
     <div className="flex h-[calc(100vh-4rem)] bg-[#EBEBEB]">
@@ -290,16 +327,68 @@ export default function AgentEmailDashboardPage() {
             <Inbox className="h-4 w-4" />
             <h1 className="text-sm font-semibold">Agent Email</h1>
           </div>
-          <button
-            type="button"
-            onClick={loadList}
-            className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 flex items-center gap-1"
-            title="Refresh"
-          >
-            <RefreshCcw className="h-3.5 w-3.5" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={loadList}
+              className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 flex items-center gap-1"
+              title="Refresh"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+            <div className="relative group">
+              <button
+                type="button"
+                disabled={backfillState === 'running'}
+                className="text-xs text-luxury-gray-3 hover:text-luxury-gray-1 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Pull recent agent emails from admin mailboxes"
+              >
+                <DownloadCloud className="h-3.5 w-3.5" />
+                {backfillState === 'running' ? 'Backfilling...' : 'Backfill'}
+              </button>
+              <div className="absolute right-0 top-full mt-1 hidden group-hover:block bg-white border border-luxury-gray-4 rounded-md shadow-lg z-10 min-w-[140px]">
+                <button
+                  type="button"
+                  onClick={() => runBackfill(24)}
+                  disabled={backfillState === 'running'}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-luxury-gray-5 disabled:opacity-50"
+                >
+                  Last 24 hours
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runBackfill(72)}
+                  disabled={backfillState === 'running'}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-luxury-gray-5 disabled:opacity-50"
+                >
+                  Last 3 days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runBackfill(168)}
+                  disabled={backfillState === 'running'}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-luxury-gray-5 disabled:opacity-50"
+                >
+                  Last 7 days
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+        {backfillMessage && (
+          <div className="px-4 py-2 text-[11px] text-luxury-gray-2 bg-[#F0E7D6] border-b border-luxury-gray-4 flex items-center justify-between">
+            <span>{backfillMessage}</span>
+            <button
+              type="button"
+              onClick={() => setBackfillMessage(null)}
+              className="text-luxury-gray-3 hover:text-luxury-gray-1"
+              title="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div className="px-4 py-2 text-[11px] text-luxury-gray-3 border-b border-luxury-gray-5">
           {loadingList
             ? 'Loading...'
