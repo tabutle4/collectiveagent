@@ -11,7 +11,8 @@ import {
   Trash2,
   Check,
   X,
-  GripVertical,
+  ChevronUp,
+  ChevronDown,
   AlertCircle,
   CheckCircle2,
   Circle,
@@ -203,31 +204,43 @@ export default function ChecklistsPage() {
   }
 
   const moveItem = async (item: ChecklistItem, direction: 'up' | 'down') => {
-    const list = selectedItems
+    const list = selectedItems // already sorted by display_order
     const idx = list.findIndex(i => i.id === item.id)
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1
     if (swapIdx < 0 || swapIdx >= list.length) return
 
-    const swapItem = list[swapIdx]
+    // Reorder by POSITION, then re-number display_order sequentially (0..n-1).
+    // We intentionally do NOT just swap the two items' stored display_order
+    // values: if items share a value (ties from seeding/migration), swapping
+    // equal numbers is a no-op and nothing moves. Re-numbering by position
+    // makes the move always take effect and normalizes any duplicate orders.
+    const reordered = [...list]
+    const [moved] = reordered.splice(idx, 1)
+    reordered.splice(swapIdx, 0, moved)
+    const withOrder = reordered.map((i, n) => ({ ...i, display_order: n }))
+
+    // Only persist the items whose order actually changed.
+    const changed = withOrder.filter(i => {
+      const prev = list.find(p => p.id === i.id)
+      return prev && prev.display_order !== i.display_order
+    })
+    if (changed.length === 0) return
+
     setSaving(true)
     try {
-      await Promise.all([
-        fetch('/api/admin/checklist-items', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: item.id, display_order: swapItem.display_order }),
-        }),
-        fetch('/api/admin/checklist-items', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: swapItem.id, display_order: item.display_order }),
-        }),
-      ])
+      await Promise.all(
+        changed.map(i =>
+          fetch('/api/admin/checklist-items', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: i.id, display_order: i.display_order }),
+          })
+        )
+      )
       setItems(prev =>
         prev.map(i => {
-          if (i.id === item.id) return { ...i, display_order: swapItem.display_order }
-          if (i.id === swapItem.id) return { ...i, display_order: item.display_order }
-          return i
+          const u = withOrder.find(w => w.id === i.id)
+          return u ? { ...i, display_order: u.display_order } : i
         })
       )
     } catch (err: any) {
@@ -424,9 +437,18 @@ export default function ChecklistsPage() {
                       <button
                         onClick={() => moveItem(item, 'up')}
                         disabled={idx === 0 || saving}
+                        title="Move up"
                         className="text-luxury-gray-4 hover:text-luxury-gray-2 disabled:opacity-20 disabled:cursor-not-allowed"
                       >
-                        <GripVertical size={12} />
+                        <ChevronUp size={12} />
+                      </button>
+                      <button
+                        onClick={() => moveItem(item, 'down')}
+                        disabled={idx === selectedItems.length - 1 || saving}
+                        title="Move down"
+                        className="text-luxury-gray-4 hover:text-luxury-gray-2 disabled:opacity-20 disabled:cursor-not-allowed"
+                      >
+                        <ChevronDown size={12} />
                       </button>
                     </div>
 
