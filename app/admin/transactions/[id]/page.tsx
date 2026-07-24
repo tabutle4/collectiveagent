@@ -4193,7 +4193,7 @@ export default function AdminTransactionDetailPage() {
                         <span className="text-xs text-green-600 self-center">CDA approved</span>
                       )}
                       <button
-                        onClick={() => router.push(`/admin/transactions/${id}/send/${producingAgents[0]?.id}?type=approval`)}
+                        onClick={() => window.location.assign(`/admin/transactions/${id}/send/${producingAgents[0]?.id}?type=approval`)}
                         className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
                       >
                         <FileText size={12} />
