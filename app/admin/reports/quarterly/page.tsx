@@ -289,9 +289,23 @@ export default function QuarterlyPresentationPage() {
         </div>
       </div>
 
+      {/* Print-only: all slides stacked, one per page */}
+      <div className="hidden print:block">
+        <div className="print-slide"><TitleSlide quarter={quarterLabel} /></div>
+        <div className="print-slide"><AgendaSlide /></div>
+        <div className="print-slide"><GrowthSlide data={data} active /></div>
+        <div className="print-slide"><VolumeSlide data={data} active /></div>
+        {data.topTeams[0] && <div className="print-slide"><TeamSlide team={data.topTeams[0]} rank={1} quarter={data.quarter.quarter} active /></div>}
+        {data.topTeams[1] && <div className="print-slide"><TeamSlide team={data.topTeams[1]} rank={2} quarter={data.quarter.quarter} active /></div>}
+        <div className="print-slide"><ProducersSlide type="LEASES" houston={data.topProducers.leases.houston} dallas={data.topProducers.leases.dallas} /></div>
+        <div className="print-slide"><ProducersSlide type="SALES" houston={data.topProducers.sales.houston} dallas={data.topProducers.sales.dallas} /></div>
+        <div className="print-slide"><RevealSlide agentNet={data.volume.totalAgentNet} quarter={data.quarter.quarter} year={data.quarter.year} /></div>
+        <div className="print-slide"><CloseSlide quarter={quarterLabel} /></div>
+      </div>
+
       {/* Slide Container */}
       <div 
-        className="max-w-7xl mx-auto bg-neutral-950 border border-neutral-800 relative overflow-hidden"
+        className="max-w-7xl mx-auto bg-neutral-950 border border-neutral-800 relative overflow-hidden print:hidden"
         style={{ minHeight: 'calc(100vh - 120px)' }}
       >
         {/* Slides */}

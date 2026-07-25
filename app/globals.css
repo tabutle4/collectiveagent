@@ -392,3 +392,17 @@
     line-height: 1.375rem;
   }
 }
+
+@media print {
+  @page { size: letter landscape; margin: 0; }
+  .print-slide {
+    position: relative;
+    overflow: hidden;
+    min-height: 90vh;
+    background: #000;
+    page-break-after: always;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
