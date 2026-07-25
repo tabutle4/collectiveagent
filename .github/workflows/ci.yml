@@ -1,0 +1,71 @@
+name: CI
+
+# Every push to main gets a green check or a red X on GitHub within minutes.
+# A red X means: do not trust that deploy - read the failed step's log.
+# Vercel will still build; this is the independent second opinion.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck (tsc --noEmit)
+        run: ./node_modules/.bin/tsc --noEmit
+
+      - name: Money-math and pattern tests
+        run: npm test
+
+      - name: 'Guard: no new requireAuth under /api/admin'
+        run: |
+          # Four legacy files are grandfathered (queued on the audit list).
+          # Any NEW admin route using requireAuth instead of requirePermission
+          # fails the build.
+          COUNT=$(grep -rl "requireAuth" app/api/admin --include="*.ts" | wc -l)
+          echo "requireAuth files under app/api/admin: $COUNT (baseline 4)"
+          if [ "$COUNT" -gt 4 ]; then
+            echo "::error::A new /api/admin route uses requireAuth. Use requirePermission with a specific permission code (see AGENTS.md)."
+            grep -rl "requireAuth" app/api/admin --include="*.ts"
+            exit 1
+          fi
+
+      - name: 'Guard: no requireRole in new code'
+        run: |
+          COUNT=$(grep -rl "requireRole(" app --include="*.ts" | wc -l)
+          echo "requireRole call sites: $COUNT (baseline 1: quarterly report, queued for migration)"
+          if [ "$COUNT" -gt 1 ]; then
+            echo "::error::requireRole added in new code. Express access as a permission instead (see AGENTS.md)."
+            exit 1
+          fi
+
+      - name: 'Guard: no secret keys committed'
+        run: |
+          if grep -rInE "sk_live_[A-Za-z0-9]|sk_test_[A-Za-z0-9]" app lib components scripts --include="*.ts" --include="*.tsx" --include="*.mjs"; then
+            echo "::error::A live/test secret key appears in source. Remove it and rotate the key."
+            exit 1
+          fi
+          echo "secrets scan clean"
+
+      - name: 'Guard: canonical math has one home'
+        run: |
+          # amount_1099 arithmetic must only live in lib/transactions/math.ts.
+          HITS=$(grep -rln "agent_gross + btsa\|btsa_amount) -" app --include="*.ts" | wc -l)
+          if [ "$HITS" -gt 0 ]; then
+            echo "::error::Commission formula arithmetic found outside lib/transactions/math.ts."
+            exit 1
+          fi
+          echo "canonical math intact"
