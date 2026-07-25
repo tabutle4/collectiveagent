@@ -142,6 +142,8 @@ export async function GET(
       .from('transaction_internal_agents')
       .select('brokerage_split, transactions!inner(status, closing_date)')
       .eq('agent_id', tia.agent_id)
+      // Cap rule: only primary/listing agent rows count toward the cap.
+      .in('agent_role', ['primary_agent', 'listing_agent'])
       .eq('counts_toward_progress', true)
       .eq('transactions.status', 'closed')
       .gte('transactions.closing_date', `${currentYear}-01-01`)

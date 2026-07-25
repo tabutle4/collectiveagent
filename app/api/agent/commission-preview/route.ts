@@ -95,17 +95,22 @@ export async function POST(request: NextRequest) {
       newAgentRequired = Number((agent as any).qualifying_transaction_target ?? 5) || 5
     }
 
-    // Cap progress: brokerage splits credited this calendar year.
+    // Cap progress. The cap rule: primary/listing agent rows only, approved
+    // by the office's "counts toward" checkbox, on deals closed this calendar
+    // year. Identical recipe to the statement, agent dashboard, and smart-calc
+    // so every surface reports one cap number.
     let capAmount = Number(plan?.cap_amount ?? 0) || 0
     let ytd = 0
     if (capAmount > 0) {
       const yearStart = `${new Date().getFullYear()}-01-01`
       const { data: rows } = await supabaseAdmin
         .from('transaction_internal_agents')
-        .select('brokerage_split, created_at')
+        .select('brokerage_split, transactions!inner(status, closing_date)')
         .eq('agent_id', agentId)
-        .gte('created_at', yearStart)
-        .limit(1000)
+        .in('agent_role', ['primary_agent', 'listing_agent'])
+        .eq('counts_toward_progress', true)
+        .eq('transactions.status', 'closed')
+        .gte('transactions.closing_date', yearStart)
       ytd = (rows || []).reduce((s: number, r: any) => s + (parseFloat(String(r.brokerage_split ?? 0)) || 0), 0)
     }
 

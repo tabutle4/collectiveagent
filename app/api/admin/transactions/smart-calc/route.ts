@@ -112,11 +112,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Cap rule: primary/listing rows only, checkbox-approved, on deals
+        // closed THIS YEAR - the same recipe the statement and the agent
+        // dashboard use, so every surface reports one cap number.
         const { data: ytdTransactions } = await supabase
           .from('transaction_internal_agents')
-          .select('brokerage_split, counts_toward_progress')
+          .select('brokerage_split, counts_toward_progress, transactions!inner(status, closing_date)')
           .eq('agent_id', agentId)
+          .in('agent_role', ['primary_agent', 'listing_agent'])
           .eq('counts_toward_progress', true)
+          .eq('transactions.status', 'closed')
+          .gte('transactions.closing_date', `${new Date().getFullYear()}-01-01`)
 
         ytdCapProgress = (ytdTransactions || []).reduce((sum: number, t: any) => {
           return sum + parseFloat(t.brokerage_split || 0)

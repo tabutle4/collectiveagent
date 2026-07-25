@@ -34,7 +34,14 @@ paycheck for a real person.
    `isLeaseTransactionType()` for transaction types,
    `complianceIsLease()` for form submissions. Never regex ad hoc.
    New Agent Plan graduation = 5 CLOSED SALES, then the agent picks Cap or
-   No Cap. Leases never count toward the 5.
+   No Cap. Leases never count toward the 5. Progress reads
+   users.qualifying_transaction_count (set by Mark Paid + its "counts toward"
+   checkbox) - never re-count rows.
+   CAP PROGRESS (Cap Plan $18,000): sum of brokerage_split on
+   primary_agent/listing_agent rows only, counts_toward_progress = true,
+   deals closed this calendar year. Same recipe in the statement, agent
+   dashboard, smart-calc, and commission preview - all four must stay
+   identical.
 5. **fetchAllRows for any table that can exceed 1000 rows** (transactions,
    transaction_internal_agents, checklist_completions, agent_form_submissions).
    A bare `.select()` silently truncates at 1000. fetchAllRows must keep its

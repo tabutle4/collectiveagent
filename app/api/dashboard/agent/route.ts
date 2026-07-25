@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       // Agent rows (batched)
       fetchAllRows(
         'transaction_internal_agents',
-        'transaction_id, agent_net, sales_volume, units, brokerage_split, counts_toward_progress',
+        'transaction_id, agent_role, agent_net, sales_volume, units, brokerage_split, counts_toward_progress',
         {
           filters: [{ type: 'eq', column: 'agent_id', value: userId }],
         },
@@ -84,9 +84,13 @@ export async function GET(request: NextRequest) {
       const closedIds = (closedTxns || []).map(t => t.id)
       
       // Sum brokerage_split from agent rows on those transactions
+      // Cap rule: only primary/listing agent rows count (plus the office's
+      // "counts toward" checkbox at Mark Paid). Co-agent, team lead, and
+      // referral rows never move the cap.
       capProgress = agentRows
-        .filter((r: any) => 
-          closedIds.includes(r.transaction_id) && 
+        .filter((r: any) =>
+          closedIds.includes(r.transaction_id) &&
+          ['primary_agent', 'listing_agent'].includes(String(r.agent_role || '')) &&
           r.counts_toward_progress !== false
         )
         .reduce((sum: number, r: any) => sum + parseFloat(r.brokerage_split || 0), 0)
