@@ -57,6 +57,26 @@ const POST_CLOSING_STATUS_OPTIONS = [
   { value: 'incomplete', label: 'Incomplete' },
 ]
 
+// Funding status is workflow state the office advances by hand on the Needs
+// CDA tab (mirrors the Brokermint CDA report's funding column).
+const FUNDING_STATUS_OPTIONS = [
+  { value: '', label: 'Not set' },
+  { value: 'wire_form_sent', label: 'Wire Form Sent' },
+  { value: 'wire', label: 'Wired' },
+  { value: 'check', label: 'Check Received' },
+  { value: 'funded', label: 'Funded' },
+]
+
+// CDA status is system-driven (request approval -> broker approves -> CDA
+// sent, from the Work Deal page); these are the display labels.
+const CDA_STATUS_LABELS: Record<string, string> = {
+  pending_compliance: 'Pending Compliance',
+  pending_approval: 'Pending Broker Approval',
+  approved: 'Approved - ready to send',
+  sent: 'Sent to Title',
+  cda_sent: 'Sent to Title',
+}
+
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
@@ -372,6 +392,24 @@ export default function AdminCompliancePage() {
       setError(err.message)
     } finally {
       setSavingClosing(false)
+    }
+  }
+
+  // Funding status: the office advances it by hand, straight from the tab.
+  const setFundingStatus = async (r: TrackerRow, value: string) => {
+    if (!r.transaction_id) { setError('Link this submission to a transaction before setting the funding status.'); return }
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-funding-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submission_id: r.id, funding_status: value || null }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not save funding status')
+      setRows(prev => prev.map(x => (x.transaction_id === r.transaction_id ? { ...x, funding_status: value || null } : x)))
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -1190,11 +1228,19 @@ export default function AdminCompliancePage() {
                     </td>
                     {tab === 'needs_cda' && (
                       <>
-                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap capitalize">
-                          {r.cda_status ? r.cda_status.replace(/_/g, ' ') : '-'}
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap">
+                          {r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : '-'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap capitalize">
-                          {r.funding_status ? r.funding_status.replace(/_/g, ' ') : '-'}
+                        <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={r.funding_status || ''}
+                            onChange={e => setFundingStatus(r, e.target.value)}
+                            className="select-luxury text-xs py-1"
+                          >
+                            {FUNDING_STATUS_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</td>
@@ -1284,39 +1330,92 @@ export default function AdminCompliancePage() {
         <div className="md:hidden space-y-3">
           {visible.map(r => (
             <div key={r.id} className="container-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <span className="block text-sm text-luxury-gray-1 font-medium">{r.agent_name || '-'}</span>
-                  {r.side && <span className="block text-xs text-luxury-gray-3 capitalize">{r.side}</span>}
-                  <span className="block text-xs text-luxury-gray-3">Submitted {fmtDateTime(r.submitted_at)}</span>
-                </div>
-                <div className="flex-shrink-0">{statusBadge(r.compliance_status)}</div>
-              </div>
-              <div className="mt-2 text-xs text-luxury-gray-1">
-                <span className="block">{r.property_address || '-'}</span>
-                {r.client_name && <span className="block text-luxury-gray-3">{r.client_name}</span>}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-2">
-                <span>{r.transaction_type ? r.transaction_type.replace(/_v2$/, '').replace(/_/g, ' ') : '-'}</span>
-                {r.is_locked && <Lock size={11} className="text-amber-600" />}
-                <span>Closing: {fmtDate(r.closing_date) || '-'}</span>
-                {r.paid && <span className="inline-flex items-center gap-1 text-green-600"><Check size={12} /> Paid</span>}
-                <span className={r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}>
-                  {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
-                </span>
-                {r.cda_sent && <span className="text-luxury-gray-3">CDA sent</span>}
-                {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-amber-700">CDA pending approval</span>}
-                {!r.cda_sent && r.cda_status === 'approved' && <span className="text-green-600">CDA approved</span>}
-              </div>
-              {tab === 'needs_cda' && (
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-1">
-                  {r.cda_status && <span className="text-luxury-gray-2 capitalize">CDA: {r.cda_status.replace(/_/g, ' ')}</span>}
-                  {r.funding_status && <span className="text-luxury-gray-2 capitalize">Funding: {r.funding_status.replace(/_/g, ' ')}</span>}
-                  <span>Office Gross: {r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</span>
-                  <span>Agent Net: {r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</span>
-                  <span>Office Net: {r.office_net != null ? fmtMoney(r.office_net) : '-'}</span>
-                  {r.transaction_status && <span className="text-luxury-gray-2 capitalize">Status: {r.transaction_status}</span>}
-                </div>
+              {tab === 'needs_cda' ? (
+                <>
+                  {/* Phone-first closing card: address + date first, then the
+                      pipeline chips, the money, and the funding control. */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm font-semibold text-luxury-gray-1">{r.property_address || '-'}</span>
+                      {r.client_name && <span className="block text-xs text-luxury-gray-3">{r.client_name}</span>}
+                      <span className="block text-xs text-luxury-gray-2 mt-0.5">{r.agent_name}{r.side ? ` · ${r.side}` : ''}</span>
+                    </div>
+                    <div className="flex-shrink-0 text-right">
+                      <p className="text-[10px] text-luxury-gray-3">Closing</p>
+                      <p className="text-sm font-semibold text-luxury-gray-1 whitespace-nowrap">{fmtDate(r.closing_date) || 'No date'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                    <span className={`px-2 py-0.5 rounded ${
+                      r.cda_status === 'sent' || r.cda_status === 'cda_sent' ? 'bg-green-50 text-green-700'
+                      : r.cda_status === 'approved' ? 'bg-green-50 text-green-700'
+                      : r.cda_status === 'pending_approval' ? 'bg-amber-50 text-amber-700'
+                      : 'bg-luxury-light text-luxury-gray-3'
+                    }`}>
+                      CDA: {r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : 'Not started'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded ${r.checklist_complete ? 'bg-green-50 text-green-700' : 'bg-luxury-light text-luxury-gray-3'}`}>
+                      {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
+                    </span>
+                    {r.transaction_status && (
+                      <span className="px-2 py-0.5 rounded bg-luxury-light text-luxury-gray-3 capitalize">{r.transaction_status}</span>
+                    )}
+                    {r.is_locked && <Lock size={11} className="text-amber-600 mt-1" />}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-center bg-luxury-light rounded p-2 text-xs">
+                    <div>
+                      <p className="text-[10px] text-luxury-gray-3">Office Gross</p>
+                      <p className="font-semibold text-luxury-gray-1">{r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-luxury-gray-3">Agent Net</p>
+                      <p className="font-semibold text-luxury-gray-1">{r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-luxury-gray-3">Office Net</p>
+                      <p className="font-semibold text-luxury-gray-1">{r.office_net != null ? fmtMoney(r.office_net) : '-'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-luxury-gray-3 flex-shrink-0">Funding</span>
+                    <select
+                      value={r.funding_status || ''}
+                      onChange={e => setFundingStatus(r, e.target.value)}
+                      className="select-luxury text-xs py-1 flex-1"
+                    >
+                      {FUNDING_STATUS_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="block text-sm text-luxury-gray-1 font-medium">{r.agent_name || '-'}</span>
+                      {r.side && <span className="block text-xs text-luxury-gray-3 capitalize">{r.side}</span>}
+                      <span className="block text-xs text-luxury-gray-3">Submitted {fmtDateTime(r.submitted_at)}</span>
+                    </div>
+                    <div className="flex-shrink-0">{statusBadge(r.compliance_status)}</div>
+                  </div>
+                  <div className="mt-2 text-xs text-luxury-gray-1">
+                    <span className="block">{r.property_address || '-'}</span>
+                    {r.client_name && <span className="block text-luxury-gray-3">{r.client_name}</span>}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-2">
+                    <span>{r.transaction_type ? r.transaction_type.replace(/_v2$/, '').replace(/_/g, ' ') : '-'}</span>
+                    {r.is_locked && <Lock size={11} className="text-amber-600" />}
+                    <span>Closing: {fmtDate(r.closing_date) || '-'}</span>
+                    {r.paid && <span className="inline-flex items-center gap-1 text-green-600"><Check size={12} /> Paid</span>}
+                    <span className={r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}>
+                      {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
+                    </span>
+                    {r.cda_sent && <span className="text-luxury-gray-3">CDA sent</span>}
+                    {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-amber-700">CDA pending approval</span>}
+                    {!r.cda_sent && r.cda_status === 'approved' && <span className="text-green-600">CDA approved</span>}
+                  </div>
+                </>
               )}
               {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
                 <div className="mt-1 text-xs text-red-600">{r.missing_items.length} missing</div>
@@ -1361,6 +1460,33 @@ export default function AdminCompliancePage() {
               )}
             </div>
           ))}
+          {tab === 'needs_cda' && visible.length > 0 && (
+            <div className="container-card p-4 border-t-2 border-luxury-gray-1">
+              <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
+                Overall total ({visible.length})
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[10px] text-luxury-gray-3">Office Gross</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_gross ?? 0)) || 0), 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-luxury-gray-3">Agent Net</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.agent_net ?? 0)) || 0), 0))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-luxury-gray-3">Office Net</p>
+                  <p className="text-sm font-semibold text-luxury-gray-1">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_net ?? 0)) || 0), 0))}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         </>
       )}
