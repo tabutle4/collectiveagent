@@ -1111,10 +1111,12 @@ export default function AdminCompliancePage() {
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Post Closing</th>
                 {tab === 'needs_cda' && (
                   <>
-                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Funding</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">CDA Status</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Funding Status</th>
                     <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Office Gross</th>
                     <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent Net</th>
                     <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Office Net</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Status</th>
                   </>
                 )}
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent</th>
@@ -1182,13 +1184,18 @@ export default function AdminCompliancePage() {
                     </td>
                     {tab === 'needs_cda' && (
                       <>
-                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap capitalize">
+                          {r.cda_status ? r.cda_status.replace(/_/g, ' ') : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap capitalize">
                           {r.funding_status ? r.funding_status.replace(/_/g, ' ') : '-'}
-                          {r.transaction_status && <span className="block text-luxury-gray-3 capitalize">{r.transaction_status}</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_net != null ? fmtMoney(r.office_net) : '-'}</td>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap capitalize">
+                          {r.transaction_status || '-'}
+                        </td>
                       </>
                     )}
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
@@ -1235,7 +1242,7 @@ export default function AdminCompliancePage() {
 
                   {linkPanelId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={tab === 'needs_cda' ? 14 : 10} className="px-5 py-4">
+                      <td colSpan={tab === 'needs_cda' ? 16 : 10} className="px-5 py-4">
                         {renderLinkPanel(r)}
                       </td>
                     </tr>
@@ -1243,7 +1250,7 @@ export default function AdminCompliancePage() {
 
                   {expandedId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={tab === 'needs_cda' ? 14 : 10} className="px-5 py-4">
+                      <td colSpan={tab === 'needs_cda' ? 16 : 10} className="px-5 py-4">
                         {renderExpandedDetail(r)}
                       </td>
                     </tr>
@@ -1252,7 +1259,7 @@ export default function AdminCompliancePage() {
               ))}
               {tab === 'needs_cda' && visible.length > 0 && (
                 <tr className="border-t border-luxury-gray-5 bg-luxury-gray-5/10">
-                  <td colSpan={7} className="px-4 py-3 text-xs font-semibold text-luxury-gray-1">Overall total ({visible.length})</td>
+                  <td colSpan={8} className="px-4 py-3 text-xs font-semibold text-luxury-gray-1">Overall total ({visible.length})</td>
                   <td className="px-4 py-3 text-xs font-semibold text-luxury-gray-1 whitespace-nowrap">
                     {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_gross ?? 0)) || 0), 0))}
                   </td>
@@ -1262,7 +1269,7 @@ export default function AdminCompliancePage() {
                   <td className="px-4 py-3 text-xs font-semibold text-luxury-gray-1 whitespace-nowrap">
                     {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_net ?? 0)) || 0), 0))}
                   </td>
-                  <td colSpan={4}></td>
+                  <td colSpan={5}></td>
                 </tr>
               )}
             </tbody>
@@ -1297,10 +1304,12 @@ export default function AdminCompliancePage() {
               </div>
               {tab === 'needs_cda' && (
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-1">
-                  {r.funding_status && <span className="text-luxury-gray-2">Funding: {r.funding_status.replace(/_/g, ' ')}</span>}
+                  {r.cda_status && <span className="text-luxury-gray-2 capitalize">CDA: {r.cda_status.replace(/_/g, ' ')}</span>}
+                  {r.funding_status && <span className="text-luxury-gray-2 capitalize">Funding: {r.funding_status.replace(/_/g, ' ')}</span>}
                   <span>Office Gross: {r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</span>
                   <span>Agent Net: {r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</span>
                   <span>Office Net: {r.office_net != null ? fmtMoney(r.office_net) : '-'}</span>
+                  {r.transaction_status && <span className="text-luxury-gray-2 capitalize">Status: {r.transaction_status}</span>}
                 </div>
               )}
               {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
