@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireAuth } from '@/lib/api-auth'
+import { syncPayloadCustomerEmail } from '@/lib/payload/syncCustomerEmail'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     const { data: agent, error: fetchError } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, bank_connected, payload_activation_id')
+      .select('id, first_name, last_name, email, bank_connected, payload_activation_id, payload_payee_id')
       .eq('id', agentId)
       .single()
 
@@ -36,6 +37,12 @@ export async function POST(request: NextRequest) {
         fallback: true,
       }, { status: 503 })
     }
+
+    // Keep the linked Payload account's email matched to the email this
+    // activation is sent to. Payload matches send_to by email and creates a
+    // brand-new empty customer on a mismatch, which is how duplicate ghost
+    // accounts were born.
+    await syncPayloadCustomerEmail(agent.payload_payee_id, agent.email)
 
     const res = await fetch('https://api.payload.com/payment_activations/', {
       method: 'POST',

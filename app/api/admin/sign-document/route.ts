@@ -6,6 +6,7 @@ import { getICAContent, extractICAOverridesFromUser } from '@/lib/documents/ica-
 import { getReferralICAContent } from '@/lib/documents/referral-ica-content'
 import { getReferralSettings } from '@/lib/documents/settings-helpers'
 import { getCommissionPlanContent, getCommissionPlanKey, extractOverridesFromUser } from '@/lib/documents/commission-plan-content'
+import { syncPayloadCustomerEmail } from '@/lib/payload/syncCustomerEmail'
 import { getStandardPlanDefaults } from '@/lib/documents/plan-defaults'
 import { uploadAgentDocument, createM365User } from '@/lib/microsoft-graph'
 import { Resend } from 'resend'
@@ -323,6 +324,14 @@ export async function POST(request: NextRequest) {
       }
 
       await supabaseAdmin.from('users').update(activationUpdate).eq('id', agent.id)
+
+      // The agent's email just changed from personal to office. Their Payload
+      // customer account (created at onboarding payment with the personal
+      // email) must follow, or the next bank activation request will not
+      // match it and Payload will create a duplicate ghost account.
+      if (officeEmail) {
+        await syncPayloadCustomerEmail(agent.payload_payee_id, officeEmail)
+      }
 
       // Send agent the W-9 / TREC lookout email (standard agents only)
       if (!isReferralAgent) {
