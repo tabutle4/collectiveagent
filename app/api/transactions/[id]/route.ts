@@ -3,6 +3,7 @@ import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
+import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_view_all_transactions')
@@ -503,6 +504,10 @@ if (action === 'add_external_brokerage') {
             }
 
             await supabase.from('agent_debts').update(debtUpdate).eq('id', debtApp.debt_id)
+            // Two-way billing sync: a debt settled by payout withholding
+            // settles its Payload invoice copy (negative Commission Offset
+            // line item, same as stage_debt) so the agent can't pay twice.
+            await settlePayloadInvoiceForDebt(debtApp.debt_id)
           }
         }
       }

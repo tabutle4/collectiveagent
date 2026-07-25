@@ -37,6 +37,14 @@ interface MonthlyInvoice {
   due_date: string | null
 }
 
+interface PayloadInvoice {
+  id: string
+  amount_due: number
+  due_date: string | null
+  status: string
+  description: string
+}
+
 interface Props {
   agentId: string
   tiaId: string
@@ -67,6 +75,10 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   // Payload monthly fee invoices (unpaid, not yet staged)
   const [monthlyInvoices, setMonthlyInvoices] = useState<MonthlyInvoice[]>([])
   const [stagingInvoice, setStagingInvoice] = useState<string | null>(null)
+  // ALL open (unpaid) Payload invoices for this agent. Display-only: anything
+  // open in Payload that is not already represented in this panel gets a red
+  // warning so the office never processes a payout past an open invoice.
+  const [payloadInvoices, setPayloadInvoices] = useState<PayloadInvoice[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -118,6 +130,17 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
         }
       } catch {
         // non-fatal — monthly invoices are a bonus, not critical
+      }
+      // Every open Payload invoice for this agent, monthly or not. Rendered
+      // as display-only warnings when nothing in this panel accounts for it.
+      try {
+        const pRes = await fetch(`/api/payload/open-invoices?user_id=${agentId}`, { cache: 'no-store' })
+        if (pRes.ok) {
+          const pData = await pRes.json()
+          setPayloadInvoices(pData.invoices || [])
+        }
+      } catch {
+        // non-fatal — warnings only
       }
     } catch {
       // silent
@@ -360,7 +383,34 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
   const totalApplied = appliedDebts.length + appliedCredits.length
   const totalOutstanding = debts.length + credits.length
 
-  if (totalOutstanding === 0 && totalApplied === 0 && monthlyInvoices.length === 0 && !showAddDebt && !showAddCredit) {
+  // Open Payload invoices that need attention. Matching is by exact Payload
+  // invoice ID from the debt's notes stamp ("Payload invoice ID: inv_..."),
+  // never by amount: two invoices can share an amount without being the same
+  // invoice. Three cases:
+  //   1. ID matches an OUTSTANDING debt here: hidden, the debt already shows
+  //      as a stageable row above.
+  //   2. ID matches an APPLIED debt here: loudest warning. The money was
+  //      collected on this deal but the invoice is still open in Payload,
+  //      so the agent is about to be billed twice. Settle/void in Payload.
+  //   3. No ID match anywhere: warning. Open in Payload with no record on
+  //      this deal, resolve before paying out.
+  // Monthly fee invoices are excluded, they render in their own section.
+  const extractPayloadId = (notes?: string | null) => {
+    const m = /payload[ _]invoice(?:[ _]id)?:?\s*([A-Za-z0-9_-]+)/i.exec(notes || '')
+    return m ? m[1] : null
+  }
+  const outstandingPayloadIds = new Set(
+    debts.map(d => extractPayloadId(d.notes)).filter(Boolean) as string[]
+  )
+  const appliedPayloadIds = new Set(
+    appliedDebts.map(d => extractPayloadId(d.notes)).filter(Boolean) as string[]
+  )
+  const monthlyIds = new Set(monthlyInvoices.map(i => i.id))
+  const openPayloadWarnings = payloadInvoices.filter(
+    inv => !monthlyIds.has(inv.id) && !outstandingPayloadIds.has(inv.id)
+  )
+
+  if (totalOutstanding === 0 && totalApplied === 0 && monthlyInvoices.length === 0 && openPayloadWarnings.length === 0 && !showAddDebt && !showAddCredit) {
     return (
       <div className="border-t border-luxury-gray-5/50 mt-2 pt-2">
         <div className="flex items-center justify-between mb-1">
@@ -395,6 +445,11 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
               ({totalOutstanding + monthlyInvoices.length} outstanding)
             </span>
           )}
+          {openPayloadWarnings.length > 0 && (
+            <span className="text-red-600 font-semibold ml-1">
+              ({openPayloadWarnings.length} open in Payload)
+            </span>
+          )}
         </button>
         {!isPaid && expanded && (
           <div className="flex gap-2">
@@ -406,6 +461,35 @@ export default function AgentBillingPanel({ agentId, tiaId, transactionId, onApp
 
       {expanded && (
         <div className="space-y-1.5">
+          {/* Open Payload invoices with no internal record. Display-only. */}
+          {openPayloadWarnings.map(inv => {
+            const collectedHere = appliedPayloadIds.has(inv.id)
+            return (
+              <div
+                key={`payload-${inv.id}`}
+                className="flex items-start gap-2 p-2 rounded border border-red-300 bg-red-50"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-luxury-gray-1 truncate">
+                    {inv.description}
+                    <span className="ml-2 text-[10px] text-red-600 font-semibold uppercase">open in Payload</span>
+                  </p>
+                  <p className="text-[10px] text-luxury-gray-3">
+                    {inv.due_date ? fmtDate(inv.due_date) : '--'} · Payload invoice {inv.id}
+                  </p>
+                  <p className="text-[10px] text-red-600 mt-0.5">
+                    {collectedHere
+                      ? 'This invoice was already deducted on this deal but is still open in Payload. Settle or void it in Payload so the agent is not billed twice.'
+                      : 'No matching record on this deal. Resolve on the Billing page before paying out.'}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-red-600 shrink-0">
+                  {fmt$(inv.amount_due)}
+                </span>
+              </div>
+            )
+          })}
+
           {/* Applied — pre-checked. Unchecking calls reverse_mark_paid. */}
           {appliedDebts.map(d => (
             <label
