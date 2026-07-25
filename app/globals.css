@@ -397,6 +397,7 @@
   @page { size: letter landscape; margin: 0; }
   aside, .sticky, .fixed { display: none !important; }
   div[style*="margin-left"] { margin-left: 0 !important; }
+  .print-slide [class*="animate-"] { animation: none !important; opacity: 1 !important; transform: none !important; }
   .print-slide {
     position: relative;
     overflow: hidden;
