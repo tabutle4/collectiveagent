@@ -50,7 +50,9 @@ export async function GET(request: NextRequest) {
         .order('date_incurred', { ascending: false })
 
       if (status) query = query.eq('status', status)
-      if (debtType) query = query.eq('debt_type', debtType)
+      // Comma-separated types supported: the Billing page asks for
+      // custom_invoice,ecommission - both are invoices owed by an agent.
+      if (debtType) query = query.in('debt_type', debtType.split(','))
 
       const { data: records } = await query
       return NextResponse.json({ records: records || [] })
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
         .from('agent_debts')
         .select('agent_id', { count: 'exact' })
         .eq('status', 'outstanding')
-        .eq('debt_type', 'custom_invoice'),
+        .in('debt_type', ['custom_invoice', 'ecommission']),
     ])
 
     return NextResponse.json({

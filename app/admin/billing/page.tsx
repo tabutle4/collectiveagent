@@ -133,7 +133,7 @@ export default function AdminBillingPage() {
     try {
       const [usersRes, debtsRes, creditsRes] = await Promise.all([
         fetch('/api/users/list'),
-        fetch('/api/billing?status=outstanding&debt_type=custom_invoice'),
+        fetch('/api/billing?status=outstanding&debt_type=custom_invoice,ecommission'),
         fetch('/api/billing?status=outstanding&debt_type=brokerage_credit'),
       ])
       const usersData = await usersRes.json()
@@ -146,7 +146,7 @@ export default function AdminBillingPage() {
       setAgents(activeAgents)
 
       const outstandingDebts = (debtsData.records || []).filter(
-        (d: any) => d.status === 'outstanding' && d.debt_type === 'custom_invoice'
+        (d: any) => d.status === 'outstanding' && ['custom_invoice', 'ecommission'].includes(d.debt_type)
       )
       setOpenCustomInvoices(outstandingDebts.length)
       setOpenDebtAgentIds([...new Set(outstandingDebts.map((d: any) => d.agent_id))] as string[])
@@ -228,10 +228,10 @@ export default function AdminBillingPage() {
       setLoadingAgent(null)
     }
 
-    const debtsRes = await fetch('/api/billing?status=outstanding&debt_type=custom_invoice')
+    const debtsRes = await fetch('/api/billing?status=outstanding&debt_type=custom_invoice,ecommission')
     const debtsData = await debtsRes.json()
     const outstandingDebts = (debtsData.records || []).filter(
-      (d: any) => d.status === 'outstanding' && d.debt_type === 'custom_invoice'
+      (d: any) => d.status === 'outstanding' && ['custom_invoice', 'ecommission'].includes(d.debt_type)
     )
     setOpenCustomInvoices(outstandingDebts.length)
     setOpenDebtAgentIds([...new Set(outstandingDebts.map((d: any) => d.agent_id))] as string[])

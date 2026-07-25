@@ -524,7 +524,11 @@ if (action === 'add_external_brokerage') {
           // The threshold amount is per-agent (users.qualifying_transaction_target,
           // default 5). We just increment the counter here; UI/statements render
           // the threshold against the per-agent target.
-          const isNewAgentPlan = plan === 'new_agent'
+          const isNewAgentPlan =
+            plan === '70_30_new' ||
+            plan === 'new_agent' ||
+            plan === 'new agent plan' ||
+            (plan.includes('new') && plan.includes('agent'))
           if (isNewAgentPlan) {
             userUpdate.qualifying_transaction_count =
               (agentUser.qualifying_transaction_count || 0) + 1
