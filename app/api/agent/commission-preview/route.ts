@@ -82,6 +82,19 @@ export async function POST(request: NextRequest) {
     const coachingFee = coachingWaived ? 0 : Number(plan?.coaching_fee_amount ?? 0)
     const firmMinimumPct = await getFirmMinimumPct(isLease)
 
+    // New Agent Plan progress: deals toward the 5 that trigger the
+    // Cap-or-No-Cap choice. Counted as production commission rows.
+    const isNewAgentPlan = String(plan?.code || '') === '70_30_new' || /new[ _]?agent|70_30_new/i.test(planCode)
+    let newAgentDeals: number | null = null
+    if (isNewAgentPlan) {
+      const { count } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .select('id', { count: 'exact', head: true })
+        .eq('agent_id', agentId)
+        .in('agent_role', ['primary_agent', 'listing_agent'])
+      newAgentDeals = count ?? 0
+    }
+
     // Cap progress: brokerage splits credited this calendar year.
     let capAmount = Number(plan?.cap_amount ?? 0) || 0
     let ytd = 0
@@ -110,6 +123,8 @@ export async function POST(request: NextRequest) {
       ytd_brokerage_split: Math.round(ytd * 100) / 100,
       capped: capAmount > 0 && ytd >= capAmount,
       is_broker_plan: isBrokerPlan,
+      new_agent_deals: newAgentDeals,
+      new_agent_required: 5,
     })
   } catch (err: any) {
     console.error('commission-preview error:', err)

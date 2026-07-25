@@ -10,6 +10,9 @@ function normalizeCommissionPlan(plan: string): string {
   if (!plan) return ''
   const p = plan.toLowerCase()
   if (p === 'broker_100' || p === 'broker plan' || p === 'broker') return 'broker'
+  // Post-Cap must be tested before the generic cap catch-all below, or a
+  // post_cap agent displays (and can be silently re-saved) as Cap Plan.
+  if (p === 'post_cap' || p.includes('post cap') || p.includes('post-cap') || p.includes('post_cap')) return 'post_cap'
   if (p.includes('new_agent') || p.includes('new agent') || p.includes('70/30') || p === 'new_agent') return 'new_agent'
   if (p.includes('no_cap') || p.includes('no cap') || p.includes('85/15') || p === 'no_cap') return 'no_cap'
   if (p.includes('cap') && !p.includes('no')) return 'cap'
@@ -463,6 +466,14 @@ export default function ProfilePage({
       if (sanitized.commission_plan === 'broker') {
         sanitized.commission_plan = 'broker_100'
       }
+      // Translate every dropdown selection to the canonical commission_plans
+      // code. Saving the raw dropdown words ('cap', 'no_cap', 'new_agent')
+      // left plans the payout engine could not match, so those agents were
+      // silently computed at the 85/15 default with no cap tracking.
+      if (sanitized.commission_plan === 'new_agent') sanitized.commission_plan = '70_30_new'
+      if (sanitized.commission_plan === 'no_cap') sanitized.commission_plan = '85_15_no_cap'
+      if (sanitized.commission_plan === 'cap') sanitized.commission_plan = '70_30_cap'
+      // 'post_cap' is already the canonical code - saved as-is.
       if (sanitized.lease_commission_plan === 'broker_lease') {
         // No dedicated lease broker_100 plan in commission_plans; encode as
         // a custom-style string so the parser picks up the 0/100 split.
@@ -1233,6 +1244,7 @@ export default function ProfilePage({
                       <option value="new_agent">New Agent 70/30</option>
                       <option value="no_cap">No Cap 85/15</option>
                       <option value="cap">Cap 70/30</option>
+                      <option value="post_cap">Post-Cap Plan 97/3</option>
                       <option value="broker">Broker Plan 0/100</option>
                       <option value="custom">Custom Plan</option>
                     </select>

@@ -69,6 +69,8 @@ const commissionPlans = [
   { value: '70_30_new', label: 'New Agent Plan' },
   { value: '85_15_no_cap', label: 'No Cap Plan 85/15' },
   { value: '70_30_cap', label: 'Cap Plan 70/30 $18,000 Cap' },
+  { value: 'post_cap', label: 'Post-Cap Plan 97/3' },
+  { value: 'broker_100', label: 'Broker Plan 0/100' },
   { value: '85_15_lease', label: 'Apartment and Lease' },
 ]
 

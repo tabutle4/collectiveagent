@@ -356,7 +356,7 @@ export default function TransactionsPage() {
       </div>
 
       {!canViewAll && (
-        <div className={`grid grid-cols-2 ${Number(capInfo?.cap_amount) > 0 ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3 mb-6`}>
+        <div className={`grid grid-cols-2 ${Number(capInfo?.cap_amount) > 0 || capInfo?.new_agent_deals != null ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3 mb-6`}>
           <div className="inner-card">
             <p className="text-xs text-luxury-gray-3 mb-1">Units{quarterFilter !== 'all' ? ` · ${quarterLabel(quarterFilter)}` : ''}</p>
             <p className="text-lg font-semibold text-luxury-gray-1">{totals.units}</p>
@@ -375,6 +375,17 @@ export default function TransactionsPage() {
               <p className="text-lg font-semibold text-luxury-gray-1">
                 {capInfo.capped ? 'CAPPED' : `${fmtMoney(capInfo.ytd_brokerage_split)} of ${fmtMoney(capInfo.cap_amount)}`}
               </p>
+            </div>
+          )}
+          {capInfo?.new_agent_deals != null && (
+            <div className="inner-card">
+              <p className="text-xs text-luxury-gray-3 mb-1">New Agent Plan Progress</p>
+              <p className="text-lg font-semibold text-luxury-gray-1">
+                {capInfo.new_agent_deals} of {capInfo.new_agent_required || 5} deals
+              </p>
+              {capInfo.new_agent_deals >= (capInfo.new_agent_required || 5) && (
+                <p className="text-xs text-luxury-gray-3">Time to pick Cap or No Cap</p>
+              )}
             </div>
           )}
         </div>

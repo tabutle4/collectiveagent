@@ -381,6 +381,12 @@ export default function ComplianceCdaForm() {
             {Number(previewInfo.firm_minimum_pct) > 0 && sumRow('Firm minimum (from Settings)', `${previewInfo.firm_minimum_pct}% of ${summaryIsLease ? 'rent' : 'sales price'}`)}
             {Number(previewInfo.cap_amount) > 0 && sumRow('Cap status', previewInfo.capped ? 'CAPPED' : `${fmt$(previewInfo.ytd_brokerage_split)} of ${fmt$(previewInfo.cap_amount)} YTD`)}
             {previewInfo.is_broker_plan && sumRow('Broker plan', 'Commission and BTSA go to the brokerage')}
+            {previewInfo.new_agent_deals != null && sumRow(
+              'New Agent Plan progress',
+              previewInfo.new_agent_deals >= (previewInfo.new_agent_required || 5)
+                ? `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} deals - time to pick Cap or No Cap`
+                : `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} deals`
+            )}
           </div>
         )}
         <div className="text-xs text-luxury-gray-2 space-y-1">
