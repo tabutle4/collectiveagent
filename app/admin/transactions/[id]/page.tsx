@@ -4078,7 +4078,15 @@ export default function AdminTransactionDetailPage() {
                 <SectionHeader>Key Dates</SectionHeader>
                 <div className="space-y-0">
                   <FieldRow label="Created" value={fmtDate(txn.created_at)} />
-                  <FieldRow label="Acceptance Date" value={fmtDate(txn.acceptance_date)} />
+                  <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
+                    <span className="field-label shrink-0">Acceptance Date</span>
+                    <input
+                      type="date"
+                      value={txn.acceptance_date || ''}
+                      onChange={e => updateTransaction({ acceptance_date: e.target.value || null })}
+                      className="text-xs bg-transparent border border-luxury-gray-5 rounded px-2 py-1 text-luxury-gray-1 cursor-pointer"
+                    />
+                  </div>
                   {!leaseTransaction && (
                     <div className="flex justify-between items-center gap-4 py-1.5 border-b border-luxury-gray-5/30">
                       <span className="field-label shrink-0">Closing Date</span>

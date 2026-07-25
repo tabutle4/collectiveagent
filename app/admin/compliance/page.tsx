@@ -224,7 +224,13 @@ export default function AdminCompliancePage() {
 
   const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
   const pendingChecklist = (r: TrackerRow) => !r.checklist_complete
-  const needsCda = (r: TrackerRow) => !r.is_lease && r.compliance_status === 'complete' && !r.cda_sent
+  // Referred-out deals never get a CDA from CRC - the receiving brokerage
+  // closes them - so they are excluded from the Needs CDA list.
+  const isReferredOut = (r: TrackerRow) =>
+    String(r.transaction_type || '').includes('referred_out') ||
+    String(r.side || '').toLowerCase() === 'referred_out' ||
+    String((r.form_data || {}).representing || '').toLowerCase() === 'referred_out'
+  const needsCda = (r: TrackerRow) => !r.is_lease && !isReferredOut(r) && r.compliance_status === 'complete' && !r.cda_sent
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
