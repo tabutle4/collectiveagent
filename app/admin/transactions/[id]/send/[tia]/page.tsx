@@ -217,6 +217,86 @@ function SendDocumentInner() {
           </div>
         )}
 
+        {mode === 'approval' && agent && (() => {
+          // Review breakdown for the approver: everything the statement would
+          // show, plus agent standing, so Courtney can approve from one screen.
+          const n = (v: any) => parseFloat(String(v ?? 0)) || 0
+          const f$ = (v: any) => `$${n(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          const staged = agent.billing?.staged || []
+          const stagedTotal = staged.reduce((s: number, d: any) => s + n(d.amount_paid), 0)
+          const netToAgent = Math.round((n(agent.amount_1099_reportable) - stagedTotal) * 100) / 100
+          const outstanding = (agent.billing?.debts || []).filter((d: any) => !staged.some((s: any) => s.id === d.id))
+          const outstandingTotal = outstanding.reduce((s: number, d: any) => s + n(d.amount_remaining ?? d.amount_owed), 0)
+          const licExp = u?.license_expiration ? new Date(u.license_expiration) : null
+          const licDays = licExp ? Math.floor((licExp.getTime() - Date.now()) / 86400000) : null
+          const ecAmount = n(txn.ecommission_amount)
+          const ecCovered = staged.some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
+          const line = (label: string, value: string, cls = '') => (
+            <div className={`flex justify-between gap-4 py-1 border-b border-luxury-gray-5/30 text-xs ${cls}`}>
+              <span className="text-luxury-gray-3">{label}</span>
+              <span className="text-luxury-gray-1 whitespace-nowrap">{value}</span>
+            </div>
+          )
+          return (
+            <div className="container-card">
+              <h2 className="section-title mb-3">Review Breakdown</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">Agent</p>
+                  {line('Agent', agentName)}
+                  {line('Plan', agent.commission_plan_friendly || u?.commission_plan || '-')}
+                  {u?.lease_commission_plan && line('Lease plan', u.lease_commission_plan)}
+                  {u?.division && line('Division', String(u.division))}
+                  {line('License #', u?.license_number || '-')}
+                  {licExp && line(
+                    'License expires',
+                    licExp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                    licDays != null && licDays < 60 ? 'text-red-600 font-semibold' : ''
+                  )}
+                  {licDays != null && licDays < 0 && (
+                    <p className="text-xs text-red-600 mt-1 font-semibold">License is EXPIRED - resolve before paying out.</p>
+                  )}
+                  {u?.monthly_fee_paid_through && line('Monthly fee paid through', new Date(u.monthly_fee_paid_through).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))}
+                  {outstanding.length > 0 && line(
+                    `Other outstanding balances (${outstanding.length})`,
+                    f$(outstandingTotal),
+                    'text-amber-700'
+                  )}
+                  {u?.special_commission_notes && (
+                    <p className="text-xs text-amber-700 mt-2">Note: {u.special_commission_notes}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">Money on this deal</p>
+                  {n(txn.sales_price) > 0 && line('Sales price', f$(txn.sales_price))}
+                  {n(txn.monthly_rent) > 0 && line('Monthly rent', f$(txn.monthly_rent))}
+                  {agent.side && line('Side', String(agent.side))}
+                  {line('Agent basis', f$(agent.agent_basis))}
+                  {line(`Agent split (${n(agent.split_percentage) || '-'}%)`, f$(agent.agent_gross))}
+                  {line('Brokerage split', f$(agent.brokerage_split))}
+                  {n(agent.btsa_amount) > 0 && line('+ BTSA (no split)', f$(agent.btsa_amount))}
+                  {n(agent.processing_fee) > 0 && line('- Processing fee', `-${f$(agent.processing_fee)}`)}
+                  {n(agent.coaching_fee) > 0 && line('- Coaching fee', `-${f$(agent.coaching_fee)}`)}
+                  {n(agent.other_fees) > 0 && line(`- Other fees${agent.other_fees_description ? ` (${agent.other_fees_description})` : ''}`, `-${f$(agent.other_fees)}`)}
+                  {n(agent.rebate_amount) > 0 && line('- Rebate', `-${f$(agent.rebate_amount)}`)}
+                  {line('1099 amount', f$(agent.amount_1099_reportable), 'font-semibold')}
+                  {staged.map((d: any) => line(`- ${d.description || d.debt_type || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700'))}
+                  {line('Net to agent', f$(netToAgent), 'font-semibold')}
+                  {line('Office net (deal)', f$(txn.office_net))}
+                  {ecAmount > 0 && (
+                    ecCovered
+                      ? <p className="text-xs text-amber-700 mt-2">eCommission advance {f$(ecAmount)} - repayment is applied above.</p>
+                      : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+                  )}
+                  {agent.adjustment_notes && (
+                    <p className="text-xs text-luxury-gray-3 mt-2">{agent.adjustment_notes}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
         <div className="container-card">
           <h2 className="section-title mb-3">Preview</h2>
           <iframe

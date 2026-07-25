@@ -199,6 +199,8 @@ export default function AdminCompliancePage() {
   const [linkSearching, setLinkSearching] = useState(false)
   const [linkBusy, setLinkBusy] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Funding status renders as text; clicking it swaps in the dropdown.
+  const [editingFundingId, setEditingFundingId] = useState<string | null>(null)
 
   // Status editing (per row)
   const [editStatus, setEditStatus] = useState<string>('')
@@ -1232,15 +1234,28 @@ export default function AdminCompliancePage() {
                           {r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : '-'}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                          <select
-                            value={r.funding_status || ''}
-                            onChange={e => setFundingStatus(r, e.target.value)}
-                            className="select-luxury text-xs py-1"
-                          >
-                            {FUNDING_STATUS_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
+                          {editingFundingId === r.id ? (
+                            <select
+                              autoFocus
+                              value={r.funding_status || ''}
+                              onBlur={() => setEditingFundingId(null)}
+                              onChange={e => { setFundingStatus(r, e.target.value); setEditingFundingId(null) }}
+                              className="select-luxury text-xs py-1"
+                            >
+                              {FUNDING_STATUS_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingFundingId(r.id)}
+                              title="Click to change funding status"
+                              className={`text-xs underline decoration-dotted underline-offset-2 hover:text-luxury-gray-1 ${r.funding_status ? 'text-luxury-gray-1' : 'text-luxury-gray-4'}`}
+                            >
+                              {FUNDING_STATUS_OPTIONS.find(o => o.value === (r.funding_status || ''))?.label || 'Not set'}
+                            </button>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</td>
                         <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</td>
@@ -1378,15 +1393,27 @@ export default function AdminCompliancePage() {
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <span className="text-xs text-luxury-gray-3 flex-shrink-0">Funding</span>
-                    <select
-                      value={r.funding_status || ''}
-                      onChange={e => setFundingStatus(r, e.target.value)}
-                      className="select-luxury text-xs py-1 flex-1"
-                    >
-                      {FUNDING_STATUS_OPTIONS.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
+                    {editingFundingId === `m-${r.id}` ? (
+                      <select
+                        autoFocus
+                        value={r.funding_status || ''}
+                        onBlur={() => setEditingFundingId(null)}
+                        onChange={e => { setFundingStatus(r, e.target.value); setEditingFundingId(null) }}
+                        className="select-luxury text-xs py-1 flex-1"
+                      >
+                        {FUNDING_STATUS_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingFundingId(`m-${r.id}`)}
+                        className={`text-xs underline decoration-dotted underline-offset-2 ${r.funding_status ? 'text-luxury-gray-1' : 'text-luxury-gray-4'}`}
+                      >
+                        {FUNDING_STATUS_OPTIONS.find(o => o.value === (r.funding_status || ''))?.label || 'Not set - tap to set'}
+                      </button>
+                    )}
                   </div>
                 </>
               ) : (
