@@ -12,3 +12,9 @@ tsconfig.tsbuildinfo
 zip*_pm_*.zip
 deploy_pkg/
 *.zip
+
+# Junk files that keep sneaking in
+.DS_Store
+*.zip
+*.patch
+tsconfig.tsbuildinfo
