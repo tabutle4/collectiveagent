@@ -202,7 +202,8 @@ export async function POST(request: NextRequest) {
       .select(`
         id, commission_plan, lease_commission_plan,
         referring_agent_id, revenue_share_percentage,
-        waive_buyer_processing_fees, waive_seller_processing_fees
+        waive_buyer_processing_fees, waive_seller_processing_fees,
+        waive_coaching_fee
       `)
       .eq('id', agent_id)
       .single()
@@ -287,6 +288,7 @@ export async function POST(request: NextRequest) {
     let firmSplitPct  = commissionPlan?.firm_split_percentage  ?? 15
     let teamLeadPct   = 0
     let coachingFee   = commissionPlan?.coaching_fee_amount    ?? 0
+    if ((agent as any)?.waive_coaching_fee === true) coachingFee = 0
 
     // If no DB row matched, parse the embedded split out of the custom plan
     // string. See lib/transactions/customPlanParser.ts for format details.

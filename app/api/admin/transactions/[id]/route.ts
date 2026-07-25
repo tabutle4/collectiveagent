@@ -941,7 +941,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (amount > 0) {
           const { data: txn } = await supabase
             .from('transactions')
-            .select('transaction_type, listing_base_commission, buying_base_commission')
+            .select('transaction_type, listing_base_commission, buying_base_commission, listing_side_commission, buying_side_commission')
             .eq('id', id)
             .single()
 
@@ -955,7 +955,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               const baseField = impliedSide === 'listing' ? 'listing_base_commission' : 'buying_base_commission'
               const sideField = impliedSide === 'listing' ? 'listing_side_commission' : 'buying_side_commission'
               const existingBase = parseFloat((txn as any)[baseField] ?? 0) || 0
-              if (existingBase === 0) {
+              const existingSide = parseFloat((txn as any)[sideField] ?? 0) || 0
+              if (existingBase === 0 && existingSide === 0) {
                 await supabase
                   .from('transactions')
                   .update({

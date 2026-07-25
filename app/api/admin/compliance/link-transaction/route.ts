@@ -1,8 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { complianceIsLease } from '@/lib/forms/requiredFields'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
+
+// Convert compliance-form commission inputs into a gross commission dollar
+// amount. commission_basis_price is the PRICE the commission is computed on
+// and must NEVER be written to gross_commission directly - that bug produced
+// deals whose commission equaled the full sale price. Returns null when the
+// inputs cannot produce a plausible figure; the office sets it at review.
+function computeGrossFromRate(basisPrice: any, rate: any, rateType: any): number | null {
+  const clean = (v: any) => parseFloat(String(v ?? '').replace(/[^0-9.]/g, ''))
+  const basis = clean(basisPrice)
+  const rateNum = clean(rate)
+  if (!Number.isFinite(rateNum) || rateNum <= 0) return null
+  let gross: number | null = null
+  if (String(rateType || 'percent') === 'flat') gross = Math.round(rateNum * 100) / 100
+  else if (Number.isFinite(basis) && basis > 0) gross = Math.round(basis * rateNum) / 100
+  if (gross != null && Number.isFinite(basis) && basis > 1000 && gross > basis * 0.25) return null
+  return gross
+}
+
 
 // Actions for an unlinked compliance submission on the compliance tracker:
 //   action: 'search'  -> find existing transactions to link to (by address/client)
@@ -30,14 +49,14 @@ export async function POST(request: NextRequest) {
       if (listErr) throw listErr
       const items = (subs || []).map((s: any) => {
         const d = s.data || {}
-        const rawType = String(d.transaction_type || '').toLowerCase()
-        const isLease = rawType.includes('tenant') || rawType.includes('landlord') || rawType.includes('lease')
+        const rawType = String(d.representing || d.transaction_type || '').toLowerCase()
+        const isLease = complianceIsLease({ representing: String(d.representing || ''), referred_client_type: (d as any).referred_client_type })
         const pnum = (v: any): number | null => {
           if (v === null || v === undefined || v === '') return null
           const m = String(v).replace(/,/g, '').match(/-?\d+\.?\d*/)
           return m ? parseFloat(m[0]) : null
         }
-        const rent = pnum(d.commission_basis_price)
+        const rent = pnum(d.total_sales_rent_price)
         const term = pnum(d.lease_term_months)
         const price = pnum(d.total_sales_rent_price)
         const volume = isLease ? (rent && term ? rent * term : null) : price
@@ -170,8 +189,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Submission has no property address to create a transaction from' }, { status: 400 })
       }
 
-      const rawType = String(d.transaction_type || '').toLowerCase()
-      const isLease = rawType.includes('tenant') || rawType.includes('landlord') || rawType.includes('lease')
+      const rawType = String(d.representing || d.transaction_type || '').toLowerCase()
+      const isLease = complianceIsLease({ representing: String(d.representing || ''), referred_client_type: (d as any).referred_client_type })
 
       // Overview data can be overridden by the review page; fall back to the
       // submission JSON when the client does not supply a field. Numbers are
@@ -183,7 +202,7 @@ export async function POST(request: NextRequest) {
         const m = String(v).replace(/,/g, '').match(/-?\d+\.?\d*/)
         return m ? parseFloat(m[0]) : null
       }
-      const rent = ov.monthly_rent !== undefined ? parseNum(ov.monthly_rent) : parseNum(d.commission_basis_price)
+      const rent = ov.monthly_rent !== undefined ? parseNum(ov.monthly_rent) : parseNum(d.total_sales_rent_price)
       const term = ov.lease_term !== undefined ? parseNum(ov.lease_term) : parseNum(d.lease_term_months)
       const salesPrice = ov.sales_price !== undefined ? parseNum(ov.sales_price) : parseNum(d.total_sales_rent_price)
       let salesVolume = ov.sales_volume !== undefined ? parseNum(ov.sales_volume) : null
@@ -201,7 +220,7 @@ export async function POST(request: NextRequest) {
         client_name: (ov.client_name !== undefined ? ov.client_name : d.client_name) || null,
         client_email: d.client_email || null,
         sales_volume: salesVolume,
-        gross_commission: parseNum(d.commission_basis_price),
+        gross_commission: computeGrossFromRate(d.commission_basis_price, d.commission_rate, d.commission_rate_type),
         submitted_by: sub.agent_id || null,
         compliance_status: 'complete',
         updated_at: new Date().toISOString(),

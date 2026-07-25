@@ -10,6 +10,24 @@ import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
+// Convert compliance-form commission inputs into a gross commission dollar
+// amount. commission_basis_price is the PRICE the commission is computed on
+// and must NEVER be written to gross_commission directly - that bug produced
+// deals whose commission equaled the full sale price. Returns null when the
+// inputs cannot produce a plausible figure; the office sets it at review.
+function computeGrossFromRate(basisPrice: any, rate: any, rateType: any): number | null {
+  const clean = (v: any) => parseFloat(String(v ?? '').replace(/[^0-9.]/g, ''))
+  const basis = clean(basisPrice)
+  const rateNum = clean(rate)
+  if (!Number.isFinite(rateNum) || rateNum <= 0) return null
+  let gross: number | null = null
+  if (String(rateType || 'percent') === 'flat') gross = Math.round(rateNum * 100) / 100
+  else if (Number.isFinite(basis) && basis > 0) gross = Math.round(basis * rateNum) / 100
+  if (gross != null && Number.isFinite(basis) && basis > 1000 && gross > basis * 0.25) return null
+  return gross
+}
+
+
 export const dynamic = 'force-dynamic'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -280,7 +298,7 @@ export async function POST(request: NextRequest) {
           loan_type:             formFields.loan_type || null,
           sales_price:           formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
           monthly_rent:          isLease && formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
-          gross_commission:      formFields.commission_basis_price ? parseFloat(formFields.commission_basis_price) : null,
+          gross_commission:      computeGrossFromRate(formFields.commission_basis_price, formFields.commission_rate, formFields.commission_rate_type),
           bonus_amount:          formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
           has_btsa:              !!(formFields.bonus_btsa_amount && parseFloat(formFields.bonus_btsa_amount) > 0),
           btsa_amount:           formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
@@ -472,7 +490,7 @@ export async function POST(request: NextRequest) {
       lead_source: lead_source || null, loan_type: loan_type || null,
       sales_price: total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
       monthly_rent: isLease && total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
-      gross_commission: commission_basis_price ? parseFloat(commission_basis_price) : null,
+      gross_commission: computeGrossFromRate(commission_basis_price, commission_rate, commission_rate_type),
       bonus_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,
       has_btsa: !!(bonus_btsa_amount && parseFloat(bonus_btsa_amount) > 0),
       btsa_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,

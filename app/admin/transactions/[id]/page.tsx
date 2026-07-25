@@ -2300,6 +2300,7 @@ export default function AdminTransactionDetailPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agent_id: a.agent_id,
+            side: (a as any).side || null,
             office_gross: officeGross,
             transaction_type: txn.transaction_type,
             lead_source: agentLeadSources[a.agent_id] || 'own',
