@@ -6,21 +6,22 @@ import {
   getActiveAdmins,
   insertSystemNote,
 } from '@/lib/agent-email'
-import {
-  fetchAgentContext,
-  contextToEmailLines,
-} from '@/lib/agent-email-context'
-import {
-  buildAssignmentEmail,
-  sendNotificationEmail,
-  writeInAppNotification,
-} from '@/lib/agent-email-notifications'
+import { writeInAppNotification } from '@/lib/agent-email-notifications'
 
 export const dynamic = 'force-dynamic'
 
 // POST - Assign a thread to another admin (non-urgent hand-off).
 // Body: { toUserId: string, note: string }
-// Preserves current status. Notifies via email + in-app.
+//
+// Preserves current status. Records an audit row, adds a system note, and
+// writes an in-app notification for the target admin.
+//
+// Phase 2.1 change: no email is sent at assignment time. The target admin
+// already received the original email (Reading A guarantees they were on
+// To or CC), so an extra email would be noise. If the thread sits with no
+// activity from the assignee for 48 hours, the stale-assignments cron
+// reverts it to the New bucket where anyone can pick it up.
+//
 // Gated by can_manage_agent_email.
 export async function POST(
   request: NextRequest,
@@ -66,7 +67,8 @@ export async function POST(
       created_by_user_id: auth.user.id,
     })
 
-    // Update thread (preserve status, just move ownership)
+    // Update thread (preserve status, move ownership, bump updated_at
+    // so the stale-assignment cron uses this as the "clock started" point)
     await supabaseAdmin
       .from('email_threads')
       .update({
@@ -83,7 +85,7 @@ export async function POST(
       `${actorName} assigned this thread to ${targetName}. "${note}"`
     )
 
-    // In-app notification
+    // In-app notification (no email; the target already has the original email)
     await writeInAppNotification({
       userId: toUserId,
       threadId,
@@ -92,61 +94,9 @@ export async function POST(
       body: `${actorName} handed this off to you. "${note}"`,
     })
 
-    // Email notification (best-effort, does not fail the request)
-    try {
-      const ctx = await fetchAgentContext(thread.agent_user_id)
-      const agentName = ctx?.name || 'the agent'
-      const agentContextLines = ctx ? contextToEmailLines(ctx) : []
-
-      const { data: latestMsg } = await supabaseAdmin
-        .from('email_thread_messages')
-        .select('body_text, body_html, subject')
-        .eq('thread_id', threadId)
-        .eq('direction', 'inbound')
-        .order('received_at', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .maybeSingle()
-      const preview =
-        (latestMsg?.body_text as string) ||
-        stripHtml((latestMsg?.body_html as string) || '') ||
-        ''
-
-      const email = buildAssignmentEmail({
-        actorName,
-        actorEmail: auth.user.email,
-        recipientEmail: target.email,
-        agentName,
-        agentContextLines,
-        reasonNote: note,
-        latestMessagePreview: preview.slice(0, 400),
-        threadId,
-        threadSubject: thread.subject as string | null,
-      })
-
-      await sendNotificationEmail({
-        fromUpn: auth.user.email,
-        to: target.email,
-        subject: email.subject,
-        html: email.html,
-      })
-    } catch (e) {
-      console.error('assign email send failed (non-fatal):', e)
-    }
-
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('assign route error:', err)
     return NextResponse.json({ error: err?.message || 'Assign failed' }, { status: 500 })
   }
-}
-
-function stripHtml(html: string): string {
-  if (!html) return ''
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
 }

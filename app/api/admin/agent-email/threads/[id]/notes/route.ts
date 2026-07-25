@@ -78,6 +78,16 @@ export async function POST(
       .single()
     if (error) throw error
 
+    // Bump the thread's updated_at so this note counts as recent activity.
+    // The stale-assignment cron uses updated_at to decide when an assignment
+    // has been idle for 48 hours; without this bump, adding notes wouldn't
+    // count as "the assignee is on it" and the thread could revert to New
+    // even though someone was actively working.
+    await supabaseAdmin
+      .from('email_threads')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', threadId)
+
     // Notify mentioned admins (skip self-mentions)
     const actorName = preferredDisplayName(auth.user as any)
 

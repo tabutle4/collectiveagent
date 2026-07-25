@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/agent-email-reconcile",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/agent-email-stale-assignments",
+      "schedule": "0 * * * *"
     }
   ]
 }

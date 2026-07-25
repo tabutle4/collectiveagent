@@ -7,6 +7,7 @@ import {
 } from '@/lib/graph-mail-subscriptions'
 import {
   resolveAgentFromEmail,
+  getActiveAdmins,
   getActiveAdminEmailSet,
   messagePassesReadingAFilter,
   findOrCreateInboundThread,
@@ -15,6 +16,7 @@ import {
   insertSystemNote,
   preferredDisplayName,
 } from '@/lib/agent-email'
+import { writeInAppNotification } from '@/lib/agent-email-notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -259,9 +261,94 @@ async function processInbound(m: {
       'Thread reopened. This thread was closed but the agent replied, so it is back in the queue.'
     )
   }
+
+  // Auto-assign on the FIRST inbound of a thread if the To field contains
+  // exactly one active admin. Runs only when the thread was created just
+  // now (wasCreated=true). Reopened threads are not auto-assigned; they
+  // land back in the New bucket per the manual reopen convention.
+  if (thread.wasCreated && insertResult.inserted) {
+    await autoAssignIfDirected({
+      threadId: thread.threadId,
+      toAddresses: m.toAddresses,
+      adminEmailSet,
+      agentName: m.fromName || m.fromAddress,
+    })
+  }
 }
 
-// ─── Outbound (out-of-band reply detection) ───────────────────────────────
+// Auto-assign a thread to the single admin who was on the To line, if
+// there is exactly one. Applies Reading A + "first message only" per the
+// Phase 2.1 spec. Writes:
+//   - email_threads.assigned_to_user_id
+//   - email_thread_assignments audit row (created_by_user_id=null since
+//     this is a system action)
+//   - a system note explaining the auto-assign
+//   - an in-app notification for the target admin
+// No email is sent (the target already has the original email in their
+// inbox by definition of Reading A).
+async function autoAssignIfDirected(input: {
+  threadId: string
+  toAddresses: string[]
+  adminEmailSet: Set<string>
+  agentName: string
+}): Promise<void> {
+  const { threadId, toAddresses, adminEmailSet, agentName } = input
+
+  // Find admin addresses in the To field (case-insensitive, dedupe).
+  const toAdminEmails = Array.from(
+    new Set(
+      (toAddresses || [])
+        .map(a => (a || '').toLowerCase())
+        .filter(a => a && adminEmailSet.has(a))
+    )
+  )
+  if (toAdminEmails.length !== 1) return
+
+  // Resolve that admin to a user row and confirm still active.
+  const admins = await getActiveAdmins()
+  const target = admins.find(a => a.email.toLowerCase() === toAdminEmails[0])
+  if (!target) return
+
+  const targetName = preferredDisplayName(target)
+
+  // Update thread assignment.
+  const { error: updErr } = await supabaseAdmin
+    .from('email_threads')
+    .update({
+      assigned_to_user_id: target.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', threadId)
+  if (updErr) {
+    console.error('autoAssignIfDirected update error:', updErr)
+    return
+  }
+
+  // Audit row (no created_by_user_id, system action).
+  await supabaseAdmin.from('email_thread_assignments').insert({
+    thread_id: threadId,
+    assigned_from_user_id: null,
+    assigned_to_user_id: target.id,
+    reason_note: `Auto-assigned: ${target.email} was the only admin on the To line.`,
+    is_escalation: false,
+    created_by_user_id: null,
+  })
+
+  // System note.
+  await insertSystemNote(
+    threadId,
+    `Auto-assigned to ${targetName} because they were the only admin on the To line.`
+  )
+
+  // In-app notification.
+  await writeInAppNotification({
+    userId: target.id,
+    threadId,
+    kind: 'assigned',
+    actorUserId: null,
+    body: `${agentName} sent this to you directly, so it was auto-assigned.`,
+  })
+}
 
 async function processOutbound(m: {
   fromAddress: string
@@ -281,6 +368,52 @@ async function processOutbound(m: {
   if (!m.conversationId) return
   const found = await locateThreadByConversationId(m.conversationId)
   if (!found) return
+
+  // Dedupe race fix (Phase 2.1): the dashboard's Reply flow inserts a row
+  // with sent_via_dashboard=true and a locally-generated internetMessageId.
+  // When Graph delivers the sent-items notification for the same send, we
+  // arrive here with a DIFFERENT (Graph-assigned) internetMessageId, so the
+  // insertThreadMessage unique-key dedupe by internet_message_id will NOT
+  // catch it. Result before this fix: a duplicate outbound row plus a false
+  // "sent from Outlook" system note.
+  //
+  // Fix: look for a dashboard-sent outbound row on the same thread within
+  // the last 60 seconds. If found and recipients match, backfill the real
+  // graph_message_id onto that row and return without inserting a duplicate.
+  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString()
+  const { data: recentDashboardSend } = await supabaseAdmin
+    .from('email_thread_messages')
+    .select('id, graph_message_id, to_addresses')
+    .eq('thread_id', found.threadId)
+    .eq('direction', 'outbound')
+    .eq('sent_via_dashboard', true)
+    .gte('sent_at', oneMinuteAgo)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (recentDashboardSend) {
+    const dashRecipients = new Set<string>(
+      (recentDashboardSend.to_addresses || []).map((a: string) => (a || '').toLowerCase())
+    )
+    const graphRecipients = new Set((m.toAddresses || []).map(a => (a || '').toLowerCase()))
+    const sameRecipients =
+      dashRecipients.size > 0 &&
+      dashRecipients.size === graphRecipients.size &&
+      Array.from(dashRecipients).every(a => graphRecipients.has(a))
+    if (sameRecipients) {
+      // Backfill the real Graph message id on the existing row so we can
+      // trace back to the mailbox copy later if needed. No duplicate insert,
+      // no false "sent from Outlook" note.
+      if (!recentDashboardSend.graph_message_id) {
+        await supabaseAdmin
+          .from('email_thread_messages')
+          .update({ graph_message_id: m.graphMessageId })
+          .eq('id', recentDashboardSend.id)
+      }
+      return
+    }
+  }
 
   // Look up the admin who sent it, by email.
   const { data: adminUser } = await supabaseAdmin
