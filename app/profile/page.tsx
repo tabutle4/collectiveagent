@@ -1570,7 +1570,7 @@ export default function ProfilePage({
                         <p className="text-sm font-medium text-luxury-gray-1">
                           {(() => {
                             const plan = normalizeCommissionPlan(user.commission_plan || '')
-                            const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30' }
+                            const labels: Record<string, string> = { new_agent: 'New Agent 70/30', no_cap: 'No Cap 85/15', cap: 'Cap 70/30', post_cap: 'Post-Cap Plan 97/3', broker: 'Broker Plan 0/100' }
                             return labels[plan] || user.commission_plan || user.commission_plan_other || 'N/A'
                           })()}
                         </p>

@@ -318,15 +318,17 @@ export default function TransactionsPage() {
             </div>
           ))
         )}
-        <div>
-          <a
-            href={canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`}
-            className="underline hover:text-luxury-gray-1"
-            onClick={e => e.stopPropagation()}
-          >
-            Open full deal
-          </a>
-        </div>
+        {canViewAll && (
+          <div>
+            <a
+              href={`/admin/transactions/${t.id}`}
+              className="underline hover:text-luxury-gray-1"
+              onClick={e => e.stopPropagation()}
+            >
+              Open full deal
+            </a>
+          </div>
+        )}
       </div>
     )
   }
