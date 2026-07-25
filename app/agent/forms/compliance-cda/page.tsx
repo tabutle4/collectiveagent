@@ -100,6 +100,8 @@ export default function ComplianceCdaForm() {
   const [commissionConfirmed, setCommissionConfirmed] = useState(false)
   // Compliance mode: attach this submission to a retainer prospect the agent picked
   const [attachTo, setAttachTo] = useState<{ id: string; client_name: string } | null>(null)
+  // Internal referral: which CRC agent receives the fee (searched by name).
+  const [internalReferralAgent, setInternalReferralAgent] = useState<{ id: string; name: string } | null>(null)
 
   // Transaction search
   const [addressSearch, setAddressSearch] = useState('')
@@ -157,7 +159,14 @@ export default function ComplianceCdaForm() {
       if (!res.ok) { router.push('/auth/login'); return }
       const data = await res.json()
       setUser(data.user)
-      if (data.user?.division?.length) setField('flyer_display_type', 'division')
+      if (data.user?.division?.length) {
+        setField('flyer_display_type', 'division')
+        // One division on file: preselect it so the agent has nothing to do.
+        const divs = Array.isArray(data.user.division)
+          ? data.user.division.filter(Boolean)
+          : String(data.user.division).split('|').map((s: string) => s.trim()).filter(Boolean)
+        if (divs.length === 1) setField('flyer_division', divs[0])
+      }
     }
     fetchUser()
   }, [router])
@@ -289,7 +298,10 @@ export default function ComplianceCdaForm() {
     const extFee = form.external_referral ? resolve(form.external_referral_fee, form.external_referral_fee_type, gross) : 0
     const brokFee = form.brokerage_referral ? resolve(form.brokerage_referral_fee, form.brokerage_referral_fee_type, gross) : 0
     const grossPlusAddl = Math.round((gross + addl) * 100) / 100
-    const pool = Math.round((grossPlusAddl - intFee - extFee - brokFee) * 100) / 100
+    // Referral fees do NOT carve the pool. They come out of the agent's NET
+    // after the split (the server writes them into other_fees), so the pool
+    // that splits between the agent and CRC is gross + additional comp.
+    const pool = grossPlusAddl
     const splitPct = Number(previewInfo?.agent_split_pct ?? 85)
     let splitAmt = Math.round(pool * splitPct) / 100
     // Firm Minimum Adjustment: when commission + additional comp is below the
@@ -310,8 +322,12 @@ export default function ComplianceCdaForm() {
     const procFee = Number(previewInfo?.processing_fee ?? 0)
     const coaching = Number(previewInfo?.coaching_fee ?? 0)
     const ec = form.has_ecommission ? (parseFloat(form.ecommission_amount || '0') || 0) : 0
-    const estNet = Math.round((splitAmt + btsa - procFee - coaching - rebate) * 100) / 100
-    return { basis, rate, gross, addl, btsa, rebate, intFee, extFee, brokFee, grossPlusAddl, pool, splitPct, splitAmt, minAdj, minBasis, minPct, procFee, coaching, ec, estNet }
+    // Broker plan: the broker keeps no commission, so BTSA goes to the
+    // brokerage and is not added to the broker's own net.
+    const isBrokerPlan = !!previewInfo?.is_broker_plan
+    const btsaToAgent = isBrokerPlan ? 0 : btsa
+    const estNet = Math.round((splitAmt + btsaToAgent - procFee - coaching - rebate - intFee - extFee - brokFee) * 100) / 100
+    return { basis, rate, gross, addl, btsa, rebate, intFee, extFee, brokFee, grossPlusAddl, pool, splitPct, splitAmt, minAdj, minBasis, minPct, procFee, coaching, ec, estNet, isBrokerPlan }
   })()
 
   // Any change to a commission input un-confirms the summary.
@@ -364,36 +380,40 @@ export default function ComplianceCdaForm() {
             {sumRow('Coaching fee', previewInfo.coaching_waived ? 'Waived' : fmt$(previewInfo.coaching_fee))}
             {Number(previewInfo.firm_minimum_pct) > 0 && sumRow('Firm minimum (from Settings)', `${previewInfo.firm_minimum_pct}% of ${summaryIsLease ? 'rent' : 'sales price'}`)}
             {Number(previewInfo.cap_amount) > 0 && sumRow('Cap status', previewInfo.capped ? 'CAPPED' : `${fmt$(previewInfo.ytd_brokerage_split)} of ${fmt$(previewInfo.cap_amount)} YTD`)}
+            {previewInfo.is_broker_plan && sumRow('Broker plan', 'Commission and BTSA go to the brokerage')}
           </div>
         )}
         <div className="text-xs text-luxury-gray-2 space-y-1">
           {sumRow(form.commission_rate_type === 'flat' ? 'Flat commission' : `Commission (${form.commission_rate || '0'}% of ${fmt$(commissionSummary.basis)})`, fmt$(commissionSummary.gross), 'fld_basis')}
           {commissionSummary.addl > 0 && sumRow('+ Additional compensation (splits with the pool)', fmt$(commissionSummary.addl))}
-          {commissionSummary.intFee > 0 && sumRow('- Internal referral fee', `-${fmt$(commissionSummary.intFee)}`, 'fld_internal_referral_fee')}
-          {commissionSummary.extFee > 0 && sumRow('- External referral fee', `-${fmt$(commissionSummary.extFee)}`, 'fld_external_referral_fee')}
-          {commissionSummary.brokFee > 0 && sumRow('- Brokerage referral fee', `-${fmt$(commissionSummary.brokFee)}`, 'fld_brokerage_referral_fee')}
           <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
             <span>Commission pool (splits between you and CRC)</span>
             <span>{fmt$(commissionSummary.pool)}</span>
           </div>
           {sumRow(`Your split (${commissionSummary.splitPct}% of pool)`, fmt$(commissionSummary.splitAmt))}
           {commissionSummary.minAdj > 0 && sumRow(`Firm Minimum Adjustment (CRC's share is calculated on ${fmt$(commissionSummary.minBasis)})`, `-${fmt$(commissionSummary.minAdj)}`, 'fld_rate')}
-          {commissionSummary.btsa > 0 && sumRow('+ BTSA / bonus - paid to you in full, no split', fmt$(commissionSummary.btsa), 'fld_btsa')}
+          {commissionSummary.btsa > 0 && sumRow(
+            commissionSummary.isBrokerPlan ? 'BTSA / bonus - broker plan: goes to the brokerage' : '+ BTSA / bonus - paid to you in full, no split',
+            fmt$(commissionSummary.btsa), 'fld_btsa'
+          )}
           {commissionSummary.procFee > 0 && sumRow('- Processing fee', `-${fmt$(commissionSummary.procFee)}`)}
           {commissionSummary.coaching > 0 && sumRow('- Coaching fee', `-${fmt$(commissionSummary.coaching)}`)}
           {commissionSummary.rebate > 0 && sumRow('- Client rebate (from your share)', `-${fmt$(commissionSummary.rebate)}`, 'fld_rebate')}
+          {commissionSummary.intFee > 0 && sumRow('- Internal referral fee (from your share)', `-${fmt$(commissionSummary.intFee)}`, 'fld_internal_referral_fee')}
+          {commissionSummary.extFee > 0 && sumRow('- External referral fee (from your share)', `-${fmt$(commissionSummary.extFee)}`, 'fld_external_referral_fee')}
+          {commissionSummary.brokFee > 0 && sumRow('- Brokerage referral fee (from your share)', `-${fmt$(commissionSummary.brokFee)}`, 'fld_brokerage_referral_fee')}
           <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
             <span>Estimated net to you</span>
             <span>{fmt$(commissionSummary.estNet)}</span>
           </div>
           {commissionSummary.ec > 0 && (
             <div className="flex justify-between text-amber-700 bg-amber-50 rounded px-2 py-1 mt-1">
-              <span>Deducted from your payout at closing: eCommission repayment</span>
+              <span>{commissionSummary.isBrokerPlan ? 'eCommission repayment - broker plan: repaid from the brokerage net, not your payout' : 'Deducted from your payout at closing: eCommission repayment'}</span>
               <span>-{fmt$(commissionSummary.ec)}</span>
             </div>
           )}
         </div>
-        <p className="text-[11px] text-luxury-gray-3 mt-2">Any unpaid fees or invoices on your account may also be applied at closing and reduce this amount.</p>
+        <p className="text-[11px] text-luxury-gray-3 mt-2">Any unpaid fees or invoices on your account may also be applied at closing and reduce this amount. <a href="/agent/fees" target="_blank" rel="noopener noreferrer" className="underline hover:text-luxury-gray-1">View your fees</a></p>
         <label className="flex items-center gap-2 mt-3 cursor-pointer">
           <input type="checkbox" checked={commissionConfirmed} onChange={e => setCommissionConfirmed(e.target.checked)} className="w-3.5 h-3.5" />
           <span className="text-xs text-luxury-gray-1 font-medium">I confirm this commission calculation is correct. <span className="font-normal text-luxury-gray-3">Changing any number un-checks this. Use the EDIT buttons to jump to a field and fix it.</span></span>
@@ -417,6 +437,7 @@ export default function ComplianceCdaForm() {
       if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
       if (!expediteAcknowledgedSub) { setError('You must acknowledge the expedite policy.'); return }
+      if (form.internal_referral && !internalReferralAgent) { setError('Internal referral: search and select which agent the referral is going to.'); return }
       payload = { ...payload, ...form, transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: subsequentNotes }
     } else {
       if (!form.expedite_acknowledged) { setError('You must acknowledge the expedite policy.'); return }
@@ -427,6 +448,7 @@ export default function ComplianceCdaForm() {
       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
       if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
+      if (form.internal_referral && !internalReferralAgent) { setError('Internal referral: search and select which agent the referral is going to.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
       if (!foundTransaction && !newAddressComplete) {
@@ -460,7 +482,7 @@ export default function ComplianceCdaForm() {
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, commission_confirmed: commissionConfirmed }) })
+      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, commission_confirmed: commissionConfirmed, internal_referral_agent_id: internalReferralAgent?.id || null }) })
       const data = await res.json()
       if (res.ok && data.duplicate_check) { setDuplicateMatches(data.matches || []); return }
       if (!res.ok || !data.success) { setError(data.error || 'Submission failed. Please try again.'); return }
@@ -493,6 +515,13 @@ export default function ComplianceCdaForm() {
       </div>
     )
   }
+
+  // The agent's own divisions from their profile (string "A | B" or array).
+  // The flyer picker offers only these - pick one or all - instead of every
+  // division that exists. Agents with none on file fall back to the full list.
+  const myDivisions: string[] = Array.isArray(user?.division)
+    ? (user.division as string[]).filter(Boolean)
+    : String(user?.division || '').split('|').map((s: string) => s.trim()).filter(Boolean)
 
   const selectedRetainerType = RETAINER_TYPES.find(t => t.value === retainer.retainer_transaction_type)
   const requiredDocs = retainer.retainer_transaction_type ? RETAINER_DOCS[retainer.retainer_transaction_type] || [] : []
@@ -778,6 +807,8 @@ export default function ComplianceCdaForm() {
                         {(form as any)[key] && (
                           <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
   <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
+)}{key === 'internal_referral' && (
+  <div className="mt-2"><AgentSelect value={internalReferralAgent?.id || ''} onSelect={setInternalReferralAgent} label="Which agent is the referral going to?" placeholder="Search for the agent..." /></div>
 )}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
                         )}
                       </div>
@@ -1072,6 +1103,8 @@ export default function ComplianceCdaForm() {
                     {(form as any)[key] && (
                       <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
   <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
+)}{key === 'internal_referral' && (
+  <div className="mt-2"><AgentSelect value={internalReferralAgent?.id || ''} onSelect={setInternalReferralAgent} label="Which agent is the referral going to?" placeholder="Search for the agent..." /></div>
 )}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
                     )}
                   </div>
@@ -1162,12 +1195,36 @@ export default function ComplianceCdaForm() {
                       <div className="flex-1">
                         <span className="text-sm text-luxury-gray-1">A Division</span>
                         {form.flyer_display_type === 'division' && (
-                          <select className="input-luxury w-full text-sm mt-2" value={form.flyer_division} onChange={e => setField('flyer_division', e.target.value)}>
-                            <option value="">Select division...</option>
-                            {FLYER_DIVISIONS.filter(d => !['team', 'houston', 'dallas'].includes(d.value)).map(d => (
-                              <option key={d.value} value={d.label}>{d.label}</option>
-                            ))}
-                          </select>
+                          myDivisions.length > 0 ? (
+                            <div className="mt-2 space-y-1.5">
+                              {myDivisions.length > 1 && <p className="text-[10px] text-luxury-gray-3">Your divisions - pick one or all</p>}
+                              {myDivisions.map(d => {
+                                const picked = form.flyer_division.split(' | ').map(s => s.trim()).filter(Boolean)
+                                const on = picked.includes(d)
+                                return (
+                                  <label key={d} className="flex items-center gap-1.5 text-xs text-luxury-gray-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={on}
+                                      onChange={() => {
+                                        const next = on ? picked.filter(x => x !== d) : [...picked, d]
+                                        setField('flyer_division', next.join(' | '))
+                                      }}
+                                      className="w-3.5 h-3.5"
+                                    />
+                                    {d}
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <select className="input-luxury w-full text-sm mt-2" value={form.flyer_division} onChange={e => setField('flyer_division', e.target.value)}>
+                              <option value="">Select division...</option>
+                              {FLYER_DIVISIONS.filter(d => !['team', 'houston', 'dallas'].includes(d.value)).map(d => (
+                                <option key={d.value} value={d.label}>{d.label}</option>
+                              ))}
+                            </select>
+                          )
                         )}
                       </div>
                     </label>

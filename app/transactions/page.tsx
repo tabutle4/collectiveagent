@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, Download } from 'lucide-react'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import NewTransactionModal from '@/components/transactions/NewTransactionModal'
 import { TransactionStatus } from '@/lib/transactions/types'
@@ -20,8 +20,13 @@ export default function TransactionsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [agentFilter, setAgentFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [quarterFilter, setQuarterFilter] = useState('all')
+  const [tia, setTia] = useState<any[]>([])
   const [canViewAll, setCanViewAll] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Cap progress for the agent strip - only shown when the plan has a cap.
+  const [capInfo, setCapInfo] = useState<any>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,6 +42,7 @@ export default function TransactionsPage() {
 
         const data = await res.json()
         setTransactions(data.transactions || [])
+        setTia(data.tia || [])
         setAgents(data.agents || [])
         setPermissions(data.permissions || {})
         setCanViewAll(data.canViewAll || false)
@@ -46,6 +52,19 @@ export default function TransactionsPage() {
           new Set((data.transactions || []).map((t: any) => t.transaction_type).filter(Boolean))
         ) as string[]
         setTransactionTypes(types.sort())
+
+        // Agents: load cap progress for the top strip. Only rendered when
+        // the plan actually has a cap (New Agent Plan shows progress too).
+        if (!data.canViewAll) {
+          try {
+            const capRes = await fetch('/api/agent/commission-preview', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_lease: false }),
+            })
+            if (capRes.ok) setCapInfo(await capRes.json())
+          } catch { /* strip works without cap info */ }
+        }
       } catch (err) {
         console.error('Error fetching transactions:', err)
       } finally {
@@ -67,8 +86,58 @@ export default function TransactionsPage() {
     return getTransactionTypeLabel(type)
   }
 
+  // ── Quarter qualification - the EXACT rules the quarterly report uses ────
+  // Leases (type mentions tenant/landlord/lease): counted by move-in date
+  // (falling back to closing date), any status except cancelled. Sales:
+  // counted by closing date and only when closed.
+  const isLeaseTxn = (t: any) => /tenant|landlord|lease/i.test(String(t.transaction_type || ''))
+  const qualDate = (t: any) => (isLeaseTxn(t) ? t.move_in_date || t.closing_date : t.closing_date)
+  const qualifiesInRange = (t: any, start: string, end: string) => {
+    const d = qualDate(t)
+    if (!d || d < start || d > end) return false
+    return isLeaseTxn(t) ? t.status !== 'cancelled' : t.status === 'closed'
+  }
+  const quarterRange = (q: string): [string, string] | null => {
+    const m = q.match(/^(\d{4})-Q([1-4])$/)
+    if (!m) return null
+    const y = m[1]
+    const starts = ['01-01', '04-01', '07-01', '10-01']
+    const ends = ['03-31', '06-30', '09-30', '12-31']
+    const i = parseInt(m[2]) - 1
+    return [`${y}-${starts[i]}`, `${y}-${ends[i]}`]
+  }
+
+  // Agents only see 2026 forward. A deal with no dates at all stays visible
+  // only if it was created in 2026 or later. Admin views are unfiltered.
+  const visible = useMemo(() => {
+    if (canViewAll) return transactions
+    return transactions.filter(t => {
+      const d = qualDate(t) || t.closing_date || t.move_in_date || t.created_at
+      return !d || String(d).slice(0, 10) >= '2026-01-01'
+    })
+  }, [transactions, canViewAll])
+
+  // Quarter options generated from the years actually present in the data.
+  const quarterOptions = useMemo(() => {
+    const years = new Set<string>()
+    for (const t of visible) {
+      const d = qualDate(t)
+      if (d) years.add(String(d).slice(0, 4))
+    }
+    const opts: string[] = []
+    Array.from(years).sort().reverse().forEach(y => {
+      for (let i = 4; i >= 1; i--) opts.push(`${y}-Q${i}`)
+    })
+    return opts
+  }, [visible])
+
   const filtered = useMemo(() => {
-    let list = [...transactions]
+    let list = [...visible]
+
+    if (quarterFilter !== 'all') {
+      const range = quarterRange(quarterFilter)
+      if (range) list = list.filter(t => qualifiesInRange(t, range[0], range[1]))
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
@@ -94,18 +163,54 @@ export default function TransactionsPage() {
     }
 
     return list
-  }, [transactions, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll])
+  }, [visible, quarterFilter, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll])
 
   const statusCounts = useMemo(
     () => ({
-      all: transactions.length,
-      active: transactions.filter(t => STATUS_GROUPS.active.includes(t.status)).length,
-      compliance: transactions.filter(t => STATUS_GROUPS.compliance.includes(t.status)).length,
-      processing: transactions.filter(t => STATUS_GROUPS.processing.includes(t.status)).length,
-      complete: transactions.filter(t => STATUS_GROUPS.complete.includes(t.status)).length,
+      all: visible.length,
+      active: visible.filter(t => STATUS_GROUPS.active.includes(t.status)).length,
+      compliance: visible.filter(t => STATUS_GROUPS.compliance.includes(t.status)).length,
+      processing: visible.filter(t => STATUS_GROUPS.processing.includes(t.status)).length,
+      complete: visible.filter(t => STATUS_GROUPS.complete.includes(t.status)).length,
     }),
-    [transactions]
+    [visible]
   )
+
+  // My commission rows by transaction (agents: only their rows come back).
+  const myTiaByTxn = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const r of tia) {
+      const list = map.get(r.transaction_id) || []
+      list.push(r)
+      map.set(r.transaction_id, list)
+    }
+    return map
+  }, [tia])
+
+  // Totals for the current filtered set, counted the way the quarterly
+  // report counts: production roles' commission rows, units defaulting to 1.
+  const totals = useMemo(() => {
+    const ids = new Set(filtered.map(t => t.id))
+    const prodRoles = ['primary_agent', 'listing_agent']
+    let units = 0
+    let volume = 0
+    let myNet = 0
+    for (const r of tia) {
+      if (!ids.has(r.transaction_id)) continue
+      if (canViewAll && agentFilter !== 'all' && r.agent_id !== agentFilter) continue
+      if (prodRoles.includes(r.agent_role)) {
+        units += r.units == null ? 1 : parseFloat(String(r.units)) || 0
+        volume += parseFloat(String(r.sales_volume ?? 0)) || 0
+      }
+      myNet += parseFloat(String(r.agent_net ?? 0)) || 0
+    }
+    return {
+      deals: filtered.length,
+      units,
+      volume: Math.round(volume * 100) / 100,
+      myNet: Math.round(myNet * 100) / 100,
+    }
+  }, [filtered, tia, canViewAll, agentFilter])
 
   const formatVolume = (t: any) => {
     const amount = t.sales_volume
@@ -118,6 +223,114 @@ export default function TransactionsPage() {
     return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
+  const fmtMoney = (n: any) => {
+    const v = parseFloat(String(n ?? 0)) || 0
+    return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  const quarterLabel = (q: string) => {
+    const m = q.match(/^(\d{4})-Q([1-4])$/)
+    return m ? `Q${m[2]} ${m[1]}` : q
+  }
+
+  // Download the current filtered view as a CSV report, totals included.
+  const downloadReport = () => {
+    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const header = [
+      'Property', ...(canViewAll ? ['Agent'] : []), 'Type', 'Client', 'Status', 'Compliance',
+      'Closing Date', 'Move In Date', 'Sales Volume', ...(canViewAll ? [] : ['My Net', 'Payment Status']),
+    ]
+    const lines = [header.map(esc).join(',')]
+    for (const t of filtered) {
+      const mine = (myTiaByTxn.get(t.id) || [])
+      const myNetRow = mine.reduce((s, r) => s + (parseFloat(String(r.agent_net ?? 0)) || 0), 0)
+      const payStatus = mine.map(r => r.payment_status).filter(Boolean).join(' / ')
+      lines.push([
+        t.property_address || '',
+        ...(canViewAll ? [getAgentName(t.submitted_by)] : []),
+        formatTransactionType(t.transaction_type),
+        t.client_name || '',
+        t.status || '',
+        t.compliance_status || '',
+        t.closing_date || '',
+        t.move_in_date || '',
+        t.sales_volume || '',
+        ...(canViewAll ? [] : [myNetRow ? myNetRow.toFixed(2) : '', payStatus]),
+      ].map(esc).join(','))
+    }
+    lines.push('')
+    lines.push([`Totals (${quarterFilter === 'all' ? 'all time' : quarterLabel(quarterFilter)})`,
+      `Deals: ${totals.deals}`, `Units: ${totals.units}`, `Volume: ${totals.volume.toFixed(2)}`,
+      ...(canViewAll ? [] : [`My Net: ${totals.myNet.toFixed(2)}`])].map(esc).join(','))
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `transactions_report_${quarterFilter === 'all' ? 'all_time' : quarterFilter}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const gt0 = (v: any) => (parseFloat(String(v ?? 0)) || 0) > 0
+
+  // Expanded row panel: the deal's key dates + compliance, and the money on
+  // the commission rows (agents see only their own rows; admins see all).
+  const renderExpanded = (t: any) => {
+    const rows = myTiaByTxn.get(t.id) || []
+    return (
+      <div className="bg-luxury-light rounded p-4 text-xs text-luxury-gray-2 space-y-3">
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          <span>
+            Compliance: <span className="font-medium">{t.compliance_status?.replace(/_/g, ' ') || 'not requested'}</span>
+          </span>
+          {t.acceptance_date && <span>Accepted: {formatDate(t.acceptance_date)}</span>}
+          {t.closing_date && <span>Closing: {formatDate(t.closing_date)}</span>}
+          {t.move_in_date && <span>Move-in: {formatDate(t.move_in_date)}</span>}
+          {gt0(t.sales_price) && <span>Sales price: {fmtMoney(t.sales_price)}</span>}
+          {gt0(t.monthly_rent) && <span>Monthly rent: {fmtMoney(t.monthly_rent)}</span>}
+          {t.lease_term && <span>Term: {t.lease_term} months</span>}
+          {gt0(t.sales_volume) && <span>Volume: {fmtMoney(t.sales_volume)}</span>}
+        </div>
+        {rows.length === 0 ? (
+          <p className="text-luxury-gray-3">No commission rows {canViewAll ? 'on this deal yet.' : 'for you on this deal yet.'}</p>
+        ) : (
+          rows.map((r: any) => (
+            <div key={r.id} className="border-t border-luxury-gray-5 pt-2">
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-semibold text-luxury-gray-1">
+                  {canViewAll && getAgentName(r.agent_id) ? `${getAgentName(r.agent_id)} · ` : ''}
+                  {String(r.agent_role || '').replace(/_/g, ' ')}
+                  {r.side ? ` · ${r.side}` : ''}
+                </p>
+                <span className={`px-2 py-0.5 rounded ${r.payment_status === 'paid' ? 'bg-green-50 text-green-700' : 'bg-luxury-light text-luxury-gray-3 border border-luxury-gray-5'}`}>
+                  {r.payment_status === 'paid' ? `Paid${r.payment_date ? ` ${formatDate(r.payment_date)}` : ''}` : (r.payment_status || 'pending')}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1">
+                <span>Gross: {fmtMoney(r.agent_gross)}</span>
+                <span>Brokerage split: {fmtMoney(r.brokerage_split)}</span>
+                {gt0(r.processing_fee) && <span>Processing fee: -{fmtMoney(r.processing_fee)}</span>}
+                {gt0(r.coaching_fee) && <span>Coaching fee: -{fmtMoney(r.coaching_fee)}</span>}
+                {gt0(r.other_fees) && <span>Other fees: -{fmtMoney(r.other_fees)}</span>}
+                {gt0(r.btsa_amount) && <span>BTSA: {fmtMoney(r.btsa_amount)}</span>}
+                {gt0(r.rebate_amount) && <span>Rebate: -{fmtMoney(r.rebate_amount)}</span>}
+                <span className="font-semibold text-luxury-gray-1">Net: {fmtMoney(r.agent_net)}</span>
+              </div>
+            </div>
+          ))
+        )}
+        <div>
+          <a
+            href={canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`}
+            className="underline hover:text-luxury-gray-1"
+            onClick={e => e.stopPropagation()}
+          >
+            Open full deal
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
 
   return (
@@ -126,13 +339,46 @@ export default function TransactionsPage() {
         <h1 className="page-title">
           {canViewAll ? 'TRANSACTIONS' : 'MY TRANSACTIONS'} ({filtered.length})
         </h1>
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="btn btn-primary flex items-center gap-1.5"
-        >
-          <Plus size={14} /> New Transaction
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadReport}
+            className="btn btn-secondary flex items-center gap-1.5"
+          >
+            <Download size={14} /> Download Report
+          </button>
+          <button
+            onClick={() => setShowNewModal(true)}
+            className="btn btn-primary flex items-center gap-1.5"
+          >
+            <Plus size={14} /> New Transaction
+          </button>
+        </div>
       </div>
+
+      {!canViewAll && (
+        <div className={`grid grid-cols-2 ${Number(capInfo?.cap_amount) > 0 ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3 mb-6`}>
+          <div className="inner-card">
+            <p className="text-xs text-luxury-gray-3 mb-1">Units{quarterFilter !== 'all' ? ` · ${quarterLabel(quarterFilter)}` : ''}</p>
+            <p className="text-lg font-semibold text-luxury-gray-1">{totals.units}</p>
+          </div>
+          <div className="inner-card">
+            <p className="text-xs text-luxury-gray-3 mb-1">Volume{quarterFilter !== 'all' ? ` · ${quarterLabel(quarterFilter)}` : ''}</p>
+            <p className="text-lg font-semibold text-luxury-gray-1">{fmtMoney(totals.volume)}</p>
+          </div>
+          <div className="inner-card">
+            <p className="text-xs text-luxury-gray-3 mb-1">My Net{quarterFilter !== 'all' ? ` · ${quarterLabel(quarterFilter)}` : ''}</p>
+            <p className="text-lg font-semibold text-luxury-gray-1">{fmtMoney(totals.myNet)}</p>
+          </div>
+          {Number(capInfo?.cap_amount) > 0 && (
+            <div className="inner-card">
+              <p className="text-xs text-luxury-gray-3 mb-1">Cap Progress</p>
+              <p className="text-lg font-semibold text-luxury-gray-1">
+                {capInfo.capped ? 'CAPPED' : `${fmtMoney(capInfo.ytd_brokerage_split)} of ${fmtMoney(capInfo.cap_amount)}`}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="container-card">
         <div className="flex flex-col gap-3 mb-5">
@@ -155,6 +401,19 @@ export default function TransactionsPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <select
+              value={quarterFilter}
+              onChange={e => setQuarterFilter(e.target.value)}
+              className="select-luxury text-xs flex-1 min-w-[140px]"
+            >
+              <option value="all">All Time</option>
+              {quarterOptions.map(q => (
+                <option key={q} value={q}>
+                  {quarterLabel(q)} (deals that count)
+                </option>
+              ))}
+            </select>
+
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
@@ -229,10 +488,10 @@ export default function TransactionsPage() {
                 </thead>
                 <tbody>
                   {filtered.map(t => (
+                    <Fragment key={t.id}>
                     <tr
-                      key={t.id}
                       className="tr-luxury-clickable"
-                      onClick={() => router.push(canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`)}
+                      onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                     >
                       <td className="py-3 px-4">
                         <p className="text-sm font-semibold text-luxury-gray-1">
@@ -281,6 +540,14 @@ export default function TransactionsPage() {
                         {formatDate(t.move_in_date)}
                       </td>
                     </tr>
+                    {expandedId === t.id && (
+                      <tr>
+                        <td colSpan={canViewAll ? 9 : 7} className="px-4 pb-3">
+                          {renderExpanded(t)}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -291,7 +558,7 @@ export default function TransactionsPage() {
                 <div
                   key={t.id}
                   className="inner-card cursor-pointer"
-                  onClick={() => router.push(canViewAll ? `/admin/transactions/${t.id}` : `/transactions/${t.id}`)}
+                  onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                 >
                   <div className="flex items-start justify-between mb-1">
                     <p className="text-sm font-semibold text-luxury-gray-1 flex-1">
@@ -318,6 +585,7 @@ export default function TransactionsPage() {
                         <p>{t.compliance_status.replace(/_/g, ' ')}</p>
                       )}
                   </div>
+                  {expandedId === t.id && <div className="mt-3">{renderExpanded(t)}</div>}
                 </div>
               ))}
             </div>

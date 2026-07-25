@@ -221,6 +221,15 @@ export async function computeCommissionBreakdown(args: {
   if (feeIsSellerSide && agent.waive_seller_processing_fees) processingFee = 0
   else if (feeIsSellerSide && (agent as any).half_seller_processing_fees) processingFee = Math.round(processingFee * 50) / 100
 
+  // Broker plan: the broker keeps no commission (0/100 split), so BTSA also
+  // follows the commission to the brokerage instead of the broker's own row.
+  // Matches broker_100, plan strings containing "broker", the lease magic
+  // string "Custom Lease 0/100", and any plan that resolves to a 0/100 split.
+  const isBrokerPlan =
+    /broker/i.test(planCode) ||
+    /^custom\s+lease\s+0\s*\/\s*100$/i.test(planCode.trim()) ||
+    (agentSplitPct === 0 && firmSplitPct === 100)
+
   // Amounts - all percentages apply to the commission_amount (basis).
   let agentGross = commissionAmount * (agentSplitPct / 100)
   let brokerageSplit = commissionAmount * (firmSplitPct / 100)
@@ -270,9 +279,16 @@ export async function computeCommissionBreakdown(args: {
 
   // Under Model A: team_lead is already carved out of agent_gross by the team
   // split. Do NOT deduct it again from agent_net or 1099. Use canonical math.
+  // Broker plan: BTSA belongs to the brokerage (the broker keeps no
+  // commission), so it is added to brokerage_split and excluded from the
+  // broker's own net/1099.
+  const tiaBtsaAmount = num(existingTia?.btsa_amount)
+  if (isBrokerPlan && tiaBtsaAmount > 0) {
+    brokerageSplit = Math.round((brokerageSplit + tiaBtsaAmount) * 100) / 100
+  }
   const { amount_1099, agent_net } = computeCommission({
     agent_gross: agentGross,
-    btsa_amount: existingTia?.btsa_amount ?? 0,
+    btsa_amount: isBrokerPlan ? 0 : tiaBtsaAmount,
     processing_fee: processingFee,
     coaching_fee: coachingFee,
     other_fees: existingTia?.other_fees ?? 0,
@@ -303,6 +319,7 @@ export async function computeCommissionBreakdown(args: {
     onTeamWithSplit,
     firmMinimumAdjustment,
     firmMinimumPctApplied,
+    isBrokerPlan,
   }
 }
 
@@ -330,6 +347,10 @@ export async function computeCommissionBreakdown(args: {
  *     - sum(staged credits applied against this txn) -- credits paid out here
  *     - sum(TEB.amount_1099_reportable)              -- paid to other brokerages
  *     - sum(momentum_partner TIA.agent_gross)        -- paid to referrers
+ *     - sum(basis-less referral_agent TIA.agent_gross) -- internal referral
+ *       payouts charged to the referring agent's net (fee sits in other_fees
+ *       above, so the pair nets to zero; carve-out rows have a basis and are
+ *       excluded)
  *     + other-side income (a side commission in office_gross with no internal
  *       agent - money CRC collected and passes through to the other brokerage;
  *       cancels the external payout, so pass-through deals net correctly)
@@ -367,7 +388,7 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
     const [{ data: tias }, { data: tebs }, { data: stagedRecs }, { data: txnSides }] = await Promise.all([
       supabase
         .from('transaction_internal_agents')
-        .select('brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross, side')
+        .select('brokerage_split, processing_fee, coaching_fee, other_fees, agent_role, agent_gross, agent_basis, side')
         .eq('transaction_id', transactionId),
       supabase
         .from('transaction_external_brokerages')
@@ -420,6 +441,19 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
           : s,
       0
     )
+    // New-style internal referral payouts (fee reported on the compliance
+    // form). The fee is charged to the referring agent's net via other_fees,
+    // which lands in feesTotal above as brokerage income; the payout to the
+    // receiving agent leaves the brokerage here, netting the pair to zero.
+    // Old carve-out referral rows carry an agent_basis (their money never
+    // entered brokerage_split), so only basis-less rows are subtracted.
+    const referralPayoutsTotal = (tias || []).reduce(
+      (s, t: any) =>
+        t.agent_role === 'referral_agent' && t.agent_basis == null
+          ? s + parseFloat(String(t.agent_gross ?? 0))
+          : s,
+      0
+    )
     const externalTotal = (tebs || []).reduce(
       (s, e) => s + parseFloat(String(e.amount_1099_reportable ?? 0)),
       0
@@ -461,7 +495,8 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
           stagedDebtsTotal -
           stagedCreditsTotal -
           externalTotal -
-          momentumPayoutsTotal +
+          momentumPayoutsTotal -
+          referralPayoutsTotal +
           otherSideIncome) *
           100
       ) / 100

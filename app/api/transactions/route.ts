@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
        sales_volume,
        closing_date,
        move_in_date,
+       acceptance_date,
+       lease_term,
        transaction_type,
        submitted_by,
        office_location`,
@@ -53,6 +55,20 @@ export async function GET(request: NextRequest) {
         filters,
         orderBy: { column: 'closing_date', ascending: false },
       },
+      supabase
+    )
+
+    // Commission rows power the transactions page's quarter totals (they are
+    // what the quarterly report counts) and, for agents, the per-deal
+    // "my net" display. Agents get only their own rows.
+    const tiaFilters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
+    if (!canViewAll) {
+      tiaFilters.push({ type: 'eq', column: 'agent_id', value: userId })
+    }
+    const tia = await fetchAllRows(
+      'transaction_internal_agents',
+      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date',
+      { filters: tiaFilters },
       supabase
     )
 
@@ -76,6 +92,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       transactions,
+      tia,
       agents,
       permissions: permissionsObject,
       canViewAll,

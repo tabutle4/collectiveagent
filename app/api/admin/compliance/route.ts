@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     if (txnIds.length) {
       const txns = await fetchByIds(
         'transactions',
-        'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date',
+        'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, closing_date, move_in_date, funding_status, office_gross, office_net',
         'id',
         txnIds
       )
@@ -156,12 +156,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Batch: paid per agent per deal (the side's own agent got paid)
+    // Batch: paid per agent per deal (the side's own agent got paid), and the
+    // side agent's net for the Needs CDA money columns.
     const paidByTxnAgent: Record<string, boolean> = {}
+    const netByTxnAgent: Record<string, number> = {}
     if (txnIds.length) {
       const internalAgents = await fetchByIds(
         'transaction_internal_agents',
-        'transaction_id, agent_id, payment_status',
+        'transaction_id, agent_id, payment_status, agent_net',
         'transaction_id',
         txnIds
       )
@@ -169,6 +171,8 @@ export async function GET(request: NextRequest) {
         if (ia.payment_status === 'paid') {
           paidByTxnAgent[`${ia.transaction_id}:${ia.agent_id}`] = true
         }
+        const key = `${ia.transaction_id}:${ia.agent_id}`
+        netByTxnAgent[key] = (netByTxnAgent[key] || 0) + (parseFloat(String(ia.agent_net ?? 0)) || 0)
       }
     }
 
@@ -250,6 +254,11 @@ export async function GET(request: NextRequest) {
         closing_date: txn?.closing_date || txn?.move_in_date || d.closing_or_movein_date || null,
         transaction_type: txn?.transaction_type || null,
         is_locked: txn?.is_locked || false,
+        // Money + funding for the Needs CDA view (mirrors the Brokermint CDA report)
+        funding_status: txn?.funding_status || null,
+        office_gross: txn?.office_gross ?? null,
+        office_net: txn?.office_net ?? null,
+        agent_net: r.transaction_id && r.agent_id ? (netByTxnAgent[`${r.transaction_id}:${r.agent_id}`] ?? null) : null,
         is_lease: isLeaseTransactionType(txn?.transaction_type),
         checklist_complete: r.transaction_id ? (checklistCompleteByTxn[r.transaction_id] || false) : false,
         transaction_status: txn?.status || null,

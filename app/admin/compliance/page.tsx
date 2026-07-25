@@ -34,6 +34,10 @@ interface TrackerRow {
   is_lease: boolean
   checklist_complete: boolean
   transaction_status: string | null
+  funding_status: string | null
+  office_gross: number | null
+  office_net: number | null
+  agent_net: number | null
   form_data: Record<string, any>
 }
 
@@ -267,7 +271,8 @@ export default function AdminCompliancePage() {
     const time = (s: string | null) => (s ? new Date(s).getTime() : 0)
     list.sort((a, b) => {
       if (sortBy === 'recent') return time(b.submitted_at) - time(a.submitted_at)
-      if (sortBy === 'closing') return time(b.closing_date) - time(a.closing_date)
+      // Needs CDA works like the Brokermint CDA report: soonest closing first.
+      if (sortBy === 'closing') return tab === 'needs_cda' ? time(a.closing_date) - time(b.closing_date) : time(b.closing_date) - time(a.closing_date)
       if (sortBy === 'agent') return (a.agent_name || '').localeCompare(b.agent_name || '')
       if (sortBy === 'status') return (a.compliance_status || '').localeCompare(b.compliance_status || '')
       return 0
@@ -1013,7 +1018,7 @@ export default function AdminCompliancePage() {
         ] as const).map(t => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); if (t.key === 'needs_cda') setSortBy('closing') }}
             className={`text-xs px-3 py-1.5 rounded border transition-colors ${
               tab === t.key
                 ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
@@ -1104,6 +1109,14 @@ export default function AdminCompliancePage() {
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Closing</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Compliance</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Post Closing</th>
+                {tab === 'needs_cda' && (
+                  <>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Funding</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Office Gross</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent Net</th>
+                    <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Office Net</th>
+                  </>
+                )}
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Agent</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Property / Client</th>
                 <th className="text-xs font-medium text-luxury-gray-3 px-4 py-3">Type</th>
@@ -1167,6 +1180,17 @@ export default function AdminCompliancePage() {
                         )}
                       </div>
                     </td>
+                    {tab === 'needs_cda' && (
+                      <>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap">
+                          {r.funding_status ? r.funding_status.replace(/_/g, ' ') : '-'}
+                          {r.transaction_status && <span className="block text-luxury-gray-3 capitalize">{r.transaction_status}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</td>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</td>
+                        <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{r.office_net != null ? fmtMoney(r.office_net) : '-'}</td>
+                      </>
+                    )}
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {r.agent_name}
                       {r.side && <span className="block text-luxury-gray-3 capitalize">{r.side}</span>}
@@ -1211,7 +1235,7 @@ export default function AdminCompliancePage() {
 
                   {linkPanelId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={10} className="px-5 py-4">
+                      <td colSpan={tab === 'needs_cda' ? 14 : 10} className="px-5 py-4">
                         {renderLinkPanel(r)}
                       </td>
                     </tr>
@@ -1219,13 +1243,28 @@ export default function AdminCompliancePage() {
 
                   {expandedId === r.id && (
                     <tr className="border-b border-luxury-gray-5/50 bg-luxury-gray-5/10">
-                      <td colSpan={10} className="px-5 py-4">
+                      <td colSpan={tab === 'needs_cda' ? 14 : 10} className="px-5 py-4">
                         {renderExpandedDetail(r)}
                       </td>
                     </tr>
                   )}
                 </Fragment>
               ))}
+              {tab === 'needs_cda' && visible.length > 0 && (
+                <tr className="border-t border-luxury-gray-5 bg-luxury-gray-5/10">
+                  <td colSpan={7} className="px-4 py-3 text-xs font-semibold text-luxury-gray-1">Overall total ({visible.length})</td>
+                  <td className="px-4 py-3 text-xs font-semibold text-luxury-gray-1 whitespace-nowrap">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_gross ?? 0)) || 0), 0))}
+                  </td>
+                  <td className="px-4 py-3 text-xs font-semibold text-luxury-gray-1 whitespace-nowrap">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.agent_net ?? 0)) || 0), 0))}
+                  </td>
+                  <td className="px-4 py-3 text-xs font-semibold text-luxury-gray-1 whitespace-nowrap">
+                    {fmtMoney(visible.reduce((s, r) => s + (parseFloat(String(r.office_net ?? 0)) || 0), 0))}
+                  </td>
+                  <td colSpan={4}></td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1256,6 +1295,14 @@ export default function AdminCompliancePage() {
                 {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-amber-700">CDA pending approval</span>}
                 {!r.cda_sent && r.cda_status === 'approved' && <span className="text-green-600">CDA approved</span>}
               </div>
+              {tab === 'needs_cda' && (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-luxury-gray-1">
+                  {r.funding_status && <span className="text-luxury-gray-2">Funding: {r.funding_status.replace(/_/g, ' ')}</span>}
+                  <span>Office Gross: {r.office_gross != null ? fmtMoney(r.office_gross) : '-'}</span>
+                  <span>Agent Net: {r.agent_net != null ? fmtMoney(r.agent_net) : '-'}</span>
+                  <span>Office Net: {r.office_net != null ? fmtMoney(r.office_net) : '-'}</span>
+                </div>
+              )}
               {r.missing_items.length > 0 && r.compliance_status !== 'complete' && (
                 <div className="mt-1 text-xs text-red-600">{r.missing_items.length} missing</div>
               )}

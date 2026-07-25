@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getFirmMinimumPct } from '@/lib/transactions/cascade'
+import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,8 +44,23 @@ export async function POST(request: NextRequest) {
         lc.includes(String(p.code || '').toLowerCase()) || String(p.name || '').toLowerCase().includes(lc)
       ) || null
     }
-    const agentSplitPct = Number(plan?.agent_split_percentage ?? 85)
-    const firmSplitPct = Number(plan?.firm_split_percentage ?? 15)
+    let agentSplitPct = Number(plan?.agent_split_percentage ?? 85)
+    let firmSplitPct = Number(plan?.firm_split_percentage ?? 15)
+    // No DB row matched: parse the split embedded in a custom plan string,
+    // same fallback the cascade uses (covers the broker lease magic string).
+    if (!plan && planCode) {
+      const parsed = parseCustomPlanSplit(planCode)
+      if (parsed) {
+        agentSplitPct = parsed.agentPct
+        firmSplitPct = parsed.firmPct
+      }
+    }
+    // Broker plan (same rule as the cascade): broker keeps no commission -
+    // BTSA goes to the brokerage and eCommission repays from brokerage net.
+    const isBrokerPlan =
+      /broker/i.test(planCode) ||
+      /^custom\s+lease\s+0\s*\/\s*100$/i.test(planCode.trim()) ||
+      (agentSplitPct === 0 && firmSplitPct === 100)
 
     // Side-aware processing fee with waive / half-off state.
     const side = String(body.side || '')
@@ -93,6 +109,7 @@ export async function POST(request: NextRequest) {
       cap_amount: capAmount,
       ytd_brokerage_split: Math.round(ytd * 100) / 100,
       capped: capAmount > 0 && ytd >= capAmount,
+      is_broker_plan: isBrokerPlan,
     })
   } catch (err: any) {
     console.error('commission-preview error:', err)

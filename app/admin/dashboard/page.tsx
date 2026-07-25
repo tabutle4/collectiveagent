@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { TrendingUp, DollarSign, Hash } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
@@ -306,12 +307,14 @@ function MultiSegmentDonut({
 }
 
 export default function AdminDashboard() {
+  const router = useRouter()
   const { hasPermission } = useAuth()
   const [prospects, setProspects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>('ytd')
   const [txnFilter, setTxnFilter] = useState<TxnFilter>('all')
   const [metrics, setMetrics] = useState({ volume: 0, units: 0, agentNet: 0, officeNet: 0 })
+  const [needsAttention, setNeedsAttention] = useState({ complianceRequested: 0, cdaNeeded: 0, brokerApprovalPending: 0, eligibleForPayout: 0 })
   const [allTransactions, setAllTransactions] = useState<any[]>([])
   const [allAgentRows, setAllAgentRows] = useState<any[]>([])
   const [leaseTypes, setLeaseTypes] = useState<string[]>([])
@@ -357,6 +360,7 @@ export default function AdminDashboard() {
       const data = await res.json()
       setAllTransactions(data.transactions || [])
       setAllAgentRows(data.agentRows || [])
+      setNeedsAttention(data.needsAttention || { complianceRequested: 0, cdaNeeded: 0, brokerApprovalPending: 0, eligibleForPayout: 0 })
       const leaseNames = (data.processingFeeTypes || [])
         .filter((t: any) => t.is_lease)
         .map((t: any) => t.name)
@@ -605,45 +609,59 @@ export default function AdminDashboard() {
               Needs Attention
             </h2>
             <div className="space-y-3">
-              <div className="inner-card">
+              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/admin/compliance')}>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Compliance Requested</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">
-                    0
+                    {needsAttention.complianceRequested}
                   </span>
                 </div>
                 <p className="text-xs text-luxury-gray-3">
-                  No transactions awaiting compliance review
+                  {needsAttention.complianceRequested === 0
+                    ? 'No transactions awaiting compliance review'
+                    : `${needsAttention.complianceRequested} transaction${needsAttention.complianceRequested === 1 ? '' : 's'} awaiting compliance review`}
                 </p>
               </div>
-              <div className="inner-card">
+              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/admin/compliance')}>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Approved - CDA Needed</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">
-                    0
+                    {needsAttention.cdaNeeded}
                   </span>
                 </div>
-                <p className="text-xs text-luxury-gray-3">No transactions ready for CDA</p>
+                <p className="text-xs text-luxury-gray-3">
+                  {needsAttention.cdaNeeded === 0
+                    ? 'No transactions ready for CDA'
+                    : `${needsAttention.cdaNeeded} sale${needsAttention.cdaNeeded === 1 ? '' : 's'} with compliance complete, CDA not sent`}
+                </p>
               </div>
-              <div className="inner-card">
+              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/transactions')}>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Eligible for Payout</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">
-                    0
+                    {needsAttention.eligibleForPayout}
                   </span>
                 </div>
-                <p className="text-xs text-luxury-gray-3">No transactions eligible for payout</p>
+                <p className="text-xs text-luxury-gray-3">
+                  {needsAttention.eligibleForPayout === 0
+                    ? 'No transactions eligible for payout'
+                    : `${needsAttention.eligibleForPayout} deal${needsAttention.eligibleForPayout === 1 ? '' : 's'} with check received, compliance complete, checklist done`}
+                </p>
               </div>
-              <div className="inner-card">
+              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/admin/compliance')}>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">
                     Broker Approval Pending
                   </p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">
-                    0
+                    {needsAttention.brokerApprovalPending}
                   </span>
                 </div>
-                <p className="text-xs text-luxury-gray-3">No CDAs awaiting broker approval</p>
+                <p className="text-xs text-luxury-gray-3">
+                  {needsAttention.brokerApprovalPending === 0
+                    ? 'No CDAs awaiting broker approval'
+                    : `${needsAttention.brokerApprovalPending} CDA${needsAttention.brokerApprovalPending === 1 ? '' : 's'} sent for approval, not yet approved`}
+                </p>
               </div>
             </div>
           </div>

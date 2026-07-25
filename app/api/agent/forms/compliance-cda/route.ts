@@ -430,8 +430,147 @@ export async function POST(request: NextRequest) {
             .eq('agent_role', 'primary_agent')
             .neq('payment_status', 'paid')
         }
+        // Referral fees land on the primary row's other_fees (they come out
+        // of the agent's NET) - same policy as a first submission, recomputed
+        // from this resubmission's values. Only when a referral or commission
+        // input changed, and never over office-entered fees (the tag rule).
+        const REFERRAL_TAG_SUB = '[referral fees - compliance form]'
+        const intFeeSub = fieldMap.internal_referral_fee || 0
+        const extFeeSub = fieldMap.external_referral_fee || 0
+        const brokFeeSub = fieldMap.brokerage_referral_fee || 0
+        const refPartsSub: string[] = []
+        if (intFeeSub > 0) refPartsSub.push(`Internal Referral Fee $${intFeeSub.toFixed(2)}`)
+        if (extFeeSub > 0) refPartsSub.push(`External Referral Fee $${extFeeSub.toFixed(2)}`)
+        if (brokFeeSub > 0) refPartsSub.push(`Brokerage Referral Fee $${brokFeeSub.toFixed(2)}`)
+        const refTotalSub = Math.round((intFeeSub + extFeeSub + brokFeeSub) * 100) / 100
+        const referralInputsChanged = changedFields.some(k =>
+          k.startsWith('internal_referral') || k.startsWith('external_referral') || k.startsWith('brokerage_referral') ||
+          ['commission_basis_price', 'commission_rate', 'commission_rate_type'].includes(k)
+        )
+        if (referralInputsChanged) {
+          const { data: primarySub } = await supabaseAdmin
+            .from('transaction_internal_agents')
+            .select('id, other_fees, other_fees_description, payment_status')
+            .eq('transaction_id', txn.id)
+            .eq('agent_id', agentId)
+            .eq('agent_role', 'primary_agent')
+            .limit(1)
+            .maybeSingle()
+          if (primarySub && primarySub.payment_status !== 'paid') {
+            const existingFeesSub = parseFloat(String(primarySub.other_fees ?? 0)) || 0
+            const taggedSub = String(primarySub.other_fees_description || '').includes(REFERRAL_TAG_SUB)
+            if (!(existingFeesSub > 0 && !taggedSub)) {
+              await supabaseAdmin
+                .from('transaction_internal_agents')
+                .update({
+                  other_fees: refTotalSub,
+                  other_fees_description: refPartsSub.length ? `${refPartsSub.join('; ')} ${REFERRAL_TAG_SUB}` : null,
+                  updated_at: now,
+                })
+                .eq('id', primarySub.id)
+            }
+          }
+        }
+        // Internal referral newly reported on a resubmission: create the
+        // receiving CRC agent's payout row. Duplicate-guarded, so a
+        // resubmission that repeats the same referral changes nothing.
+        const intAgentIdSub = String((body as any).internal_referral_agent_id || '')
+        const sideFromRepSub =
+          repLowerSub.includes('landlord') ? 'landlord'
+          : repLowerSub.includes('seller') ? 'seller'
+          : repLowerSub.includes('tenant') ? 'tenant'
+          : repLowerSub.includes('buyer') ? 'buyer'
+          : null
+        if (formFields.internal_referral && intFeeSub > 0 && intAgentIdSub && intAgentIdSub !== agentId) {
+          const { data: existingRefSub } = await supabaseAdmin
+            .from('transaction_internal_agents')
+            .select('id')
+            .eq('transaction_id', txn.id)
+            .eq('agent_id', intAgentIdSub)
+            .eq('agent_role', 'referral_agent')
+            .limit(1)
+            .maybeSingle()
+          if (!existingRefSub) {
+            await supabaseAdmin.from('transaction_internal_agents').insert({
+              transaction_id: txn.id,
+              agent_id: intAgentIdSub,
+              agent_role: 'referral_agent',
+              side: sideFromRepSub,
+              agent_basis: null,
+              agent_gross: intFeeSub,
+              agent_net: intFeeSub,
+              amount_1099_reportable: intFeeSub,
+              sales_volume: 0,
+              units: 0,
+              counts_toward_progress: false,
+              payment_status: 'pending',
+              funding_source: 'crc',
+              lead_source: 'own',
+              adjustment_notes: 'Internal referral fee reported on the compliance form; paid out of the referring deal agent\'s net.',
+              updated_at: now,
+            })
+          }
+        }
+        // eCommission newly reported on a resubmission: same auto-record as a
+        // first submission (invoice for regular plans, brokerage-net repayment
+        // for broker plans). Duplicate-guarded by the notes tag / TEB lookup.
+        const ecSubAmount = fieldMap.has_ecommission ? (parseFloat(String(fieldMap.ecommission_amount ?? 0)) || 0) : 0
+        if (ecSubAmount > 0 && (changedFields.includes('has_ecommission') || changedFields.includes('ecommission_amount'))) {
+          const { data: subAgentProfile } = await supabaseAdmin
+            .from('users').select('commission_plan, lease_commission_plan').eq('id', agentId).single()
+          const subPlanCode = String(
+            (isLease && subAgentProfile?.lease_commission_plan) ? subAgentProfile.lease_commission_plan : (subAgentProfile?.commission_plan || '')
+          )
+          const isBrokerPlanSub = /broker/i.test(subPlanCode) || /^custom\s+lease\s+0\s*\/\s*100$/i.test(subPlanCode.trim())
+          if (isBrokerPlanSub) {
+            const { data: existingEcTebSub } = await supabaseAdmin
+              .from('transaction_external_brokerages')
+              .select('id')
+              .eq('transaction_id', txn.id)
+              .eq('brokerage_role', 'other')
+              .ilike('brokerage_name', 'eCommission%')
+              .limit(1)
+              .maybeSingle()
+            if (!existingEcTebSub) {
+              await supabaseAdmin.from('transaction_external_brokerages').insert({
+                transaction_id: txn.id,
+                brokerage_role: 'other',
+                brokerage_role_other: 'ecommission_repayment',
+                brokerage_name: 'eCommission (advance repayment)',
+                commission_amount: ecSubAmount,
+                amount_1099_reportable: ecSubAmount,
+                payment_status: 'pending',
+                side: sideFromRepSub,
+                notes: 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.',
+              })
+            }
+          } else {
+            const tagSub = `auto:compliance-ecommission:${txn.id}`
+            const { data: existingDebtSub } = await supabaseAdmin
+              .from('agent_debts')
+              .select('id')
+              .eq('agent_id', agentId)
+              .ilike('notes', `%${tagSub}%`)
+              .limit(1)
+              .maybeSingle()
+            if (!existingDebtSub) {
+              await supabaseAdmin.from('agent_debts').insert({
+                agent_id: agentId,
+                debt_type: 'custom_invoice',
+                description: `eCommission Repayment - ${txn.property_address || 'compliance submission'}`,
+                amount_owed: ecSubAmount,
+                amount_paid: 0,
+                date_incurred: now.slice(0, 10),
+                status: 'outstanding',
+                record_type: 'debt',
+                notes: `Reported by agent on the compliance form. ${tagSub}`,
+              })
+            }
+          }
+        }
         // Commission inputs may have changed - re-run the cascade so tia rows
         // and TL/momentum payouts stay in sync with the resubmitted values.
+        // Cascade LAST so its office_net recompute sees the records above.
         await autoCascadeTransaction(txn.id)
       }
       const formatLabel = (k: string) => k.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
@@ -467,13 +606,22 @@ export async function POST(request: NextRequest) {
     if (!acceptance_date) return NextResponse.json({ error: 'Acceptance date is required' }, { status: 400 })
     if (!closing_or_movein_date) return NextResponse.json({ error: 'Closing or move-in date is required' }, { status: 400 })
 
-    const { data: agentProfile } = await supabaseAdmin.from('users').select('office').eq('id', agentId).single()
+    const { data: agentProfile } = await supabaseAdmin.from('users').select('office, commission_plan, lease_commission_plan').eq('id', agentId).single()
     // A referred out deal is still a lease if the client referred was a tenant
     // or landlord. Without this, a referred out lease was treated as a sale:
     // the date landed in closing_date, move_in_date stayed null, and monthly
     // rent was never written. The flyer logic below already handled this; the
     // data did not.
     const isLease = complianceIsLease({ representing, referred_client_type })
+
+    // Broker plan detection (same rule as the cascade): the broker keeps no
+    // commission, so an eCommission advance is repaid out of the brokerage
+    // net, not billed to the agent. Matches broker_100, plan strings
+    // containing "broker", and the lease magic string "Custom Lease 0/100".
+    const brokerPlanCode = String(
+      (isLease && agentProfile?.lease_commission_plan) ? agentProfile.lease_commission_plan : (agentProfile?.commission_plan || '')
+    )
+    const isBrokerPlan = /broker/i.test(brokerPlanCode) || /^custom\s+lease\s+0\s*\/\s*100$/i.test(brokerPlanCode.trim())
 
     // Server-side gate: the agent must have confirmed the on-screen commission
     // summary before we accept the submission (retainer mode has no commission).
@@ -524,10 +672,107 @@ export async function POST(request: NextRequest) {
     const brokerageFeeNum = brokerage_referral ? resolveAmt(brokerage_referral_fee, (body as any).brokerage_referral_fee_type, grossForFees) : 0
     const ecommissionNum = (body as any).has_ecommission ? (parseFloat(String((body as any).ecommission_amount ?? 0)) || 0) : 0
 
+    // Referral fees are FEES on the primary agent's commission row (they come
+    // out of the agent's NET via the canonical other_fees term), not a
+    // carve-out of the pool. Recipient records are created alongside:
+    // internal -> a payout row for the selected CRC agent; external -> the
+    // external-brokerage record (office completes W-9 at review).
+    const REFERRAL_TAG = '[referral fees - compliance form]'
+    const referralFeeParts: string[] = []
+    if (internalFeeNum > 0) referralFeeParts.push(`Internal Referral Fee $${internalFeeNum.toFixed(2)}`)
+    if (externalFeeNum > 0) referralFeeParts.push(`External Referral Fee $${externalFeeNum.toFixed(2)}`)
+    if (brokerageFeeNum > 0) referralFeeParts.push(`Brokerage Referral Fee $${brokerageFeeNum.toFixed(2)}`)
+    const referralFeesTotal = Math.round((internalFeeNum + externalFeeNum + brokerageFeeNum) * 100) / 100
+    const referralFeesDescription = referralFeeParts.length ? `${referralFeeParts.join('; ')} ${REFERRAL_TAG}` : null
+    const internalReferralAgentId = String((body as any).internal_referral_agent_id || '')
+
+    // Write the referral fees onto the primary agent's row. Only overwrite
+    // other_fees when it is empty or was previously written by this form (the
+    // tag), so office-entered custom fees are never clobbered.
+    const applyReferralFeesToPrimaryTia = async (txnId: string) => {
+      if (referralFeesTotal <= 0) return
+      const { data: primaryRow } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .select('id, other_fees, other_fees_description, payment_status')
+        .eq('transaction_id', txnId)
+        .eq('agent_id', agentId)
+        .eq('agent_role', 'primary_agent')
+        .limit(1)
+        .maybeSingle()
+      if (!primaryRow || primaryRow.payment_status === 'paid') return
+      const existingFees = parseFloat(String(primaryRow.other_fees ?? 0)) || 0
+      const existingDesc = String(primaryRow.other_fees_description || '')
+      const formWritten = existingDesc.includes(REFERRAL_TAG)
+      if (existingFees > 0 && !formWritten) return // office-entered fees: hands off
+      await supabaseAdmin
+        .from('transaction_internal_agents')
+        .update({ other_fees: referralFeesTotal, other_fees_description: referralFeesDescription, updated_at: now })
+        .eq('id', primaryRow.id)
+    }
+
+    // Internal referral: create the receiving CRC agent's payout row (their
+    // fee, their 1099). Duplicate-guarded; does not touch the pool split.
+    const createInternalReferralRow = async (txnId: string) => {
+      if (!(internal_referral && internalFeeNum > 0 && internalReferralAgentId)) return
+      if (internalReferralAgentId === agentId) return
+      const { data: existing } = await supabaseAdmin
+        .from('transaction_internal_agents')
+        .select('id')
+        .eq('transaction_id', txnId)
+        .eq('agent_id', internalReferralAgentId)
+        .eq('agent_role', 'referral_agent')
+        .limit(1)
+        .maybeSingle()
+      if (existing) return
+      await supabaseAdmin.from('transaction_internal_agents').insert({
+        transaction_id: txnId,
+        agent_id: internalReferralAgentId,
+        agent_role: 'referral_agent',
+        side: tiaSideFromRep,
+        agent_basis: null,
+        agent_gross: internalFeeNum,
+        agent_net: internalFeeNum,
+        amount_1099_reportable: internalFeeNum,
+        sales_volume: 0,
+        units: 0,
+        counts_toward_progress: false,
+        payment_status: 'pending',
+        funding_source: 'crc',
+        lead_source: 'own',
+        adjustment_notes: 'Internal referral fee reported on the compliance form; paid out of the referring deal agent\'s net.',
+        updated_at: now,
+      })
+    }
+
     // Auto-create money records the office used to add by hand. Both are
     // guarded so a resubmission can never create duplicates.
     const createEcommissionDebtAndTeb = async (txnId: string) => {
-      if (ecommissionNum > 0) {
+      if (ecommissionNum > 0 && isBrokerPlan) {
+        // Broker plan: the broker does not keep commission, so the advance
+        // is repaid from the brokerage net instead of billed to the agent.
+        // Recorded as an external payout so the office_net math subtracts it.
+        const { data: existingEcTeb } = await supabaseAdmin
+          .from('transaction_external_brokerages')
+          .select('id')
+          .eq('transaction_id', txnId)
+          .eq('brokerage_role', 'other')
+          .ilike('brokerage_name', 'eCommission%')
+          .limit(1)
+          .maybeSingle()
+        if (!existingEcTeb) {
+          await supabaseAdmin.from('transaction_external_brokerages').insert({
+            transaction_id: txnId,
+            brokerage_role: 'other',
+            brokerage_role_other: 'ecommission_repayment',
+            brokerage_name: 'eCommission (advance repayment)',
+            commission_amount: ecommissionNum,
+            amount_1099_reportable: ecommissionNum,
+            payment_status: 'pending',
+            side: tiaSideFromRep,
+            notes: 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.',
+          })
+        }
+      } else if (ecommissionNum > 0) {
         const tag = `auto:compliance-ecommission:${txnId}`
         const { data: existingDebt } = await supabaseAdmin
           .from('agent_debts')
@@ -716,8 +961,13 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', side: tiaSideFromRep, btsa_amount: btsaNum, rebate_amount: rebateNum, sales_volume: volumeNum > 0 ? volumeNum : null, units: 1, lead_source: lead_source || 'own', updated_at: now })
       // New deal from a compliance submission: cascade immediately so the
       // commission tab is populated without waiting for a manual Recalculate.
-      await autoCascadeTransaction(transactionId)
+      // Money records first, cascade last: the cascade's office_net recompute
+      // must see the referral fees, the eCommission records, and the internal
+      // referral payout row, or office_net is stale until the next recalc.
+      await applyReferralFeesToPrimaryTia(transactionId)
       await createEcommissionDebtAndTeb(transactionId)
+      await createInternalReferralRow(transactionId)
+      await autoCascadeTransaction(transactionId)
     } else {
       transactionId = txn.id
       if (txn.is_locked) {
@@ -768,8 +1018,13 @@ export async function POST(request: NextRequest) {
         .eq('agent_id', agentId)
         .eq('agent_role', 'primary_agent')
         .neq('payment_status', 'paid')
-      await autoCascadeTransaction(transactionId)
+      // Money records first, cascade last: the cascade's office_net recompute
+      // must see the referral fees, the eCommission records, and the internal
+      // referral payout row, or office_net is stale until the next recalc.
+      await applyReferralFeesToPrimaryTia(transactionId)
       await createEcommissionDebtAndTeb(transactionId)
+      await createInternalReferralRow(transactionId)
+      await autoCascadeTransaction(transactionId)
     }
 
     // ── Contacts: upsert client + title for both new and existing transactions ─

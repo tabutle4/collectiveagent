@@ -132,6 +132,8 @@ export default function ProfilePage({
     monthly_fee_waived: false,
     waive_buyer_processing_fees: false,
     waive_seller_processing_fees: false,
+    half_buyer_processing_fees: false,
+    half_seller_processing_fees: false,
     waive_coaching_fee: false,
     admin_notes: '',
     accepted_trec: false,
@@ -356,6 +358,8 @@ export default function ProfilePage({
         monthly_fee_waived: freshUserData.monthly_fee_waived || false,
         waive_buyer_processing_fees: freshUserData.waive_buyer_processing_fees || false,
         waive_seller_processing_fees: freshUserData.waive_seller_processing_fees || false,
+        half_buyer_processing_fees: freshUserData.half_buyer_processing_fees || false,
+        half_seller_processing_fees: freshUserData.half_seller_processing_fees || false,
         waive_coaching_fee: freshUserData.waive_coaching_fee || false,
         admin_notes: freshUserData.admin_notes || '',
         accepted_trec: freshUserData.accepted_trec || false,
@@ -566,6 +570,8 @@ export default function ProfilePage({
             monthly_fee_waived: billingForm.monthly_fee_waived,
             waive_buyer_processing_fees: billingForm.waive_buyer_processing_fees,
             waive_seller_processing_fees: billingForm.waive_seller_processing_fees,
+            half_buyer_processing_fees: billingForm.half_buyer_processing_fees,
+            half_seller_processing_fees: billingForm.half_seller_processing_fees,
             waive_coaching_fee: billingForm.waive_coaching_fee,
             admin_notes: billingForm.admin_notes,
             accepted_trec: billingForm.accepted_trec,
@@ -1878,6 +1884,48 @@ export default function ProfilePage({
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Buyer Processing Fees Half Off</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Buyer-side processing fees deducted at half the standard amount (Waived wins if both are on)
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          half_buyer_processing_fees: !prev.half_buyer_processing_fees,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.half_buyer_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.half_buyer_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-luxury-gray-1">Seller Processing Fees Half Off</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        Seller-side processing fees deducted at half the standard amount (Waived wins if both are on)
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setBillingForm(prev => ({
+                          ...prev,
+                          half_seller_processing_fees: !prev.half_seller_processing_fees,
+                        }))
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${billingForm.half_seller_processing_fees ? 'bg-luxury-accent' : 'bg-luxury-gray-4'}`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${billingForm.half_seller_processing_fees ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
                       <p className="text-sm font-medium text-luxury-gray-1">Coaching Fee Waived</p>
                       <p className="text-xs text-luxury-gray-3">
                         New Agent coaching/training fee will not be deducted on any transaction
@@ -1987,13 +2035,13 @@ export default function ProfilePage({
                     <div className="inner-card">
                       <p className="text-xs text-luxury-gray-3 mb-1">Buyer Processing Fees</p>
                       <p className="text-sm font-medium text-luxury-gray-1">
-                        {user.waive_buyer_processing_fees ? 'Waived' : 'Standard'}
+                        {user.waive_buyer_processing_fees ? 'Waived' : user.half_buyer_processing_fees ? 'Half Off' : 'Standard'}
                       </p>
                     </div>
                     <div className="inner-card">
                       <p className="text-xs text-luxury-gray-3 mb-1">Seller Processing Fees</p>
                       <p className="text-sm font-medium text-luxury-gray-1">
-                        {user.waive_seller_processing_fees ? 'Waived' : 'Standard'}
+                        {user.waive_seller_processing_fees ? 'Waived' : user.half_seller_processing_fees ? 'Half Off' : 'Standard'}
                       </p>
                     </div>
                     <div className="inner-card">
