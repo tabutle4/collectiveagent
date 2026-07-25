@@ -88,6 +88,11 @@ export async function fetchAllRows<T = any>(
         nullsFirst: options.orderBy.nullsFirst ?? false,
       })
     }
+    // Always add a unique tiebreaker order so .range() pagination is stable.
+    // Without a deterministic order, Postgres may return rows in a different
+    // order on each page request, silently skipping or duplicating rows once
+    // a table exceeds BATCH_SIZE. This is required for correct results.
+    query = query.order('id', { ascending: true })
 
     const { data, error } = await query
 
