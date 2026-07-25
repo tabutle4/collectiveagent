@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getFirmMinimumPct } from '@/lib/transactions/cascade'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
           office, office_email, email,
           referring_agent_id, revenue_share_percentage,
           waive_buyer_processing_fees, waive_seller_processing_fees,
+          half_buyer_processing_fees, half_seller_processing_fees,
           qualifying_transaction_count
         `)
         .eq('id', agentId)
@@ -203,6 +205,7 @@ export async function POST(request: NextRequest) {
         id, commission_plan, lease_commission_plan,
         referring_agent_id, revenue_share_percentage,
         waive_buyer_processing_fees, waive_seller_processing_fees,
+        half_buyer_processing_fees, half_seller_processing_fees,
         waive_coaching_fee
       `)
       .eq('id', agent_id)
@@ -323,15 +326,43 @@ export async function POST(request: NextRequest) {
     // rounding of each slice could make multiple values round-half-up and
     // produce a sum $0.01 over basis, which shows up downstream as wrong
     // brokerage preview amounts on team transactions.
-    const agentGross   = round2(agentBasis * (agentSplitPct / 100))
+    let agentGross   = round2(agentBasis * (agentSplitPct / 100))
     const teamLeadPayout = round2(agentBasis * (teamLeadPct / 100))
-    const brokerageSplit = round2(agentBasis - agentGross - teamLeadPayout)
+    let brokerageSplit = round2(agentBasis - agentGross - teamLeadPayout)
+
+    // Firm Minimum Adjustment - same rule as the cascade. Pool = side
+    // commission incl. additional comp; price basis from the body or the
+    // passed transaction record.
+    let firm_minimum_adjustment = 0
+    let firm_minimum_pct: number | null = null
+    {
+      const minPct = await getFirmMinimumPct(!!isLease)
+      const bodyAny = body as any
+      const minPriceBasis = Number(bodyAny.sales_price ?? bodyAny.transaction?.sales_price ?? (isLease ? bodyAny.transaction?.monthly_rent : 0)) || 0
+      const minPool = Number(bodyAny.commission_pool ?? agentBasis) || 0
+      if (minPct && minPriceBasis > 0 && minPool > 0) {
+        const minBasis = round2(minPriceBasis * minPct / 100)
+        if (minPool < minBasis) {
+          const firmPortion = round2(agentBasis - agentGross - teamLeadPayout)
+          const firmAtMin = round2(minBasis * (100 - agentSplitPct - teamLeadPct) / 100)
+          const adj = round2(firmAtMin - firmPortion)
+          if (adj > 0) {
+            brokerageSplit = round2(brokerageSplit + adj)
+            agentGross = round2(agentGross - adj)
+            firm_minimum_adjustment = adj
+            firm_minimum_pct = minPct
+          }
+        }
+      }
+    }
 
     // Processing fee with waiver check (side-aware)
     let processingFee = processingFeeType?.processing_fee || 0
     const cat = sideCategory(side as Side)
     if (cat === 'buying' && agent.waive_buyer_processing_fees) processingFee = 0
+    else if (cat === 'buying' && (agent as any).half_buyer_processing_fees) processingFee = Math.round(processingFee * 50) / 100
     if (cat === 'listing' && agent.waive_seller_processing_fees) processingFee = 0
+    else if (cat === 'listing' && (agent as any).half_seller_processing_fees) processingFee = Math.round(processingFee * 50) / 100
 
     // Momentum partner payout - paid OUT of the brokerage's portion, but
     // calculated as a % of the agent's full basis (commission_amount), NOT

@@ -57,6 +57,30 @@ const RETAINER_DOCS: Record<string, string[]> = {
 interface Comp { id: string; amount: string; fee_type: string; fee_type_other: string; paid_by: string; paid_by_other: string }
 const emptyComp = (): Comp => ({ id: crypto.randomUUID(), amount: '', fee_type: '', fee_type_other: '', paid_by: '', paid_by_other: '' })
 
+// Small click-to-open explainer used next to commission fields.
+function FieldTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-luxury-gray-5 text-luxury-gray-2 text-[10px] font-bold ml-1 align-middle hover:bg-luxury-gray-3 hover:text-white"
+        aria-label="What is this?"
+      >?</button>
+      {open && <p className="text-[11px] text-luxury-gray-2 bg-luxury-light border border-luxury-gray-5 rounded p-2 mt-1">{text}</p>}
+    </>
+  )
+}
+
+// Scrolls back to a field from the Commission Summary "edit" buttons.
+function jumpToField(id: string) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  ;(el as HTMLInputElement).focus({ preventScroll: true })
+}
+
 type Mode = 'compliance' | 'subsequent' | 'retainer'
 
 export default function ComplianceCdaForm() {
@@ -73,6 +97,7 @@ export default function ComplianceCdaForm() {
   const [error, setError] = useState('')
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
+  const [commissionConfirmed, setCommissionConfirmed] = useState(false)
   // Compliance mode: attach this submission to a retainer prospect the agent picked
   const [attachTo, setAttachTo] = useState<{ id: string; client_name: string } | null>(null)
 
@@ -99,9 +124,16 @@ export default function ComplianceCdaForm() {
     lease_term_months: '', referred_client_type: '', commission_basis_price: '',
     commission_rate: '', commission_rate_type: 'percent' as 'percent' | 'flat',
     total_sales_rent_price: '', bonus_btsa_amount: '0', rebate_amount: '0',
+    bonus_btsa_amount_type: 'flat' as 'percent' | 'flat',
+    rebate_amount_type: 'flat' as 'percent' | 'flat',
     internal_referral: false, internal_referral_fee: '',
+    internal_referral_fee_type: 'percent' as 'percent' | 'flat',
     external_referral: false, external_referral_fee: '',
+    external_referral_fee_type: 'percent' as 'percent' | 'flat',
+    external_referral_brokerage_name: '',
     brokerage_referral: false, brokerage_referral_fee: '',
+    brokerage_referral_fee_type: 'percent' as 'percent' | 'flat',
+    has_ecommission: false, ecommission_amount: '0',
     title_officer_name: '', title_company: '', title_company_email: '', title_phone: '',
     loan_type: '', expedite_acknowledged: false,
     bedrooms: '', bathrooms: '', garage: '', sqft: '',
@@ -211,6 +243,165 @@ export default function ComplianceCdaForm() {
     } catch { setSearchDone(true) } finally { setSearching(false) }
   }, [addressSearch, mode, isAdmin, onBehalfAgent])
 
+  // ── Commission Summary (everything that affects the commission) ──────────
+  // Percent bases: BTSA and rebate = % of the SALES PRICE (commission basis
+  // price); referral fees = % of the computed gross commission. Mirrors the
+  // server-side resolution exactly.
+  const [previewInfo, setPreviewInfo] = useState<any>(null)
+  const summaryIsLease = complianceIsLease({ representing: form.representing, referred_client_type: form.referred_client_type })
+  const summarySide =
+    form.representing?.toLowerCase().includes('landlord') ? 'landlord'
+    : form.representing?.toLowerCase().includes('seller') ? 'seller'
+    : form.representing?.toLowerCase().includes('tenant') ? 'tenant'
+    : form.representing?.toLowerCase().includes('buyer') ? 'buyer'
+    : ''
+  useEffect(() => {
+    if (mode === 'retainer') return
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/agent/commission-preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            is_lease: summaryIsLease,
+            side: summarySide,
+            transaction_type: form.tenant_transaction_type || '',
+            agent_id: onBehalfAgent?.id || undefined,
+          }),
+        })
+        if (res.ok) setPreviewInfo(await res.json())
+      } catch { /* preview is best-effort; the box still shows the math */ }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [mode, summaryIsLease, summarySide, form.tenant_transaction_type, onBehalfAgent])
+
+  const commissionSummary = (() => {
+    const basis = parseFloat(form.commission_basis_price || '') || 0
+    const rate = parseFloat(form.commission_rate || '') || 0
+    const gross = form.commission_rate_type === 'flat' ? Math.round(rate * 100) / 100 : Math.round(basis * rate) / 100
+    const addl = comps.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
+    const resolve = (v: string, t: string, base: number) => {
+      const n = parseFloat(v || '0') || 0
+      return t === 'percent' ? Math.round(base * n) / 100 : n
+    }
+    const btsa = resolve(form.bonus_btsa_amount, form.bonus_btsa_amount_type, basis)
+    const rebate = resolve(form.rebate_amount, form.rebate_amount_type, basis)
+    const intFee = form.internal_referral ? resolve(form.internal_referral_fee, form.internal_referral_fee_type, gross) : 0
+    const extFee = form.external_referral ? resolve(form.external_referral_fee, form.external_referral_fee_type, gross) : 0
+    const brokFee = form.brokerage_referral ? resolve(form.brokerage_referral_fee, form.brokerage_referral_fee_type, gross) : 0
+    const grossPlusAddl = Math.round((gross + addl) * 100) / 100
+    const pool = Math.round((grossPlusAddl - intFee - extFee - brokFee) * 100) / 100
+    const splitPct = Number(previewInfo?.agent_split_pct ?? 85)
+    let splitAmt = Math.round(pool * splitPct) / 100
+    // Firm Minimum Adjustment: when commission + additional comp is below the
+    // Settings minimum, CRC's split is calculated on the minimum basis.
+    let minAdj = 0
+    let minBasis = 0
+    const minPct = Number(previewInfo?.firm_minimum_pct ?? 0)
+    if (minPct > 0 && basis > 0 && grossPlusAddl > 0) {
+      minBasis = Math.round(basis * minPct) / 100
+      if (grossPlusAddl < minBasis) {
+        const firmPct = 100 - splitPct
+        const firmAtMin = Math.round(minBasis * firmPct) / 100
+        const firmActual = Math.round(pool * firmPct) / 100
+        minAdj = Math.max(0, Math.round((firmAtMin - firmActual) * 100) / 100)
+        splitAmt = Math.round((splitAmt - minAdj) * 100) / 100
+      }
+    }
+    const procFee = Number(previewInfo?.processing_fee ?? 0)
+    const coaching = Number(previewInfo?.coaching_fee ?? 0)
+    const ec = form.has_ecommission ? (parseFloat(form.ecommission_amount || '0') || 0) : 0
+    const estNet = Math.round((splitAmt + btsa - procFee - coaching - rebate) * 100) / 100
+    return { basis, rate, gross, addl, btsa, rebate, intFee, extFee, brokFee, grossPlusAddl, pool, splitPct, splitAmt, minAdj, minBasis, minPct, procFee, coaching, ec, estNet }
+  })()
+
+  // Any change to a commission input un-confirms the summary.
+  useEffect(() => { setCommissionConfirmed(false) }, [
+    form.commission_basis_price, form.commission_rate, form.commission_rate_type,
+    form.bonus_btsa_amount, form.bonus_btsa_amount_type,
+    form.rebate_amount, form.rebate_amount_type,
+    form.internal_referral, form.internal_referral_fee, form.internal_referral_fee_type,
+    form.external_referral, form.external_referral_fee, form.external_referral_fee_type,
+    form.brokerage_referral, form.brokerage_referral_fee, form.brokerage_referral_fee_type,
+    form.has_ecommission, form.ecommission_amount,
+    comps,
+  ])
+
+  const fmt$ = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const sumRow = (label: string, amount: string, editId?: string) => (
+    <div className="flex justify-between items-center">
+      <span className="flex items-center gap-2">{label}{editId && (
+        <button type="button" onClick={() => jumpToField(editId)} className="text-[9px] uppercase tracking-wider border border-luxury-gray-4 text-luxury-gray-3 rounded px-1.5 hover:bg-luxury-gray-1 hover:text-white">edit</button>
+      )}</span><span>{amount}</span>
+    </div>
+  )
+  const renderCommissionConfirm = () => (
+    <>
+      <div className="inner-card border border-luxury-gray-5">
+        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">eCommission Advance</p>
+        <label className="block text-xs text-luxury-gray-3 mb-2">Did you take an eCommission (or other commission advance) on this deal?
+          <FieldTip text="If a company advanced you part of this commission before closing, enter the amount you must repay. Submitting adds the repayment invoice to your account automatically, and it is deducted from your payout at closing." />
+        </label>
+        <div className="flex gap-4 mb-2 text-xs text-luxury-gray-2">
+          <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={!form.has_ecommission} onChange={() => setField('has_ecommission' as any, false)} className="w-3.5 h-3.5" /> No</label>
+          <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={form.has_ecommission} onChange={() => setField('has_ecommission' as any, true)} className="w-3.5 h-3.5" /> Yes</label>
+        </div>
+        {form.has_ecommission && (
+          <>
+            <input id="fld_ecommission" type="number" className="input-luxury w-full text-sm" value={form.ecommission_amount} onChange={e => setField('ecommission_amount' as any, e.target.value)} placeholder="Advance amount to be repaid" min="0" step="0.01" />
+            <p className="text-[11px] text-luxury-gray-3 mt-1">Submitting creates the repayment invoice on your account automatically.</p>
+          </>
+        )}
+      </div>
+
+      <div className="inner-card border border-luxury-gray-5">
+        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Commission Summary</p>
+        {previewInfo && (
+          <div className="bg-luxury-light rounded p-3 mb-3 text-xs text-luxury-gray-2 space-y-1">
+            <p className="text-[10px] uppercase tracking-widest text-luxury-gray-3 mb-1">Your plan - from your profile</p>
+            {sumRow(`Plan for this ${summaryIsLease ? 'lease' : 'sale'}`, `${previewInfo.plan_name} \u00b7 ${previewInfo.agent_split_pct} / ${previewInfo.firm_split_pct}`)}
+            {summarySide && sumRow('Side you represent', summarySide.charAt(0).toUpperCase() + summarySide.slice(1))}
+            {sumRow('Processing fee for this side', previewInfo.processing_fee_status === 'waived' ? 'Waived' : previewInfo.processing_fee_status === 'half' ? `${fmt$(previewInfo.processing_fee)} \u00b7 Half Off` : fmt$(previewInfo.processing_fee))}
+            {sumRow('Coaching fee', previewInfo.coaching_waived ? 'Waived' : fmt$(previewInfo.coaching_fee))}
+            {Number(previewInfo.firm_minimum_pct) > 0 && sumRow('Firm minimum (from Settings)', `${previewInfo.firm_minimum_pct}% of ${summaryIsLease ? 'rent' : 'sales price'}`)}
+            {Number(previewInfo.cap_amount) > 0 && sumRow('Cap status', previewInfo.capped ? 'CAPPED' : `${fmt$(previewInfo.ytd_brokerage_split)} of ${fmt$(previewInfo.cap_amount)} YTD`)}
+          </div>
+        )}
+        <div className="text-xs text-luxury-gray-2 space-y-1">
+          {sumRow(form.commission_rate_type === 'flat' ? 'Flat commission' : `Commission (${form.commission_rate || '0'}% of ${fmt$(commissionSummary.basis)})`, fmt$(commissionSummary.gross), 'fld_basis')}
+          {commissionSummary.addl > 0 && sumRow('+ Additional compensation (splits with the pool)', fmt$(commissionSummary.addl))}
+          {commissionSummary.intFee > 0 && sumRow('- Internal referral fee', `-${fmt$(commissionSummary.intFee)}`, 'fld_internal_referral_fee')}
+          {commissionSummary.extFee > 0 && sumRow('- External referral fee', `-${fmt$(commissionSummary.extFee)}`, 'fld_external_referral_fee')}
+          {commissionSummary.brokFee > 0 && sumRow('- Brokerage referral fee', `-${fmt$(commissionSummary.brokFee)}`, 'fld_brokerage_referral_fee')}
+          <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
+            <span>Commission pool (splits between you and CRC)</span>
+            <span>{fmt$(commissionSummary.pool)}</span>
+          </div>
+          {sumRow(`Your split (${commissionSummary.splitPct}% of pool)`, fmt$(commissionSummary.splitAmt))}
+          {commissionSummary.minAdj > 0 && sumRow(`Firm Minimum Adjustment (CRC's share is calculated on ${fmt$(commissionSummary.minBasis)})`, `-${fmt$(commissionSummary.minAdj)}`, 'fld_rate')}
+          {commissionSummary.btsa > 0 && sumRow('+ BTSA / bonus - paid to you in full, no split', fmt$(commissionSummary.btsa), 'fld_btsa')}
+          {commissionSummary.procFee > 0 && sumRow('- Processing fee', `-${fmt$(commissionSummary.procFee)}`)}
+          {commissionSummary.coaching > 0 && sumRow('- Coaching fee', `-${fmt$(commissionSummary.coaching)}`)}
+          {commissionSummary.rebate > 0 && sumRow('- Client rebate (from your share)', `-${fmt$(commissionSummary.rebate)}`, 'fld_rebate')}
+          <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
+            <span>Estimated net to you</span>
+            <span>{fmt$(commissionSummary.estNet)}</span>
+          </div>
+          {commissionSummary.ec > 0 && (
+            <div className="flex justify-between text-amber-700 bg-amber-50 rounded px-2 py-1 mt-1">
+              <span>Deducted from your payout at closing: eCommission repayment</span>
+              <span>-{fmt$(commissionSummary.ec)}</span>
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-luxury-gray-3 mt-2">Any unpaid fees or invoices on your account may also be applied at closing and reduce this amount.</p>
+        <label className="flex items-center gap-2 mt-3 cursor-pointer">
+          <input type="checkbox" checked={commissionConfirmed} onChange={e => setCommissionConfirmed(e.target.checked)} className="w-3.5 h-3.5" />
+          <span className="text-xs text-luxury-gray-1 font-medium">I confirm this commission calculation is correct. <span className="font-normal text-luxury-gray-3">Changing any number un-checks this. Use the EDIT buttons to jump to a field and fix it.</span></span>
+        </label>
+      </div>
+    </>
+  )
+
   const handleSubmit = async () => {
     setError('')
     let payload: any = { submission_mode: mode }
@@ -235,6 +426,7 @@ export default function ComplianceCdaForm() {
       if (!form.representing) { setError('Representation is required.'); return }
       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
+      if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
       if (!foundTransaction && !newAddressComplete) {
@@ -268,7 +460,7 @@ export default function ComplianceCdaForm() {
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, commission_confirmed: commissionConfirmed }) })
       const data = await res.json()
       if (res.ok && data.duplicate_check) { setDuplicateMatches(data.matches || []); return }
       if (!res.ok || !data.success) { setError(data.error || 'Submission failed. Please try again.'); return }
@@ -531,7 +723,7 @@ export default function ComplianceCdaForm() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price</label>
-                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" id="fld_basis" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate</label>
@@ -540,7 +732,7 @@ export default function ComplianceCdaForm() {
                           <option value="percent">%</option>
                           <option value="flat">$</option>
                         </select>
-                        <input type="number" className="input-luxury flex-1 text-sm" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                        <input type="number" className="input-luxury flex-1 text-sm" id="fld_rate" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
                       </div>
                     </div>
                     <div>
@@ -549,11 +741,11 @@ export default function ComplianceCdaForm() {
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Bonus / BTSA Amount</label>
-                      <input type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      <div className="flex gap-1.5"><input id="fld_btsa" type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.bonus_btsa_amount_type} onChange={e => setField('bonus_btsa_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Bonus To Selling Agent - extra money a builder or seller pays you on top of commission. $ amount or % of the sales price. Paid to you in full; the brokerage split does not apply to it." />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Buyer / Seller Rebate</label>
-                      <input type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                      <div className="flex gap-1.5"><input id="fld_rebate" type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.rebate_amount_type} onChange={e => setField('rebate_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Money you are giving back to your client at closing. Usually a dollar amount. If you choose %, it means percent of the SALES PRICE. This comes out of YOUR share." />
                     </div>
                     <div>
                       <label className="block text-xs text-luxury-gray-3 mb-1">Loan Type</label>
@@ -584,7 +776,9 @@ export default function ComplianceCdaForm() {
                           ))}
                         </div>
                         {(form as any)[key] && (
-                          <input type="text" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="% or $" />
+                          <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
+  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
+)}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
                         )}
                       </div>
                     ))}
@@ -791,7 +985,7 @@ export default function ComplianceCdaForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price <span className="text-red-500">*</span></label>
-                  <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                  <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" id="fld_basis" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate <span className="text-red-500">*</span></label>
@@ -800,7 +994,7 @@ export default function ComplianceCdaForm() {
                       <option value="percent">%</option>
                       <option value="flat">$</option>
                     </select>
-                    <input type="number" className="input-luxury flex-1 text-sm" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                    <input type="number" className="input-luxury flex-1 text-sm" id="fld_rate" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
                   </div>
                 </div>
                 <div>
@@ -809,7 +1003,7 @@ export default function ComplianceCdaForm() {
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Bonus / BTSA Amount <span className="text-red-500">*</span></label>
-                  <input type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                  <div className="flex gap-1.5"><input id="fld_btsa" type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.bonus_btsa_amount_type} onChange={e => setField('bonus_btsa_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Bonus To Selling Agent - extra money a builder or seller pays you on top of commission. $ amount or % of the sales price. Paid to you in full; the brokerage split does not apply to it." />
                   <p className="text-xs text-luxury-gray-3 mt-1">Enter 0 if none</p>
                 </div>
                 <div className="md:col-span-2">
@@ -850,7 +1044,7 @@ export default function ComplianceCdaForm() {
                 </div>
                 <div>
                   <label className="block text-xs text-luxury-gray-3 mb-1">Buyer / Seller Rebate Deducted from Commission <span className="text-red-500">*</span></label>
-                  <input type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                  <div className="flex gap-1.5"><input id="fld_rebate" type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.rebate_amount_type} onChange={e => setField('rebate_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Money you are giving back to your client at closing. Usually a dollar amount. If you choose %, it means percent of the SALES PRICE. This comes out of YOUR share." />
                   <p className="text-xs text-luxury-gray-3 mt-1">Enter 0 if none</p>
                 </div>
               </div>
@@ -876,7 +1070,9 @@ export default function ComplianceCdaForm() {
                       ))}
                     </div>
                     {(form as any)[key] && (
-                      <input type="text" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="% or $" />
+                      <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
+  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
+)}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
                     )}
                   </div>
                 ))}
@@ -994,6 +1190,8 @@ export default function ComplianceCdaForm() {
             <AlertCircle size={14} className="flex-shrink-0" />{error}
           </div>
         )}
+
+        {(mode === 'compliance' || (mode === 'subsequent' && foundTransaction)) && renderCommissionConfirm()}
 
         {(mode === 'retainer' || mode === 'compliance' || (mode === 'subsequent' && foundTransaction)) && (
           <div className="flex items-center justify-between pt-2 border-t border-luxury-gray-5/50">

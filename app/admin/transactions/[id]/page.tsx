@@ -5618,6 +5618,9 @@ export default function AdminTransactionDetailPage() {
                         {(u.waive_buyer_processing_fees || u.waive_seller_processing_fees) && (
                           <FieldRow label="Processing Fees" value="Waived" />
                         )}
+                        {((u as any).half_buyer_processing_fees || (u as any).half_seller_processing_fees) && (
+                          <FieldRow label="Processing Fees" value={`Half Off (${[(u as any).half_buyer_processing_fees && 'Buyer', (u as any).half_seller_processing_fees && 'Seller'].filter(Boolean).join(' & ')})`} />
+                        )}
                         {u.special_commission_notes && (
                           <div className="mt-2 p-2 bg-orange-50 rounded text-xs text-orange-700">
                             {u.special_commission_notes}

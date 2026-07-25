@@ -1,0 +1,1093 @@
+diff --git a/app/admin/transactions/[id]/page.tsx b/app/admin/transactions/[id]/page.tsx
+index 2e1859a..67a6bff 100644
+--- a/app/admin/transactions/[id]/page.tsx
++++ b/app/admin/transactions/[id]/page.tsx
+@@ -5618,6 +5618,9 @@ export default function AdminTransactionDetailPage() {
+                         {(u.waive_buyer_processing_fees || u.waive_seller_processing_fees) && (
+                           <FieldRow label="Processing Fees" value="Waived" />
+                         )}
++                        {((u as any).half_buyer_processing_fees || (u as any).half_seller_processing_fees) && (
++                          <FieldRow label="Processing Fees" value={`Half Off (${[(u as any).half_buyer_processing_fees && 'Buyer', (u as any).half_seller_processing_fees && 'Seller'].filter(Boolean).join(' & ')})`} />
++                        )}
+                         {u.special_commission_notes && (
+                           <div className="mt-2 p-2 bg-orange-50 rounded text-xs text-orange-700">
+                             {u.special_commission_notes}
+diff --git a/app/agent/forms/compliance-cda/page.tsx b/app/agent/forms/compliance-cda/page.tsx
+index bf626e7..6522e06 100644
+--- a/app/agent/forms/compliance-cda/page.tsx
++++ b/app/agent/forms/compliance-cda/page.tsx
+@@ -57,6 +57,30 @@ const RETAINER_DOCS: Record<string, string[]> = {
+ interface Comp { id: string; amount: string; fee_type: string; fee_type_other: string; paid_by: string; paid_by_other: string }
+ const emptyComp = (): Comp => ({ id: crypto.randomUUID(), amount: '', fee_type: '', fee_type_other: '', paid_by: '', paid_by_other: '' })
+ 
++// Small click-to-open explainer used next to commission fields.
++function FieldTip({ text }: { text: string }) {
++  const [open, setOpen] = useState(false)
++  return (
++    <>
++      <button
++        type="button"
++        onClick={() => setOpen(o => !o)}
++        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-luxury-gray-5 text-luxury-gray-2 text-[10px] font-bold ml-1 align-middle hover:bg-luxury-gray-3 hover:text-white"
++        aria-label="What is this?"
++      >?</button>
++      {open && <p className="text-[11px] text-luxury-gray-2 bg-luxury-light border border-luxury-gray-5 rounded p-2 mt-1">{text}</p>}
++    </>
++  )
++}
++
++// Scrolls back to a field from the Commission Summary "edit" buttons.
++function jumpToField(id: string) {
++  const el = document.getElementById(id)
++  if (!el) return
++  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
++  ;(el as HTMLInputElement).focus({ preventScroll: true })
++}
++
+ type Mode = 'compliance' | 'subsequent' | 'retainer'
+ 
+ export default function ComplianceCdaForm() {
+@@ -73,6 +97,7 @@ export default function ComplianceCdaForm() {
+   const [error, setError] = useState('')
+   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+   const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
++  const [commissionConfirmed, setCommissionConfirmed] = useState(false)
+   // Compliance mode: attach this submission to a retainer prospect the agent picked
+   const [attachTo, setAttachTo] = useState<{ id: string; client_name: string } | null>(null)
+ 
+@@ -99,9 +124,16 @@ export default function ComplianceCdaForm() {
+     lease_term_months: '', referred_client_type: '', commission_basis_price: '',
+     commission_rate: '', commission_rate_type: 'percent' as 'percent' | 'flat',
+     total_sales_rent_price: '', bonus_btsa_amount: '0', rebate_amount: '0',
++    bonus_btsa_amount_type: 'flat' as 'percent' | 'flat',
++    rebate_amount_type: 'flat' as 'percent' | 'flat',
+     internal_referral: false, internal_referral_fee: '',
++    internal_referral_fee_type: 'percent' as 'percent' | 'flat',
+     external_referral: false, external_referral_fee: '',
++    external_referral_fee_type: 'percent' as 'percent' | 'flat',
++    external_referral_brokerage_name: '',
+     brokerage_referral: false, brokerage_referral_fee: '',
++    brokerage_referral_fee_type: 'percent' as 'percent' | 'flat',
++    has_ecommission: false, ecommission_amount: '0',
+     title_officer_name: '', title_company: '', title_company_email: '', title_phone: '',
+     loan_type: '', expedite_acknowledged: false,
+     bedrooms: '', bathrooms: '', garage: '', sqft: '',
+@@ -211,6 +243,165 @@ export default function ComplianceCdaForm() {
+     } catch { setSearchDone(true) } finally { setSearching(false) }
+   }, [addressSearch, mode, isAdmin, onBehalfAgent])
+ 
++  // ── Commission Summary (everything that affects the commission) ──────────
++  // Percent bases: BTSA and rebate = % of the SALES PRICE (commission basis
++  // price); referral fees = % of the computed gross commission. Mirrors the
++  // server-side resolution exactly.
++  const [previewInfo, setPreviewInfo] = useState<any>(null)
++  const summaryIsLease = complianceIsLease({ representing: form.representing, referred_client_type: form.referred_client_type })
++  const summarySide =
++    form.representing?.toLowerCase().includes('landlord') ? 'landlord'
++    : form.representing?.toLowerCase().includes('seller') ? 'seller'
++    : form.representing?.toLowerCase().includes('tenant') ? 'tenant'
++    : form.representing?.toLowerCase().includes('buyer') ? 'buyer'
++    : ''
++  useEffect(() => {
++    if (mode === 'retainer') return
++    const t = setTimeout(async () => {
++      try {
++        const res = await fetch('/api/agent/commission-preview', {
++          method: 'POST', headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({
++            is_lease: summaryIsLease,
++            side: summarySide,
++            transaction_type: form.tenant_transaction_type || '',
++            agent_id: onBehalfAgent?.id || undefined,
++          }),
++        })
++        if (res.ok) setPreviewInfo(await res.json())
++      } catch { /* preview is best-effort; the box still shows the math */ }
++    }, 350)
++    return () => clearTimeout(t)
++  }, [mode, summaryIsLease, summarySide, form.tenant_transaction_type, onBehalfAgent])
++
++  const commissionSummary = (() => {
++    const basis = parseFloat(form.commission_basis_price || '') || 0
++    const rate = parseFloat(form.commission_rate || '') || 0
++    const gross = form.commission_rate_type === 'flat' ? Math.round(rate * 100) / 100 : Math.round(basis * rate) / 100
++    const addl = comps.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
++    const resolve = (v: string, t: string, base: number) => {
++      const n = parseFloat(v || '0') || 0
++      return t === 'percent' ? Math.round(base * n) / 100 : n
++    }
++    const btsa = resolve(form.bonus_btsa_amount, form.bonus_btsa_amount_type, basis)
++    const rebate = resolve(form.rebate_amount, form.rebate_amount_type, basis)
++    const intFee = form.internal_referral ? resolve(form.internal_referral_fee, form.internal_referral_fee_type, gross) : 0
++    const extFee = form.external_referral ? resolve(form.external_referral_fee, form.external_referral_fee_type, gross) : 0
++    const brokFee = form.brokerage_referral ? resolve(form.brokerage_referral_fee, form.brokerage_referral_fee_type, gross) : 0
++    const grossPlusAddl = Math.round((gross + addl) * 100) / 100
++    const pool = Math.round((grossPlusAddl - intFee - extFee - brokFee) * 100) / 100
++    const splitPct = Number(previewInfo?.agent_split_pct ?? 85)
++    let splitAmt = Math.round(pool * splitPct) / 100
++    // Firm Minimum Adjustment: when commission + additional comp is below the
++    // Settings minimum, CRC's split is calculated on the minimum basis.
++    let minAdj = 0
++    let minBasis = 0
++    const minPct = Number(previewInfo?.firm_minimum_pct ?? 0)
++    if (minPct > 0 && basis > 0 && grossPlusAddl > 0) {
++      minBasis = Math.round(basis * minPct) / 100
++      if (grossPlusAddl < minBasis) {
++        const firmPct = 100 - splitPct
++        const firmAtMin = Math.round(minBasis * firmPct) / 100
++        const firmActual = Math.round(pool * firmPct) / 100
++        minAdj = Math.max(0, Math.round((firmAtMin - firmActual) * 100) / 100)
++        splitAmt = Math.round((splitAmt - minAdj) * 100) / 100
++      }
++    }
++    const procFee = Number(previewInfo?.processing_fee ?? 0)
++    const coaching = Number(previewInfo?.coaching_fee ?? 0)
++    const ec = form.has_ecommission ? (parseFloat(form.ecommission_amount || '0') || 0) : 0
++    const estNet = Math.round((splitAmt + btsa - procFee - coaching - rebate) * 100) / 100
++    return { basis, rate, gross, addl, btsa, rebate, intFee, extFee, brokFee, grossPlusAddl, pool, splitPct, splitAmt, minAdj, minBasis, minPct, procFee, coaching, ec, estNet }
++  })()
++
++  // Any change to a commission input un-confirms the summary.
++  useEffect(() => { setCommissionConfirmed(false) }, [
++    form.commission_basis_price, form.commission_rate, form.commission_rate_type,
++    form.bonus_btsa_amount, form.bonus_btsa_amount_type,
++    form.rebate_amount, form.rebate_amount_type,
++    form.internal_referral, form.internal_referral_fee, form.internal_referral_fee_type,
++    form.external_referral, form.external_referral_fee, form.external_referral_fee_type,
++    form.brokerage_referral, form.brokerage_referral_fee, form.brokerage_referral_fee_type,
++    form.has_ecommission, form.ecommission_amount,
++    comps,
++  ])
++
++  const fmt$ = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
++  const sumRow = (label: string, amount: string, editId?: string) => (
++    <div className="flex justify-between items-center">
++      <span className="flex items-center gap-2">{label}{editId && (
++        <button type="button" onClick={() => jumpToField(editId)} className="text-[9px] uppercase tracking-wider border border-luxury-gray-4 text-luxury-gray-3 rounded px-1.5 hover:bg-luxury-gray-1 hover:text-white">edit</button>
++      )}</span><span>{amount}</span>
++    </div>
++  )
++  const renderCommissionConfirm = () => (
++    <>
++      <div className="inner-card border border-luxury-gray-5">
++        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">eCommission Advance</p>
++        <label className="block text-xs text-luxury-gray-3 mb-2">Did you take an eCommission (or other commission advance) on this deal?
++          <FieldTip text="If a company advanced you part of this commission before closing, enter the amount you must repay. Submitting adds the repayment invoice to your account automatically, and it is deducted from your payout at closing." />
++        </label>
++        <div className="flex gap-4 mb-2 text-xs text-luxury-gray-2">
++          <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={!form.has_ecommission} onChange={() => setField('has_ecommission' as any, false)} className="w-3.5 h-3.5" /> No</label>
++          <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={form.has_ecommission} onChange={() => setField('has_ecommission' as any, true)} className="w-3.5 h-3.5" /> Yes</label>
++        </div>
++        {form.has_ecommission && (
++          <>
++            <input id="fld_ecommission" type="number" className="input-luxury w-full text-sm" value={form.ecommission_amount} onChange={e => setField('ecommission_amount' as any, e.target.value)} placeholder="Advance amount to be repaid" min="0" step="0.01" />
++            <p className="text-[11px] text-luxury-gray-3 mt-1">Submitting creates the repayment invoice on your account automatically.</p>
++          </>
++        )}
++      </div>
++
++      <div className="inner-card border border-luxury-gray-5">
++        <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Commission Summary</p>
++        {previewInfo && (
++          <div className="bg-luxury-light rounded p-3 mb-3 text-xs text-luxury-gray-2 space-y-1">
++            <p className="text-[10px] uppercase tracking-widest text-luxury-gray-3 mb-1">Your plan - from your profile</p>
++            {sumRow(`Plan for this ${summaryIsLease ? 'lease' : 'sale'}`, `${previewInfo.plan_name} \u00b7 ${previewInfo.agent_split_pct} / ${previewInfo.firm_split_pct}`)}
++            {summarySide && sumRow('Side you represent', summarySide.charAt(0).toUpperCase() + summarySide.slice(1))}
++            {sumRow('Processing fee for this side', previewInfo.processing_fee_status === 'waived' ? 'Waived' : previewInfo.processing_fee_status === 'half' ? `${fmt$(previewInfo.processing_fee)} \u00b7 Half Off` : fmt$(previewInfo.processing_fee))}
++            {sumRow('Coaching fee', previewInfo.coaching_waived ? 'Waived' : fmt$(previewInfo.coaching_fee))}
++            {Number(previewInfo.firm_minimum_pct) > 0 && sumRow('Firm minimum (from Settings)', `${previewInfo.firm_minimum_pct}% of ${summaryIsLease ? 'rent' : 'sales price'}`)}
++            {Number(previewInfo.cap_amount) > 0 && sumRow('Cap status', previewInfo.capped ? 'CAPPED' : `${fmt$(previewInfo.ytd_brokerage_split)} of ${fmt$(previewInfo.cap_amount)} YTD`)}
++          </div>
++        )}
++        <div className="text-xs text-luxury-gray-2 space-y-1">
++          {sumRow(form.commission_rate_type === 'flat' ? 'Flat commission' : `Commission (${form.commission_rate || '0'}% of ${fmt$(commissionSummary.basis)})`, fmt$(commissionSummary.gross), 'fld_basis')}
++          {commissionSummary.addl > 0 && sumRow('+ Additional compensation (splits with the pool)', fmt$(commissionSummary.addl))}
++          {commissionSummary.intFee > 0 && sumRow('- Internal referral fee', `-${fmt$(commissionSummary.intFee)}`, 'fld_internal_referral_fee')}
++          {commissionSummary.extFee > 0 && sumRow('- External referral fee', `-${fmt$(commissionSummary.extFee)}`, 'fld_external_referral_fee')}
++          {commissionSummary.brokFee > 0 && sumRow('- Brokerage referral fee', `-${fmt$(commissionSummary.brokFee)}`, 'fld_brokerage_referral_fee')}
++          <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
++            <span>Commission pool (splits between you and CRC)</span>
++            <span>{fmt$(commissionSummary.pool)}</span>
++          </div>
++          {sumRow(`Your split (${commissionSummary.splitPct}% of pool)`, fmt$(commissionSummary.splitAmt))}
++          {commissionSummary.minAdj > 0 && sumRow(`Firm Minimum Adjustment (CRC's share is calculated on ${fmt$(commissionSummary.minBasis)})`, `-${fmt$(commissionSummary.minAdj)}`, 'fld_rate')}
++          {commissionSummary.btsa > 0 && sumRow('+ BTSA / bonus - paid to you in full, no split', fmt$(commissionSummary.btsa), 'fld_btsa')}
++          {commissionSummary.procFee > 0 && sumRow('- Processing fee', `-${fmt$(commissionSummary.procFee)}`)}
++          {commissionSummary.coaching > 0 && sumRow('- Coaching fee', `-${fmt$(commissionSummary.coaching)}`)}
++          {commissionSummary.rebate > 0 && sumRow('- Client rebate (from your share)', `-${fmt$(commissionSummary.rebate)}`, 'fld_rebate')}
++          <div className="flex justify-between font-semibold text-luxury-gray-1 border-t border-luxury-gray-5 pt-1 mt-1">
++            <span>Estimated net to you</span>
++            <span>{fmt$(commissionSummary.estNet)}</span>
++          </div>
++          {commissionSummary.ec > 0 && (
++            <div className="flex justify-between text-amber-700 bg-amber-50 rounded px-2 py-1 mt-1">
++              <span>Deducted from your payout at closing: eCommission repayment</span>
++              <span>-{fmt$(commissionSummary.ec)}</span>
++            </div>
++          )}
++        </div>
++        <p className="text-[11px] text-luxury-gray-3 mt-2">Any unpaid fees or invoices on your account may also be applied at closing and reduce this amount.</p>
++        <label className="flex items-center gap-2 mt-3 cursor-pointer">
++          <input type="checkbox" checked={commissionConfirmed} onChange={e => setCommissionConfirmed(e.target.checked)} className="w-3.5 h-3.5" />
++          <span className="text-xs text-luxury-gray-1 font-medium">I confirm this commission calculation is correct. <span className="font-normal text-luxury-gray-3">Changing any number un-checks this. Use the EDIT buttons to jump to a field and fix it.</span></span>
++        </label>
++      </div>
++    </>
++  )
++
+   const handleSubmit = async () => {
+     setError('')
+     let payload: any = { submission_mode: mode }
+@@ -235,6 +426,7 @@ export default function ComplianceCdaForm() {
+       if (!form.representing) { setError('Representation is required.'); return }
+       if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
+       if (!form.commission_rate) { setError('Commission rate is required.'); return }
++      if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
+       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
+       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
+       if (!foundTransaction && !newAddressComplete) {
+@@ -268,7 +460,7 @@ export default function ComplianceCdaForm() {
+ 
+     setSubmitting(true)
+     try {
+-      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
++      const res = await fetch('/api/agent/forms/compliance-cda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, commission_confirmed: commissionConfirmed }) })
+       const data = await res.json()
+       if (res.ok && data.duplicate_check) { setDuplicateMatches(data.matches || []); return }
+       if (!res.ok || !data.success) { setError(data.error || 'Submission failed. Please try again.'); return }
+@@ -531,7 +723,7 @@ export default function ComplianceCdaForm() {
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price</label>
+-                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
++                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" id="fld_basis" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                     </div>
+                     <div>
+                       <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate</label>
+@@ -540,7 +732,7 @@ export default function ComplianceCdaForm() {
+                           <option value="percent">%</option>
+                           <option value="flat">$</option>
+                         </select>
+-                        <input type="number" className="input-luxury flex-1 text-sm" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                        <input type="number" className="input-luxury flex-1 text-sm" id="fld_rate" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                       </div>
+                     </div>
+                     <div>
+@@ -549,11 +741,11 @@ export default function ComplianceCdaForm() {
+                     </div>
+                     <div>
+                       <label className="block text-xs text-luxury-gray-3 mb-1">Bonus / BTSA Amount</label>
+-                      <input type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                      <div className="flex gap-1.5"><input id="fld_btsa" type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.bonus_btsa_amount_type} onChange={e => setField('bonus_btsa_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Bonus To Selling Agent - extra money a builder or seller pays you on top of commission. $ amount or % of the sales price. Paid to you in full; the brokerage split does not apply to it." />
+                     </div>
+                     <div>
+                       <label className="block text-xs text-luxury-gray-3 mb-1">Buyer / Seller Rebate</label>
+-                      <input type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                      <div className="flex gap-1.5"><input id="fld_rebate" type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.rebate_amount_type} onChange={e => setField('rebate_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Money you are giving back to your client at closing. Usually a dollar amount. If you choose %, it means percent of the SALES PRICE. This comes out of YOUR share." />
+                     </div>
+                     <div>
+                       <label className="block text-xs text-luxury-gray-3 mb-1">Loan Type</label>
+@@ -584,7 +776,9 @@ export default function ComplianceCdaForm() {
+                           ))}
+                         </div>
+                         {(form as any)[key] && (
+-                          <input type="text" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="% or $" />
++                          <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
++  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
++)}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
+                         )}
+                       </div>
+                     ))}
+@@ -791,7 +985,7 @@ export default function ComplianceCdaForm() {
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price <span className="text-red-500">*</span></label>
+-                  <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
++                  <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" id="fld_basis" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                 </div>
+                 <div>
+                   <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate <span className="text-red-500">*</span></label>
+@@ -800,7 +994,7 @@ export default function ComplianceCdaForm() {
+                       <option value="percent">%</option>
+                       <option value="flat">$</option>
+                     </select>
+-                    <input type="number" className="input-luxury flex-1 text-sm" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                    <input type="number" className="input-luxury flex-1 text-sm" id="fld_rate" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
+                   </div>
+                 </div>
+                 <div>
+@@ -809,7 +1003,7 @@ export default function ComplianceCdaForm() {
+                 </div>
+                 <div>
+                   <label className="block text-xs text-luxury-gray-3 mb-1">Bonus / BTSA Amount <span className="text-red-500">*</span></label>
+-                  <input type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                  <div className="flex gap-1.5"><input id="fld_btsa" type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.bonus_btsa_amount_type} onChange={e => setField('bonus_btsa_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Bonus To Selling Agent - extra money a builder or seller pays you on top of commission. $ amount or % of the sales price. Paid to you in full; the brokerage split does not apply to it." />
+                   <p className="text-xs text-luxury-gray-3 mt-1">Enter 0 if none</p>
+                 </div>
+                 <div className="md:col-span-2">
+@@ -850,7 +1044,7 @@ export default function ComplianceCdaForm() {
+                 </div>
+                 <div>
+                   <label className="block text-xs text-luxury-gray-3 mb-1">Buyer / Seller Rebate Deducted from Commission <span className="text-red-500">*</span></label>
+-                  <input type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" />
++                  <div className="flex gap-1.5"><input id="fld_rebate" type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.rebate_amount_type} onChange={e => setField('rebate_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Money you are giving back to your client at closing. Usually a dollar amount. If you choose %, it means percent of the SALES PRICE. This comes out of YOUR share." />
+                   <p className="text-xs text-luxury-gray-3 mt-1">Enter 0 if none</p>
+                 </div>
+               </div>
+@@ -876,7 +1070,9 @@ export default function ComplianceCdaForm() {
+                       ))}
+                     </div>
+                     {(form as any)[key] && (
+-                      <input type="text" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="% or $" />
++                      <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
++  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
++)}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
+                     )}
+                   </div>
+                 ))}
+@@ -995,6 +1191,8 @@ export default function ComplianceCdaForm() {
+           </div>
+         )}
+ 
++        {(mode === 'compliance' || (mode === 'subsequent' && foundTransaction)) && renderCommissionConfirm()}
++
+         {(mode === 'retainer' || mode === 'compliance' || (mode === 'subsequent' && foundTransaction)) && (
+           <div className="flex items-center justify-between pt-2 border-t border-luxury-gray-5/50">
+             <button onClick={() => router.push('/agent/forms')} className="btn btn-secondary text-xs">Cancel</button>
+diff --git a/app/api/admin/transactions/[id]/route.ts b/app/api/admin/transactions/[id]/route.ts
+index 71969c2..70ebf4f 100644
+--- a/app/api/admin/transactions/[id]/route.ts
++++ b/app/api/admin/transactions/[id]/route.ts
+@@ -322,8 +322,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{
+               division, revenue_share, revenue_share_percentage, referring_agent,
+               referring_agent_id, referred_agents,
+               qualifying_transaction_count, qualifying_transaction_target,
+-              waive_buyer_processing_fees,
+-              waive_seller_processing_fees, waive_coaching_fee,
++              waive_buyer_processing_fees, half_buyer_processing_fees,
++              half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
+               cap_amount_override, post_cap_split_override,
+               special_commission_notes, headshot_url,
+               monthly_fee_paid_through, bank_connected
+@@ -1626,8 +1626,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
+             office_email, email, phone, office, commission_plan, license_number,
+             license_expiration, referring_agent_id, revenue_share_percentage,
+             qualifying_transaction_count, qualifying_transaction_target,
+-            waive_buyer_processing_fees,
+-            waive_seller_processing_fees, waive_coaching_fee,
++            waive_buyer_processing_fees, half_buyer_processing_fees,
++            half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
+             cap_amount_override, post_cap_split_override,
+             monthly_fee_paid_through
+           )
+@@ -1674,8 +1674,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
+                     office_email, email, phone, office, commission_plan, license_number,
+                     license_expiration, referring_agent_id, revenue_share_percentage,
+                     qualifying_transaction_count, qualifying_transaction_target,
+-                    waive_buyer_processing_fees,
+-                    waive_seller_processing_fees, waive_coaching_fee,
++                    waive_buyer_processing_fees, half_buyer_processing_fees,
++                    half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
+                     cap_amount_override, post_cap_split_override,
+                     monthly_fee_paid_through
+                   )
+@@ -1728,8 +1728,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
+                     office_email, email, phone, office, commission_plan, license_number,
+                     license_expiration, referring_agent_id, revenue_share_percentage,
+                     qualifying_transaction_count, qualifying_transaction_target,
+-                    waive_buyer_processing_fees,
+-                    waive_seller_processing_fees, waive_coaching_fee,
++                    waive_buyer_processing_fees, half_buyer_processing_fees,
++                    half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
+                     cap_amount_override, post_cap_split_override,
+                     monthly_fee_paid_through
+                   )
+diff --git a/app/api/admin/transactions/smart-calc/route.ts b/app/api/admin/transactions/smart-calc/route.ts
+index a9be662..8bcd149 100644
+--- a/app/api/admin/transactions/smart-calc/route.ts
++++ b/app/api/admin/transactions/smart-calc/route.ts
+@@ -1,4 +1,5 @@
+ import { NextRequest, NextResponse } from 'next/server'
++import { getFirmMinimumPct } from '@/lib/transactions/cascade'
+ import { requirePermission } from '@/lib/api-auth'
+ import { supabaseAdmin as supabase } from '@/lib/supabase'
+ import { computeCommission } from '@/lib/transactions/math'
+@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
+           office, office_email, email,
+           referring_agent_id, revenue_share_percentage,
+           waive_buyer_processing_fees, waive_seller_processing_fees,
++          half_buyer_processing_fees, half_seller_processing_fees,
+           qualifying_transaction_count
+         `)
+         .eq('id', agentId)
+@@ -203,6 +205,7 @@ export async function POST(request: NextRequest) {
+         id, commission_plan, lease_commission_plan,
+         referring_agent_id, revenue_share_percentage,
+         waive_buyer_processing_fees, waive_seller_processing_fees,
++        half_buyer_processing_fees, half_seller_processing_fees,
+         waive_coaching_fee
+       `)
+       .eq('id', agent_id)
+@@ -323,15 +326,43 @@ export async function POST(request: NextRequest) {
+     // rounding of each slice could make multiple values round-half-up and
+     // produce a sum $0.01 over basis, which shows up downstream as wrong
+     // brokerage preview amounts on team transactions.
+-    const agentGross   = round2(agentBasis * (agentSplitPct / 100))
++    let agentGross   = round2(agentBasis * (agentSplitPct / 100))
+     const teamLeadPayout = round2(agentBasis * (teamLeadPct / 100))
+-    const brokerageSplit = round2(agentBasis - agentGross - teamLeadPayout)
++    let brokerageSplit = round2(agentBasis - agentGross - teamLeadPayout)
++
++    // Firm Minimum Adjustment - same rule as the cascade. Pool = side
++    // commission incl. additional comp; price basis from the body or the
++    // passed transaction record.
++    let firm_minimum_adjustment = 0
++    let firm_minimum_pct: number | null = null
++    {
++      const minPct = await getFirmMinimumPct(!!isLease)
++      const bodyAny = body as any
++      const minPriceBasis = Number(bodyAny.sales_price ?? bodyAny.transaction?.sales_price ?? (isLease ? bodyAny.transaction?.monthly_rent : 0)) || 0
++      const minPool = Number(bodyAny.commission_pool ?? agentBasis) || 0
++      if (minPct && minPriceBasis > 0 && minPool > 0) {
++        const minBasis = round2(minPriceBasis * minPct / 100)
++        if (minPool < minBasis) {
++          const firmPortion = round2(agentBasis - agentGross - teamLeadPayout)
++          const firmAtMin = round2(minBasis * (100 - agentSplitPct - teamLeadPct) / 100)
++          const adj = round2(firmAtMin - firmPortion)
++          if (adj > 0) {
++            brokerageSplit = round2(brokerageSplit + adj)
++            agentGross = round2(agentGross - adj)
++            firm_minimum_adjustment = adj
++            firm_minimum_pct = minPct
++          }
++        }
++      }
++    }
+ 
+     // Processing fee with waiver check (side-aware)
+     let processingFee = processingFeeType?.processing_fee || 0
+     const cat = sideCategory(side as Side)
+     if (cat === 'buying' && agent.waive_buyer_processing_fees) processingFee = 0
++    else if (cat === 'buying' && (agent as any).half_buyer_processing_fees) processingFee = Math.round(processingFee * 50) / 100
+     if (cat === 'listing' && agent.waive_seller_processing_fees) processingFee = 0
++    else if (cat === 'listing' && (agent as any).half_seller_processing_fees) processingFee = Math.round(processingFee * 50) / 100
+ 
+     // Momentum partner payout - paid OUT of the brokerage's portion, but
+     // calculated as a % of the agent's full basis (commission_amount), NOT
+diff --git a/app/api/agent/commission-preview/route.ts b/app/api/agent/commission-preview/route.ts
+new file mode 100644
+index 0000000..3f3c0fb
+--- /dev/null
++++ b/app/api/agent/commission-preview/route.ts
+@@ -0,0 +1,101 @@
++import { NextRequest, NextResponse } from 'next/server'
++import { requireAuth } from '@/lib/api-auth'
++import { supabaseAdmin } from '@/lib/supabase'
++import { getFirmMinimumPct } from '@/lib/transactions/cascade'
++
++export const dynamic = 'force-dynamic'
++
++// POST /api/agent/commission-preview
++// Live "your plan" numbers for the compliance form's Commission Summary box:
++// plan + splits, side-aware processing fee with waive/half state, coaching
++// fee, firm minimum percent, and cap progress. Read-only. Self-scoped;
++// admin-ish roles may preview for the agent they are submitting on behalf of.
++export async function POST(request: NextRequest) {
++  const auth = await requireAuth(request)
++  if (auth.error) return auth.error
++  try {
++    const body = await request.json()
++    const isLease = !!body.is_lease
++    const requested = String(body.agent_id || '')
++    const callerRole = String((auth.user as any).role || '')
++    const adminish = ['operations', 'broker', 'admin', 'tc', 'staff', 'support'].includes(callerRole)
++    const agentId = requested && adminish ? requested : auth.user.id
++
++    const { data: agent } = await supabaseAdmin
++      .from('users')
++      .select('id, commission_plan, lease_commission_plan, waive_buyer_processing_fees, waive_seller_processing_fees, half_buyer_processing_fees, half_seller_processing_fees, waive_coaching_fee')
++      .eq('id', agentId)
++      .single()
++    if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
++
++    const planCode = String((isLease ? (agent as any).lease_commission_plan : agent.commission_plan) || agent.commission_plan || '')
++    // Fuzzy plan match (code OR name) - same intent as the cascade's matcher.
++    let plan: any = null
++    if (planCode) {
++      const { data: plans } = await supabaseAdmin
++        .from('commission_plans')
++        .select('*')
++        .eq('is_active', true)
++      const lc = planCode.toLowerCase()
++      plan = (plans || []).find((p: any) =>
++        String(p.code || '').toLowerCase() === lc || String(p.name || '').toLowerCase() === lc
++      ) || (plans || []).find((p: any) =>
++        lc.includes(String(p.code || '').toLowerCase()) || String(p.name || '').toLowerCase().includes(lc)
++      ) || null
++    }
++    const agentSplitPct = Number(plan?.agent_split_percentage ?? 85)
++    const firmSplitPct = Number(plan?.firm_split_percentage ?? 15)
++
++    // Side-aware processing fee with waive / half-off state.
++    const side = String(body.side || '')
++    const txnType = String(body.transaction_type || '')
++    const { data: pfts } = await supabaseAdmin.from('processing_fee_types').select('*')
++    const pft = (pfts || []).find((f: any) => String(f.code || '') === txnType)
++      || (pfts || []).find((f: any) => String(f.code || '').includes(isLease ? 'tenant' : 'buyer'))
++      || null
++    const baseFee = Number(pft?.processing_fee ?? 0)
++    const buySide = side === 'buyer' || side === 'tenant'
++    let fee = baseFee
++    let feeStatus: 'standard' | 'half' | 'waived' = 'standard'
++    if (buySide && agent.waive_buyer_processing_fees) { fee = 0; feeStatus = 'waived' }
++    else if (buySide && (agent as any).half_buyer_processing_fees) { fee = Math.round(baseFee * 50) / 100; feeStatus = 'half' }
++    else if (!buySide && agent.waive_seller_processing_fees) { fee = 0; feeStatus = 'waived' }
++    else if (!buySide && (agent as any).half_seller_processing_fees) { fee = Math.round(baseFee * 50) / 100; feeStatus = 'half' }
++
++    const coachingWaived = agent.waive_coaching_fee === true
++    const coachingFee = coachingWaived ? 0 : Number(plan?.coaching_fee_amount ?? 0)
++    const firmMinimumPct = await getFirmMinimumPct(isLease)
++
++    // Cap progress: brokerage splits credited this calendar year.
++    let capAmount = Number(plan?.cap_amount ?? 0) || 0
++    let ytd = 0
++    if (capAmount > 0) {
++      const yearStart = `${new Date().getFullYear()}-01-01`
++      const { data: rows } = await supabaseAdmin
++        .from('transaction_internal_agents')
++        .select('brokerage_split, created_at')
++        .eq('agent_id', agentId)
++        .gte('created_at', yearStart)
++        .limit(1000)
++      ytd = (rows || []).reduce((s: number, r: any) => s + (parseFloat(String(r.brokerage_split ?? 0)) || 0), 0)
++    }
++
++    return NextResponse.json({
++      plan_name: plan?.name || planCode || 'Standard',
++      agent_split_pct: agentSplitPct,
++      firm_split_pct: firmSplitPct,
++      processing_fee: fee,
++      processing_fee_original: baseFee,
++      processing_fee_status: feeStatus,
++      coaching_fee: coachingFee,
++      coaching_waived: coachingWaived,
++      firm_minimum_pct: firmMinimumPct,
++      cap_amount: capAmount,
++      ytd_brokerage_split: Math.round(ytd * 100) / 100,
++      capped: capAmount > 0 && ytd >= capAmount,
++    })
++  } catch (err: any) {
++    console.error('commission-preview error:', err)
++    return NextResponse.json({ error: err.message }, { status: 500 })
++  }
++}
+diff --git a/app/api/agent/forms/compliance-cda/route.ts b/app/api/agent/forms/compliance-cda/route.ts
+index e01c824..f056307 100644
+--- a/app/api/agent/forms/compliance-cda/route.ts
++++ b/app/api/agent/forms/compliance-cda/route.ts
+@@ -288,6 +288,39 @@ export async function POST(request: NextRequest) {
+         const isLease = rep === 'referred_out' && !formFields.referred_client_type
+           ? txn.transaction_type === 'lease'
+           : complianceIsLease({ representing: rep, referred_client_type: formFields.referred_client_type })
++        // The agent must have confirmed the on-screen commission summary.
++        if (body.commission_confirmed !== true) {
++          return NextResponse.json({ error: 'Please confirm the commission calculation in the Commission Summary box before submitting.' }, { status: 400 })
++        }
++        // Same commission derivation as a first submission, from this
++        // branch's formFields: base = computed gross, side = base + additional
++        // compensation, on the side the agent represents.
++        const addlSub = Array.isArray(formFields.additional_compensation)
++          ? formFields.additional_compensation.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
++          : 0
++        const computedGrossSub = computeGrossFromRate(formFields.commission_basis_price, formFields.commission_rate, formFields.commission_rate_type)
++        const repLowerSub = String(rep || '').toLowerCase()
++        const sideCommissionFieldsSub: Record<string, any> =
++          computedGrossSub == null ? {} :
++          (repLowerSub.includes('seller') || repLowerSub.includes('landlord')) ? {
++            listing_base_commission: computedGrossSub,
++            listing_side_commission: Math.round((computedGrossSub + addlSub) * 100) / 100,
++          } :
++          (repLowerSub.includes('buyer') || repLowerSub.includes('tenant')) ? {
++            buying_base_commission: computedGrossSub,
++            buying_side_commission: Math.round((computedGrossSub + addlSub) * 100) / 100,
++          } : {}
++        // %/$ resolution - same policy as a first submission: BTSA and rebate
++        // percent of the SALES PRICE (basis), referral fees percent of gross.
++        const basisPriceSub = parseFloat(String(formFields.commission_basis_price ?? '').replace(/[^0-9.]/g, '')) || 0
++        const volumeSub = parseFloat(String(formFields.total_sales_rent_price ?? '').replace(/[^0-9.]/g, '')) || 0
++        const resolveSub = (v: any, t: any, base: number) => {
++          const n = parseFloat(String(v ?? '').replace(/[^0-9.]/g, '')) || 0
++          return String(t || 'flat') === 'percent' ? Math.round(base * n) / 100 : n
++        }
++        const btsaSub = resolveSub(formFields.bonus_btsa_amount, formFields.bonus_btsa_amount_type, basisPriceSub)
++        const rebateSub = resolveSub(formFields.rebate_amount, formFields.rebate_amount_type, basisPriceSub)
++        const grossFeeBaseSub = computedGrossSub ?? 0
+         const fieldMap: Record<string, any> = {
+           representing:          formFields.representing || null,
+           tenant_transaction_type: formFields.tenant_transaction_type || null,
+@@ -296,27 +329,37 @@ export async function POST(request: NextRequest) {
+           move_in_date:          isLease ? formFields.closing_or_movein_date || null : null,
+           acceptance_date:       formFields.acceptance_date || null,
+           loan_type:             formFields.loan_type || null,
+-          sales_price:           formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
+-          monthly_rent:          isLease && formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
+-          gross_commission:      computeGrossFromRate(formFields.commission_basis_price, formFields.commission_rate, formFields.commission_rate_type),
+-          bonus_amount:          formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
+-          has_btsa:              !!(formFields.bonus_btsa_amount && parseFloat(formFields.bonus_btsa_amount) > 0),
+-          btsa_amount:           formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
+-          rebate_amount:         formFields.rebate_amount ? parseFloat(formFields.rebate_amount) : 0,
++          // Corrected semantics: commission basis price IS the sales price
++          // (or rent); the total is the reported production VOLUME.
++          sales_price:           basisPriceSub > 0 ? basisPriceSub : null,
++          monthly_rent:          isLease && basisPriceSub > 0 ? basisPriceSub : null,
++          sales_volume:          volumeSub > 0 ? volumeSub : null,
++          gross_commission:      computedGrossSub,
++          bonus_amount:          btsaSub,
++          has_btsa:              btsaSub > 0,
++          btsa_amount:           btsaSub,
++          rebate_amount:         rebateSub,
+           internal_referral:     formFields.internal_referral || false,
+-          internal_referral_fee: formFields.internal_referral_fee ? parseFloat(formFields.internal_referral_fee) : 0,
++          internal_referral_fee: formFields.internal_referral ? resolveSub(formFields.internal_referral_fee, formFields.internal_referral_fee_type, grossFeeBaseSub) : 0,
++          internal_referral_fee_type: formFields.internal_referral_fee_type || 'flat',
+           external_referral:     formFields.external_referral || false,
+-          external_referral_fee: formFields.external_referral_fee ? parseFloat(formFields.external_referral_fee) : 0,
++          external_referral_fee: formFields.external_referral ? resolveSub(formFields.external_referral_fee, formFields.external_referral_fee_type, grossFeeBaseSub) : 0,
++          external_referral_fee_type: formFields.external_referral_fee_type || 'flat',
+           brokerage_referral:    formFields.brokerage_referral || false,
+-          brokerage_referral_fee: formFields.brokerage_referral_fee ? parseFloat(formFields.brokerage_referral_fee) : 0,
++          brokerage_referral_fee: formFields.brokerage_referral ? resolveSub(formFields.brokerage_referral_fee, formFields.brokerage_referral_fee_type, grossFeeBaseSub) : 0,
++          brokerage_referral_fee_type: formFields.brokerage_referral_fee_type || 'flat',
++          has_ecommission:       !!formFields.has_ecommission,
++          ecommission_amount:    formFields.has_ecommission ? (parseFloat(String(formFields.ecommission_amount ?? 0)) || 0) : null,
+         }
+         // Keys that map from form field name to transaction column name
+         const formToColumn: Record<string, string> = {
+           lease_term_months:        'lease_term',
+           closing_or_movein_date:   isLease ? 'move_in_date' : 'closing_date',
+-          total_sales_rent_price:   isLease ? 'monthly_rent' : 'sales_price',
+-          commission_basis_price:   'gross_commission',
++          total_sales_rent_price:   'sales_volume',
++          commission_basis_price:   isLease ? 'monthly_rent' : 'sales_price',
+           bonus_btsa_amount:        'bonus_amount',
++          has_ecommission:          'has_ecommission',
++          ecommission_amount:       'ecommission_amount',
+         }
+         // Build partial update: only include columns whose form field changed
+         const partialUpdate: Record<string, any> = {
+@@ -338,13 +381,55 @@ export async function POST(request: NextRequest) {
+             partialUpdate.closing_date = fieldMap.closing_date
+             partialUpdate.move_in_date = fieldMap.move_in_date
+           }
+-          // monthly_rent and sales_price are paired
+-          if (changedKey === 'total_sales_rent_price') {
++          // basis price drives BOTH price columns (sale vs lease semantics)
++          if (changedKey === 'commission_basis_price') {
+             partialUpdate.sales_price = fieldMap.sales_price
+             partialUpdate.monthly_rent = fieldMap.monthly_rent
+           }
++          // fee type changes re-resolve their dollar columns
++          if (changedKey === 'internal_referral_fee_type' || changedKey === 'internal_referral_fee') {
++            partialUpdate.internal_referral_fee = fieldMap.internal_referral_fee
++            partialUpdate.internal_referral_fee_type = fieldMap.internal_referral_fee_type
++          }
++          if (changedKey === 'external_referral_fee_type' || changedKey === 'external_referral_fee') {
++            partialUpdate.external_referral_fee = fieldMap.external_referral_fee
++            partialUpdate.external_referral_fee_type = fieldMap.external_referral_fee_type
++          }
++          if (changedKey === 'brokerage_referral_fee_type' || changedKey === 'brokerage_referral_fee') {
++            partialUpdate.brokerage_referral_fee = fieldMap.brokerage_referral_fee
++            partialUpdate.brokerage_referral_fee_type = fieldMap.brokerage_referral_fee_type
++          }
++          if (changedKey === 'rebate_amount_type') {
++            partialUpdate.rebate_amount = fieldMap.rebate_amount
++          }
++          if (changedKey === 'bonus_btsa_amount_type') {
++            partialUpdate.bonus_amount = fieldMap.bonus_amount
++            partialUpdate.has_btsa = fieldMap.has_btsa
++            partialUpdate.btsa_amount = fieldMap.btsa_amount
++          }
++          // Commission inputs drive gross + base + side commissions together
++          if (['commission_basis_price', 'commission_rate', 'commission_rate_type', 'additional_compensation'].includes(changedKey)) {
++            partialUpdate.gross_commission = fieldMap.gross_commission
++            Object.assign(partialUpdate, sideCommissionFieldsSub)
++          }
+         }
+         await supabaseAdmin.from('transactions').update(partialUpdate).eq('id', txn.id)
++        // BTSA and rebate live on the agent's commission row - the payout math
++        // reads them there, not from the transaction columns. Never touch a
++        // row that has already been paid.
++        if (changedFields.includes('bonus_btsa_amount') || changedFields.includes('rebate_amount')) {
++          await supabaseAdmin
++            .from('transaction_internal_agents')
++            .update({
++              ...(changedFields.includes('bonus_btsa_amount') || changedFields.includes('bonus_btsa_amount_type') ? { btsa_amount: btsaSub } : {}),
++              ...(changedFields.includes('rebate_amount') || changedFields.includes('rebate_amount_type') ? { rebate_amount: rebateSub } : {}),
++              updated_at: now,
++            })
++            .eq('transaction_id', txn.id)
++            .eq('agent_id', agentId)
++            .eq('agent_role', 'primary_agent')
++            .neq('payment_status', 'paid')
++        }
+         // Commission inputs may have changed - re-run the cascade so tia rows
+         // and TL/momentum payouts stay in sync with the resubmitted values.
+         await autoCascadeTransaction(txn.id)
+@@ -389,6 +474,106 @@ export async function POST(request: NextRequest) {
+     // rent was never written. The flyer logic below already handled this; the
+     // data did not.
+     const isLease = complianceIsLease({ representing, referred_client_type })
++
++    // Server-side gate: the agent must have confirmed the on-screen commission
++    // summary before we accept the submission (retainer mode has no commission).
++    if (body.commission_confirmed !== true) {
++      return NextResponse.json({ error: 'Please confirm the commission calculation in the Commission Summary box before submitting.' }, { status: 400 })
++    }
++
++    // Where the commission lands on the deal. Base = computed gross; the side
++    // total also includes additional compensation (same convention as the
++    // additional-income route). Seller/landlord deals fill the listing side,
++    // buyer/tenant deals fill the buying side, so the Overview tab and the
++    // office-net math finally see the money without a manual office step.
++    const additionalCompTotal = Array.isArray(additional_compensation)
++      ? additional_compensation.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
++      : 0
++    const computedGross = computeGrossFromRate(commission_basis_price, commission_rate, commission_rate_type)
++    const repLower = String(representing || '').toLowerCase()
++    const sideCommissionFields: Record<string, any> =
++      computedGross == null ? {} :
++      (repLower.includes('seller') || repLower.includes('landlord')) ? {
++        listing_base_commission: computedGross,
++        listing_side_commission: Math.round((computedGross + additionalCompTotal) * 100) / 100,
++      } :
++      (repLower.includes('buyer') || repLower.includes('tenant')) ? {
++        buying_base_commission: computedGross,
++        buying_side_commission: Math.round((computedGross + additionalCompTotal) * 100) / 100,
++      } : {}
++    const tiaSideFromRep =
++      repLower.includes('landlord') ? 'landlord'
++      : repLower.includes('seller') ? 'seller'
++      : repLower.includes('tenant') ? 'tenant'
++      : repLower.includes('buyer') ? 'buyer'
++      : null
++    // %/$ resolution. Percent bases per office policy: BTSA and rebate are a
++    // percent of the SALES PRICE (the commission basis price); referral fees
++    // are a percent of the computed gross commission.
++    const basisPriceNum = parseFloat(String(commission_basis_price ?? '').replace(/[^0-9.]/g, '')) || 0
++    const volumeNum = parseFloat(String(total_sales_rent_price ?? '').replace(/[^0-9.]/g, '')) || 0
++    const resolveAmt = (v: any, t: any, base: number) => {
++      const n = parseFloat(String(v ?? '').replace(/[^0-9.]/g, '')) || 0
++      return String(t || 'flat') === 'percent' ? Math.round(base * n) / 100 : n
++    }
++    const btsaNum = resolveAmt(bonus_btsa_amount, (body as any).bonus_btsa_amount_type, basisPriceNum)
++    const rebateNum = resolveAmt(rebate_amount, (body as any).rebate_amount_type, basisPriceNum)
++    const grossForFees = computedGross ?? 0
++    const internalFeeNum = internal_referral ? resolveAmt(internal_referral_fee, (body as any).internal_referral_fee_type, grossForFees) : 0
++    const externalFeeNum = external_referral ? resolveAmt(external_referral_fee, (body as any).external_referral_fee_type, grossForFees) : 0
++    const brokerageFeeNum = brokerage_referral ? resolveAmt(brokerage_referral_fee, (body as any).brokerage_referral_fee_type, grossForFees) : 0
++    const ecommissionNum = (body as any).has_ecommission ? (parseFloat(String((body as any).ecommission_amount ?? 0)) || 0) : 0
++
++    // Auto-create money records the office used to add by hand. Both are
++    // guarded so a resubmission can never create duplicates.
++    const createEcommissionDebtAndTeb = async (txnId: string) => {
++      if (ecommissionNum > 0) {
++        const tag = `auto:compliance-ecommission:${txnId}`
++        const { data: existingDebt } = await supabaseAdmin
++          .from('agent_debts')
++          .select('id')
++          .eq('agent_id', agentId)
++          .ilike('notes', `%${tag}%`)
++          .limit(1)
++          .maybeSingle()
++        if (!existingDebt) {
++          await supabaseAdmin.from('agent_debts').insert({
++            agent_id: agentId,
++            debt_type: 'custom_invoice',
++            description: `eCommission Repayment - ${resolvedAddress || 'compliance submission'}`,
++            amount_owed: ecommissionNum,
++            amount_paid: 0,
++            date_incurred: now.slice(0, 10),
++            status: 'outstanding',
++            record_type: 'debt',
++            notes: `Reported by agent on the compliance form. ${tag}`,
++          })
++        }
++      }
++      const tebName = String((body as any).external_referral_brokerage_name || '').trim()
++      if (external_referral && externalFeeNum > 0 && tebName) {
++        const { data: existingTeb } = await supabaseAdmin
++          .from('transaction_external_brokerages')
++          .select('id')
++          .eq('transaction_id', txnId)
++          .eq('brokerage_role', 'referral')
++          .ilike('brokerage_name', tebName)
++          .limit(1)
++          .maybeSingle()
++        if (!existingTeb) {
++          await supabaseAdmin.from('transaction_external_brokerages').insert({
++            transaction_id: txnId,
++            brokerage_role: 'referral',
++            brokerage_name: tebName,
++            commission_amount: externalFeeNum,
++            amount_1099_reportable: externalFeeNum,
++            payment_status: 'pending',
++            side: tiaSideFromRep,
++            notes: 'Auto-created from the agent compliance form. Office: complete W-9 / EIN / address at review.',
++          })
++        }
++      }
++    }
+     // Same rule as isLease above, so the flyer and the data can never disagree.
+     const flyerIsLease = isLease
+     const flyerType = flyerIsLease ? 'just_leased' : 'just_sold'
+@@ -488,16 +673,23 @@ export async function POST(request: NextRequest) {
+       acceptance_date: acceptance_date || null,
+       mls_link: mls_link || null, client_name: client_name ? formatNameToTitleCase(String(client_name).trim()) : null, client_email: client_email || null,
+       lead_source: lead_source || null, loan_type: loan_type || null,
+-      sales_price: total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
+-      monthly_rent: isLease && total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
+-      gross_commission: computeGrossFromRate(commission_basis_price, commission_rate, commission_rate_type),
+-      bonus_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,
+-      has_btsa: !!(bonus_btsa_amount && parseFloat(bonus_btsa_amount) > 0),
+-      btsa_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,
+-      rebate_amount: rebate_amount ? parseFloat(rebate_amount) : 0,
+-      internal_referral: internal_referral || false, internal_referral_fee: internal_referral_fee ? parseFloat(internal_referral_fee) : 0,
+-      external_referral: external_referral || false, external_referral_fee: external_referral_fee ? parseFloat(external_referral_fee) : 0,
+-      brokerage_referral: brokerage_referral || false, brokerage_referral_fee: brokerage_referral_fee ? parseFloat(brokerage_referral_fee) : 0,
++      sales_price: basisPriceNum > 0 ? basisPriceNum : null,
++      monthly_rent: isLease && basisPriceNum > 0 ? basisPriceNum : null,
++      sales_volume: volumeNum > 0 ? volumeNum : null,
++      gross_commission: computedGross,
++      ...sideCommissionFields,
++      bonus_amount: btsaNum,
++      has_btsa: btsaNum > 0,
++      btsa_amount: btsaNum,
++      rebate_amount: rebateNum,
++      has_ecommission: ecommissionNum > 0,
++      ecommission_amount: ecommissionNum > 0 ? ecommissionNum : null,
++      internal_referral_fee_type: (body as any).internal_referral_fee_type || 'flat',
++      external_referral_fee_type: (body as any).external_referral_fee_type || 'flat',
++      brokerage_referral_fee_type: (body as any).brokerage_referral_fee_type || 'flat',
++      internal_referral: internal_referral || false, internal_referral_fee: internalFeeNum,
++      external_referral: external_referral || false, external_referral_fee: externalFeeNum,
++      brokerage_referral: brokerage_referral || false, brokerage_referral_fee: brokerageFeeNum,
+       title_officer_name: title_officer_name ? formatNameToTitleCase(String(title_officer_name).trim()) : null,
+       title_company: title_company ? toTitleCase(String(title_company).trim()) : null,
+       title_company_email: title_company_email || null, flyer_division: flyerDisplayLine,
+@@ -521,10 +713,11 @@ export async function POST(request: NextRequest) {
+         .select('id').single()
+       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
+       transactionId = newTxn.id
+-      await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', updated_at: now })
++      await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', side: tiaSideFromRep, btsa_amount: btsaNum, rebate_amount: rebateNum, sales_volume: volumeNum > 0 ? volumeNum : null, units: 1, lead_source: lead_source || 'own', updated_at: now })
+       // New deal from a compliance submission: cascade immediately so the
+       // commission tab is populated without waiting for a manual Recalculate.
+       await autoCascadeTransaction(transactionId)
++      await createEcommissionDebtAndTeb(transactionId)
+     } else {
+       transactionId = txn.id
+       if (txn.is_locked) {
+@@ -554,11 +747,29 @@ export async function POST(request: NextRequest) {
+           }
+         : {}
+       await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)
++      // BTSA and rebate live on the agent's commission row - the payout math
++      // reads them there. Never touch a row that has already been paid.
++      await supabaseAdmin
++        .from('transaction_internal_agents')
++        .update({ btsa_amount: btsaNum, rebate_amount: rebateNum, updated_at: now })
++        .eq('transaction_id', transactionId)
++        .eq('agent_id', agentId)
++        .eq('agent_role', 'primary_agent')
++        .neq('payment_status', 'paid')
+       // Attaching a compliance submission to an existing deal: make sure the
+       // submitting agent has a primary tia row (NULL commission fields until
+       // a basis exists), then cascade with the freshly written inputs.
+       await ensurePrimaryTia(transactionId, agentId)
++      // Keep the agent row's volume/units/lead source current on attach too.
++      await supabaseAdmin
++        .from('transaction_internal_agents')
++        .update({ sales_volume: volumeNum > 0 ? volumeNum : null, units: 1, lead_source: lead_source || 'own', side: tiaSideFromRep, updated_at: now })
++        .eq('transaction_id', transactionId)
++        .eq('agent_id', agentId)
++        .eq('agent_role', 'primary_agent')
++        .neq('payment_status', 'paid')
+       await autoCascadeTransaction(transactionId)
++      await createEcommissionDebtAndTeb(transactionId)
+     }
+ 
+     // ── Contacts: upsert client + title for both new and existing transactions ─
+diff --git a/app/api/transactions/[id]/route.ts b/app/api/transactions/[id]/route.ts
+index 6e8899f..e9319b8 100644
+--- a/app/api/transactions/[id]/route.ts
++++ b/app/api/transactions/[id]/route.ts
+@@ -27,8 +27,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{
+               division, revenue_share, revenue_share_percentage, referring_agent,
+               referring_agent_id, referred_agents,
+               qualifying_transaction_count, qualifying_transaction_target,
+-              waive_buyer_processing_fees,
+-              waive_seller_processing_fees, waive_coaching_fee,
++              waive_buyer_processing_fees, half_buyer_processing_fees,
++              half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
+               cap_amount_override, post_cap_split_override,
+               special_commission_notes, headshot_url
+             )
+diff --git a/components/admin/AdminUserProfileModal.tsx b/components/admin/AdminUserProfileModal.tsx
+index 33e2cd4..3695d24 100644
+--- a/components/admin/AdminUserProfileModal.tsx
++++ b/components/admin/AdminUserProfileModal.tsx
+@@ -340,6 +340,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
+       monthly_fee_waived: freshUser?.monthly_fee_waived ?? false,
+       waive_buyer_processing_fees: freshUser?.waive_buyer_processing_fees ?? false,
+       waive_seller_processing_fees: freshUser?.waive_seller_processing_fees ?? false,
++      half_buyer_processing_fees: freshUser?.half_buyer_processing_fees ?? false,
++      half_seller_processing_fees: freshUser?.half_seller_processing_fees ?? false,
+       roles: freshUser?.roles || [],
+       role: freshUser?.role || '',
+       full_nav_access: freshUser?.full_nav_access ?? false,
+@@ -592,6 +594,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
+           monthly_fee_waived: !!formData.monthly_fee_waived,
+           waive_buyer_processing_fees: !!formData.waive_buyer_processing_fees,
+           waive_seller_processing_fees: !!formData.waive_seller_processing_fees,
++          half_buyer_processing_fees: !!formData.half_buyer_processing_fees,
++          half_seller_processing_fees: !!formData.half_seller_processing_fees,
+           office: toNullableString(formData.office),
+           division: toNullableString(formData.division),
+           status: toNullableString(formData.status),
+@@ -1310,6 +1314,23 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
+                     />
+                     <span className="text-sm">Waive Seller Processing Fees</span>
+                   </div>
++                  <div className="flex items-center gap-3">
++                    <input
++                      type="checkbox"
++                      checked={formData.half_buyer_processing_fees}
++                      onChange={e => handleInputChange('half_buyer_processing_fees', e.target.checked)}
++                    />
++                    <span className="text-sm">Half Off Buyer Processing Fees</span>
++                  </div>
++                  <div className="flex items-center gap-3">
++                    <input
++                      type="checkbox"
++                      checked={formData.half_seller_processing_fees}
++                      onChange={e => handleInputChange('half_seller_processing_fees', e.target.checked)}
++                    />
++                    <span className="text-sm">Half Off Seller Processing Fees</span>
++                  </div>
++                  <p className="text-xs text-luxury-gray-3">If Waive and Half Off are both checked for a side, Waive wins.</p>
+                 </div>
+               </div>
+             </div>
+diff --git a/lib/transactions/cascade.ts b/lib/transactions/cascade.ts
+index 2156d24..a736da4 100644
+--- a/lib/transactions/cascade.ts
++++ b/lib/transactions/cascade.ts
+@@ -26,6 +26,29 @@ export function num(v: any): number {
+ // team_lead_commission on the primary's TIA row is informational tracking only
+ // and is NOT deducted from agent_net or amount_1099_reportable - the team
+ // lead's cut has already been carved out of agent_gross at the team-split step.
++// ── Firm Minimum ─────────────────────────────────────────────────────────────
++// Settings → commission rules can define minimum_percent: the minimum
++// commission (% of sales price for sales, % of rent for leases). When a
++// deal's commission pool (the side commission, which already includes
++// additional compensation) is below that minimum, CRC's split is calculated
++// as if the minimum had been met and the shortfall comes out of the agent's
++// share. Statements label this the "Firm Minimum Adjustment".
++export async function getFirmMinimumPct(isLease: boolean): Promise<number | null> {
++  const { data: rules } = await supabase
++    .from('commission_rules')
++    .select('rule_key, rule_name, minimum_percent, is_active')
++    .eq('is_active', true)
++    .not('minimum_percent', 'is', null)
++  if (!rules || rules.length === 0) return null
++  const want = isLease ? 'lease' : 'sale'
++  const match = rules.find((r: any) =>
++    String(r.rule_key || '').toLowerCase().includes(want) ||
++    String(r.rule_name || '').toLowerCase().includes(want)
++  ) || (rules.length === 1 ? rules[0] : null)
++  const pct = match ? parseFloat(String(match.minimum_percent)) : NaN
++  return Number.isFinite(pct) && pct > 0 ? pct : null
++}
++
+ export async function computeCommissionBreakdown(args: {
+   agentId: string
+   transactionId: string
+@@ -61,6 +84,7 @@ export async function computeCommissionBreakdown(args: {
+       id, commission_plan, lease_commission_plan,
+       referring_agent_id, revenue_share_percentage,
+       waive_buyer_processing_fees, waive_seller_processing_fees,
++      half_buyer_processing_fees, half_seller_processing_fees,
+       waive_coaching_fee
+     `)
+     .eq('id', agentId)
+@@ -100,7 +124,7 @@ export async function computeCommissionBreakdown(args: {
+   // since ended. See resolveGoverningTeamAgreement.
+   const { data: txnDates } = await supabase
+     .from('transactions')
+-    .select('acceptance_date, move_in_date, closing_date')
++    .select('acceptance_date, move_in_date, closing_date, sales_price, monthly_rent, listing_side_commission, buying_side_commission')
+     .eq('id', transactionId)
+     .maybeSingle()
+   const governingDate =
+@@ -189,18 +213,42 @@ export async function computeCommissionBreakdown(args: {
+   // "buyer side" of a lease for waiver purposes.
+   let processingFee = num(pft?.processing_fee)
+   const tt = (transactionType || '').toLowerCase()
+-  if (
+-    (tt.includes('buyer') || tt.includes('tenant')) &&
+-    agent.waive_buyer_processing_fees
+-  ) processingFee = 0
+-  if (
+-    (tt.includes('seller') || tt.includes('listing') || tt.includes('landlord')) &&
+-    agent.waive_seller_processing_fees
+-  ) processingFee = 0
++  const feeIsBuyerSide = tt.includes('buyer') || tt.includes('tenant')
++  const feeIsSellerSide = tt.includes('seller') || tt.includes('listing') || tt.includes('landlord')
++  // Per side: Waive wins over Half Off; Half Off halves the standard fee.
++  if (feeIsBuyerSide && agent.waive_buyer_processing_fees) processingFee = 0
++  else if (feeIsBuyerSide && (agent as any).half_buyer_processing_fees) processingFee = Math.round(processingFee * 50) / 100
++  if (feeIsSellerSide && agent.waive_seller_processing_fees) processingFee = 0
++  else if (feeIsSellerSide && (agent as any).half_seller_processing_fees) processingFee = Math.round(processingFee * 50) / 100
+ 
+   // Amounts - all percentages apply to the commission_amount (basis).
+-  const agentGross = commissionAmount * (agentSplitPct / 100)
+-  const brokerageSplit = commissionAmount * (firmSplitPct / 100)
++  let agentGross = commissionAmount * (agentSplitPct / 100)
++  let brokerageSplit = commissionAmount * (firmSplitPct / 100)
++  // Firm Minimum Adjustment. Pool = the side commission (includes additional
++  // compensation); referral carve-outs do NOT change the pool used for the
++  // minimum test. Teams are NOT exempt.
++  let firmMinimumAdjustment = 0
++  let firmMinimumPctApplied: number | null = null
++  const firmMinPct = await getFirmMinimumPct(isLease)
++  if (firmMinPct) {
++    const ttMin = (transactionType || '').toLowerCase()
++    const minIsBuySide = ttMin.includes('buyer') || ttMin.includes('tenant')
++    const minPool = num(
++      minIsBuySide ? (txnDates as any)?.buying_side_commission : (txnDates as any)?.listing_side_commission
++    ) || commissionAmount
++    const minPriceBasis = isLease ? num((txnDates as any)?.monthly_rent) : num((txnDates as any)?.sales_price)
++    const minBasis = Math.round(minPriceBasis * firmMinPct) / 100
++    if (minPriceBasis > 0 && minPool > 0 && minPool < minBasis) {
++      const firmAtMin = Math.round(minBasis * firmSplitPct) / 100
++      const adj = Math.round((firmAtMin - brokerageSplit) * 100) / 100
++      if (adj > 0) {
++        brokerageSplit = firmAtMin
++        agentGross = Math.round((agentGross - adj) * 100) / 100
++        firmMinimumAdjustment = adj
++        firmMinimumPctApplied = firmMinPct
++      }
++    }
++  }
+   // Team lead payout is ONLY non-zero when the agent is on a team with a split
+   const teamLeadPayout = onTeamWithSplit
+     ? commissionAmount * (teamLeadPct / 100)
+@@ -253,6 +301,8 @@ export async function computeCommissionBreakdown(args: {
+     primaryAgentNet,
+     primary1099,
+     onTeamWithSplit,
++    firmMinimumAdjustment,
++    firmMinimumPctApplied,
+   }
+ }
+ 

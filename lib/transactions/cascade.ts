@@ -26,6 +26,29 @@ export function num(v: any): number {
 // team_lead_commission on the primary's TIA row is informational tracking only
 // and is NOT deducted from agent_net or amount_1099_reportable - the team
 // lead's cut has already been carved out of agent_gross at the team-split step.
+// ── Firm Minimum ─────────────────────────────────────────────────────────────
+// Settings → commission rules can define minimum_percent: the minimum
+// commission (% of sales price for sales, % of rent for leases). When a
+// deal's commission pool (the side commission, which already includes
+// additional compensation) is below that minimum, CRC's split is calculated
+// as if the minimum had been met and the shortfall comes out of the agent's
+// share. Statements label this the "Firm Minimum Adjustment".
+export async function getFirmMinimumPct(isLease: boolean): Promise<number | null> {
+  const { data: rules } = await supabase
+    .from('commission_rules')
+    .select('rule_key, rule_name, minimum_percent, is_active')
+    .eq('is_active', true)
+    .not('minimum_percent', 'is', null)
+  if (!rules || rules.length === 0) return null
+  const want = isLease ? 'lease' : 'sale'
+  const match = rules.find((r: any) =>
+    String(r.rule_key || '').toLowerCase().includes(want) ||
+    String(r.rule_name || '').toLowerCase().includes(want)
+  ) || (rules.length === 1 ? rules[0] : null)
+  const pct = match ? parseFloat(String(match.minimum_percent)) : NaN
+  return Number.isFinite(pct) && pct > 0 ? pct : null
+}
+
 export async function computeCommissionBreakdown(args: {
   agentId: string
   transactionId: string
@@ -61,6 +84,7 @@ export async function computeCommissionBreakdown(args: {
       id, commission_plan, lease_commission_plan,
       referring_agent_id, revenue_share_percentage,
       waive_buyer_processing_fees, waive_seller_processing_fees,
+      half_buyer_processing_fees, half_seller_processing_fees,
       waive_coaching_fee
     `)
     .eq('id', agentId)
@@ -100,7 +124,7 @@ export async function computeCommissionBreakdown(args: {
   // since ended. See resolveGoverningTeamAgreement.
   const { data: txnDates } = await supabase
     .from('transactions')
-    .select('acceptance_date, move_in_date, closing_date')
+    .select('acceptance_date, move_in_date, closing_date, sales_price, monthly_rent, listing_side_commission, buying_side_commission')
     .eq('id', transactionId)
     .maybeSingle()
   const governingDate =
@@ -189,18 +213,42 @@ export async function computeCommissionBreakdown(args: {
   // "buyer side" of a lease for waiver purposes.
   let processingFee = num(pft?.processing_fee)
   const tt = (transactionType || '').toLowerCase()
-  if (
-    (tt.includes('buyer') || tt.includes('tenant')) &&
-    agent.waive_buyer_processing_fees
-  ) processingFee = 0
-  if (
-    (tt.includes('seller') || tt.includes('listing') || tt.includes('landlord')) &&
-    agent.waive_seller_processing_fees
-  ) processingFee = 0
+  const feeIsBuyerSide = tt.includes('buyer') || tt.includes('tenant')
+  const feeIsSellerSide = tt.includes('seller') || tt.includes('listing') || tt.includes('landlord')
+  // Per side: Waive wins over Half Off; Half Off halves the standard fee.
+  if (feeIsBuyerSide && agent.waive_buyer_processing_fees) processingFee = 0
+  else if (feeIsBuyerSide && (agent as any).half_buyer_processing_fees) processingFee = Math.round(processingFee * 50) / 100
+  if (feeIsSellerSide && agent.waive_seller_processing_fees) processingFee = 0
+  else if (feeIsSellerSide && (agent as any).half_seller_processing_fees) processingFee = Math.round(processingFee * 50) / 100
 
   // Amounts - all percentages apply to the commission_amount (basis).
-  const agentGross = commissionAmount * (agentSplitPct / 100)
-  const brokerageSplit = commissionAmount * (firmSplitPct / 100)
+  let agentGross = commissionAmount * (agentSplitPct / 100)
+  let brokerageSplit = commissionAmount * (firmSplitPct / 100)
+  // Firm Minimum Adjustment. Pool = the side commission (includes additional
+  // compensation); referral carve-outs do NOT change the pool used for the
+  // minimum test. Teams are NOT exempt.
+  let firmMinimumAdjustment = 0
+  let firmMinimumPctApplied: number | null = null
+  const firmMinPct = await getFirmMinimumPct(isLease)
+  if (firmMinPct) {
+    const ttMin = (transactionType || '').toLowerCase()
+    const minIsBuySide = ttMin.includes('buyer') || ttMin.includes('tenant')
+    const minPool = num(
+      minIsBuySide ? (txnDates as any)?.buying_side_commission : (txnDates as any)?.listing_side_commission
+    ) || commissionAmount
+    const minPriceBasis = isLease ? num((txnDates as any)?.monthly_rent) : num((txnDates as any)?.sales_price)
+    const minBasis = Math.round(minPriceBasis * firmMinPct) / 100
+    if (minPriceBasis > 0 && minPool > 0 && minPool < minBasis) {
+      const firmAtMin = Math.round(minBasis * firmSplitPct) / 100
+      const adj = Math.round((firmAtMin - brokerageSplit) * 100) / 100
+      if (adj > 0) {
+        brokerageSplit = firmAtMin
+        agentGross = Math.round((agentGross - adj) * 100) / 100
+        firmMinimumAdjustment = adj
+        firmMinimumPctApplied = firmMinPct
+      }
+    }
+  }
   // Team lead payout is ONLY non-zero when the agent is on a team with a split
   const teamLeadPayout = onTeamWithSplit
     ? commissionAmount * (teamLeadPct / 100)
@@ -253,6 +301,8 @@ export async function computeCommissionBreakdown(args: {
     primaryAgentNet,
     primary1099,
     onTeamWithSplit,
+    firmMinimumAdjustment,
+    firmMinimumPctApplied,
   }
 }
 

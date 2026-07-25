@@ -27,8 +27,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               division, revenue_share, revenue_share_percentage, referring_agent,
               referring_agent_id, referred_agents,
               qualifying_transaction_count, qualifying_transaction_target,
-              waive_buyer_processing_fees,
-              waive_seller_processing_fees, waive_coaching_fee,
+              waive_buyer_processing_fees, half_buyer_processing_fees,
+              half_seller_processing_fees, waive_seller_processing_fees, waive_coaching_fee,
               cap_amount_override, post_cap_split_override,
               special_commission_notes, headshot_url
             )

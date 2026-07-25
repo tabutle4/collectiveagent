@@ -288,6 +288,39 @@ export async function POST(request: NextRequest) {
         const isLease = rep === 'referred_out' && !formFields.referred_client_type
           ? txn.transaction_type === 'lease'
           : complianceIsLease({ representing: rep, referred_client_type: formFields.referred_client_type })
+        // The agent must have confirmed the on-screen commission summary.
+        if (body.commission_confirmed !== true) {
+          return NextResponse.json({ error: 'Please confirm the commission calculation in the Commission Summary box before submitting.' }, { status: 400 })
+        }
+        // Same commission derivation as a first submission, from this
+        // branch's formFields: base = computed gross, side = base + additional
+        // compensation, on the side the agent represents.
+        const addlSub = Array.isArray(formFields.additional_compensation)
+          ? formFields.additional_compensation.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
+          : 0
+        const computedGrossSub = computeGrossFromRate(formFields.commission_basis_price, formFields.commission_rate, formFields.commission_rate_type)
+        const repLowerSub = String(rep || '').toLowerCase()
+        const sideCommissionFieldsSub: Record<string, any> =
+          computedGrossSub == null ? {} :
+          (repLowerSub.includes('seller') || repLowerSub.includes('landlord')) ? {
+            listing_base_commission: computedGrossSub,
+            listing_side_commission: Math.round((computedGrossSub + addlSub) * 100) / 100,
+          } :
+          (repLowerSub.includes('buyer') || repLowerSub.includes('tenant')) ? {
+            buying_base_commission: computedGrossSub,
+            buying_side_commission: Math.round((computedGrossSub + addlSub) * 100) / 100,
+          } : {}
+        // %/$ resolution - same policy as a first submission: BTSA and rebate
+        // percent of the SALES PRICE (basis), referral fees percent of gross.
+        const basisPriceSub = parseFloat(String(formFields.commission_basis_price ?? '').replace(/[^0-9.]/g, '')) || 0
+        const volumeSub = parseFloat(String(formFields.total_sales_rent_price ?? '').replace(/[^0-9.]/g, '')) || 0
+        const resolveSub = (v: any, t: any, base: number) => {
+          const n = parseFloat(String(v ?? '').replace(/[^0-9.]/g, '')) || 0
+          return String(t || 'flat') === 'percent' ? Math.round(base * n) / 100 : n
+        }
+        const btsaSub = resolveSub(formFields.bonus_btsa_amount, formFields.bonus_btsa_amount_type, basisPriceSub)
+        const rebateSub = resolveSub(formFields.rebate_amount, formFields.rebate_amount_type, basisPriceSub)
+        const grossFeeBaseSub = computedGrossSub ?? 0
         const fieldMap: Record<string, any> = {
           representing:          formFields.representing || null,
           tenant_transaction_type: formFields.tenant_transaction_type || null,
@@ -296,27 +329,37 @@ export async function POST(request: NextRequest) {
           move_in_date:          isLease ? formFields.closing_or_movein_date || null : null,
           acceptance_date:       formFields.acceptance_date || null,
           loan_type:             formFields.loan_type || null,
-          sales_price:           formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
-          monthly_rent:          isLease && formFields.total_sales_rent_price ? parseFloat(formFields.total_sales_rent_price) : null,
-          gross_commission:      computeGrossFromRate(formFields.commission_basis_price, formFields.commission_rate, formFields.commission_rate_type),
-          bonus_amount:          formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
-          has_btsa:              !!(formFields.bonus_btsa_amount && parseFloat(formFields.bonus_btsa_amount) > 0),
-          btsa_amount:           formFields.bonus_btsa_amount ? parseFloat(formFields.bonus_btsa_amount) : 0,
-          rebate_amount:         formFields.rebate_amount ? parseFloat(formFields.rebate_amount) : 0,
+          // Corrected semantics: commission basis price IS the sales price
+          // (or rent); the total is the reported production VOLUME.
+          sales_price:           basisPriceSub > 0 ? basisPriceSub : null,
+          monthly_rent:          isLease && basisPriceSub > 0 ? basisPriceSub : null,
+          sales_volume:          volumeSub > 0 ? volumeSub : null,
+          gross_commission:      computedGrossSub,
+          bonus_amount:          btsaSub,
+          has_btsa:              btsaSub > 0,
+          btsa_amount:           btsaSub,
+          rebate_amount:         rebateSub,
           internal_referral:     formFields.internal_referral || false,
-          internal_referral_fee: formFields.internal_referral_fee ? parseFloat(formFields.internal_referral_fee) : 0,
+          internal_referral_fee: formFields.internal_referral ? resolveSub(formFields.internal_referral_fee, formFields.internal_referral_fee_type, grossFeeBaseSub) : 0,
+          internal_referral_fee_type: formFields.internal_referral_fee_type || 'flat',
           external_referral:     formFields.external_referral || false,
-          external_referral_fee: formFields.external_referral_fee ? parseFloat(formFields.external_referral_fee) : 0,
+          external_referral_fee: formFields.external_referral ? resolveSub(formFields.external_referral_fee, formFields.external_referral_fee_type, grossFeeBaseSub) : 0,
+          external_referral_fee_type: formFields.external_referral_fee_type || 'flat',
           brokerage_referral:    formFields.brokerage_referral || false,
-          brokerage_referral_fee: formFields.brokerage_referral_fee ? parseFloat(formFields.brokerage_referral_fee) : 0,
+          brokerage_referral_fee: formFields.brokerage_referral ? resolveSub(formFields.brokerage_referral_fee, formFields.brokerage_referral_fee_type, grossFeeBaseSub) : 0,
+          brokerage_referral_fee_type: formFields.brokerage_referral_fee_type || 'flat',
+          has_ecommission:       !!formFields.has_ecommission,
+          ecommission_amount:    formFields.has_ecommission ? (parseFloat(String(formFields.ecommission_amount ?? 0)) || 0) : null,
         }
         // Keys that map from form field name to transaction column name
         const formToColumn: Record<string, string> = {
           lease_term_months:        'lease_term',
           closing_or_movein_date:   isLease ? 'move_in_date' : 'closing_date',
-          total_sales_rent_price:   isLease ? 'monthly_rent' : 'sales_price',
-          commission_basis_price:   'gross_commission',
+          total_sales_rent_price:   'sales_volume',
+          commission_basis_price:   isLease ? 'monthly_rent' : 'sales_price',
           bonus_btsa_amount:        'bonus_amount',
+          has_ecommission:          'has_ecommission',
+          ecommission_amount:       'ecommission_amount',
         }
         // Build partial update: only include columns whose form field changed
         const partialUpdate: Record<string, any> = {
@@ -338,13 +381,55 @@ export async function POST(request: NextRequest) {
             partialUpdate.closing_date = fieldMap.closing_date
             partialUpdate.move_in_date = fieldMap.move_in_date
           }
-          // monthly_rent and sales_price are paired
-          if (changedKey === 'total_sales_rent_price') {
+          // basis price drives BOTH price columns (sale vs lease semantics)
+          if (changedKey === 'commission_basis_price') {
             partialUpdate.sales_price = fieldMap.sales_price
             partialUpdate.monthly_rent = fieldMap.monthly_rent
           }
+          // fee type changes re-resolve their dollar columns
+          if (changedKey === 'internal_referral_fee_type' || changedKey === 'internal_referral_fee') {
+            partialUpdate.internal_referral_fee = fieldMap.internal_referral_fee
+            partialUpdate.internal_referral_fee_type = fieldMap.internal_referral_fee_type
+          }
+          if (changedKey === 'external_referral_fee_type' || changedKey === 'external_referral_fee') {
+            partialUpdate.external_referral_fee = fieldMap.external_referral_fee
+            partialUpdate.external_referral_fee_type = fieldMap.external_referral_fee_type
+          }
+          if (changedKey === 'brokerage_referral_fee_type' || changedKey === 'brokerage_referral_fee') {
+            partialUpdate.brokerage_referral_fee = fieldMap.brokerage_referral_fee
+            partialUpdate.brokerage_referral_fee_type = fieldMap.brokerage_referral_fee_type
+          }
+          if (changedKey === 'rebate_amount_type') {
+            partialUpdate.rebate_amount = fieldMap.rebate_amount
+          }
+          if (changedKey === 'bonus_btsa_amount_type') {
+            partialUpdate.bonus_amount = fieldMap.bonus_amount
+            partialUpdate.has_btsa = fieldMap.has_btsa
+            partialUpdate.btsa_amount = fieldMap.btsa_amount
+          }
+          // Commission inputs drive gross + base + side commissions together
+          if (['commission_basis_price', 'commission_rate', 'commission_rate_type', 'additional_compensation'].includes(changedKey)) {
+            partialUpdate.gross_commission = fieldMap.gross_commission
+            Object.assign(partialUpdate, sideCommissionFieldsSub)
+          }
         }
         await supabaseAdmin.from('transactions').update(partialUpdate).eq('id', txn.id)
+        // BTSA and rebate live on the agent's commission row - the payout math
+        // reads them there, not from the transaction columns. Never touch a
+        // row that has already been paid.
+        if (changedFields.includes('bonus_btsa_amount') || changedFields.includes('rebate_amount')) {
+          await supabaseAdmin
+            .from('transaction_internal_agents')
+            .update({
+              ...(changedFields.includes('bonus_btsa_amount') || changedFields.includes('bonus_btsa_amount_type') ? { btsa_amount: btsaSub } : {}),
+              ...(changedFields.includes('rebate_amount') || changedFields.includes('rebate_amount_type') ? { rebate_amount: rebateSub } : {}),
+              updated_at: now,
+            })
+            .eq('transaction_id', txn.id)
+            .eq('agent_id', agentId)
+            .eq('agent_role', 'primary_agent')
+            .neq('payment_status', 'paid')
+        }
         // Commission inputs may have changed - re-run the cascade so tia rows
         // and TL/momentum payouts stay in sync with the resubmitted values.
         await autoCascadeTransaction(txn.id)
@@ -389,6 +474,106 @@ export async function POST(request: NextRequest) {
     // rent was never written. The flyer logic below already handled this; the
     // data did not.
     const isLease = complianceIsLease({ representing, referred_client_type })
+
+    // Server-side gate: the agent must have confirmed the on-screen commission
+    // summary before we accept the submission (retainer mode has no commission).
+    if (body.commission_confirmed !== true) {
+      return NextResponse.json({ error: 'Please confirm the commission calculation in the Commission Summary box before submitting.' }, { status: 400 })
+    }
+
+    // Where the commission lands on the deal. Base = computed gross; the side
+    // total also includes additional compensation (same convention as the
+    // additional-income route). Seller/landlord deals fill the listing side,
+    // buyer/tenant deals fill the buying side, so the Overview tab and the
+    // office-net math finally see the money without a manual office step.
+    const additionalCompTotal = Array.isArray(additional_compensation)
+      ? additional_compensation.reduce((s: number, c: any) => s + (parseFloat(String(c?.amount ?? 0)) || 0), 0)
+      : 0
+    const computedGross = computeGrossFromRate(commission_basis_price, commission_rate, commission_rate_type)
+    const repLower = String(representing || '').toLowerCase()
+    const sideCommissionFields: Record<string, any> =
+      computedGross == null ? {} :
+      (repLower.includes('seller') || repLower.includes('landlord')) ? {
+        listing_base_commission: computedGross,
+        listing_side_commission: Math.round((computedGross + additionalCompTotal) * 100) / 100,
+      } :
+      (repLower.includes('buyer') || repLower.includes('tenant')) ? {
+        buying_base_commission: computedGross,
+        buying_side_commission: Math.round((computedGross + additionalCompTotal) * 100) / 100,
+      } : {}
+    const tiaSideFromRep =
+      repLower.includes('landlord') ? 'landlord'
+      : repLower.includes('seller') ? 'seller'
+      : repLower.includes('tenant') ? 'tenant'
+      : repLower.includes('buyer') ? 'buyer'
+      : null
+    // %/$ resolution. Percent bases per office policy: BTSA and rebate are a
+    // percent of the SALES PRICE (the commission basis price); referral fees
+    // are a percent of the computed gross commission.
+    const basisPriceNum = parseFloat(String(commission_basis_price ?? '').replace(/[^0-9.]/g, '')) || 0
+    const volumeNum = parseFloat(String(total_sales_rent_price ?? '').replace(/[^0-9.]/g, '')) || 0
+    const resolveAmt = (v: any, t: any, base: number) => {
+      const n = parseFloat(String(v ?? '').replace(/[^0-9.]/g, '')) || 0
+      return String(t || 'flat') === 'percent' ? Math.round(base * n) / 100 : n
+    }
+    const btsaNum = resolveAmt(bonus_btsa_amount, (body as any).bonus_btsa_amount_type, basisPriceNum)
+    const rebateNum = resolveAmt(rebate_amount, (body as any).rebate_amount_type, basisPriceNum)
+    const grossForFees = computedGross ?? 0
+    const internalFeeNum = internal_referral ? resolveAmt(internal_referral_fee, (body as any).internal_referral_fee_type, grossForFees) : 0
+    const externalFeeNum = external_referral ? resolveAmt(external_referral_fee, (body as any).external_referral_fee_type, grossForFees) : 0
+    const brokerageFeeNum = brokerage_referral ? resolveAmt(brokerage_referral_fee, (body as any).brokerage_referral_fee_type, grossForFees) : 0
+    const ecommissionNum = (body as any).has_ecommission ? (parseFloat(String((body as any).ecommission_amount ?? 0)) || 0) : 0
+
+    // Auto-create money records the office used to add by hand. Both are
+    // guarded so a resubmission can never create duplicates.
+    const createEcommissionDebtAndTeb = async (txnId: string) => {
+      if (ecommissionNum > 0) {
+        const tag = `auto:compliance-ecommission:${txnId}`
+        const { data: existingDebt } = await supabaseAdmin
+          .from('agent_debts')
+          .select('id')
+          .eq('agent_id', agentId)
+          .ilike('notes', `%${tag}%`)
+          .limit(1)
+          .maybeSingle()
+        if (!existingDebt) {
+          await supabaseAdmin.from('agent_debts').insert({
+            agent_id: agentId,
+            debt_type: 'custom_invoice',
+            description: `eCommission Repayment - ${resolvedAddress || 'compliance submission'}`,
+            amount_owed: ecommissionNum,
+            amount_paid: 0,
+            date_incurred: now.slice(0, 10),
+            status: 'outstanding',
+            record_type: 'debt',
+            notes: `Reported by agent on the compliance form. ${tag}`,
+          })
+        }
+      }
+      const tebName = String((body as any).external_referral_brokerage_name || '').trim()
+      if (external_referral && externalFeeNum > 0 && tebName) {
+        const { data: existingTeb } = await supabaseAdmin
+          .from('transaction_external_brokerages')
+          .select('id')
+          .eq('transaction_id', txnId)
+          .eq('brokerage_role', 'referral')
+          .ilike('brokerage_name', tebName)
+          .limit(1)
+          .maybeSingle()
+        if (!existingTeb) {
+          await supabaseAdmin.from('transaction_external_brokerages').insert({
+            transaction_id: txnId,
+            brokerage_role: 'referral',
+            brokerage_name: tebName,
+            commission_amount: externalFeeNum,
+            amount_1099_reportable: externalFeeNum,
+            payment_status: 'pending',
+            side: tiaSideFromRep,
+            notes: 'Auto-created from the agent compliance form. Office: complete W-9 / EIN / address at review.',
+          })
+        }
+      }
+    }
     // Same rule as isLease above, so the flyer and the data can never disagree.
     const flyerIsLease = isLease
     const flyerType = flyerIsLease ? 'just_leased' : 'just_sold'
@@ -488,16 +673,23 @@ export async function POST(request: NextRequest) {
       acceptance_date: acceptance_date || null,
       mls_link: mls_link || null, client_name: client_name ? formatNameToTitleCase(String(client_name).trim()) : null, client_email: client_email || null,
       lead_source: lead_source || null, loan_type: loan_type || null,
-      sales_price: total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
-      monthly_rent: isLease && total_sales_rent_price ? parseFloat(total_sales_rent_price) : null,
-      gross_commission: computeGrossFromRate(commission_basis_price, commission_rate, commission_rate_type),
-      bonus_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,
-      has_btsa: !!(bonus_btsa_amount && parseFloat(bonus_btsa_amount) > 0),
-      btsa_amount: bonus_btsa_amount ? parseFloat(bonus_btsa_amount) : 0,
-      rebate_amount: rebate_amount ? parseFloat(rebate_amount) : 0,
-      internal_referral: internal_referral || false, internal_referral_fee: internal_referral_fee ? parseFloat(internal_referral_fee) : 0,
-      external_referral: external_referral || false, external_referral_fee: external_referral_fee ? parseFloat(external_referral_fee) : 0,
-      brokerage_referral: brokerage_referral || false, brokerage_referral_fee: brokerage_referral_fee ? parseFloat(brokerage_referral_fee) : 0,
+      sales_price: basisPriceNum > 0 ? basisPriceNum : null,
+      monthly_rent: isLease && basisPriceNum > 0 ? basisPriceNum : null,
+      sales_volume: volumeNum > 0 ? volumeNum : null,
+      gross_commission: computedGross,
+      ...sideCommissionFields,
+      bonus_amount: btsaNum,
+      has_btsa: btsaNum > 0,
+      btsa_amount: btsaNum,
+      rebate_amount: rebateNum,
+      has_ecommission: ecommissionNum > 0,
+      ecommission_amount: ecommissionNum > 0 ? ecommissionNum : null,
+      internal_referral_fee_type: (body as any).internal_referral_fee_type || 'flat',
+      external_referral_fee_type: (body as any).external_referral_fee_type || 'flat',
+      brokerage_referral_fee_type: (body as any).brokerage_referral_fee_type || 'flat',
+      internal_referral: internal_referral || false, internal_referral_fee: internalFeeNum,
+      external_referral: external_referral || false, external_referral_fee: externalFeeNum,
+      brokerage_referral: brokerage_referral || false, brokerage_referral_fee: brokerageFeeNum,
       title_officer_name: title_officer_name ? formatNameToTitleCase(String(title_officer_name).trim()) : null,
       title_company: title_company ? toTitleCase(String(title_company).trim()) : null,
       title_company_email: title_company_email || null, flyer_division: flyerDisplayLine,
@@ -521,10 +713,11 @@ export async function POST(request: NextRequest) {
         .select('id').single()
       if (createErr || !newTxn) { console.error('Failed to create transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
       transactionId = newTxn.id
-      await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', updated_at: now })
+      await supabaseAdmin.from('transaction_internal_agents').insert({ transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', side: tiaSideFromRep, btsa_amount: btsaNum, rebate_amount: rebateNum, sales_volume: volumeNum > 0 ? volumeNum : null, units: 1, lead_source: lead_source || 'own', updated_at: now })
       // New deal from a compliance submission: cascade immediately so the
       // commission tab is populated without waiting for a manual Recalculate.
       await autoCascadeTransaction(transactionId)
+      await createEcommissionDebtAndTeb(transactionId)
     } else {
       transactionId = txn.id
       if (txn.is_locked) {
@@ -554,11 +747,29 @@ export async function POST(request: NextRequest) {
           }
         : {}
       await supabaseAdmin.from('transactions').update({ ...txnFields, ...attachFields }).eq('id', transactionId)
+      // BTSA and rebate live on the agent's commission row - the payout math
+      // reads them there. Never touch a row that has already been paid.
+      await supabaseAdmin
+        .from('transaction_internal_agents')
+        .update({ btsa_amount: btsaNum, rebate_amount: rebateNum, updated_at: now })
+        .eq('transaction_id', transactionId)
+        .eq('agent_id', agentId)
+        .eq('agent_role', 'primary_agent')
+        .neq('payment_status', 'paid')
       // Attaching a compliance submission to an existing deal: make sure the
       // submitting agent has a primary tia row (NULL commission fields until
       // a basis exists), then cascade with the freshly written inputs.
       await ensurePrimaryTia(transactionId, agentId)
+      // Keep the agent row's volume/units/lead source current on attach too.
+      await supabaseAdmin
+        .from('transaction_internal_agents')
+        .update({ sales_volume: volumeNum > 0 ? volumeNum : null, units: 1, lead_source: lead_source || 'own', side: tiaSideFromRep, updated_at: now })
+        .eq('transaction_id', transactionId)
+        .eq('agent_id', agentId)
+        .eq('agent_role', 'primary_agent')
+        .neq('payment_status', 'paid')
       await autoCascadeTransaction(transactionId)
+      await createEcommissionDebtAndTeb(transactionId)
     }
 
     // ── Contacts: upsert client + title for both new and existing transactions ─

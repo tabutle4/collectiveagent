@@ -340,6 +340,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
       monthly_fee_waived: freshUser?.monthly_fee_waived ?? false,
       waive_buyer_processing_fees: freshUser?.waive_buyer_processing_fees ?? false,
       waive_seller_processing_fees: freshUser?.waive_seller_processing_fees ?? false,
+      half_buyer_processing_fees: freshUser?.half_buyer_processing_fees ?? false,
+      half_seller_processing_fees: freshUser?.half_seller_processing_fees ?? false,
       roles: freshUser?.roles || [],
       role: freshUser?.role || '',
       full_nav_access: freshUser?.full_nav_access ?? false,
@@ -592,6 +594,8 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           monthly_fee_waived: !!formData.monthly_fee_waived,
           waive_buyer_processing_fees: !!formData.waive_buyer_processing_fees,
           waive_seller_processing_fees: !!formData.waive_seller_processing_fees,
+          half_buyer_processing_fees: !!formData.half_buyer_processing_fees,
+          half_seller_processing_fees: !!formData.half_seller_processing_fees,
           office: toNullableString(formData.office),
           division: toNullableString(formData.division),
           status: toNullableString(formData.status),
@@ -1310,6 +1314,23 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
                     />
                     <span className="text-sm">Waive Seller Processing Fees</span>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.half_buyer_processing_fees}
+                      onChange={e => handleInputChange('half_buyer_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Half Off Buyer Processing Fees</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.half_seller_processing_fees}
+                      onChange={e => handleInputChange('half_seller_processing_fees', e.target.checked)}
+                    />
+                    <span className="text-sm">Half Off Seller Processing Fees</span>
+                  </div>
+                  <p className="text-xs text-luxury-gray-3">If Waive and Half Off are both checked for a side, Waive wins.</p>
                 </div>
               </div>
             </div>
