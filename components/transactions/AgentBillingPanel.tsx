@@ -574,6 +574,7 @@ interface AddFormState {
 
 const DEBT_TYPES = [
   { value: 'custom_invoice',     label: 'Custom Invoice' },
+  { value: 'ecommission',        label: 'eCommission' },
   { value: 'brokerage_credit',   label: 'Brokerage Credit' },
   { value: 'brokermint_balance', label: 'Brokermint Balance' },
 ]

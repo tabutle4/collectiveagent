@@ -3084,6 +3084,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
           if (!txnIsLease) {
             const isNewAgentPlan =
+              plan === '70_30_new' ||
               plan === 'new_agent' ||
               plan === 'new agent plan' ||
               (plan.includes('new') && plan.includes('agent'))
@@ -3236,6 +3237,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           if (agentUser) {
             const plan = (agentUser.commission_plan || '').toLowerCase().trim()
             const isNewAgentPlan =
+              plan === '70_30_new' ||
               plan === 'new_agent' ||
               plan === 'new agent plan' ||
               (plan.includes('new') && plan.includes('agent'))

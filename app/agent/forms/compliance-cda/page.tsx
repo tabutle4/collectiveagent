@@ -384,8 +384,8 @@ export default function ComplianceCdaForm() {
             {previewInfo.new_agent_deals != null && sumRow(
               'New Agent Plan progress',
               previewInfo.new_agent_deals >= (previewInfo.new_agent_required || 5)
-                ? `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} deals - time to pick Cap or No Cap`
-                : `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} deals`
+                ? `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} qualifying sales - time to pick Cap or No Cap`
+                : `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} qualifying sales (leases do not count)`
             )}
           </div>
         )}

@@ -179,6 +179,9 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   }
   if (model.officeNet > 0) payeeRow(model.officeLineLabel, model.agencyName, money(model.officeNet))
   if (model.agentNetPay > 0) payeeRow(`${model.listingSide > 0 ? 'Listing' : 'Buying'} agent commission`, model.agentName, money(model.agentNetPay))
+  for (const p of model.externalPayees || []) {
+    payeeRow('External payout', p.name, money(p.amount))
+  }
   if (model.rebateAmount > 0 && model.rebateLabel) {
     const rebatePayee = model.rebateLabel.includes('Buyer')
       ? (model.buyerContact?.name || '--')

@@ -14,14 +14,16 @@
 import { createClient } from '@supabase/supabase-js'
 import fs from 'node:fs'
 
-// Load .env.local the way Next does, without adding a dependency.
-try {
-  const env = fs.readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
-  for (const line of env.split('\n')) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '')
-  }
-} catch { /* fine - env may come from the shell */ }
+// Load .env.local / .env the way Next does, without adding a dependency.
+for (const file of ['../.env.local', '../.env', '../.env.development.local']) {
+  try {
+    const env = fs.readFileSync(new URL(file, import.meta.url), 'utf8')
+    for (const line of env.split('\n')) {
+      const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '')
+    }
+  } catch { /* fine - env may come from the shell */ }
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -60,7 +62,7 @@ const planMatch = v => {
 }
 
 // ── 1. Plan values the payout engine cannot match ─────────────────────────
-const users = await all('users', 'id, first_name, last_name, is_active, role, commission_plan, lease_commission_plan')
+const users = await all('users', 'id, first_name, last_name, is_active, role, commission_plan, lease_commission_plan, qualifying_transaction_count, qualifying_transaction_target')
 const activeAgents = users.filter(u => u.is_active !== false)
 for (const u of activeAgents) {
   if (!planMatch(u.commission_plan)) {
@@ -134,17 +136,17 @@ if (noSide.length) {
   alert('missing-side', `${noSide.length} production commission rows have no side tag - office_net treats their side as pass-through income (txns: ${[...new Set(noSide.map(r => String(r.transaction_id).slice(0, 8)))].slice(0, 8).join(', ')}...)`)
 }
 
-// ── 7. New Agent Plan graduations due ──────────────────────────────────────
-const dealCount = new Map()
-for (const r of tias) {
-  if (['primary_agent', 'listing_agent'].includes(r.agent_role)) {
-    dealCount.set(r.agent_id, (dealCount.get(r.agent_id) || 0) + 1)
-  }
-}
+// ── 7. New Agent Plan graduations due. The official counter is
+//      users.qualifying_transaction_count - Mark Paid increments it for
+//      qualifying closed SALES only, and the office's "counts toward"
+//      checkbox can exclude a deal. That checkbox decision is final, so the
+//      stored counter is the truth, not a re-count of rows.
 for (const u of activeAgents) {
   const code = String(u.commission_plan || '').toLowerCase()
-  if ((code === '70_30_new' || code.includes('new agent')) && (dealCount.get(u.id) || 0) >= 5) {
-    info('graduations', `${u.first_name} ${u.last_name} has ${dealCount.get(u.id)} deals on the New Agent Plan - due to pick Cap or No Cap`)
+  const target = Number(u.qualifying_transaction_target ?? 5) || 5
+  const count = Number(u.qualifying_transaction_count ?? 0) || 0
+  if ((code === '70_30_new' || code.includes('new agent')) && count >= target) {
+    info('graduations', `${u.first_name} ${u.last_name} has ${count} of ${target} qualifying sales on the New Agent Plan - due to pick Cap or No Cap`)
   }
 }
 

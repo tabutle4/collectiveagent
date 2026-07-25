@@ -62,6 +62,10 @@ export interface CdaModel {
   priceForDisplay: number
   priceLabel: string
   salesPricePct: string | null
+  // External payouts (referral brokerages, eCommission repayments). These
+  // were always subtracted from officeNet; listing them as payee lines makes
+  // the CDA's payee table sum to the total gross commission.
+  externalPayees: { name: string; amount: number }[]
   extraRows: { side: string; label: string; amount: number }[]
   notes: string | null
   brokerageLines: string[]
@@ -187,11 +191,14 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const allAgentsDisburseTotal = producingRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
   const { data: externalBrokerages } = await supabaseAdmin
     .from('transaction_external_brokerages')
-    .select('amount_1099_reportable')
+    .select('brokerage_name, amount_1099_reportable')
     .eq('transaction_id', id)
   const externalTotal = (externalBrokerages || []).reduce(
     (s, e) => s + Number(e.amount_1099_reportable || 0), 0
   )
+  const externalPayees = (externalBrokerages || [])
+    .filter(e => Number(e.amount_1099_reportable || 0) > 0)
+    .map(e => ({ name: e.brokerage_name || 'External brokerage', amount: Number(e.amount_1099_reportable || 0) }))
   // Amounts withheld from agents on this deal (e.g. a monthly brokerage fee
   // recovered from the check). These reduce the agent's disbursement and are
   // kept by the brokerage, so they move from the agent line to the office
@@ -267,7 +274,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     agentName, agencyName, propertyAddr, role, logoUrl, generatedDate,
     listingSide, buyingSide, btsaTotal, officeGross, totalGrossCommission,
     officeNet, officeLineLabel, agentNetPay, rebateAmount, rebateLabel,
-    priceForDisplay, priceLabel, salesPricePct, extraRows, notes, brokerageLines,
+    priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
     titleContact, buyerContact, sellerContact, agent, txn, settings,
   }
 

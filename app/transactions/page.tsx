@@ -383,7 +383,7 @@ export default function TransactionsPage() {
             <div className="inner-card">
               <p className="text-xs text-luxury-gray-3 mb-1">New Agent Plan Progress</p>
               <p className="text-lg font-semibold text-luxury-gray-1">
-                {capInfo.new_agent_deals} of {capInfo.new_agent_required || 5} deals
+                {capInfo.new_agent_deals} of {capInfo.new_agent_required || 5} qualifying sales
               </p>
               {capInfo.new_agent_deals >= (capInfo.new_agent_required || 5) && (
                 <p className="text-xs text-luxury-gray-3">Time to pick Cap or No Cap</p>

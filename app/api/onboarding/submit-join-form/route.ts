@@ -49,7 +49,15 @@ export async function POST(request: NextRequest) {
         nrds_id: formData.nrds_id || null,
         association: formData.association,
         association_status_on_join: formData.association_status_on_join,
-        commission_plan: formData.commission_plan,
+        // Translate the join form's plan NAMES to canonical commission_plans
+        // codes. The payout engine matches by code or exact name; storing the
+        // code makes the value immune to a plan being renamed in Settings.
+        // Custom Plan strings ("Custom - 80/20 Cap") pass through untouched.
+        commission_plan:
+          formData.commission_plan === 'New Agent Plan' ? '70_30_new'
+          : formData.commission_plan === 'No Cap Plan' ? '85_15_no_cap'
+          : formData.commission_plan === 'Cap Plan' ? '70_30_cap'
+          : formData.commission_plan,
         instagram_handle: formData.instagram_handle || null,
         tiktok_handle: formData.tiktok_handle || null,
         threads_handle: formData.threads_handle || null,

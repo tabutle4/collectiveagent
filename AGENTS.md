@@ -33,6 +33,8 @@ paycheck for a real person.
    `users.lease_commission_plan` (default Lease Plan 85/15). Lease detection:
    `isLeaseTransactionType()` for transaction types,
    `complianceIsLease()` for form submissions. Never regex ad hoc.
+   New Agent Plan graduation = 5 CLOSED SALES, then the agent picks Cap or
+   No Cap. Leases never count toward the 5.
 5. **fetchAllRows for any table that can exceed 1000 rows** (transactions,
    transaction_internal_agents, checklist_completions, agent_form_submissions).
    A bare `.select()` silently truncates at 1000. fetchAllRows must keep its
@@ -40,11 +42,17 @@ paycheck for a real person.
 6. **Broker plan** (`broker_100`, `Custom Lease 0/100`, or any 0/100 split):
    the broker keeps nothing - BTSA goes to brokerage_split, eCommission
    advances repay from brokerage net (external record), never an agent invoice.
-7. **Referral fees from the compliance form come out of the agent's NET**
+7. **eCommission advances**: every deal reporting one gets an external payout
+   record (brokerage_name "eCommission (advance repayment)") so the money
+   routes to the eCommission company, never into brokerage net. Non-broker
+   plans ALSO get the matching agent debt with debt_type `ecommission`
+   (withheld at payout, funding the external record). The pair nets to zero
+   for CRC.
+8. **Referral fees from the compliance form come out of the agent's NET**
    (written to `other_fees` with the `[referral fees - compliance form]` tag).
    Office-entered carve-out referrals (agent_basis set on the referral row)
    are the legacy style - do not convert one into the other.
-8. **Firm minimum**: when a side's pool (commission + additional comp) is
+9. **Firm minimum**: when a side's pool (commission + additional comp) is
    below Settings' `minimum_percent` of price/rent, CRC's split is computed
    on the minimum basis and the shortfall comes out of the agent's share.
    The user-facing label is exactly "Firm Minimum Adjustment".

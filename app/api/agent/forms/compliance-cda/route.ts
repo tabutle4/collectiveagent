@@ -522,29 +522,33 @@ export async function POST(request: NextRequest) {
             (isLease && subAgentProfile?.lease_commission_plan) ? subAgentProfile.lease_commission_plan : (subAgentProfile?.commission_plan || '')
           )
           const isBrokerPlanSub = /broker/i.test(subPlanCode) || /^custom\s+lease\s+0\s*\/\s*100$/i.test(subPlanCode.trim())
-          if (isBrokerPlanSub) {
-            const { data: existingEcTebSub } = await supabaseAdmin
-              .from('transaction_external_brokerages')
-              .select('id')
-              .eq('transaction_id', txn.id)
-              .eq('brokerage_role', 'other')
-              .ilike('brokerage_name', 'eCommission%')
-              .limit(1)
-              .maybeSingle()
-            if (!existingEcTebSub) {
-              await supabaseAdmin.from('transaction_external_brokerages').insert({
-                transaction_id: txn.id,
-                brokerage_role: 'other',
-                brokerage_role_other: 'ecommission_repayment',
-                brokerage_name: 'eCommission (advance repayment)',
-                commission_amount: ecSubAmount,
-                amount_1099_reportable: ecSubAmount,
-                payment_status: 'pending',
-                side: sideFromRepSub,
-                notes: 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.',
-              })
-            }
-          } else {
+          // Same policy as a first submission: the external payout record is
+          // ALWAYS created (eCommission is owed their money either way); the
+          // agent-side repayment debt only exists off the broker plan.
+          const { data: existingEcTebSub } = await supabaseAdmin
+            .from('transaction_external_brokerages')
+            .select('id')
+            .eq('transaction_id', txn.id)
+            .eq('brokerage_role', 'other')
+            .ilike('brokerage_name', 'eCommission%')
+            .limit(1)
+            .maybeSingle()
+          if (!existingEcTebSub) {
+            await supabaseAdmin.from('transaction_external_brokerages').insert({
+              transaction_id: txn.id,
+              brokerage_role: 'other',
+              brokerage_role_other: 'ecommission_repayment',
+              brokerage_name: 'eCommission (advance repayment)',
+              commission_amount: ecSubAmount,
+              amount_1099_reportable: ecSubAmount,
+              payment_status: 'pending',
+              side: sideFromRepSub,
+              notes: isBrokerPlanSub
+                ? 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.'
+                : 'eCommission advance repayment. Collected from the agent payout (see the matching eCommission debt) and paid out here. Auto-created from the agent compliance form.',
+            })
+          }
+          if (!isBrokerPlanSub) {
             const tagSub = `auto:compliance-ecommission:${txn.id}`
             const { data: existingDebtSub } = await supabaseAdmin
               .from('agent_debts')
@@ -556,7 +560,7 @@ export async function POST(request: NextRequest) {
             if (!existingDebtSub) {
               await supabaseAdmin.from('agent_debts').insert({
                 agent_id: agentId,
-                debt_type: 'custom_invoice',
+                debt_type: 'ecommission',
                 description: `eCommission Repayment - ${txn.property_address || 'compliance submission'}`,
                 amount_owed: ecSubAmount,
                 amount_paid: 0,
@@ -747,10 +751,11 @@ export async function POST(request: NextRequest) {
     // Auto-create money records the office used to add by hand. Both are
     // guarded so a resubmission can never create duplicates.
     const createEcommissionDebtAndTeb = async (txnId: string) => {
-      if (ecommissionNum > 0 && isBrokerPlan) {
-        // Broker plan: the broker does not keep commission, so the advance
-        // is repaid from the brokerage net instead of billed to the agent.
-        // Recorded as an external payout so the office_net math subtracts it.
+      if (ecommissionNum > 0) {
+        // The advance is money owed to the eCommission COMPANY, so every
+        // eCommission deal gets an external payout record: it appears as a
+        // payee on the CDA and the office_net math subtracts it - CRC never
+        // counts pass-through repayment money as brokerage income.
         const { data: existingEcTeb } = await supabaseAdmin
           .from('transaction_external_brokerages')
           .select('id')
@@ -769,30 +774,37 @@ export async function POST(request: NextRequest) {
             amount_1099_reportable: ecommissionNum,
             payment_status: 'pending',
             side: tiaSideFromRep,
-            notes: 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.',
+            notes: isBrokerPlan
+              ? 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.'
+              : 'eCommission advance repayment. Collected from the agent payout (see the matching eCommission debt) and paid out here. Auto-created from the agent compliance form.',
           })
         }
-      } else if (ecommissionNum > 0) {
-        const tag = `auto:compliance-ecommission:${txnId}`
-        const { data: existingDebt } = await supabaseAdmin
-          .from('agent_debts')
-          .select('id')
-          .eq('agent_id', agentId)
-          .ilike('notes', `%${tag}%`)
-          .limit(1)
-          .maybeSingle()
-        if (!existingDebt) {
-          await supabaseAdmin.from('agent_debts').insert({
-            agent_id: agentId,
-            debt_type: 'custom_invoice',
-            description: `eCommission Repayment - ${resolvedAddress || 'compliance submission'}`,
-            amount_owed: ecommissionNum,
-            amount_paid: 0,
-            date_incurred: now.slice(0, 10),
-            status: 'outstanding',
-            record_type: 'debt',
-            notes: `Reported by agent on the compliance form. ${tag}`,
-          })
+        // Regular plans also get the repayment debt on the agent (its own
+        // debt type), staged at payout so the withheld amount funds the
+        // external payout above. Broker plans skip it - the broker keeps no
+        // commission to withhold from.
+        if (!isBrokerPlan) {
+          const tag = `auto:compliance-ecommission:${txnId}`
+          const { data: existingDebt } = await supabaseAdmin
+            .from('agent_debts')
+            .select('id')
+            .eq('agent_id', agentId)
+            .ilike('notes', `%${tag}%`)
+            .limit(1)
+            .maybeSingle()
+          if (!existingDebt) {
+            await supabaseAdmin.from('agent_debts').insert({
+              agent_id: agentId,
+              debt_type: 'ecommission',
+              description: `eCommission Repayment - ${resolvedAddress || 'compliance submission'}`,
+              amount_owed: ecommissionNum,
+              amount_paid: 0,
+              date_incurred: now.slice(0, 10),
+              status: 'outstanding',
+              record_type: 'debt',
+              notes: `Reported by agent on the compliance form. ${tag}`,
+            })
+          }
         }
       }
       const tebName = String((body as any).external_referral_brokerage_name || '').trim()

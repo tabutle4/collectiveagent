@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const { data: agent } = await supabaseAdmin
       .from('users')
-      .select('id, commission_plan, lease_commission_plan, waive_buyer_processing_fees, waive_seller_processing_fees, half_buyer_processing_fees, half_seller_processing_fees, waive_coaching_fee')
+      .select('id, commission_plan, lease_commission_plan, waive_buyer_processing_fees, waive_seller_processing_fees, half_buyer_processing_fees, half_seller_processing_fees, waive_coaching_fee, qualifying_transaction_count, qualifying_transaction_target')
       .eq('id', agentId)
       .single()
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -82,17 +82,17 @@ export async function POST(request: NextRequest) {
     const coachingFee = coachingWaived ? 0 : Number(plan?.coaching_fee_amount ?? 0)
     const firmMinimumPct = await getFirmMinimumPct(isLease)
 
-    // New Agent Plan progress: deals toward the 5 that trigger the
-    // Cap-or-No-Cap choice. Counted as production commission rows.
+    // New Agent Plan progress toward the Cap-or-No-Cap choice. The OFFICIAL
+    // counter is users.qualifying_transaction_count: Mark Paid increments it
+    // only for qualifying closed SALES (leases never count), and the office's
+    // "counts toward" checkbox at Mark Paid can exclude a deal. Never re-count
+    // rows here - that would ignore the office's checkbox decisions.
     const isNewAgentPlan = String(plan?.code || '') === '70_30_new' || /new[ _]?agent|70_30_new/i.test(planCode)
     let newAgentDeals: number | null = null
+    let newAgentRequired = 5
     if (isNewAgentPlan) {
-      const { count } = await supabaseAdmin
-        .from('transaction_internal_agents')
-        .select('id', { count: 'exact', head: true })
-        .eq('agent_id', agentId)
-        .in('agent_role', ['primary_agent', 'listing_agent'])
-      newAgentDeals = count ?? 0
+      newAgentDeals = Number((agent as any).qualifying_transaction_count ?? 0) || 0
+      newAgentRequired = Number((agent as any).qualifying_transaction_target ?? 5) || 5
     }
 
     // Cap progress: brokerage splits credited this calendar year.
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       capped: capAmount > 0 && ytd >= capAmount,
       is_broker_plan: isBrokerPlan,
       new_agent_deals: newAgentDeals,
-      new_agent_required: 5,
+      new_agent_required: newAgentRequired,
     })
   } catch (err: any) {
     console.error('commission-preview error:', err)
