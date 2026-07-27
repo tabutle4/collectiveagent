@@ -7,13 +7,15 @@ export const dynamic = 'force-dynamic'
 
 // GET - List threads with filters.
 // Query params:
-//   view=my|all       (default: 'all')
+//   screen=triage|my_work|oversight   (Phase 3 primary filter)
+//   view=my|all       (legacy; kept for compatibility)
 //   status=<status>   (optional; one of THREAD_STATUSES)
 //   limit=<n>         (default 100, max 500)
 //
-// "my" view returns threads where the current user is either the current
-// assignee, the current waiting_on user, or the target of an escalation
-// that hasn't been closed out. Everything else falls under "all".
+// Screen semantics:
+//   triage    = unassigned, not closed (the shared to-sort pile)
+//   my_work   = assigned to me or waiting on me, not closed
+//   oversight = assigned to anyone, not closed (grouped client-side)
 //
 // Gated by can_view_agent_email.
 export async function GET(request: NextRequest) {
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
+    const screen = searchParams.get('screen') as 'triage' | 'my_work' | 'oversight' | null
     const view: ThreadView = (searchParams.get('view') as ThreadView) === 'my' ? 'my' : 'all'
     const statusFilter = searchParams.get('status') as ThreadStatus | null
     const limitRaw = parseInt(searchParams.get('limit') || '100', 10)
@@ -40,8 +43,16 @@ export async function GET(request: NextRequest) {
       .order('last_message_at', { ascending: false, nullsFirst: false })
       .limit(limit)
 
-    if (view === 'my') {
-      // Assigned to me OR waiting on me
+    if (screen === 'triage') {
+      query = query.is('assigned_to_user_id', null).neq('status', 'closed')
+    } else if (screen === 'my_work') {
+      query = query
+        .or(`assigned_to_user_id.eq.${auth.user.id},waiting_on_user_id.eq.${auth.user.id}`)
+        .neq('status', 'closed')
+    } else if (screen === 'oversight') {
+      query = query.not('assigned_to_user_id', 'is', null).neq('status', 'closed')
+    } else if (view === 'my') {
+      // Legacy path
       query = query.or(
         `assigned_to_user_id.eq.${auth.user.id},waiting_on_user_id.eq.${auth.user.id}`
       )
@@ -131,6 +142,8 @@ export async function GET(request: NextRequest) {
         status: t.status,
         last_message_at: t.last_message_at,
         last_message_direction: t.last_message_direction,
+        updated_at: t.updated_at,
+        created_at: t.created_at,
         agent: agent
           ? {
               id: agent.id,

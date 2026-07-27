@@ -14,14 +14,17 @@ export async function GET(request: NextRequest) {
   try {
     const { data } = await supabaseAdmin
       .from('agent_email_user_prefs')
-      .select('default_view, teams_notifications_enabled')
+      .select('default_view, teams_notifications_enabled, default_screen')
       .eq('user_id', auth.user.id)
       .maybeSingle()
 
+    const ds = data?.default_screen
     return NextResponse.json({
       prefs: {
         defaultView: (data?.default_view as 'my' | 'all') || 'my',
         teamsNotificationsEnabled: Boolean(data?.teams_notifications_enabled),
+        defaultScreen:
+          ds === 'my_work' || ds === 'oversight' ? ds : 'triage',
       },
     })
   } catch (err: any) {
@@ -44,6 +47,13 @@ export async function PUT(request: NextRequest) {
     }
     if (body?.defaultView === 'my' || body?.defaultView === 'all') {
       patch.default_view = body.defaultView
+    }
+    if (
+      body?.defaultScreen === 'triage' ||
+      body?.defaultScreen === 'my_work' ||
+      body?.defaultScreen === 'oversight'
+    ) {
+      patch.default_screen = body.defaultScreen
     }
     if (typeof body?.teamsNotificationsEnabled === 'boolean') {
       patch.teams_notifications_enabled = body.teamsNotificationsEnabled

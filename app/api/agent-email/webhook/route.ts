@@ -17,6 +17,7 @@ import {
   preferredDisplayName,
 } from '@/lib/agent-email'
 import { writeInAppNotification } from '@/lib/agent-email-notifications'
+import { invalidateAiSuggestions } from '@/lib/agent-email-ai'
 
 export const dynamic = 'force-dynamic'
 
@@ -260,6 +261,13 @@ async function processInbound(m: {
       thread.threadId,
       'Thread reopened. This thread was closed but the agent replied, so it is back in the queue.'
     )
+  }
+
+  // Phase 3: a new inbound changes the conversation, so cached AI triage
+  // suggestions and reply drafts for this thread are stale. Mark them for
+  // regeneration on next screen load.
+  if (insertResult.inserted) {
+    await invalidateAiSuggestions(thread.threadId)
   }
 
   // Auto-assign on the FIRST inbound of a thread if the To field contains
