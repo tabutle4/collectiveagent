@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 
 const FIELDS: { key: string; label: string }[] = [
   { key: 'team_or_office', label: 'Team / office' },
@@ -21,6 +22,15 @@ const FIELDS: { key: string; label: string }[] = [
   { key: 'title_officer_name', label: 'Title officer' },
   { key: 'additional_notes', label: 'Notes' },
 ]
+
+const n = (v: any) => parseFloat(String(v ?? 0)) || 0
+const f$ = (v: any) => `$${n(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const line = (label: string, value: string, cls = '') => (
+  <div className={`flex justify-between gap-4 py-1 border-b border-luxury-gray-5/30 text-xs ${cls}`}>
+    <span className="text-luxury-gray-3">{label}</span>
+    <span className="text-luxury-gray-1 whitespace-nowrap">{value}</span>
+  </div>
+)
 
 export default function CdaApprovalPage() {
   const params = useParams()
@@ -71,6 +81,8 @@ export default function CdaApprovalPage() {
   const txn = data.transaction
   const isApproved = txn.cda_status === 'approved' || txn.cda_status === 'sent' || !!txn.broker_approved_at
   const compliance = data.compliance || {}
+  const checklist = data.checklist || []
+  const checklistDone = checklist.filter((c: any) => c.completed).length
 
   return (
     <div className="min-h-screen bg-luxury-cream p-4 md:p-8">
@@ -102,6 +114,91 @@ export default function CdaApprovalPage() {
             ))}
           </div>
         </div>
+
+        {checklist.length > 0 && (
+          <div className="container-card">
+            <h2 className="section-title mb-3">
+              Checklist Status ({checklistDone} of {checklist.length} complete)
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
+              {checklist.map((c: any) => (
+                <div key={c.id} className="flex justify-between gap-3 py-1 border-b border-luxury-gray-5/30">
+                  <span className="text-xs text-luxury-gray-3">{c.label}</span>
+                  <span className={`text-xs font-medium text-right whitespace-nowrap ${c.completed ? 'text-green-600' : 'text-amber-700'}`}>
+                    {c.completed ? 'Complete' : 'Not complete'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.agents.length > 0 && (
+          <div className="container-card">
+            <h2 className="section-title mb-3">Money on this Deal</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {data.agents.map((a: any) => {
+                const ecAmount = n(txn.ecommission_amount)
+                const ecCovered = (a.staged || []).some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
+                return (
+                  <div key={a.id}>
+                    <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
+                      {a.agent_id ? (
+                        <Link href={`/admin/users/${a.agent_id}`} className="text-luxury-accent hover:underline">
+                          {a.name}
+                        </Link>
+                      ) : a.name}
+                      {' '}({a.role})
+                    </p>
+                    {n(txn.sales_price) > 0 && line('Sales price', f$(txn.sales_price))}
+                    {n(txn.monthly_rent) > 0 && line('Monthly rent', f$(txn.monthly_rent))}
+                    {a.side && line('Side', String(a.side))}
+                    {line('Agent basis', f$(a.agent_basis))}
+                    {line(`Agent split (${n(a.split_percentage) || '-'}%)`, f$(a.agent_gross))}
+                    {line('Brokerage split', f$(a.brokerage_split))}
+                    {n(a.btsa_amount) > 0 && line('+ BTSA (no split)', f$(a.btsa_amount))}
+                    {n(a.processing_fee) > 0 && line('- Processing fee', `-${f$(a.processing_fee)}`)}
+                    {n(a.coaching_fee) > 0 && line('- Coaching fee', `-${f$(a.coaching_fee)}`)}
+                    {n(a.other_fees) > 0 && line(`- Other fees${a.other_fees_description ? ` (${a.other_fees_description})` : ''}`, `-${f$(a.other_fees)}`)}
+                    {n(a.rebate_amount) > 0 && line('- Rebate', `-${f$(a.rebate_amount)}`)}
+                    {line('1099 amount', f$(a.amount_1099_reportable), 'font-semibold')}
+                    {(a.staged || []).map((d: any, i: number) => (
+                      <div key={i}>{line(`- ${d.description || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700')}</div>
+                    ))}
+                    {line('Net to agent', f$(a.net_to_agent), 'font-semibold')}
+                    {(a.open_invoices || []).length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-semibold text-amber-700 mb-1">
+                          Open invoices not collected on this deal ({a.open_invoices.length}) - {f$(a.open_invoices_total)}
+                        </p>
+                        {a.open_invoices.map((d: any, i: number) => (
+                          <div key={i}>
+                            {line(
+                              d.date_incurred ? `${d.description} (${d.date_incurred})` : d.description,
+                              f$(d.amount_remaining),
+                              'text-amber-700'
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {ecAmount > 0 && (
+                      ecCovered
+                        ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
+                        : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+                    )}
+                    {a.adjustment_notes && (
+                      <p className="text-xs text-luxury-gray-3 mt-2">{a.adjustment_notes}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-4 pt-3 border-t border-luxury-gray-5/40">
+              {line('Office net (deal)', f$(txn.office_net), 'font-semibold')}
+            </div>
+          </div>
+        )}
 
         {data.agents.map((a: any) => (
           <div key={a.id} className="container-card">
