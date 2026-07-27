@@ -8,6 +8,7 @@ import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
+import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 import {
   buildStatementEmail,
   buildCdaEmail,
@@ -3027,6 +3028,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               debtUpdate.date_resolved = payment_date
             }
             await supabase.from('agent_debts').update(debtUpdate).eq('id', debtApp.debt_id)
+            // Two-way billing sync: a debt collected at Mark Paid time must
+            // also close its Payload invoice copy (negative Commission Offset
+            // line item, same as stage_debt). Before this, only debts staged
+            // through the Billing panel settled in Payload; debts applied in
+            // the Mark Paid modal left their Payload invoices open.
+            await settlePayloadInvoiceForDebt(debtApp.debt_id)
           }
         }
       }
