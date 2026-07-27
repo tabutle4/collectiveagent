@@ -89,6 +89,8 @@ export async function GET(request: NextRequest) {
          units,
          agent_net,
          installment_kind,
+         payment_status,
+         payment_date,
          agent:users!transaction_internal_agents_agent_id_fkey(
            id,
            first_name,
@@ -190,8 +192,28 @@ export async function GET(request: NextRequest) {
       // set this to 0 explicitly so they don't double-count.
       totalUnits += row.units != null ? parseFloat(row.units || '0') : 1
     })
-    // Agent net includes all payees (co-agents, team leads, etc.)
-    allRelevantRows.forEach(row => {
+    // Agent net includes all payees (co-agents, team leads, etc.).
+    // Retainer rows are handled separately below, by payment date.
+    allRelevantRows
+      .filter(row => !row.installment_kind)
+      .forEach(row => {
+        totalAgentNet += parseFloat(row.agent_net || '0')
+      })
+
+    // Retainers are collected on prospects, before (or without) a lease, so
+    // they have no closing or move-in date to qualify them into a quarter.
+    // Office rule: a retainer adds no volume and no units, but the money DOES
+    // count toward agent and firm totals, in the quarter it was PAID. Rows
+    // are excluded from the deal-date sum above so nothing is counted twice.
+    // Cancelled transactions stay excluded here, same as everywhere else in
+    // this report.
+    const nonCancelledIds = new Set(transactions.map(t => t.id))
+    internalAgents.forEach(row => {
+      if (!row.installment_kind) return
+      if (row.payment_status !== 'paid') return
+      if (!nonCancelledIds.has(row.transaction_id)) return
+      const paid = row.payment_date ? String(row.payment_date).split('T')[0] : null
+      if (!paid || paid < startDateStr || paid > endDateStr) return
       totalAgentNet += parseFloat(row.agent_net || '0')
     })
 
