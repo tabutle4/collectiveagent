@@ -1,5 +1,6 @@
 import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { getEmailLayout } from '@/lib/email/layout'
+import { buildFormAnswersHtml } from '@/lib/form-fields'
 import { supabaseAdmin } from '@/lib/supabase'
 
 // Sending mailboxes
@@ -192,6 +193,9 @@ export async function sendNewProspectNotification(prospect: {
   phone: string
   location: string
   mls_choice?: string
+  // Everything the prospect filled in, appended below the summary so the office
+  // does not have to open the record to read the answers.
+  form_data?: Record<string, any>
 }) {
   const adminUrl = `https://agent.collectiverealtyco.com/admin/prospects/${prospect.id}`
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
@@ -214,6 +218,7 @@ export async function sendNewProspectNotification(prospect: {
         <div style="margin-top: 32px;">
           <a href="${adminUrl}" style="display: inline-block; padding: 12px 24px; background: #1a1a1a; color: #ffffff; text-decoration: none; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">View Prospect</a>
         </div>
+        ${buildFormAnswersHtml(prospect.form_data)}
       </div>
     `,
   })

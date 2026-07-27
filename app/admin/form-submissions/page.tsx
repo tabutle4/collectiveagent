@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import Link from 'next/link'
-import { Loader2, ExternalLink } from 'lucide-react'
+import { Loader2, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react'
+import { getFormAnswerFields } from '@/lib/form-fields'
 
 interface SubmissionRow {
   id: string
@@ -17,6 +18,7 @@ interface SubmissionRow {
   transaction_id: string | null
   listing_id: string | null
   linked_status: string | null
+  data: Record<string, any>
 }
 
 const MODE_FILTERS = [
@@ -49,12 +51,56 @@ const fmtDate = (d: string | null) =>
       })
     : '-'
 
+// Answers render as text, except links and email addresses, which stay
+// clickable the same way they do on the Forms page.
+function renderAnswer(text: string) {
+  if (/^https?:\/\//i.test(text)) {
+    return (
+      <a href={text} target="_blank" rel="noopener noreferrer" className="text-luxury-accent hover:underline break-all">
+        {text}
+      </a>
+    )
+  }
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text)) {
+    return (
+      <a href={`mailto:${text}`} className="text-luxury-accent hover:underline break-all">
+        {text}
+      </a>
+    )
+  }
+  return text
+}
+
+// Every answer saved with one submission. Each form writes a different set of
+// fields, so this renders whatever the submission actually has.
+function AnswerPanel({ data }: { data: Record<string, any> }) {
+  const fields = getFormAnswerFields(data)
+
+  if (fields.length === 0) {
+    return (
+      <p className="text-xs text-luxury-gray-3">No additional answers were saved with this submission.</p>
+    )
+  }
+
+  return (
+    <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+      {fields.map(f => (
+        <div key={f.key}>
+          <dt className="text-xs text-luxury-gray-3">{f.label}</dt>
+          <dd className="text-sm text-luxury-gray-1 break-words">{renderAnswer(f.text)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
 export default function AllSubmissionsPage() {
   const [rows, setRows] = useState<SubmissionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [modeFilter, setModeFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -144,6 +190,7 @@ export default function AllSubmissionsPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-luxury-gray-5/50">
+                    <th className="w-8 py-3 pl-2"></th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Date</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Form</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-luxury-gray-3 uppercase tracking-wider">Agent</th>
@@ -154,7 +201,18 @@ export default function AllSubmissionsPage() {
                 </thead>
                 <tbody>
                   {filtered.map(r => (
-                    <tr key={r.id} className="border-b border-luxury-gray-5/30 hover:bg-luxury-light">
+                    <Fragment key={r.id}>
+                    <tr className="border-b border-luxury-gray-5/30 hover:bg-luxury-light">
+                      <td className="py-3 pl-2">
+                        <button
+                          onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                          className="p-1 text-luxury-gray-3 hover:text-luxury-gray-1"
+                          aria-expanded={expandedId === r.id}
+                          aria-label={expandedId === r.id ? 'Hide answers' : 'Show answers'}
+                        >
+                          {expandedId === r.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      </td>
                       <td className="py-3 px-4 text-xs text-luxury-gray-2 whitespace-nowrap">{fmtDate(r.submitted_at)}</td>
                       <td className="py-3 px-4">
                         <span className={`text-xs px-2.5 py-1 rounded font-medium ${MODE_BADGE[r.submission_mode] || 'text-luxury-gray-3 bg-luxury-gray-5/40'}`}>
@@ -172,6 +230,14 @@ export default function AllSubmissionsPage() {
                         )}
                       </td>
                     </tr>
+                    {expandedId === r.id && (
+                      <tr className="border-b border-luxury-gray-5/30 bg-luxury-light">
+                        <td colSpan={7} className="py-4 px-4">
+                          <AnswerPanel data={r.data} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -190,10 +256,25 @@ export default function AllSubmissionsPage() {
                   <p className="text-sm font-medium text-luxury-gray-1">{r.agent_name}</p>
                   {r.property_address && <p className="text-xs text-luxury-gray-2">{r.property_address}</p>}
                   {r.client_name && <p className="text-xs text-luxury-gray-3">{r.client_name}</p>}
-                  {linkFor(r) && (
-                    <Link href={linkFor(r)!} className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline mt-2">
-                      View <ExternalLink size={12} />
-                    </Link>
+                  <div className="flex items-center gap-4 mt-2">
+                    <button
+                      onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                      className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline"
+                      aria-expanded={expandedId === r.id}
+                    >
+                      {expandedId === r.id ? 'Hide answers' : 'View answers'}
+                      {expandedId === r.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    </button>
+                    {linkFor(r) && (
+                      <Link href={linkFor(r)!} className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline">
+                        View <ExternalLink size={12} />
+                      </Link>
+                    )}
+                  </div>
+                  {expandedId === r.id && (
+                    <div className="mt-3 pt-3 border-t border-luxury-gray-5/40">
+                      <AnswerPanel data={r.data} />
+                    </div>
                   )}
                 </div>
               ))}

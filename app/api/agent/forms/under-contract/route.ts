@@ -7,6 +7,7 @@ import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, UNDER_CONTRACT_RULES } from '@/lib/forms/requiredFields'
 import { getEmailLayout } from '@/lib/email/layout'
+import { buildFormAnswersHtml } from '@/lib/form-fields'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage } from '@/lib/transactions/utils'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
@@ -277,7 +278,8 @@ export async function POST(request: NextRequest) {
          <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Closing:</strong> ${closing_date || 'N/A'}</p>
          ${tcLine}
        </div>
-       <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Admin</a></p>`,
+       <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Admin</a></p>
+       ${buildFormAnswersHtml(submissionData)}`,
       { title: 'New Contract Submitted', preheader: `Under contract: ${normalizedAddress}` }
     )
     await sendNotifications(notificationEmails, 'New Contract', notifyHtml, normalizedAddress)
@@ -296,7 +298,8 @@ export async function POST(request: NextRequest) {
         from: FROM_EMAIL, to: [agent_email], subject: `New Contract Received - ${normalizedAddress}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your new contract for <strong style="color:#1a1a1a;">${normalizedAddress}</strong> has been received and the transaction has been created.</p>
-           ${flyerParagraphs}`,
+           ${flyerParagraphs}
+           ${buildFormAnswersHtml(submissionData, 'What You Submitted')}`,
           { title: 'New Contract Received', preheader: `Contract received for ${normalizedAddress}` }
         ),
       })

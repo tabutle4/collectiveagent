@@ -183,6 +183,7 @@ for (const field of requiredFields) {
         email: prospect.email,
         phone: prospect.phone,
         location: prospect.location,
+        form_data: formData,
       })
     } catch (notifyError) {
       console.error('Error sending prospect notification:', notifyError)

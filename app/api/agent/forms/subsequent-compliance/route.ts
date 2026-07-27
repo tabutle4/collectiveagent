@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { getEmailLayout } from '@/lib/email/layout'
+import { buildFormAnswersHtml } from '@/lib/form-fields'
 import { Resend } from 'resend'
 import { complianceIsLease } from '@/lib/forms/requiredFields'
 
@@ -302,7 +303,8 @@ async function sendSubsequentNotification(
        <a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">
          View in Compliance Dashboard
        </a>
-     </p>`,
+     </p>
+     ${buildFormAnswersHtml(submissionData)}`,
     { title: 'Subsequent Compliance Resubmission', preheader: `Resubmission received for ${txn.property_address}` }
   )
 

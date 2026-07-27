@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { getFormConfig, createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { getEmailLayout } from '@/lib/email/layout'
+import { buildFormAnswersHtml } from '@/lib/form-fields'
 import { Resend } from 'resend'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, JUST_LISTED_RULES, PRE_LISTING_RULES } from '@/lib/forms/requiredFields'
@@ -584,7 +585,8 @@ export async function POST(request: NextRequest) {
                <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Type:</strong> ${listing.transaction_type || 'N/A'}</p>
                ${mlsLine}
                ${coordinationLine}
-             </div>`,
+             </div>
+             ${buildFormAnswersHtml(body)}`,
             { title: `${formLabel} Form Submitted`, preheader: `${formLabel}: ${address}` }
           )
           await sendListingNotifications(notificationEmails, formLabel, notifyHtml, address)

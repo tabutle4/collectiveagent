@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getEmailLayout } from '@/lib/email/layout'
+import { buildFormAnswersHtml } from '@/lib/form-fields'
 import { Resend } from 'resend'
 import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normalizeAddressComponents, buildDisplayAddress } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
@@ -236,7 +237,8 @@ export async function POST(request: NextRequest) {
            <p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Amount:</strong> $${amount.toFixed(2)} (agent net $${(amount - 45).toFixed(2)} after $45 processing fee)</p>
          </div>
          <p style="font-size:13px;color:#555555;margin:0 0 16px;">Agent confirmed all required documents are signed and uploaded to BoldTrail. Please confirm payment received and process payout.</p>
-         <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/transactions/${transactionId}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Transaction</a></p>`,
+         <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/transactions/${transactionId}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Transaction</a></p>
+         ${buildFormAnswersHtml(submissionData)}`,
         { title: 'New Retainer Submission', preheader: `Retainer for ${client_name}` }
       )
       await sendNotifications(notificationEmails, 'Retainer Submission', notifyHtml, client_name)
@@ -717,7 +719,8 @@ export async function POST(request: NextRequest) {
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Resubmission received for <strong style="color:#1a1a1a;">${txn.property_address}</strong>.</p>
          ${lockedNote}${changedHtml}
          ${notes ? `<p style="font-size:13px;color:#555;margin:0 0 16px;"><strong>Agent notes:</strong> ${notes}</p>` : ''}
-         <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Compliance Dashboard</a></p>`,
+         <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/admin/compliance" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View in Compliance Dashboard</a></p>
+         ${buildFormAnswersHtml(submissionData)}`,
         { title: 'Subsequent Compliance Resubmission', preheader: `Resubmission for ${txn.property_address}` }
       )
       await sendNotifications(notificationEmails, 'Compliance Resubmission', notifyHtml, txn.property_address)
@@ -1121,7 +1124,7 @@ export async function POST(request: NextRequest) {
       transactionId = txn.id
       if (txn.is_locked) {
         await supabaseAdmin.from('agent_form_submissions').insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: { ...submissionData, locked_transaction: true }, updated_at: now })
-        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - transaction is locked. Manual review required.</p>`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
+        const notifyHtml = getEmailLayout(`<p style="font-size:14px;color:#555;">Compliance submission for <strong>${txn.property_address}</strong> - transaction is locked. Manual review required.</p>${buildFormAnswersHtml(submissionData)}`, { title: 'Locked Transaction - Compliance Submission', preheader: `Locked: ${txn.property_address}` })
         await sendNotifications(notificationEmails, 'Compliance Submission (Locked)', notifyHtml, txn.property_address)
         return NextResponse.json({ success: true, transaction_id: transactionId, locked: true, message: 'Your compliance request has been received. Because this transaction has been reviewed by the office, any updates will be applied manually. No action is needed from you.' })
       }
@@ -1245,7 +1248,8 @@ export async function POST(request: NextRequest) {
       await resend.emails.send({ from: FROM_EMAIL, to: [agentEmail], ...(ccList.length ? { cc: ccList } : {}), subject: `Compliance Request Received - ${submissionData.property_address}`,
         html: getEmailLayout(
           `<p style="margin:0 0 16px;font-size:14px;color:#555555;">Your compliance review and CDA request for <strong style="color:#1a1a1a;">${submissionData.property_address}</strong> has been received. Our team will review your documents and follow up shortly.</p>
-           ${flyerParagraphs}`,
+           ${flyerParagraphs}
+           ${buildFormAnswersHtml(submissionData, 'What You Submitted')}`,
           { title: 'Compliance Request Received', preheader: `Request received for ${submissionData.property_address}` }
         ),
       })

@@ -102,6 +102,9 @@ export async function GET(request: NextRequest) {
         transaction_id: r.transaction_id || null,
         listing_id: r.listing_id || null,
         linked_status: txn?.status || listing?.status || null,
+        // Raw answers so the page can expand a row and show every field that was
+        // submitted. Internal keys are stripped when rendering.
+        data: r.data || {},
       }
     })
 
