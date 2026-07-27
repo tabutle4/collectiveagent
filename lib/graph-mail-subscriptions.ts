@@ -36,7 +36,8 @@ const RENEW_BUFFER_MS = 24 * 60 * 60 * 1000
 
 const WORK_FOLDER_NAME = 'Work in Dashboard'
 const WORK_FOLDER_DISPLAY = 'Work in Dashboard'
-const RULE_DISPLAY_NAME = 'Agent email → Work in Dashboard'
+const RULE_DISPLAY_NAME = 'Agent email category tag'
+const AGENT_EMAIL_CATEGORY = 'Agent Email'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 
@@ -182,39 +183,32 @@ async function deleteGraphSubscription(
 
 // ─── Folder + rule ─────────────────────────────────────────────────────────
 
-async function ensureWorkFolder(
-  token: string,
-  upn: string
-): Promise<{ folderId: string; created: boolean }> {
-  // Look under the Inbox for a child folder with our display name.
-  const list = await graphFetch(
-    token,
-    `/users/${upn}/mailFolders('inbox')/childFolders?$select=id,displayName&$top=100`
-  )
-  if (!list.ok) {
-    throw new Error(
-      `ensureWorkFolder list failed for ${upn}: ${list.status} ${list.text.slice(0, 300)}`
+// Ensure the "Agent Email" master category exists in the mailbox, colored
+// black. Idempotent: if it already exists we leave it. Non-fatal on failure
+// (the rule can still tag; the label just renders uncolored).
+async function ensureAgentEmailCategory(token: string, upn: string): Promise<void> {
+  try {
+    const list = await graphFetch(
+      token,
+      `/users/${upn}/outlook/masterCategories?$top=100`
     )
-  }
-  const existing = (list.body?.value || []).find(
-    (f: any) => f.displayName === WORK_FOLDER_NAME
-  )
-  if (existing) return { folderId: existing.id as string, created: false }
-
-  const created = await graphFetch(
-    token,
-    `/users/${upn}/mailFolders('inbox')/childFolders`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ displayName: WORK_FOLDER_DISPLAY }),
+    if (list.ok) {
+      const exists = (list.body?.value || []).find(
+        (c: any) => c.displayName === AGENT_EMAIL_CATEGORY
+      )
+      if (exists) return
     }
-  )
-  if (!created.ok) {
-    throw new Error(
-      `ensureWorkFolder create failed for ${upn}: ${created.status} ${created.text.slice(0, 300)}`
-    )
+    await graphFetch(token, `/users/${upn}/outlook/masterCategories`, {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName: AGENT_EMAIL_CATEGORY,
+        // Outlook preset palette: "preset24" renders black.
+        color: 'preset24',
+      }),
+    })
+  } catch (err) {
+    console.error(`ensureAgentEmailCategory failed for ${upn} (non-fatal)`, err)
   }
-  return { folderId: created.body.id as string, created: true }
 }
 
 /**
@@ -233,14 +227,20 @@ async function ensureMailRule(
   agentAddresses: string[],
   existingRuleId: string | null
 ): Promise<{ ruleId: string; created: boolean; updated: boolean }> {
-  // Rule body: move messages whose sender is any of the active agent addresses.
+  // Rule body: tag messages whose sender is any of the active agent
+  // addresses with the "Agent Email" category. The message stays in the
+  // Inbox; the category is a colored label so the admin can spot agent
+  // mail at a glance while still seeing it in their normal Inbox flow.
+  // folderId is retained in the signature for DB compatibility but is no
+  // longer used as a move target.
+  void folderId
   const senderContainsList = agentAddresses.map(a => a.toLowerCase())
 
   const conditions: Record<string, unknown> = {
     senderContains: senderContainsList,
   }
   const actions: Record<string, unknown> = {
-    moveToFolder: folderId,
+    assignCategories: [AGENT_EMAIL_CATEGORY],
     stopProcessingRules: false,
   }
 
@@ -491,13 +491,13 @@ async function processAdmin(
 ): Promise<void> {
   const upn = admin.email
 
-  // A. Ensure Work in Dashboard folder.
-  let folderId = existingRule?.folder_id || null
-  if (!folderId) {
-    const f = await ensureWorkFolder(token, upn)
-    folderId = f.folderId
-    if (f.created) report.foldersCreated += 1
-  }
+  // A. Ensure the "Agent Email" category exists in the mailbox master list,
+  //    colored black (presetColor24 maps to black in Outlook's palette).
+  //    Without registering it, the rule can still apply the label but it
+  //    renders without a color. folderId is kept as an empty string for the
+  //    DB row; the folder is no longer created or used.
+  await ensureAgentEmailCategory(token, upn)
+  const folderId = existingRule?.folder_id || ''
 
   // B. Ensure inbox subscription.
   await ensureSubscription(token, admin, 'inbox', existingSubs.get('inbox'), report)
@@ -505,10 +505,11 @@ async function processAdmin(
   // C. Ensure sentitems subscription.
   await ensureSubscription(token, admin, 'sentitems', existingSubs.get('sentitems'), report)
 
-  // D. Ensure mail rule (if roster changed or no rule yet).
-  const needsRuleWork =
-    !existingRule?.rule_id || existingRule.agent_addresses_hash !== agentAddressesHash
-  if (needsRuleWork && agentAddresses.length > 0) {
+  // D. Ensure mail rule (always run when there is a roster, so the update
+  //    path migrates any old move-to-folder rule to the new category action
+  //    in place via PATCH).
+  const needsRuleWork = agentAddresses.length > 0
+  if (needsRuleWork) {
     const r = await ensureMailRule(
       token,
       upn,
@@ -523,15 +524,6 @@ async function processAdmin(
       mailboxUpn: upn,
       folderId,
       ruleId: r.ruleId,
-      addressesHash: agentAddressesHash,
-    })
-  } else if (existingRule && !existingRule.folder_id) {
-    // Row existed but folder id wasn't saved , persist it now.
-    await upsertMailRuleRow({
-      userId: admin.id,
-      mailboxUpn: upn,
-      folderId,
-      ruleId: existingRule.rule_id || '',
       addressesHash: agentAddressesHash,
     })
   }
@@ -635,4 +627,141 @@ export async function findSubscriptionByClientState(
     folderKind: data.folder_kind as 'inbox' | 'sentitems',
     subscriptionId: data.subscription_id as string,
   }
+}
+
+// ─── One-time migration: undo the folder move, switch to category ──────────
+
+export interface UndoFolderMoveReport {
+  ranAt: string
+  perMailbox: Array<{
+    mailboxUpn: string
+    oldRulesDeleted: number
+    messagesMovedBackToInbox: number
+    folderDeleted: boolean
+    categoryEnsured: boolean
+    errors: string[]
+  }>
+}
+
+// For each admin mailbox:
+//   1. Delete any inbox rule that moves mail to "Work in Dashboard"
+//      (matched by the old and new display names, and by any rule whose
+//      action moves to the work folder).
+//   2. Move every message currently in "Work in Dashboard" back to the Inbox.
+//   3. Delete the now-empty "Work in Dashboard" folder.
+//   4. Ensure the "Agent Email" master category exists (black).
+//
+// Safe to re-run: if the folder is already gone and the rules are already
+// migrated, each mailbox reports zeros. Reconcile then (re)creates the
+// category-tagging rule on its normal schedule; this migration does not
+// create it, so run reconcile after.
+export async function undoFolderMoveAndSwitchToCategory(): Promise<UndoFolderMoveReport> {
+  const token = await getGraphToken()
+  const admins = await getActiveAdmins()
+  const report: UndoFolderMoveReport = { ranAt: new Date().toISOString(), perMailbox: [] }
+
+  for (const admin of admins) {
+    const upn = admin.email
+    const m = {
+      mailboxUpn: upn,
+      oldRulesDeleted: 0,
+      messagesMovedBackToInbox: 0,
+      folderDeleted: false,
+      categoryEnsured: false,
+      errors: [] as string[],
+    }
+    try {
+      // 1. Find and delete move-to-folder rules.
+      const rulesResp = await graphFetch(
+        token,
+        `/users/${upn}/mailFolders('inbox')/messageRules`
+      )
+      let workFolderId: string | null = null
+      if (rulesResp.ok) {
+        for (const rule of rulesResp.body?.value || []) {
+          const name = String(rule?.displayName || '')
+          const movesToFolder = rule?.actions?.moveToFolder
+          const isOurs =
+            name === 'Agent email \u2192 Work in Dashboard' ||
+            name === RULE_DISPLAY_NAME ||
+            Boolean(movesToFolder)
+          // Only delete rules that actually move (not the new category rule).
+          if (isOurs && movesToFolder) {
+            const del = await graphFetch(
+              token,
+              `/users/${upn}/mailFolders('inbox')/messageRules/${rule.id}`,
+              { method: 'DELETE' }
+            )
+            if (del.ok) m.oldRulesDeleted += 1
+            if (typeof movesToFolder === 'string') workFolderId = movesToFolder
+          }
+        }
+      }
+
+      // 2. Locate the Work in Dashboard folder (by id from the rule, or by name).
+      if (!workFolderId) {
+        const childList = await graphFetch(
+          token,
+          `/users/${upn}/mailFolders('inbox')/childFolders?$select=id,displayName&$top=100`
+        )
+        if (childList.ok) {
+          const found = (childList.body?.value || []).find(
+            (f: any) => f.displayName === WORK_FOLDER_NAME
+          )
+          if (found) workFolderId = found.id as string
+        }
+      }
+
+      // 3. Move messages back to Inbox, paging until empty.
+      if (workFolderId) {
+        let guard = 100
+        while (guard > 0) {
+          guard -= 1
+          const msgs = await graphFetch(
+            token,
+            `/users/${upn}/mailFolders/${workFolderId}/messages?$select=id&$top=50`
+          )
+          if (!msgs.ok) {
+            m.errors.push(`list folder messages: ${msgs.status}`)
+            break
+          }
+          const items = msgs.body?.value || []
+          if (items.length === 0) break
+          for (const item of items) {
+            const mv = await graphFetch(
+              token,
+              `/users/${upn}/messages/${item.id}/move`,
+              { method: 'POST', body: JSON.stringify({ destinationId: 'inbox' }) }
+            )
+            if (mv.ok) m.messagesMovedBackToInbox += 1
+            else m.errors.push(`move ${item.id}: ${mv.status}`)
+          }
+        }
+
+        // 4. Delete the empty folder.
+        const delFolder = await graphFetch(
+          token,
+          `/users/${upn}/mailFolders/${workFolderId}`,
+          { method: 'DELETE' }
+        )
+        if (delFolder.ok) m.folderDeleted = true
+        else m.errors.push(`delete folder: ${delFolder.status}`)
+      }
+
+      // 5. Ensure the category exists for the new rule.
+      await ensureAgentEmailCategory(token, upn)
+      m.categoryEnsured = true
+
+      // Clear the stored folder_id so reconcile does not think a folder exists.
+      await supabaseAdmin
+        .from('graph_mail_rules')
+        .update({ folder_id: '' })
+        .eq('mailbox_upn', upn)
+    } catch (err: any) {
+      m.errors.push(err?.message || String(err))
+    }
+    report.perMailbox.push(m)
+  }
+
+  return report
 }

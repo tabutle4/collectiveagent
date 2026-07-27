@@ -30,6 +30,7 @@ import {
   X,
   Send,
   Hand,
+  CheckCircle2,
 } from 'lucide-react'
 import {
   Admin,
@@ -281,6 +282,7 @@ export default function AgentEmailDashboardPage() {
 interface ExpandedInfo {
   loading: boolean
   lastMessage: { from: string; when: string | null; text: string } | null
+  allMessages: Array<{ direction: string; from: string; when: string | null; text: string }>
   agentFacts: string[]
 }
 
@@ -300,6 +302,7 @@ function TriageScreen({
   const [cursor, setCursor] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [expandedInfo, setExpandedInfo] = useState<ExpandedInfo | null>(null)
+  const [showFullThreadId, setShowFullThreadId] = useState<string | null>(null)
   const [adjustFor, setAdjustFor] = useState<ThreadListItem | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [leavingIds, setLeavingIds] = useState<Set<string>>(new Set())
@@ -363,7 +366,7 @@ function TriageScreen({
   }, [pendingIds, fetchSuggestions])
 
   const loadExpanded = useCallback(async (thread: ThreadListItem) => {
-    setExpandedInfo({ loading: true, lastMessage: null, agentFacts: [] })
+    setExpandedInfo({ loading: true, lastMessage: null, allMessages: [], agentFacts: [] })
     try {
       const [detailRes, ctxRes] = await Promise.all([
         fetch(`/api/admin/agent-email/threads/${thread.id}`, { credentials: 'include' }),
@@ -372,20 +375,31 @@ function TriageScreen({
       const detail = await detailRes.json()
       const ctxJson = await ctxRes.json()
 
+      const cleanText = (m: any): string =>
+        (m.body_text as string) ||
+        String(m.body_html || '')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/\s+/g, ' ')
+          .trim()
+
       let lastMessage: ExpandedInfo['lastMessage'] = null
+      let allMessages: ExpandedInfo['allMessages'] = []
       if (detailRes.ok && Array.isArray(detail?.messages)) {
+        allMessages = detail.messages.map((m: any) => ({
+          direction: m.direction,
+          from: m.from_name || m.from_address || '',
+          when: m.received_at || m.sent_at || null,
+          text: cleanText(m),
+        }))
         const inbound = [...detail.messages].reverse().find((m: any) => m.direction === 'inbound')
         if (inbound) {
           lastMessage = {
             from: inbound.from_name || inbound.from_address || '',
             when: inbound.received_at || inbound.sent_at || null,
-            text:
-              (inbound.body_text as string) ||
-              String(inbound.body_html || '')
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/&nbsp;/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim(),
+            text: cleanText(inbound),
           }
         }
       }
@@ -402,9 +416,9 @@ function TriageScreen({
         if (flags.length > 0) facts.push(flags.join(' , '))
       }
 
-      setExpandedInfo({ loading: false, lastMessage, agentFacts: facts })
+      setExpandedInfo({ loading: false, lastMessage, allMessages, agentFacts: facts })
     } catch {
-      setExpandedInfo({ loading: false, lastMessage: null, agentFacts: [] })
+      setExpandedInfo({ loading: false, lastMessage: null, allMessages: [], agentFacts: [] })
     }
   }, [])
 
@@ -487,6 +501,29 @@ function TriageScreen({
     [suggestions, flashToast, slideOff]
   )
 
+  // Mark handled = close the thread. Used when Dale reads a triage item and
+  // sees it needs nothing further (already dealt with, informational, etc.).
+  const markHandled = useCallback(
+    async (thread: ThreadListItem) => {
+      setBusyId(thread.id)
+      try {
+        const res = await fetch(`/api/admin/agent-email/threads/${thread.id}/close`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Mark handled failed')
+        flashToast('Marked handled.', 'ok')
+        slideOff(thread.id)
+      } catch (e: any) {
+        flashToast(e?.message || 'Mark handled failed', 'error')
+      } finally {
+        setBusyId(null)
+      }
+    },
+    [flashToast, slideOff]
+  )
+
   // Keyboard: j/k navigate, Enter expand, y accept, a adjust, s skip
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -509,6 +546,9 @@ function TriageScreen({
         if (t) setAdjustFor(t)
       } else if (e.key === 's') {
         setCursor(c => Math.min(c + 1, threads.length - 1))
+      } else if (e.key === 'h') {
+        const t = threads[cursor]
+        if (t) markHandled(t)
       } else if (e.key === 'Escape') {
         setExpandedId(null)
         setExpandedInfo(null)
@@ -516,7 +556,7 @@ function TriageScreen({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [threads, cursor, adjustFor, toggleExpand, acceptSuggestion])
+  }, [threads, cursor, adjustFor, toggleExpand, acceptSuggestion, markHandled])
 
   const runBackfill = useCallback(
     async (hours: number) => {
@@ -553,7 +593,7 @@ function TriageScreen({
               {loading ? 'Loading the pile...' : threads.length === 0 ? 'Pile is clear' : `${threads.length} to sort`}
             </h1>
             <p className="text-[11.5px] text-luxury-gray-3 italic mt-0.5">
-              Accept applies the AI tag and hand-off in one click. Expand a row to read before deciding. Keys: j k move, Enter expand, y accept, a adjust, s skip.
+              Accept applies the AI tag and hand-off in one click. Expand a row to read before deciding. Keys: j k move, Enter expand, y accept, a adjust, h handled, s skip.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -678,6 +718,15 @@ function TriageScreen({
                     </button>
                     <button
                       type="button"
+                      onClick={() => markHandled(t)}
+                      disabled={busyId === t.id}
+                      className="text-[12px] px-2 py-1.5 rounded-md text-luxury-gray-3 hover:bg-luxury-gray-5 disabled:opacity-40"
+                      title="Nothing needed, mark handled and remove from the pile"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setCursor(Math.min(i + 1, threads.length - 1))}
                       className="text-[12px] px-2 py-1.5 rounded-md text-luxury-gray-3 hover:bg-luxury-gray-5"
                       title="Leave it in the pile and move on"
@@ -709,9 +758,37 @@ function TriageScreen({
                           {expandedInfo.lastMessage.from}
                           {expandedInfo.lastMessage.when ? ` , ${formatRelative(expandedInfo.lastMessage.when)}` : ''}
                         </div>
-                        <div className="text-[12.5px] text-luxury-gray-1 leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                        <div className="text-[12.5px] text-luxury-gray-1 leading-relaxed whitespace-pre-wrap max-h-[520px] overflow-y-auto">
                           {expandedInfo.lastMessage.text}
                         </div>
+                        {expandedInfo.allMessages.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowFullThreadId(showFullThreadId === t.id ? null : t.id)}
+                            className="mt-2 text-[11px] text-luxury-gray-3 hover:text-luxury-gray-1 underline"
+                          >
+                            {showFullThreadId === t.id
+                              ? 'Hide earlier messages'
+                              : `Show full thread (${expandedInfo.allMessages.length} messages)`}
+                          </button>
+                        )}
+                        {showFullThreadId === t.id && expandedInfo.allMessages.length > 1 && (
+                          <div className="mt-2 pt-2 border-t border-luxury-gray-5 space-y-2">
+                            {expandedInfo.allMessages.map((msg, mi) => (
+                              <div key={mi} className="border border-luxury-gray-5 rounded p-2">
+                                <div className="text-[10.5px] text-luxury-gray-3 mb-1">
+                                  <span className={msg.direction === 'outbound' ? 'text-purple-800' : ''}>
+                                    {msg.direction === 'outbound' ? 'Us' : msg.from}
+                                  </span>
+                                  {msg.when ? ` , ${formatRelative(msg.when)}` : ''}
+                                </div>
+                                <div className="text-[12px] text-luxury-gray-1 leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                                  {msg.text}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {!expandedInfo?.loading && !expandedInfo?.lastMessage && (
@@ -885,6 +962,8 @@ function OversightScreen({
   const [loading, setLoading] = useState(true)
   const [suggestions, setSuggestions] = useState<Record<string, AiSuggestion>>({})
   const [reassignFor, setReassignFor] = useState<ThreadListItem | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [expandedText, setExpandedText] = useState<{ loading: boolean; messages: Array<{ direction: string; from: string; when: string | null; text: string }> } | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -945,6 +1024,65 @@ function OversightScreen({
       }
     },
     [flashToast]
+  )
+
+  const markHandled = useCallback(
+    async (thread: ThreadListItem) => {
+      setBusyId(thread.id)
+      try {
+        const res = await fetch(`/api/admin/agent-email/threads/${thread.id}/close`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Mark handled failed')
+        flashToast('Marked handled.', 'ok')
+        await load()
+        onChanged()
+      } catch (e: any) {
+        flashToast(e?.message || 'Mark handled failed', 'error')
+      } finally {
+        setBusyId(null)
+      }
+    },
+    [flashToast, load, onChanged]
+  )
+
+  const toggleExpand = useCallback(
+    async (thread: ThreadListItem) => {
+      if (expandedId === thread.id) {
+        setExpandedId(null)
+        setExpandedText(null)
+        return
+      }
+      setExpandedId(thread.id)
+      setExpandedText({ loading: true, messages: [] })
+      try {
+        const res = await fetch(`/api/admin/agent-email/threads/${thread.id}`, {
+          credentials: 'include',
+        })
+        const json = await res.json()
+        const cleanText = (m: any): string =>
+          (m.body_text as string) ||
+          String(m.body_html || '')
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/\s+/g, ' ')
+            .trim()
+        const messages = (res.ok && Array.isArray(json?.messages) ? json.messages : []).map((m: any) => ({
+          direction: m.direction,
+          from: m.from_name || m.from_address || '',
+          when: m.received_at || m.sent_at || null,
+          text: cleanText(m),
+        }))
+        setExpandedText({ loading: false, messages })
+      } catch {
+        setExpandedText({ loading: false, messages: [] })
+      }
+    },
+    [expandedId]
   )
 
   const takeOver = useCallback(
@@ -1042,11 +1180,21 @@ function OversightScreen({
               {g.threads.map(t => {
                 const m = STATUS_META[t.status]
                 const s = suggestions[t.id]
+                const expanded = expandedId === t.id
                 return (
                   <div
                     key={t.id}
-                    className="bg-white border border-luxury-gray-4 rounded-lg px-4 py-2.5 flex items-center gap-3"
+                    className="bg-white border border-luxury-gray-4 rounded-lg overflow-hidden"
                   >
+                    <div className="px-4 py-2.5 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(t)}
+                      className="text-luxury-gray-3 hover:text-luxury-gray-1 flex-shrink-0"
+                      title={expanded ? 'Collapse' : 'Read the messages'}
+                    >
+                      {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    </button>
                     <AgingDot iso={t.updated_at} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -1098,7 +1246,44 @@ function OversightScreen({
                       >
                         <Hand className="h-2.5 w-2.5" /> Take over
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => markHandled(t)}
+                        disabled={busyId === t.id}
+                        className="text-[11px] px-2 py-1 rounded border border-luxury-gray-4 hover:bg-luxury-gray-5 disabled:opacity-40 flex items-center gap-1"
+                        title="Nothing needed, mark handled"
+                      >
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Handled
+                      </button>
                     </div>
+                    </div>
+                    {expanded && (
+                      <div className="border-t border-luxury-gray-5 bg-luxury-gray-5 bg-opacity-40 px-10 py-3">
+                        {expandedText?.loading && (
+                          <div className="text-[12px] text-luxury-gray-3 italic">Loading messages...</div>
+                        )}
+                        {!expandedText?.loading && expandedText && expandedText.messages.length === 0 && (
+                          <div className="text-[12px] text-luxury-gray-3 italic">No messages found.</div>
+                        )}
+                        {!expandedText?.loading && expandedText && expandedText.messages.length > 0 && (
+                          <div className="space-y-2">
+                            {expandedText.messages.map((msg, mi) => (
+                              <div key={mi} className="bg-white border border-luxury-gray-4 rounded p-2.5">
+                                <div className="text-[10.5px] text-luxury-gray-3 mb-1">
+                                  <span className={msg.direction === 'outbound' ? 'text-purple-800' : ''}>
+                                    {msg.direction === 'outbound' ? 'Us' : msg.from}
+                                  </span>
+                                  {msg.when ? ` , ${formatRelative(msg.when)}` : ''}
+                                </div>
+                                <div className="text-[12px] text-luxury-gray-1 leading-relaxed whitespace-pre-wrap max-h-[360px] overflow-y-auto">
+                                  {msg.text}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}

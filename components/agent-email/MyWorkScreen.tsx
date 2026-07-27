@@ -25,6 +25,7 @@ import {
   Plus,
   AlertCircle,
   Sparkles,
+  CheckCircle2,
 } from 'lucide-react'
 import {
   Admin,
@@ -580,6 +581,14 @@ export default function MyWorkScreen({
                         className="text-[12px] px-3 py-1.5 rounded-md bg-[#F0E7D6] text-[#6a3906] border border-[#EAB980] hover:bg-[#EAD9BA] flex items-center gap-1"
                       >
                         <Flag className="h-3 w-3" /> Escalate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => changeStatus('closed')}
+                        className="text-[12px] px-3 py-1.5 rounded-md border border-luxury-gray-4 hover:bg-luxury-gray-5 flex items-center gap-1"
+                        title="Nothing needed, mark handled"
+                      >
+                        <CheckCircle2 className="h-3 w-3" /> Handled
                       </button>
                     </>
                   )}
