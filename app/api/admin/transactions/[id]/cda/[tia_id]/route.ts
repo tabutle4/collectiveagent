@@ -43,7 +43,7 @@ export async function GET(
     const {
       agentName, agencyName, propertyAddr, role, logoUrl, generatedDate,
       listingSide, buyingSide, btsaTotal, totalGrossCommission,
-      officeNet, officeLineLabel, agentNetPay, rebateAmount, rebateLabel,
+      officeNet, officeLineLabel, agentPayees, rebateAmount, rebateLabel,
       priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
       titleContact, buyerContact, sellerContact, agent, txn, settings,
     } = model
@@ -152,9 +152,9 @@ export async function GET(
       </thead>
       <tbody>
         ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeLineLabel}</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
-        ${agentNetPay > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${agentName}</td><td style="padding:4px 0;text-align:right">${fmt$(agentNetPay)}</td></tr>` : ''}
+        ${(agentPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
         ${(externalPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">External payout</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
-        ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">(${fmt$(rebateAmount)})</td></tr>` : ''}
+        ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">${fmt$(rebateAmount)}</td></tr>` : ''}
       </tbody>
     </table>
   </div>

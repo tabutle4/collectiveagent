@@ -28,28 +28,33 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .select(`
         id, agent_id, agent_role, side, agent_basis, split_percentage, agent_gross,
         brokerage_split, btsa_amount, processing_fee, coaching_fee, other_fees,
-        other_fees_description, rebate_amount, amount_1099_reportable, adjustment_notes,
+        other_fees_description, rebate_amount, amount_1099_reportable, agent_net, adjustment_notes,
         user:users!transaction_internal_agents_agent_id_fkey(preferred_first_name, first_name, preferred_last_name, last_name)
       `)
       .eq('transaction_id', id)
 
     const producing = (tias || []).filter((t: any) => !LINKED_ROLES.includes(t.agent_role))
+    // Team leads, momentum partners, and internal referral agents. They are paid
+    // out of the Collective Realty Co. line on the CDA rather than getting their
+    // own payee row, but each still has a TIA row with its own money on it, so
+    // the broker needs to see those breakdowns before signing.
+    const linked = (tias || []).filter((t: any) => LINKED_ROLES.includes(t.agent_role))
 
     // Debts already staged against these rows -- the deductions that land on
     // the payout. amount_paid is what was actually applied.
-    const producingIds = producing.map((t: any) => t.id)
-    const { data: stagedDebts } = producingIds.length > 0
+    const allTiaIds = (tias || []).map((t: any) => t.id)
+    const { data: stagedDebts } = allTiaIds.length > 0
       ? await supabaseAdmin
           .from('agent_debts')
           .select('offset_transaction_agent_id, description, debt_type, amount_paid')
-          .in('offset_transaction_agent_id', producingIds)
+          .in('offset_transaction_agent_id', allTiaIds)
           .eq('status', 'paid')
       : { data: [] as any[] }
 
     // Everything the agent still owes that is NOT being collected on this deal,
     // so the broker sees the balance before signing. Credits are excluded --
     // they are money owed to the agent, not an open invoice.
-    const agentIds = Array.from(new Set(producing.map((t: any) => t.agent_id).filter(Boolean)))
+    const agentIds = Array.from(new Set((tias || []).map((t: any) => t.agent_id).filter(Boolean)))
     const { data: openInvoiceRows } = agentIds.length > 0
       ? await supabaseAdmin
           .from('agent_debts')
@@ -61,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       : { data: [] as any[] }
 
     const num = (v: any) => parseFloat(String(v ?? 0)) || 0
-    const agents = producing.map((t: any) => {
+    const shapeAgent = (t: any) => {
       const staged = (stagedDebts || [])
         .filter((d: any) => d.offset_transaction_agent_id === t.id)
         .map((d: any) => ({
@@ -94,15 +99,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         other_fees_description: t.other_fees_description || null,
         rebate_amount: num(t.rebate_amount),
         amount_1099_reportable: num(t.amount_1099_reportable),
+        agent_net: num(t.agent_net),
+        // An additional-compensation row carries no gross and no 1099 -- its
+        // money sits in agent_net. Same rule the CDA uses, so a row that pays
+        // on the document never reads as $0.00 here.
+        is_additional_comp: num(t.agent_gross) <= 0 && num(t.agent_net) > 0,
         adjustment_notes: t.adjustment_notes || null,
         staged,
-        net_to_agent: Math.round((num(t.amount_1099_reportable) - stagedTotal) * 100) / 100,
+        net_to_agent: Math.round(
+          ((num(t.agent_gross) > 0 ? num(t.amount_1099_reportable) : num(t.agent_net)) - stagedTotal) * 100
+        ) / 100,
         open_invoices: openInvoices,
         open_invoices_total: Math.round(
           openInvoices.reduce((sum: number, d: any) => sum + d.amount_remaining, 0) * 100
         ) / 100,
       }
-    })
+    }
+
+    // agents drives both the money breakdowns and the CDA previews, so it stays
+    // limited to producing rows -- linked roles do not get their own CDA.
+    const agents = producing.map(shapeAgent)
+    const linkedAgents = linked.map(shapeAgent)
 
     // Checklist status for this deal. Leases use the 'payouts' template, sales
     // use the 'cda' template -- the same rule the transaction page follows.
@@ -142,7 +159,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       (subs || []).find((s: any) => s.data?.submission_mode === 'compliance')?.data ||
       (subs && subs[0]?.data) || null
 
-    return NextResponse.json({ transaction, agents, compliance, checklist })
+    return NextResponse.json({ transaction, agents, linked_agents: linkedAgents, compliance, checklist })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

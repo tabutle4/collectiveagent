@@ -64,7 +64,8 @@ export interface CdaModel {
   totalGrossCommission: number
   officeNet: number
   officeLineLabel: string
-  agentNetPay: number
+  // One line per producing agent, all of that agent's rows already combined.
+  agentPayees: { name: string; amount: number }[]
   rebateAmount: number
   rebateLabel: string | null
   priceForDisplay: number
@@ -190,7 +191,6 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     if (g <= 0) return Number(r.agent_net || 0)
     return r.amount_1099_reportable != null ? Number(r.amount_1099_reportable) : Number(r.agent_net || 0)
   }
-  const agentDisburseTotal = agentTiaRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
   // Office net = the office side commission minus every producing agent's
   // payout minus anything paid to outside brokerages. Because additional
   // income is already folded into the side commissions, this figure includes
@@ -218,13 +218,43 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
         .select('amount_paid, offset_transaction_agent_id, debt_type')
         .in('offset_transaction_agent_id', producingTiaIds)
     : { data: [] as any[] }
-  const agentTiaIdSet = new Set(agentTiaRows.map(r => r.id))
-  const thisAgentDebts = (appliedDebtRows || []).reduce(
-    (s, d) => agentTiaIdSet.has(d.offset_transaction_agent_id) ? s + Number(d.amount_paid || 0) : s, 0
-  )
   const allAgentsDebts = (appliedDebtRows || []).reduce(
     (s, d) => s + Number(d.amount_paid || 0), 0
   )
+  // Every producing agent on the deal gets exactly ONE payee line carrying all
+  // of their money. An agent can hold several TIA rows on a single deal --
+  // additional compensation creates extra co_agent rows against the same
+  // agent_id -- and they are paid once, not once per row. Linked roles are
+  // deliberately absent: they are paid inside the Collective Realty Co. line.
+  const producingAgentIds = Array.from(
+    new Set(producingRows.map(r => r.agent_id).filter(Boolean))
+  )
+  const { data: producingUsers } = producingAgentIds.length > 0
+    ? await supabaseAdmin
+        .from('users')
+        .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+        .in('id', producingAgentIds)
+    : { data: [] as any[] }
+  const nameForAgent = (aid: string): string => {
+    if (aid === tia.agent_id) return agentName
+    const u = (producingUsers || []).find((x: any) => x.id === aid)
+    if (!u) return 'Agent'
+    return `${u.preferred_first_name || u.first_name || ''} ${u.preferred_last_name || u.last_name || ''}`.trim() || 'Agent'
+  }
+  const agentPayees = producingAgentIds
+    .map(aid => {
+      const rows = producingRows.filter(r => r.agent_id === aid)
+      const rowIds = new Set(rows.map(r => r.id))
+      const disburse = rows.reduce((s, r) => s + rowAgentDisburse(r), 0)
+      const withheld = (appliedDebtRows || []).reduce(
+        (s, d) => rowIds.has(d.offset_transaction_agent_id) ? s + Number(d.amount_paid || 0) : s, 0
+      )
+      return {
+        name: nameForAgent(aid),
+        amount: Math.max(0, Math.round((disburse - withheld) * 100) / 100),
+      }
+    })
+    .filter(p => p.amount > 0)
   // An eCommission advance is withheld from the agent like any other staged
   // debt, but it is owed to eCommission, not kept by the brokerage, so it must
   // not sit in the office line. When the compliance form reported it there is
@@ -246,8 +276,18 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   if (ecommissionUncovered > 0) {
     externalPayees.push({ name: 'eCommission (Advance Repayment)', amount: ecommissionUncovered })
   }
-  // What this agent actually receives after withholdings.
-  const agentNetPay = Math.max(0, Math.round((agentDisburseTotal - thisAgentDebts) * 100) / 100)
+  // A client rebate is the AGENT's money going to the client, not the
+  // brokerage's. It is already subtracted inside amount_1099_reportable, so the
+  // residual office calculation below would otherwise leave it sitting on the
+  // Collective Realty Co. line and title would cut that money to the brokerage.
+  // Total it across the deal (base rows only -- additional-comp co_agent rows
+  // carry agent_net with no gross and no rebate of their own) so it can be
+  // subtracted from the office line and paid to the client directly.
+  const rebateRows = producingRows.filter(r => Number(r.agent_gross || 0) > 0 && Number(r.rebate_amount || 0) > 0)
+  const rebateTotal = Math.round(
+    rebateRows.reduce((s, r) => s + Number(r.rebate_amount || 0), 0) * 100
+  ) / 100
+
 
   const role = formatRole(primaryTiaRow.agent_role)
   const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'}/logo.png`
@@ -268,7 +308,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     // BTSA passes through to the agent (it's inside each agent's amount_1099),
     // so it must be added into the office pool too, or it gets subtracted from
     // the brokerage line without ever being added -- zeroing the office row.
-    Math.round((officeGross + btsaTotal - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal - ecommissionUncovered) * 100) / 100
+    Math.round((officeGross + btsaTotal - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal - ecommissionUncovered - rebateTotal) * 100) / 100
   )
   const officeSideLabel = buyingSide > 0 && listingSide === 0
     ? 'Buying'
@@ -283,9 +323,12 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     ? ((officeGross / priceForDisplay) * 100).toFixed(2) + '%'
     : null
 
-  // Rebate (reduces agent payout)
-  const rebateAmount = Number(primaryTiaRow.rebate_amount || 0)
-  const rebateLabel = primaryTiaRow.rebate_type === 'buyer' ? 'Buyer Rebate' : primaryTiaRow.rebate_type === 'seller' ? 'Seller Rebate' : rebateAmount > 0 ? 'Client Rebate' : null
+  // Rebate paid to the client. Deal-level, like every other line on the CDA,
+  // and labelled from whichever row carries it rather than only the clicked
+  // agent's row -- the money leaves the deal either way.
+  const rebateAmount = rebateTotal
+  const rebateTypeRow = rebateRows.find(r => r.rebate_type === 'buyer' || r.rebate_type === 'seller')
+  const rebateLabel = rebateTypeRow?.rebate_type === 'buyer' ? 'Buyer Rebate' : rebateTypeRow?.rebate_type === 'seller' ? 'Seller Rebate' : rebateAmount > 0 ? 'Client Rebate' : null
 
   // Notes
   const notes: string | null = null
@@ -302,7 +345,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const model: CdaModel = {
     agentName, agencyName, propertyAddr, role, logoUrl, generatedDate,
     listingSide, buyingSide, btsaTotal, officeGross, totalGrossCommission,
-    officeNet, officeLineLabel, agentNetPay, rebateAmount, rebateLabel,
+    officeNet, officeLineLabel, agentPayees, rebateAmount, rebateLabel,
     priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
     titleContact, buyerContact, sellerContact, agent, txn, settings,
   }

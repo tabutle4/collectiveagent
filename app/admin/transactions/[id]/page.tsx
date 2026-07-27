@@ -4523,14 +4523,14 @@ export default function AdminTransactionDetailPage() {
                           {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && userPermissions.includes('can_generate_cda') && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
                               <button
-                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=statement`)}
+                                onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=statement`)}
                                 className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
                               >
                                 <Send size={12} />
                                 {a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
                               </button>
                               <button
-                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=cda`)}
+                                onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=cda`)}
                                 disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
                                 title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
                                 className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
@@ -4539,7 +4539,7 @@ export default function AdminTransactionDetailPage() {
                                 Send CDA
                               </button>
                               <button
-                                onClick={() => router.push(`/admin/transactions/${id}/send/${a.id}?type=title`)}
+                                onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=title`)}
                                 disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
                                 title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending to title' : ''}
                                 className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"

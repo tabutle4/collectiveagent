@@ -32,6 +32,68 @@ const line = (label: string, value: string, cls = '') => (
   </div>
 )
 
+// One agent's money column. Used for producing agents and, with the
+// eCommission note suppressed, for the linked roles paid inside the
+// Collective Realty Co. amount -- an advance belongs to the producing agent,
+// not to a team lead or referral agent riding on the same deal.
+function AgentMoneyColumn({ a, txn, showEcommission }: { a: any; txn: any; showEcommission: boolean }) {
+  const ecAmount = n(txn.ecommission_amount)
+  const ecCovered = (a.staged || []).some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
+  return (
+    <div>
+      <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
+        {a.agent_id ? (
+          <Link href={`/admin/users/${a.agent_id}`} className="text-luxury-accent hover:underline">
+            {a.name}
+          </Link>
+        ) : a.name}
+        {' '}({a.role})
+      </p>
+      {n(txn.sales_price) > 0 && line('Sales price', f$(txn.sales_price))}
+      {n(txn.monthly_rent) > 0 && line('Monthly rent', f$(txn.monthly_rent))}
+      {a.side && line('Side', String(a.side))}
+      {line('Agent basis', f$(a.agent_basis))}
+      {line(`Agent split (${n(a.split_percentage) || '-'}%)`, f$(a.agent_gross))}
+      {line('Brokerage split', f$(a.brokerage_split))}
+      {n(a.btsa_amount) > 0 && line('+ BTSA (no split)', f$(a.btsa_amount))}
+      {n(a.processing_fee) > 0 && line('- Processing fee', `-${f$(a.processing_fee)}`)}
+      {n(a.coaching_fee) > 0 && line('- Coaching fee', `-${f$(a.coaching_fee)}`)}
+      {n(a.other_fees) > 0 && line(`- Other fees${a.other_fees_description ? ` (${a.other_fees_description})` : ''}`, `-${f$(a.other_fees)}`)}
+      {n(a.rebate_amount) > 0 && line('- Rebate', `-${f$(a.rebate_amount)}`)}
+      {a.is_additional_comp && line('Additional compensation', f$(a.agent_net), 'font-semibold')}
+      {!a.is_additional_comp && line('1099 amount', f$(a.amount_1099_reportable), 'font-semibold')}
+      {(a.staged || []).map((d: any, i: number) => (
+        <div key={i}>{line(`- ${d.description || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700')}</div>
+      ))}
+      {line('Net to agent', f$(a.net_to_agent), 'font-semibold')}
+      {(a.open_invoices || []).length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-amber-700 mb-1">
+            Open invoices not collected on this deal ({a.open_invoices.length}) - {f$(a.open_invoices_total)}
+          </p>
+          {a.open_invoices.map((d: any, i: number) => (
+            <div key={i}>
+              {line(
+                d.date_incurred ? `${d.description} (${d.date_incurred})` : d.description,
+                f$(d.amount_remaining),
+                'text-amber-700'
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {showEcommission && ecAmount > 0 && (
+        ecCovered
+          ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
+          : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+      )}
+      {a.adjustment_notes && (
+        <p className="text-xs text-luxury-gray-3 mt-2">{a.adjustment_notes}</p>
+      )}
+    </div>
+  )
+}
+
 export default function CdaApprovalPage() {
   const params = useParams()
   const id = String(params?.id || '')
@@ -83,6 +145,7 @@ export default function CdaApprovalPage() {
   const compliance = data.compliance || {}
   const checklist = data.checklist || []
   const checklistDone = checklist.filter((c: any) => c.completed).length
+  const linkedAgents = data.linked_agents || []
 
   return (
     <div className="min-h-screen bg-luxury-cream p-4 md:p-8">
@@ -133,67 +196,26 @@ export default function CdaApprovalPage() {
           </div>
         )}
 
-        {data.agents.length > 0 && (
+        {(data.agents.length > 0 || linkedAgents.length > 0) && (
           <div className="container-card">
             <h2 className="section-title mb-3">Money on this Deal</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {data.agents.map((a: any) => {
-                const ecAmount = n(txn.ecommission_amount)
-                const ecCovered = (a.staged || []).some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
-                return (
-                  <div key={a.id}>
-                    <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
-                      {a.agent_id ? (
-                        <Link href={`/admin/users/${a.agent_id}`} className="text-luxury-accent hover:underline">
-                          {a.name}
-                        </Link>
-                      ) : a.name}
-                      {' '}({a.role})
-                    </p>
-                    {n(txn.sales_price) > 0 && line('Sales price', f$(txn.sales_price))}
-                    {n(txn.monthly_rent) > 0 && line('Monthly rent', f$(txn.monthly_rent))}
-                    {a.side && line('Side', String(a.side))}
-                    {line('Agent basis', f$(a.agent_basis))}
-                    {line(`Agent split (${n(a.split_percentage) || '-'}%)`, f$(a.agent_gross))}
-                    {line('Brokerage split', f$(a.brokerage_split))}
-                    {n(a.btsa_amount) > 0 && line('+ BTSA (no split)', f$(a.btsa_amount))}
-                    {n(a.processing_fee) > 0 && line('- Processing fee', `-${f$(a.processing_fee)}`)}
-                    {n(a.coaching_fee) > 0 && line('- Coaching fee', `-${f$(a.coaching_fee)}`)}
-                    {n(a.other_fees) > 0 && line(`- Other fees${a.other_fees_description ? ` (${a.other_fees_description})` : ''}`, `-${f$(a.other_fees)}`)}
-                    {n(a.rebate_amount) > 0 && line('- Rebate', `-${f$(a.rebate_amount)}`)}
-                    {line('1099 amount', f$(a.amount_1099_reportable), 'font-semibold')}
-                    {(a.staged || []).map((d: any, i: number) => (
-                      <div key={i}>{line(`- ${d.description || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700')}</div>
-                    ))}
-                    {line('Net to agent', f$(a.net_to_agent), 'font-semibold')}
-                    {(a.open_invoices || []).length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs font-semibold text-amber-700 mb-1">
-                          Open invoices not collected on this deal ({a.open_invoices.length}) - {f$(a.open_invoices_total)}
-                        </p>
-                        {a.open_invoices.map((d: any, i: number) => (
-                          <div key={i}>
-                            {line(
-                              d.date_incurred ? `${d.description} (${d.date_incurred})` : d.description,
-                              f$(d.amount_remaining),
-                              'text-amber-700'
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {ecAmount > 0 && (
-                      ecCovered
-                        ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
-                        : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
-                    )}
-                    {a.adjustment_notes && (
-                      <p className="text-xs text-luxury-gray-3 mt-2">{a.adjustment_notes}</p>
-                    )}
-                  </div>
-                )
-              })}
+              {data.agents.map((a: any) => (
+                <AgentMoneyColumn key={a.id} a={a} txn={txn} showEcommission />
+              ))}
             </div>
+            {linkedAgents.length > 0 && (
+              <div className="mt-5 pt-4 border-t border-luxury-gray-5/40">
+                <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">
+                  Paid inside the Collective Realty Co. amount
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {linkedAgents.map((a: any) => (
+                    <AgentMoneyColumn key={a.id} a={a} txn={txn} showEcommission={false} />
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-4 pt-3 border-t border-luxury-gray-5/40">
               {line('Office net (deal)', f$(txn.office_net), 'font-semibold')}
             </div>

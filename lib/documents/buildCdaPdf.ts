@@ -178,7 +178,9 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
     y -= 16
   }
   if (model.officeNet > 0) payeeRow(model.officeLineLabel, model.agencyName, money(model.officeNet))
-  if (model.agentNetPay > 0) payeeRow(`${model.listingSide > 0 ? 'Listing' : 'Buying'} agent commission`, model.agentName, money(model.agentNetPay))
+  for (const p of model.agentPayees || []) {
+    payeeRow(`${model.listingSide > 0 ? 'Listing' : 'Buying'} agent commission`, p.name, money(p.amount))
+  }
   for (const p of model.externalPayees || []) {
     payeeRow('External payout', p.name, money(p.amount))
   }
@@ -186,7 +188,7 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
     const rebatePayee = model.rebateLabel.includes('Buyer')
       ? (model.buyerContact?.name || '--')
       : (model.sellerContact?.name || '--')
-    payeeRow(model.rebateLabel, rebatePayee, `(${money(model.rebateAmount)})`)
+    payeeRow(model.rebateLabel, rebatePayee, money(model.rebateAmount))
   }
   gap(6)
 
