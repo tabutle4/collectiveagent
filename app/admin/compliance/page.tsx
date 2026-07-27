@@ -189,6 +189,18 @@ export default function AdminCompliancePage() {
   const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
   const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda'>('all')
+
+  // Deep-linkable tabs: /admin/compliance?tab=needs_cda lands directly on the
+  // Needs CDA tab (bookmarkable, shareable). Read once on mount from
+  // window.location rather than useSearchParams to avoid the Suspense
+  // boundary requirement on statically rendered client pages.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'all' || t === 'pending_compliance' || t === 'pending_checklist' || t === 'needs_cda') {
+      setTab(t)
+      if (t === 'needs_cda') setSortBy('closing')
+    }
+  }, [])
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'closed' | 'cancelled'>('active')
   const [search, setSearch] = useState('')
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
@@ -1064,7 +1076,12 @@ export default function AdminCompliancePage() {
         ] as const).map(t => (
           <button
             key={t.key}
-            onClick={() => { setTab(t.key); if (t.key === 'needs_cda') setSortBy('closing') }}
+            onClick={() => {
+              setTab(t.key)
+              if (t.key === 'needs_cda') setSortBy('closing')
+              // Keep the URL in sync so the current tab is always copyable.
+              window.history.replaceState(null, '', t.key === 'all' ? window.location.pathname : `?tab=${t.key}`)
+            }}
             className={`text-xs px-3 py-1.5 rounded border transition-colors ${
               tab === t.key
                 ? 'bg-luxury-gray-1 text-white border-luxury-gray-1'
