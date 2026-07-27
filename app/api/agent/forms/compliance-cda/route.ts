@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     let txn: any = null
     if (transactionId) {
       const { data } = await supabaseAdmin.from('transactions')
-        .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division')
+        .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
         .eq('id', transactionId).single()
       txn = data
     } else if (address?.trim()) {
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
         const ids = tiaRows.map((r: any) => r.transaction_id)
         for (const term of addressSearchTerms(address)) {
           const { data } = await supabaseAdmin.from('transactions')
-            .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division')
+            .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
             .ilike('property_address', `%${term}%`).in('id', ids).order('created_at', { ascending: false }).limit(5)
           if (data?.length) { txn = data[0]; break }
         }
@@ -350,6 +350,25 @@ export async function POST(request: NextRequest) {
           brokerage_referral_fee_type: formFields.brokerage_referral_fee_type || 'flat',
           has_ecommission:       !!formFields.has_ecommission,
           ecommission_amount:    formFields.has_ecommission ? (parseFloat(String(formFields.ecommission_amount ?? 0)) || 0) : null,
+          // Subsequent now renders the same field block as a first submission,
+          // so every column that block can change has to be writable here too.
+          // Without these a corrected title company or client email was
+          // silently dropped on resubmission.
+          client_name:           formFields.client_name || null,
+          client_email:          formFields.client_email || null,
+          client_phone:          formFields.client_phone || null,
+          title_officer_name:    formFields.title_officer_name || null,
+          title_company:         formFields.title_company || null,
+          title_company_email:   formFields.title_company_email || null,
+          title_officer_phone:   formFields.title_phone || null,
+          mls_link:              formFields.mls_link || null,
+          lead_source:           formFields.lead_source || null,
+          unit:                  formFields.unit || null,
+          bedrooms:              formFields.bedrooms ? parseInt(String(formFields.bedrooms)) : null,
+          bathrooms:             formFields.bathrooms ? parseFloat(String(formFields.bathrooms)) : null,
+          garage:                formFields.garage ? parseInt(String(formFields.garage)) : null,
+          building_sqft:         formFields.sqft ? parseFloat(String(formFields.sqft)) : null,
+          flyer_division:        formFields.flyer_division || null,
         }
         // Keys that map from form field name to transaction column name
         const formToColumn: Record<string, string> = {
@@ -360,6 +379,8 @@ export async function POST(request: NextRequest) {
           bonus_btsa_amount:        'bonus_amount',
           has_ecommission:          'has_ecommission',
           ecommission_amount:       'ecommission_amount',
+          title_phone:              'title_officer_phone',
+          sqft:                     'building_sqft',
         }
         // Build partial update: only include columns whose form field changed
         const partialUpdate: Record<string, any> = {
@@ -538,7 +559,7 @@ export async function POST(request: NextRequest) {
               transaction_id: txn.id,
               brokerage_role: 'other',
               brokerage_role_other: 'ecommission_repayment',
-              brokerage_name: 'eCommission (advance repayment)',
+              brokerage_name: 'eCommission (Advance Repayment)',
               commission_amount: ecSubAmount,
               amount_1099_reportable: ecSubAmount,
               payment_status: 'pending',
@@ -572,6 +593,116 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+        // External referral on a resubmission: the fee is charged to the agent's
+        // net above, so the outside brokerage needs its payout row here too. A
+        // first submission does this in createEcommissionDebtAndTeb, which this
+        // branch returns before ever reaching. Duplicate-guarded.
+        if (formFields.external_referral && extFeeSub > 0) {
+          const tebNameSub = String((body as any).external_referral_brokerage_name || '').trim()
+            || 'External referral brokerage (name pending)'
+          const { data: existingExtTebSub } = await supabaseAdmin
+            .from('transaction_external_brokerages')
+            .select('id')
+            .eq('transaction_id', txn.id)
+            .eq('brokerage_role', 'referral')
+            .limit(1)
+            .maybeSingle()
+          if (!existingExtTebSub) {
+            await supabaseAdmin.from('transaction_external_brokerages').insert({
+              transaction_id: txn.id,
+              brokerage_role: 'referral',
+              brokerage_name: tebNameSub,
+              commission_amount: extFeeSub,
+              amount_1099_reportable: extFeeSub,
+              payment_status: 'pending',
+              side: sideFromRepSub,
+              notes: 'Auto-created from the agent compliance form. Office: complete W-9 / EIN / address at review.',
+            })
+          }
+        }
+
+        // Contacts. A first submission upserts the title company and the
+        // client; a resubmission never did, so a corrected title company never
+        // reached transaction_contacts -- which is exactly where the CDA reads
+        // the address for Send to Title. Same upsert, same shape.
+        const upsertContactSub = async (
+          contactType: string,
+          fields: { name: string | null; company: string | null; email: string | null; phone: string | null }
+        ) => {
+          if (!fields.name && !fields.company && !fields.email && !fields.phone) return
+          const { data: existingContact } = await supabaseAdmin
+            .from('transaction_contacts')
+            .select('id')
+            .eq('transaction_id', txn.id)
+            .eq('contact_type', contactType)
+            .maybeSingle()
+          if (existingContact) {
+            await supabaseAdmin.from('transaction_contacts')
+              .update({ name: fields.name, company: fields.company, email: fields.email, phone: fields.phone, updated_at: now })
+              .eq('id', existingContact.id)
+          } else {
+            await supabaseAdmin.from('transaction_contacts')
+              .insert({ transaction_id: txn.id, contact_type: contactType, name: fields.name, company: fields.company, email: fields.email, phone: fields.phone })
+          }
+        }
+        const repLowerContact = String(rep || '').toLowerCase()
+        const clientContactTypeSub =
+          repLowerContact.includes('landlord') ? 'landlord'
+          : repLowerContact.includes('seller') ? 'seller'
+          : repLowerContact.includes('tenant') ? 'tenant'
+          : repLowerContact.includes('buyer') ? 'buyer'
+          : null
+        if (clientContactTypeSub) {
+          await upsertContactSub(clientContactTypeSub, {
+            name: formFields.client_name || null,
+            company: null,
+            email: formFields.client_email || null,
+            phone: formFields.client_phone || null,
+          })
+        }
+        await upsertContactSub('title_company', {
+          name: formFields.title_officer_name || null,
+          company: formFields.title_company || null,
+          email: formFields.title_company_email || null,
+          phone: formFields.title_phone || null,
+        })
+
+        // Flyer. The shared block now shows the flyer question on a
+        // resubmission too, so honour it -- but update the existing flyer
+        // rather than creating a second one for the same deal. Same display-line
+        // resolution and type override as a first submission.
+        if (formFields.flyer_display_type) {
+          let flyerLineSub: string | null = null
+          if (formFields.flyer_display_type === 'division') {
+            flyerLineSub = formFields.flyer_division || null
+          } else if (formFields.flyer_display_type === 'team') {
+            flyerLineSub = formFields.flyer_team_name || null
+          } else if (formFields.flyer_display_type === 'office') {
+            const { data: officeRow } = await supabaseAdmin
+              .from('users').select('office').eq('id', agentId).single()
+            flyerLineSub = officeRow?.office || null
+          }
+          const { data: existingFlyer } = await supabaseAdmin
+            .from('transaction_flyers')
+            .select('id')
+            .eq('transaction_id', txn.id)
+            .limit(1)
+            .maybeSingle()
+          if (existingFlyer) {
+            await supabaseAdmin.from('transaction_flyers')
+              .update({ flyer_division: flyerLineSub, updated_at: now })
+              .eq('id', existingFlyer.id)
+          } else {
+            await createFlyerFromForm({
+              form: formRecord as any,
+              transactionId: txn.id,
+              agentId,
+              flyerDivision: flyerLineSub,
+              typeOverride: isLease ? 'just_leased' : 'just_sold',
+            })
+          }
+        }
+
         // Commission inputs may have changed - re-run the cascade so tia rows
         // and TL/momentum payouts stay in sync with the resubmitted values.
         // Cascade LAST so its office_net recompute sees the records above.
@@ -769,7 +900,7 @@ export async function POST(request: NextRequest) {
             transaction_id: txnId,
             brokerage_role: 'other',
             brokerage_role_other: 'ecommission_repayment',
-            brokerage_name: 'eCommission (advance repayment)',
+            brokerage_name: 'eCommission (Advance Repayment)',
             commission_amount: ecommissionNum,
             amount_1099_reportable: ecommissionNum,
             payment_status: 'pending',
@@ -807,8 +938,14 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+      // The external referral fee is charged to the agent's net via other_fees,
+      // which recomputeOfficeNet counts as brokerage income. Without a matching
+      // payout row that money stays with CRC and nobody pays the outside
+      // brokerage. The form requires the name now, but never skip the row if it
+      // somehow arrives empty -- fall back to a placeholder the office renames.
       const tebName = String((body as any).external_referral_brokerage_name || '').trim()
-      if (external_referral && externalFeeNum > 0 && tebName) {
+        || 'External referral brokerage (name pending)'
+      if (external_referral && externalFeeNum > 0) {
         const { data: existingTeb } = await supabaseAdmin
           .from('transaction_external_brokerages')
           .select('id')

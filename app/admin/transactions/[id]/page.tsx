@@ -4206,7 +4206,7 @@ export default function AdminTransactionDetailPage() {
                         className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1"
                       >
                         <FileText size={12} />
-                        Send CDA for approval
+                        Send CDA for Approval
                       </button>
                     </>
                   )}

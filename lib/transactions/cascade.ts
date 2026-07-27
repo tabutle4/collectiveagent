@@ -392,7 +392,7 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
         .eq('transaction_id', transactionId),
       supabase
         .from('transaction_external_brokerages')
-        .select('amount_1099_reportable')
+        .select('amount_1099_reportable, brokerage_name')
         .eq('transaction_id', transactionId),
       // Staged debts/credits applied against this txn. record_type='credit'
       // is a credit (reduces office_net); anything else is a debt
@@ -400,7 +400,7 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
       // actually been applied.
       supabase
         .from('agent_debts')
-        .select('record_type, amount_owed, amount_remaining')
+        .select('record_type, amount_owed, amount_remaining, debt_type')
         .eq('offset_transaction_id', transactionId),
       // Side commissions feed the pass-through calc below: office_gross =
       // listing_side_commission + buying_side_commission, and a side with no
@@ -480,19 +480,40 @@ export async function recomputeOfficeNet(transactionId: string): Promise<void> {
 
     let stagedDebtsTotal = 0
     let stagedCreditsTotal = 0
+    // An eCommission advance is withheld from the agent like any other staged
+    // debt, but the money is owed to eCommission -- an outside company -- so it
+    // is NOT brokerage income and must not land in office_net.
+    let ecommissionDebtsTotal = 0
     for (const r of stagedRecs || []) {
       const owed = parseFloat(String(r.amount_owed ?? 0))
       const remaining = parseFloat(String(r.amount_remaining ?? 0))
       const applied = Math.max(0, owed - remaining)
       if (r.record_type === 'credit') stagedCreditsTotal += applied
-      else stagedDebtsTotal += applied
+      else {
+        stagedDebtsTotal += applied
+        if (r.debt_type === 'ecommission') ecommissionDebtsTotal += applied
+      }
     }
+    // When the compliance form reports eCommission it creates BOTH an external
+    // payout row (subtracted via externalTotal) and the matching agent debt
+    // (added via stagedDebtsTotal) -- those already cancel, so touching them
+    // would double-subtract. Only the portion with no external row behind it is
+    // money still sitting wrongly in office_net, so remove just that.
+    const ecommissionExternalTotal = (tebs || []).reduce(
+      (s, e: any) =>
+        /^ecommission/i.test(String(e.brokerage_name ?? ''))
+          ? s + parseFloat(String(e.amount_1099_reportable ?? 0))
+          : s,
+      0
+    )
+    const ecommissionUncovered = Math.max(0, ecommissionDebtsTotal - ecommissionExternalTotal)
 
     const officeNet =
       Math.round(
         (brokerageSplitTotal +
           feesTotal +
           stagedDebtsTotal -
+          ecommissionUncovered -
           stagedCreditsTotal -
           externalTotal -
           momentumPayoutsTotal -

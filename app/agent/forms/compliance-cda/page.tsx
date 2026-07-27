@@ -150,8 +150,6 @@ export default function ComplianceCdaForm() {
   })
 
   // Subsequent notes
-  const [subsequentNotes, setSubsequentNotes] = useState('')
-  const [expediteAcknowledgedSub, setExpediteAcknowledgedSub] = useState(false)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -239,6 +237,14 @@ export default function ComplianceCdaForm() {
           commission_rate_type: src.commission_rate_type || 'percent',
           total_sales_rent_price: src.total_sales_rent_price ? String(src.total_sales_rent_price) : txn.sales_price ? String(txn.sales_price) : txn.monthly_rent ? String(txn.monthly_rent) : '',
           bonus_btsa_amount: src.bonus_btsa_amount !== undefined ? String(src.bonus_btsa_amount) : '0',
+          // The %/$ toggles must come back with the amounts. Without these the
+          // toggle fell back to its 'flat' default, so a BTSA originally
+          // entered as 3% reappeared as $3 and resubmitted at that value.
+          bonus_btsa_amount_type: src.bonus_btsa_amount_type || 'flat',
+          rebate_amount_type: src.rebate_amount_type || 'flat',
+          internal_referral_fee_type: src.internal_referral_fee_type || 'flat',
+          external_referral_fee_type: src.external_referral_fee_type || 'flat',
+          brokerage_referral_fee_type: src.brokerage_referral_fee_type || 'flat',
           rebate_amount: src.rebate_amount !== undefined ? String(src.rebate_amount) : '0',
           internal_referral: src.internal_referral ?? false,
           internal_referral_fee: src.internal_referral_fee ? String(src.internal_referral_fee) : '',
@@ -247,6 +253,31 @@ export default function ComplianceCdaForm() {
           brokerage_referral: src.brokerage_referral ?? false,
           brokerage_referral_fee: src.brokerage_referral_fee ? String(src.brokerage_referral_fee) : '',
           loan_type: src.loan_type || txn.loan_type || '',
+          // The rest of the shared field block, prefilled the same way: last
+          // submission first, then whatever is on the transaction, so the agent
+          // sees their original answers and edits only what changed.
+          client_name: src.client_name || txn.client_name || '',
+          client_email: src.client_email || txn.client_email || '',
+          client_phone: src.client_phone || txn.client_phone || '',
+          title_officer_name: src.title_officer_name || txn.title_officer_name || '',
+          title_company: src.title_company || txn.title_company || '',
+          title_company_email: src.title_company_email || txn.title_company_email || '',
+          title_phone: src.title_phone || txn.title_officer_phone || '',
+          mls_link: src.mls_link || txn.mls_link || '',
+          lead_source: src.lead_source || txn.lead_source || '',
+          unit: src.unit || txn.unit || '',
+          bedrooms: src.bedrooms != null ? String(src.bedrooms) : txn.bedrooms != null ? String(txn.bedrooms) : '',
+          bathrooms: src.bathrooms != null ? String(src.bathrooms) : txn.bathrooms != null ? String(txn.bathrooms) : '',
+          garage: src.garage != null ? String(src.garage) : txn.garage != null ? String(txn.garage) : '',
+          sqft: src.sqft != null ? String(src.sqft) : txn.building_sqft != null ? String(txn.building_sqft) : '',
+          team_or_office: src.team_or_office || '',
+          in_matrix: src.in_matrix ?? false,
+          external_referral_brokerage_name: src.external_referral_brokerage_name || '',
+          flyer_display_type: src.flyer_display_type || '',
+          flyer_division: src.flyer_division || txn.flyer_division || '',
+          additional_notes: src.additional_notes || '',
+          // Deliberately NOT prefilled: the agent re-acknowledges the expedite
+          // policy on every submission rather than inheriting a stale tick.
         }))
       }
     } catch { setSearchDone(true) } finally { setSearching(false) }
@@ -440,11 +471,22 @@ export default function ComplianceCdaForm() {
       payload = { ...payload, ...retainer, retainer_amount: parseFloat(retainer.retainer_amount), confirm_new_deal: confirmedNewDeal }
     } else if (mode === 'subsequent') {
       if (!searchDone || !foundTransaction) { setError('Please find your transaction first.'); return }
+      // Subsequent renders the same field block as compliance, so it validates
+      // the same way. The one difference is the transaction already exists, so
+      // there is no new-address check.
+      if (!form.expedite_acknowledged) { setError('You must acknowledge the expedite policy.'); return }
+      if (!form.client_name) { setError('Client name is required.'); return }
       if (!form.acceptance_date) { setError('Acceptance date is required.'); return }
       if (!form.closing_or_movein_date) { setError('Closing or move-in date is required.'); return }
-      if (!expediteAcknowledgedSub) { setError('You must acknowledge the expedite policy.'); return }
+      if (!form.representing) { setError('Representation is required.'); return }
+      if (!form.commission_basis_price) { setError('Commission basis price is required.'); return }
+      if (!form.commission_rate) { setError('Commission rate is required.'); return }
+      if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
       if (form.internal_referral && !internalReferralAgent) { setError('Internal referral: search and select which agent the referral is going to.'); return }
-      payload = { ...payload, ...form, transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: subsequentNotes }
+      if (form.external_referral && !form.external_referral_brokerage_name.trim()) { setError('External referral: enter the receiving brokerage name.'); return }
+      if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
+      if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
+      payload = { ...payload, ...form, transaction_id: foundTransaction.id, last_submission_id: lastSubmission?.id || null, notes: form.additional_notes }
     } else {
       if (!form.expedite_acknowledged) { setError('You must acknowledge the expedite policy.'); return }
       if (!form.client_name) { setError('Client name is required.'); return }
@@ -455,6 +497,7 @@ export default function ComplianceCdaForm() {
       if (!form.commission_rate) { setError('Commission rate is required.'); return }
       if (!commissionConfirmed) { setError('Review the Commission Summary box and confirm the calculation before submitting.'); return }
       if (form.internal_referral && !internalReferralAgent) { setError('Internal referral: search and select which agent the referral is going to.'); return }
+      if (form.external_referral && !form.external_referral_brokerage_name.trim()) { setError('External referral: enter the receiving brokerage name.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
       if (!foundTransaction && !newAddressComplete) {
@@ -700,142 +743,6 @@ export default function ComplianceCdaForm() {
               )}
             </section>
 
-            {foundTransaction && (
-              <>
-                <section>
-                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Transaction</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Acceptance Date <span className="text-red-500">*</span></label>
-                      <input type="date" className="input-luxury w-full text-sm mb-3" value={form.acceptance_date} onChange={e => setField('acceptance_date', e.target.value)} />
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Closing or Move-In Date <span className="text-red-500">*</span></label>
-                      <input type="date" className="input-luxury w-full text-sm" value={form.closing_or_movein_date} onChange={e => setField('closing_or_movein_date', e.target.value)} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Who did you represent?</label>
-                      <div className="flex flex-wrap gap-3 mt-2">
-                        {REPRESENTATION_OPTIONS.map(o => (
-                          <label key={o.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                            <input type="radio" name="sub_representing" value={o.value} checked={form.representing === o.value} onChange={() => setField('representing', o.value)} className="w-3.5 h-3.5" />
-                            {o.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    {(form.representing === 'tenant' || form.representing === 'landlord') && (
-                      <>
-                        <div>
-                          <label className="block text-xs text-luxury-gray-3 mb-1">Tenant Transaction Type</label>
-                          <select className="input-luxury w-full text-sm" value={form.tenant_transaction_type} onChange={e => setField('tenant_transaction_type', e.target.value)}>
-                            <option value="">Select...</option>
-                            {TENANT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-luxury-gray-3 mb-1">Lease Term (months)</label>
-                          <input type="number" className="input-luxury w-full text-sm" value={form.lease_term_months} onChange={e => setField('lease_term_months', e.target.value)} placeholder="12" min="1" />
-                        </div>
-                      </>
-                    )}
-                    {form.representing === 'referred_out' && (
-                      <div>
-                        <label className="block text-xs text-luxury-gray-3 mb-1">What type of client did you refer?</label>
-                        <div className="flex flex-wrap gap-3 mt-2">
-                          {REFERRED_CLIENT_TYPES.map(o => (
-                            <label key={o.value} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                              <input type="radio" name="sub_referred" value={o.value} checked={form.referred_client_type === o.value} onChange={() => setField('referred_client_type', o.value)} className="w-3.5 h-3.5" />
-                              {o.label}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Commission</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Commission Basis Price</label>
-                      <input type="text" inputMode="decimal" className="input-luxury w-full text-sm" id="fld_basis" value={form.commission_basis_price} onChange={e => setField('commission_basis_price', e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Commission Rate</label>
-                      <div className="flex gap-2">
-                        <select className="input-luxury text-sm w-20 flex-shrink-0" value={form.commission_rate_type} onChange={e => setField('commission_rate_type', e.target.value)}>
-                          <option value="percent">%</option>
-                          <option value="flat">$</option>
-                        </select>
-                        <input type="number" className="input-luxury flex-1 text-sm" id="fld_rate" value={form.commission_rate} onChange={e => setField('commission_rate', e.target.value)} placeholder="0.00" min="0" step="0.01" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Total {isLease ? 'Rent' : 'Sales'} Price</label>
-                      <input type="number" className="input-luxury w-full text-sm" value={form.total_sales_rent_price} onChange={e => setField('total_sales_rent_price', e.target.value)} placeholder="0.00" min="0" step="0.01" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Bonus / BTSA Amount</label>
-                      <div className="flex gap-1.5"><input id="fld_btsa" type="number" className="input-luxury w-full text-sm" value={form.bonus_btsa_amount} onChange={e => setField('bonus_btsa_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.bonus_btsa_amount_type} onChange={e => setField('bonus_btsa_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Bonus To Selling Agent - extra money a builder or seller pays you on top of commission. $ amount or % of the sales price. Paid to you in full; the brokerage split does not apply to it." />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Buyer / Seller Rebate</label>
-                      <div className="flex gap-1.5"><input id="fld_rebate" type="number" className="input-luxury w-full text-sm" value={form.rebate_amount} onChange={e => setField('rebate_amount', e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={form.rebate_amount_type} onChange={e => setField('rebate_amount_type', e.target.value)}><option value="flat">$</option><option value="percent">%</option></select></div><FieldTip text="Money you are giving back to your client at closing. Usually a dollar amount. If you choose %, it means percent of the SALES PRICE. This comes out of YOUR share." />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1">Loan Type</label>
-                      <select className="input-luxury w-full text-sm" value={form.loan_type} onChange={e => setField('loan_type', e.target.value)}>
-                        <option value="">Select...</option>
-                        {LOAN_TYPES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Referrals</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {([
-                      { key: 'internal_referral' as const, feeKey: 'internal_referral_fee' as const, label: 'Internal Referral?' },
-                      { key: 'external_referral' as const, feeKey: 'external_referral_fee' as const, label: 'External Referral?' },
-                      { key: 'brokerage_referral' as const, feeKey: 'brokerage_referral_fee' as const, label: 'Brokerage Referral?' },
-                    ]).map(({ key, feeKey, label }) => (
-                      <div key={key} className="inner-card">
-                        <label className="block text-xs text-luxury-gray-3 mb-2">{label}</label>
-                        <div className="flex gap-4 mb-3">
-                          {['Yes', 'No'].map(v => (
-                            <label key={v} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                              <input type="radio" checked={(form as any)[key] === (v === 'Yes')} onChange={() => setField(key, v === 'Yes')} className="w-3.5 h-3.5" />
-                              {v}
-                            </label>
-                          ))}
-                        </div>
-                        {(form as any)[key] && (
-                          <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
-  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
-)}{key === 'internal_referral' && (
-  <div className="mt-2"><AgentSelect value={internalReferralAgent?.id || ''} onSelect={setInternalReferralAgent} label="Which agent is the referral going to?" placeholder="Search for the agent..." /></div>
-)}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Expedite Policy</h2>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" checked={expediteAcknowledgedSub} onChange={e => setExpediteAcknowledgedSub(e.target.checked)} />
-                    <span className="text-xs text-luxury-gray-2">I understand that if my file is not marked compliant or compliance is not submitted by 11am at least two business days prior to closing, a $95 Brokerage Expedite Fee Applies.</span>
-                  </label>
-                </section>
-
-                <section>
-                  <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-4">Notes (optional)</h2>
-                  <textarea className="textarea-luxury w-full text-sm" rows={3} value={subsequentNotes} onChange={e => setSubsequentNotes(e.target.value)} placeholder="Any additional notes for the reviewer..." />
-                </section>
-              </>
-            )}
           </>
         )}
 
@@ -916,6 +823,15 @@ export default function ComplianceCdaForm() {
                 </div>
               )}
             </section>
+
+          </>
+        )}
+
+        {/* Every field section below is shared by both modes. Subsequent mode
+            renders the identical form, prefilled from the last submission, so
+            the agent can correct anything -- not a narrower subset. */}
+        {(mode === 'compliance' || (mode === 'subsequent' && foundTransaction)) && (
+          <>
 
             {/* Section 1 - Transaction */}
             <section>
@@ -1108,7 +1024,7 @@ export default function ComplianceCdaForm() {
                     </div>
                     {(form as any)[key] && (
                       <><div className="flex gap-1.5"><input id={`fld_${feeKey}`} type="number" className="input-luxury w-full text-sm" value={(form as any)[feeKey]} onChange={e => setField(feeKey as any, e.target.value)} placeholder="0.00" min="0" step="0.01" /><select className="input-luxury text-sm w-16 flex-shrink-0" value={(form as any)[`${feeKey}_type`]} onChange={e => setField(`${feeKey}_type` as any, e.target.value)}><option value="percent">%</option><option value="flat">$</option></select></div>{key === 'external_referral' && (
-  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name" />
+  <input type="text" className="input-luxury w-full text-sm mt-2" value={form.external_referral_brokerage_name} onChange={e => setField('external_referral_brokerage_name', e.target.value)} placeholder="Receiving brokerage name *" required />
 )}{key === 'internal_referral' && (
   <div className="mt-2"><AgentSelect value={internalReferralAgent?.id || ''} onSelect={setInternalReferralAgent} label="Which agent is the referral going to?" placeholder="Search for the agent..." /></div>
 )}<p className="text-[10px] text-luxury-gray-3 mt-1">% = percent of the commission</p></>

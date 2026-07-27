@@ -12,6 +12,14 @@ import { supabaseAdmin } from '@/lib/supabase'
  * unchanged.
  */
 
+/**
+ * debt_type for an eCommission commission advance. Withheld from the agent like
+ * any other staged debt, but owed to eCommission -- an outside company -- so it
+ * is disbursed to them, never kept by the brokerage.
+ * Keep in sync with DEBT_TYPES in components/transactions/AgentBillingPanel.tsx.
+ */
+export const ECOMMISSION_DEBT_TYPE = 'ecommission'
+
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '--'
   const ds = d.includes('T') ? d : `${d}T12:00:00`
@@ -207,7 +215,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const { data: appliedDebtRows } = producingTiaIds.length > 0
     ? await supabaseAdmin
         .from('agent_debts')
-        .select('amount_paid, offset_transaction_agent_id')
+        .select('amount_paid, offset_transaction_agent_id, debt_type')
         .in('offset_transaction_agent_id', producingTiaIds)
     : { data: [] as any[] }
   const agentTiaIdSet = new Set(agentTiaRows.map(r => r.id))
@@ -217,6 +225,27 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const allAgentsDebts = (appliedDebtRows || []).reduce(
     (s, d) => s + Number(d.amount_paid || 0), 0
   )
+  // An eCommission advance is withheld from the agent like any other staged
+  // debt, but it is owed to eCommission, not kept by the brokerage, so it must
+  // not sit in the office line. When the compliance form reported it there is
+  // already a matching external payout row (subtracted via externalTotal) and
+  // the two cancel -- only the portion with no external row behind it needs
+  // correcting here, and that portion also needs its own payee line so
+  // eCommission actually gets paid on the document.
+  const ecommissionDebtsTotal = (appliedDebtRows || []).reduce(
+    (s, d) => d.debt_type === ECOMMISSION_DEBT_TYPE ? s + Number(d.amount_paid || 0) : s, 0
+  )
+  const ecommissionExternalTotal = (externalBrokerages || []).reduce(
+    (s, e) => /^ecommission/i.test(String(e.brokerage_name ?? ''))
+      ? s + Number(e.amount_1099_reportable || 0) : s, 0
+  )
+  const ecommissionUncovered = Math.max(
+    0,
+    Math.round((ecommissionDebtsTotal - ecommissionExternalTotal) * 100) / 100
+  )
+  if (ecommissionUncovered > 0) {
+    externalPayees.push({ name: 'eCommission (Advance Repayment)', amount: ecommissionUncovered })
+  }
   // What this agent actually receives after withholdings.
   const agentNetPay = Math.max(0, Math.round((agentDisburseTotal - thisAgentDebts) * 100) / 100)
 
@@ -239,7 +268,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     // BTSA passes through to the agent (it's inside each agent's amount_1099),
     // so it must be added into the office pool too, or it gets subtracted from
     // the brokerage line without ever being added -- zeroing the office row.
-    Math.round((officeGross + btsaTotal - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal) * 100) / 100
+    Math.round((officeGross + btsaTotal - (allAgentsDisburseTotal - allAgentsDebts) - externalTotal - ecommissionUncovered) * 100) / 100
   )
   const officeSideLabel = buyingSide > 0 && listingSide === 0
     ? 'Buying'

@@ -285,8 +285,8 @@ function SendDocumentInner() {
                   {line('Office net (deal)', f$(txn.office_net))}
                   {ecAmount > 0 && (
                     ecCovered
-                      ? <p className="text-xs text-amber-700 mt-2">eCommission advance {f$(ecAmount)} - repayment is applied above.</p>
-                      : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+                      ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
+                      : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
                   )}
                   {agent.adjustment_notes && (
                     <p className="text-xs text-luxury-gray-3 mt-2">{agent.adjustment_notes}</p>
