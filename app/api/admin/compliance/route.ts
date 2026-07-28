@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     if (txnIds.length) {
       const txns = await fetchByIds(
         'transactions',
-        'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, cda_sent_manual_at, closing_date, move_in_date, funding_status, office_gross, office_net',
+        'id, property_address, client_name, status, compliance_status, transaction_type, is_locked, cda_status, cda_manual_status, cda_sent_manual_at, closing_date, move_in_date, funding_status, office_gross, office_net',
         'id',
         txnIds
       )
@@ -233,7 +233,8 @@ export async function GET(request: NextRequest) {
         // Sent by the app, OR marked sent by hand when it went to title
         // outside the app. Either signal counts; the manual mark never
         // overwrites the in-app one.
-        cda_sent: txn?.cda_status === 'sent' || !!txn?.cda_sent_manual_at,
+        cda_sent: txn?.cda_status === 'sent' || txn?.cda_manual_status === 'sent',
+        cda_manual_status: txn?.cda_manual_status || null,
         cda_sent_manual_at: txn?.cda_sent_manual_at || null,
         cda_status: txn?.cda_status || null,
         flyer: flyer

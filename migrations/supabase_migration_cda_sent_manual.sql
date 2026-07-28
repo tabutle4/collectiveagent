@@ -11,6 +11,11 @@
 --
 -- Additive only. Safe to re-run. No destructive operation in this file.
 
+-- 'sent' = went to title outside the app. 'not_needed' = this deal never needs
+-- a CDA from us. NULL = no override, fall back to what the app detects.
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS cda_manual_status text;
+
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS cda_sent_manual_at timestamptz;
 

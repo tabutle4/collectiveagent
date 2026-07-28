@@ -4,11 +4,18 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+const MANUAL_STATUSES = ['sent', 'not_needed']
+
 // POST /api/admin/compliance/set-cda-sent
-// Body: { submission_id, sent: boolean }
+// Body: { submission_id, status: 'sent' | 'not_needed' | null }
 //
-// Manual override for a CDA that went to title OUTSIDE the app -- emailed from
-// a mailbox, handed over at closing, whatever. It does NOT touch cda_status,
+// Manual override for a deal the app cannot work out on its own:
+//   'sent'       -- the CDA went to title outside the app (emailed from a
+//                   mailbox, handed over at closing)
+//   'not_needed' -- this deal never needs a CDA from us
+//   null         -- clear the override, fall back to what the app detects
+//
+// It does NOT touch cda_status,
 // so the in-app detection (cda_status = 'sent', set when the app sends the CDA
 // itself) keeps working independently. The Needs CDA tab treats a deal as sent
 // when EITHER signal is present, so marking by hand can only ever add the
@@ -24,7 +31,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { submission_id } = body
-    const sent = body.sent === true
+    const status: string | null =
+      body.status === '' || body.status === undefined || body.status === null ? null : String(body.status)
+    if (status !== null && !MANUAL_STATUSES.includes(status)) {
+      return NextResponse.json({ error: 'Invalid manual CDA status' }, { status: 400 })
+    }
 
     if (!submission_id) {
       return NextResponse.json({ error: 'submission_id is required' }, { status: 400 })
@@ -48,14 +59,15 @@ export async function POST(request: NextRequest) {
     const { error: txnErr } = await supabaseAdmin
       .from('transactions')
       .update({
-        cda_sent_manual_at: sent ? now : null,
-        cda_sent_manual_by: sent ? auth.user.id : null,
+        cda_manual_status: status,
+        cda_sent_manual_at: status ? now : null,
+        cda_sent_manual_by: status ? auth.user.id : null,
         updated_at: now,
       })
       .eq('id', sub.transaction_id)
     if (txnErr) throw txnErr
 
-    return NextResponse.json({ success: true, cda_sent_manual_at: sent ? now : null })
+    return NextResponse.json({ success: true, cda_manual_status: status, cda_sent_manual_at: status ? now : null })
   } catch (err: any) {
     console.error('set-cda-sent error:', err)
     return NextResponse.json({ error: err.message || 'Server error' }, { status: 500 })

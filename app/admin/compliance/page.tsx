@@ -20,6 +20,7 @@ interface TrackerRow {
   completed_at: string | null
   paid: boolean
   cda_sent: boolean
+  cda_manual_status?: string | null
   cda_sent_manual_at?: string | null
   cda_status?: string | null
   flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean; sent: boolean } | null
@@ -70,6 +71,14 @@ const FUNDING_STATUS_OPTIONS = [
 
 // CDA status is system-driven (request approval -> broker approves -> CDA
 // sent, from the Work Deal page); these are the display labels.
+// Manual override for what the app cannot detect: a CDA sent outside the app,
+// or a deal that never needs one. Blank clears it.
+const CDA_MANUAL_OPTIONS = [
+  { value: '', label: 'Not set' },
+  { value: 'sent', label: 'Sent outside the app' },
+  { value: 'not_needed', label: 'CDA not needed' },
+]
+
 const CDA_STATUS_LABELS: Record<string, string> = {
   pending_compliance: 'Pending Compliance',
   pending_approval: 'Pending Broker Approval',
@@ -231,6 +240,7 @@ export default function AdminCompliancePage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   // Funding status renders as text; clicking it swaps in the dropdown.
   const [editingFundingId, setEditingFundingId] = useState<string | null>(null)
+  const [editingCdaManualId, setEditingCdaManualId] = useState<string | null>(null)
 
   // Status editing (per row)
   const [editStatus, setEditStatus] = useState<string>('')
@@ -439,19 +449,24 @@ export default function AdminCompliancePage() {
   // Funding status: the office advances it by hand, straight from the tab.
   // Manual override for a CDA sent outside the app. Does not touch cda_status,
   // so in-app detection keeps working on its own.
-  const setCdaSentManual = async (r: TrackerRow, sent: boolean) => {
-    if (!r.transaction_id) { setError('Link this submission to a transaction before marking the CDA sent.'); return }
+  const setCdaManualStatus = async (r: TrackerRow, status: string) => {
+    if (!r.transaction_id) { setError('Link this submission to a transaction before setting a CDA override.'); return }
     setError('')
     try {
       const res = await fetch('/api/admin/compliance/set-cda-sent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submission_id: r.id, sent }),
+        body: JSON.stringify({ submission_id: r.id, status: status || null }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Could not save')
       setRows(prev => prev.map(x => (x.transaction_id === r.transaction_id
-        ? { ...x, cda_sent_manual_at: data.cda_sent_manual_at, cda_sent: x.cda_status === 'sent' || !!data.cda_sent_manual_at }
+        ? {
+            ...x,
+            cda_manual_status: data.cda_manual_status,
+            cda_sent_manual_at: data.cda_sent_manual_at,
+            cda_sent: x.cda_status === 'sent' || data.cda_manual_status === 'sent',
+          }
         : x)))
     } catch (err: any) {
       setError(err.message)
@@ -1267,7 +1282,7 @@ export default function AdminCompliancePage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {fmtDate(r.closing_date) || '-'}
-                      {tab === 'needs_cda' && !r.cda_sent && (() => {
+                      {tab === 'needs_cda' && !r.cda_sent && r.cda_manual_status !== 'not_needed' && (() => {
                         const d = daysUntil(r.closing_date)
                         if (d === null || d > cdaDueSoonDays) return null
                         return (
@@ -1294,25 +1309,8 @@ export default function AdminCompliancePage() {
                         )}
                         {r.cda_sent && (
                           <span className="text-xs text-luxury-gray-3">
-                            CDA sent{r.cda_sent_manual_at ? ' (marked by hand)' : ''}
+                            CDA sent{r.cda_manual_status === 'sent' ? ' (marked by hand)' : ''}
                           </span>
-                        )}
-                        {tab === 'needs_cda' && (
-                          r.cda_sent_manual_at ? (
-                            <button
-                              onClick={() => setCdaSentManual(r, false)}
-                              className="text-xs text-luxury-accent hover:underline"
-                            >
-                              Undo manual mark
-                            </button>
-                          ) : !r.cda_sent ? (
-                            <button
-                              onClick={() => setCdaSentManual(r, true)}
-                              className="text-xs text-luxury-accent hover:underline"
-                            >
-                              Mark CDA sent
-                            </button>
-                          ) : null
                         )}
                         {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-xs text-amber-700">CDA pending approval</span>}
                         {!r.cda_sent && r.cda_status === 'approved' && <span className="text-xs text-green-600">CDA approved</span>}
@@ -1331,8 +1329,32 @@ export default function AdminCompliancePage() {
                     </td>
                     {tab === 'needs_cda' && (
                       <>
-                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap">
-                          {r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : '-'}
+                        <td className="px-4 py-3 text-xs text-luxury-gray-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span>{r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : '-'}</span>
+                            {editingCdaManualId === r.id ? (
+                              <select
+                                autoFocus
+                                value={r.cda_manual_status || ''}
+                                onBlur={() => setEditingCdaManualId(null)}
+                                onChange={e => { setCdaManualStatus(r, e.target.value); setEditingCdaManualId(null) }}
+                                className="select-luxury text-xs py-1"
+                              >
+                                {CDA_MANUAL_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEditingCdaManualId(r.id)}
+                                title="Click to set a manual CDA override"
+                                className={`text-xs underline decoration-dotted underline-offset-2 hover:text-luxury-gray-1 ${r.cda_manual_status ? 'text-luxury-gray-1' : 'text-luxury-gray-4'}`}
+                              >
+                                {CDA_MANUAL_OPTIONS.find(o => o.value === (r.cda_manual_status || ''))?.label || 'Not set - tap to set'}
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           {editingFundingId === r.id ? (
@@ -1470,6 +1492,16 @@ export default function AdminCompliancePage() {
                     }`}>
                       CDA: {r.cda_status ? (CDA_STATUS_LABELS[r.cda_status] || r.cda_status.replace(/_/g, ' ')) : 'Not started'}
                     </span>
+                    <select
+                      value={r.cda_manual_status || ''}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => { e.stopPropagation(); setCdaManualStatus(r, e.target.value) }}
+                      className="select-luxury text-xs py-0.5"
+                    >
+                      {CDA_MANUAL_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
                     <span className={`px-2 py-0.5 rounded ${r.checklist_complete ? 'bg-green-50 text-green-700' : 'bg-luxury-light text-luxury-gray-3'}`}>
                       {r.checklist_complete ? 'Checklist done' : 'Checklist pending'}
                     </span>
