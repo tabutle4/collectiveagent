@@ -25,16 +25,24 @@ export async function GET(request: NextRequest) {
     const permissions = await getUserPermissions(userId)
     const canViewAll = permissions.has('can_view_all_transactions')
 
-    // Build filters
-    const filters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
+    // Commission rows power the transactions page's quarter totals (they are
+    // what the quarterly report counts) and, for agents, the per-deal
+    // "my net" display. Agents get only their own rows.
+    // Fetched before the transactions because an agent's visible deal list is
+    // derived from these rows: a deal is theirs when they hold a commission row
+    // on it, no matter who submitted the compliance request.
+    const tiaFilters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
     if (!canViewAll) {
-      filters.push({ type: 'eq', column: 'submitted_by', value: userId })
+      tiaFilters.push({ type: 'eq', column: 'agent_id', value: userId })
     }
+    const tia = await fetchAllRows(
+      'transaction_internal_agents',
+      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date',
+      { filters: tiaFilters },
+      supabase
+    )
 
-    // Fetch transactions (batched)
-    const transactions = await fetchAllRows(
-      'transactions',
-      `id,
+    const TRANSACTION_COLUMNS = `id,
        created_at,
        updated_at,
        property_address,
@@ -50,27 +58,59 @@ export async function GET(request: NextRequest) {
        lease_term,
        transaction_type,
        submitted_by,
-       office_location`,
-      {
-        filters,
-        orderBy: { column: 'closing_date', ascending: false },
-      },
-      supabase
-    )
+       office_location`
+    const TRANSACTION_ORDER = { column: 'closing_date', ascending: false }
 
-    // Commission rows power the transactions page's quarter totals (they are
-    // what the quarterly report counts) and, for agents, the per-deal
-    // "my net" display. Agents get only their own rows.
-    const tiaFilters: Array<{ type: 'eq' | 'neq' | 'is' | 'not' | 'in' | 'gte' | 'lte'; column: string; value: any }> = []
-    if (!canViewAll) {
-      tiaFilters.push({ type: 'eq', column: 'agent_id', value: userId })
+    // Fetch transactions (batched)
+    let transactions: any[]
+    if (canViewAll) {
+      transactions = await fetchAllRows(
+        'transactions',
+        TRANSACTION_COLUMNS,
+        { orderBy: TRANSACTION_ORDER },
+        supabase
+      )
+    } else {
+      // An agent's deal list is the union of deals they hold a commission row
+      // on and deals they submitted. Filtering on submitted_by alone hid every
+      // deal entered by a TC, the office, or a co-agent, even though the agent
+      // was paid on it.
+      const participatingIds = Array.from(
+        new Set((tia as any[]).map(r => r.transaction_id).filter(Boolean))
+      )
+      const [submitted, participating] = await Promise.all([
+        fetchAllRows(
+          'transactions',
+          TRANSACTION_COLUMNS,
+          {
+            filters: [{ type: 'eq' as const, column: 'submitted_by', value: userId }],
+            orderBy: TRANSACTION_ORDER,
+          },
+          supabase
+        ),
+        participatingIds.length
+          ? fetchAllRows(
+              'transactions',
+              TRANSACTION_COLUMNS,
+              {
+                filters: [{ type: 'in' as const, column: 'id', value: participatingIds }],
+                orderBy: TRANSACTION_ORDER,
+              },
+              supabase
+            )
+          : Promise.resolve([] as any[]),
+      ])
+      const byId = new Map<string, any>()
+      for (const t of [...submitted, ...participating]) byId.set(t.id, t)
+      // Postgres orders NULLs first on a DESC sort. The merged list is sorted
+      // the same way so the page's row order does not shift.
+      transactions = Array.from(byId.values()).sort((a, b) => {
+        if (!a.closing_date && !b.closing_date) return 0
+        if (!a.closing_date) return -1
+        if (!b.closing_date) return 1
+        return String(b.closing_date).localeCompare(String(a.closing_date))
+      })
     }
-    const tia = await fetchAllRows(
-      'transaction_internal_agents',
-      'id, transaction_id, agent_id, agent_role, side, sales_volume, units, agent_basis, agent_gross, brokerage_split, processing_fee, coaching_fee, other_fees, btsa_amount, rebate_amount, agent_net, amount_1099_reportable, payment_status, payment_date',
-      { filters: tiaFilters },
-      supabase
-    )
 
     // Get agents list for users who can view all
     let agents: any[] = []
