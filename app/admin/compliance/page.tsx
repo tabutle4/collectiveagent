@@ -20,6 +20,7 @@ interface TrackerRow {
   completed_at: string | null
   paid: boolean
   cda_sent: boolean
+  cda_sent_manual_at?: string | null
   cda_status?: string | null
   flyer: { id: string; flyer_type: string; has_photo: boolean; downloaded: boolean; sent: boolean } | null
   recheck_requested: boolean
@@ -282,7 +283,15 @@ export default function AdminCompliancePage() {
     String(r.transaction_type || '').includes('referred_out') ||
     String(r.side || '').toLowerCase() === 'referred_out' ||
     String((r.form_data || {}).representing || '').toLowerCase() === 'referred_out'
-  const needsCda = (r: TrackerRow) => !r.is_lease && !isReferredOut(r) && r.compliance_status === 'complete' && !r.cda_sent
+  // A deal stays on Needs CDA until POST CLOSING is complete, not merely until
+  // the CDA is sent. Sending the CDA is the middle of the job, not the end --
+  // dropping the deal off the list at that point loses track of it while the
+  // post-closing work is still open.
+  const needsCda = (r: TrackerRow) =>
+    !r.is_lease &&
+    !isReferredOut(r) &&
+    r.compliance_status === 'complete' &&
+    (r.post_closing_status || 'not_started') !== 'complete'
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
@@ -428,6 +437,27 @@ export default function AdminCompliancePage() {
   }
 
   // Funding status: the office advances it by hand, straight from the tab.
+  // Manual override for a CDA sent outside the app. Does not touch cda_status,
+  // so in-app detection keeps working on its own.
+  const setCdaSentManual = async (r: TrackerRow, sent: boolean) => {
+    if (!r.transaction_id) { setError('Link this submission to a transaction before marking the CDA sent.'); return }
+    setError('')
+    try {
+      const res = await fetch('/api/admin/compliance/set-cda-sent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submission_id: r.id, sent }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not save')
+      setRows(prev => prev.map(x => (x.transaction_id === r.transaction_id
+        ? { ...x, cda_sent_manual_at: data.cda_sent_manual_at, cda_sent: x.cda_status === 'sent' || !!data.cda_sent_manual_at }
+        : x)))
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
   const setFundingStatus = async (r: TrackerRow, value: string) => {
     if (!r.transaction_id) { setError('Link this submission to a transaction before setting the funding status.'); return }
     setError('')
@@ -1237,7 +1267,7 @@ export default function AdminCompliancePage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {fmtDate(r.closing_date) || '-'}
-                      {tab === 'needs_cda' && (() => {
+                      {tab === 'needs_cda' && !r.cda_sent && (() => {
                         const d = daysUntil(r.closing_date)
                         if (d === null || d > cdaDueSoonDays) return null
                         return (
@@ -1262,7 +1292,28 @@ export default function AdminCompliancePage() {
                             <RefreshCw size={10} /> Recheck
                           </span>
                         )}
-                        {r.cda_sent && <span className="text-xs text-luxury-gray-3">CDA sent</span>}
+                        {r.cda_sent && (
+                          <span className="text-xs text-luxury-gray-3">
+                            CDA sent{r.cda_sent_manual_at ? ' (marked by hand)' : ''}
+                          </span>
+                        )}
+                        {tab === 'needs_cda' && (
+                          r.cda_sent_manual_at ? (
+                            <button
+                              onClick={() => setCdaSentManual(r, false)}
+                              className="text-xs text-luxury-accent hover:underline"
+                            >
+                              Undo manual mark
+                            </button>
+                          ) : !r.cda_sent ? (
+                            <button
+                              onClick={() => setCdaSentManual(r, true)}
+                              className="text-xs text-luxury-accent hover:underline"
+                            >
+                              Mark CDA sent
+                            </button>
+                          ) : null
+                        )}
                         {!r.cda_sent && r.cda_status === 'pending_approval' && <span className="text-xs text-amber-700">CDA pending approval</span>}
                         {!r.cda_sent && r.cda_status === 'approved' && <span className="text-xs text-green-600">CDA approved</span>}
                         <span className={`text-xs ${r.checklist_complete ? 'text-green-600' : 'text-luxury-gray-3'}`}>
