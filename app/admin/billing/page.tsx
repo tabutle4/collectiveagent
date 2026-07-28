@@ -41,6 +41,8 @@ export default function AdminBillingPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
+  // Guards the ?agent= deep link so it only fires once, not on every re-render.
+  const deepLinkHandled = useRef(false)
   const [agentData, setAgentData] = useState<
     Record<string, { invoices: any[]; receipts: any[]; records: any[] }>
   >({})
@@ -127,6 +129,25 @@ export default function AdminBillingPage() {
     if (!user) return
     loadAgents()
   }, [user])
+
+  // Deep link: /admin/billing?agent=<id> opens straight to that agent's debts
+  // and credits, so a link from another screen lands on the right person
+  // instead of the top of an 80-row list. Runs once, after the roster loads.
+  // Reads window.location rather than useSearchParams to avoid the Suspense
+  // boundary requirement on statically rendered client pages -- same reason
+  // app/admin/compliance/page.tsx does it this way.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('agent')
+    if (!wanted || deepLinkHandled.current) return
+    if (!agents.some((a: any) => a.id === wanted)) return
+    deepLinkHandled.current = true
+    setExpandedAgent(wanted)
+    loadAgentData(wanted)
+    // Scroll the row into view once it has rendered expanded.
+    requestAnimationFrame(() => {
+      document.getElementById(`agent-${wanted}`)?.scrollIntoView({ block: 'center' })
+    })
+  }, [agents])
 
   const loadAgents = async () => {
     setLoading(true)
@@ -976,7 +997,7 @@ export default function AdminBillingPage() {
           const netBalance = totalDebts - totalCredits
 
           return (
-            <div key={agent.id} className="container-card">
+            <div key={agent.id} id={`agent-${agent.id}`} className="container-card">
               <div
                 className="flex items-center justify-between cursor-pointer"
                 onClick={() => toggleAgent(agent.id)}

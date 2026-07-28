@@ -3,6 +3,8 @@ import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
+import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -53,8 +55,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
-      // Per-agent team memberships with splits
-      const { data: teamMemberships } = agentIds.length > 0
+      // Per-agent team memberships with splits, scoped to the deal rather than
+      // to today -- the agent's own view of a transaction has to agree with the
+      // admin view and with the commission math. Same resolver cascade.ts and
+      // smart-calc use: execution date for sales, move-in for leases, falling
+      // back to closing.
+      const agentGoverningDate =
+        (isLeaseTransactionType(txn.transaction_type) ? txn.move_in_date : txn.acceptance_date) ||
+        txn.closing_date ||
+        null
+      const governingAgreementIds = (
+        await Promise.all(
+          agentIds.map((aid: string) =>
+            resolveGoverningTeamAgreement(supabase, aid, agentGoverningDate)
+          )
+        )
+      )
+        .map(a => a?.id)
+        .filter(Boolean) as string[]
+      const { data: teamMemberships } = governingAgreementIds.length > 0
         ? await supabase
             .from('team_member_agreements')
             .select(`
@@ -62,8 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
               team:teams!team_member_agreements_team_id_fkey(id, team_name),
               splits:team_agreement_splits(id, plan_type, lead_source, agent_pct, team_lead_pct, firm_pct)
             `)
-            .in('agent_id', agentIds)
-            .is('end_date', null)
+            .in('id', governingAgreementIds)
         : { data: [] }
 
       // Build a map of agent_id -> membership

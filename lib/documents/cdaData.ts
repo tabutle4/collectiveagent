@@ -66,8 +66,10 @@ export interface CdaModel {
   officeLineLabel: string
   // One line per producing agent, all of that agent's rows already combined.
   agentPayees: { name: string; amount: number }[]
-  rebateAmount: number
-  rebateLabel: string | null
+  // Everyone named on the deal, including a producing agent with no payout.
+  agentRoster: { name: string; role: string; license_number: string | null }[]
+  // One entry per rebate on the deal, each paid to its own client.
+  rebatePayees: { label: string; side: 'buyer' | 'seller' | null; amount: number }[]
   priceForDisplay: number
   priceLabel: string
   salesPricePct: string | null
@@ -215,11 +217,18 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const { data: appliedDebtRows } = producingTiaIds.length > 0
     ? await supabaseAdmin
         .from('agent_debts')
-        .select('amount_paid, offset_transaction_agent_id, debt_type')
+        .select('amount_paid, offset_transaction_agent_id, debt_type, record_type')
         .in('offset_transaction_agent_id', producingTiaIds)
     : { data: [] as any[] }
+  // A credit is money the brokerage owes the AGENT, so it moves the opposite
+  // way from a debt: it increases the agent's disbursement and comes out of the
+  // office line. Signing it like a debt sends it to the wrong party in both
+  // directions. Same convention as recomputeOfficeNet in
+  // lib/transactions/cascade.ts, which nets staged credits out of office_net.
+  const signedApplied = (d: any): number =>
+    (d.record_type === 'credit' ? -1 : 1) * Number(d.amount_paid || 0)
   const allAgentsDebts = (appliedDebtRows || []).reduce(
-    (s, d) => s + Number(d.amount_paid || 0), 0
+    (s, d) => s + signedApplied(d), 0
   )
   // Every producing agent on the deal gets exactly ONE payee line carrying all
   // of their money. An agent can hold several TIA rows on a single deal --
@@ -232,7 +241,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const { data: producingUsers } = producingAgentIds.length > 0
     ? await supabaseAdmin
         .from('users')
-        .select('id, first_name, last_name, preferred_first_name, preferred_last_name')
+        .select('id, first_name, last_name, preferred_first_name, preferred_last_name, license_number')
         .in('id', producingAgentIds)
     : { data: [] as any[] }
   const nameForAgent = (aid: string): string => {
@@ -247,7 +256,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
       const rowIds = new Set(rows.map(r => r.id))
       const disburse = rows.reduce((s, r) => s + rowAgentDisburse(r), 0)
       const withheld = (appliedDebtRows || []).reduce(
-        (s, d) => rowIds.has(d.offset_transaction_agent_id) ? s + Number(d.amount_paid || 0) : s, 0
+        (s, d) => rowIds.has(d.offset_transaction_agent_id) ? s + signedApplied(d) : s, 0
       )
       return {
         name: nameForAgent(aid),
@@ -255,6 +264,21 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
       }
     })
     .filter(p => p.amount > 0)
+  // Everyone named on the deal, for the Agent Information block. Separate from
+  // agentPayees because a producing agent with a zero payout still belongs on
+  // the document. Role is the agent's highest-priority row.
+  const agentRoster = producingAgentIds.map(aid => {
+    const rows = producingRows.filter(r => r.agent_id === aid)
+    const top = [...rows].sort(
+      (a, b) => (CDA_ROLE_PRIORITY[a.agent_role] ?? 9) - (CDA_ROLE_PRIORITY[b.agent_role] ?? 9)
+    )[0]
+    const u = (producingUsers || []).find((x: any) => x.id === aid)
+    return {
+      name: nameForAgent(aid),
+      role: formatRole(top?.agent_role),
+      license_number: (aid === tia.agent_id ? agent.license_number : u?.license_number) || null,
+    }
+  })
   // An eCommission advance is withheld from the agent like any other staged
   // debt, but it is owed to eCommission, not kept by the brokerage, so it must
   // not sit in the office line. When the compliance form reported it there is
@@ -263,7 +287,8 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   // correcting here, and that portion also needs its own payee line so
   // eCommission actually gets paid on the document.
   const ecommissionDebtsTotal = (appliedDebtRows || []).reduce(
-    (s, d) => d.debt_type === ECOMMISSION_DEBT_TYPE ? s + Number(d.amount_paid || 0) : s, 0
+    (s, d) => d.debt_type === ECOMMISSION_DEBT_TYPE && d.record_type !== 'credit'
+      ? s + Number(d.amount_paid || 0) : s, 0
   )
   const ecommissionExternalTotal = (externalBrokerages || []).reduce(
     (s, e) => /^ecommission/i.test(String(e.brokerage_name ?? ''))
@@ -326,9 +351,15 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   // Rebate paid to the client. Deal-level, like every other line on the CDA,
   // and labelled from whichever row carries it rather than only the clicked
   // agent's row -- the money leaves the deal either way.
-  const rebateAmount = rebateTotal
-  const rebateTypeRow = rebateRows.find(r => r.rebate_type === 'buyer' || r.rebate_type === 'seller')
-  const rebateLabel = rebateTypeRow?.rebate_type === 'buyer' ? 'Buyer Rebate' : rebateTypeRow?.rebate_type === 'seller' ? 'Seller Rebate' : rebateAmount > 0 ? 'Client Rebate' : null
+  // One payee line per rebate. A deal can carry a rebate on more than one side,
+  // and merging them into a single line would hide who is owed what.
+  const rebateLabelFor = (t: string | null | undefined, amt: number): string =>
+    t === 'buyer' ? 'Buyer Rebate' : t === 'seller' ? 'Seller Rebate' : 'Client Rebate'
+  const rebatePayees = rebateRows.map(r => ({
+    label: rebateLabelFor(r.rebate_type, Number(r.rebate_amount || 0)),
+    side: (r.rebate_type === 'buyer' || r.rebate_type === 'seller') ? r.rebate_type as 'buyer' | 'seller' : null,
+    amount: Number(r.rebate_amount || 0),
+  }))
 
   // Notes
   const notes: string | null = null
@@ -345,7 +376,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
   const model: CdaModel = {
     agentName, agencyName, propertyAddr, role, logoUrl, generatedDate,
     listingSide, buyingSide, btsaTotal, officeGross, totalGrossCommission,
-    officeNet, officeLineLabel, agentPayees, rebateAmount, rebateLabel,
+    officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
     priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
     titleContact, buyerContact, sellerContact, agent, txn, settings,
   }

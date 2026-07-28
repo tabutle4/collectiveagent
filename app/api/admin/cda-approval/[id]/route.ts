@@ -46,7 +46,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { data: stagedDebts } = allTiaIds.length > 0
       ? await supabaseAdmin
           .from('agent_debts')
-          .select('offset_transaction_agent_id, description, debt_type, amount_paid')
+          .select('offset_transaction_agent_id, description, debt_type, record_type, amount_paid')
           .in('offset_transaction_agent_id', allTiaIds)
           .eq('status', 'paid')
       : { data: [] as any[] }
@@ -71,9 +71,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .filter((d: any) => d.offset_transaction_agent_id === t.id)
         .map((d: any) => ({
           description: d.description || String(d.debt_type || '').replace(/_/g, ' ') || 'Debt',
+          // A credit is money owed TO the agent, so it signs the opposite way
+          // from a debt -- it adds to the payout instead of subtracting. Same
+          // convention as recomputeOfficeNet and the CDA.
+          is_credit: d.record_type === 'credit',
           amount_paid: num(d.amount_paid),
         }))
-      const stagedTotal = staged.reduce((sum: number, d: any) => sum + d.amount_paid, 0)
+      const stagedTotal = staged.reduce(
+        (sum: number, d: any) => sum + (d.is_credit ? -d.amount_paid : d.amount_paid), 0
+      )
       const openInvoices = (openInvoiceRows || [])
         .filter((d: any) => d.agent_id === t.agent_id)
         .map((d: any) => ({
@@ -159,7 +165,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       (subs || []).find((s: any) => s.data?.submission_mode === 'compliance')?.data ||
       (subs && subs[0]?.data) || null
 
-    return NextResponse.json({ transaction, agents, linked_agents: linkedAgents, compliance, checklist })
+    // The billing page is gated on can_view_billing, so only offer the link to
+    // someone who can actually open it.
+    const canViewBilling = !!auth.permissions?.has('can_view_billing')
+
+    return NextResponse.json({
+      transaction, agents, linked_agents: linkedAgents, compliance, checklist,
+      can_view_billing: canViewBilling,
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

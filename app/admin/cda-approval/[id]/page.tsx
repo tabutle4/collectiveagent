@@ -25,6 +25,9 @@ const FIELDS: { key: string; label: string }[] = [
 
 const n = (v: any) => parseFloat(String(v ?? 0)) || 0
 const f$ = (v: any) => `$${n(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+// Deduction lines already prefix a minus, so a value that is itself negative
+// would render as "--$50.00". Show the magnitude and let the label carry the sign.
+const fAbs$ = (v: any) => f$(Math.abs(n(v)))
 const line = (label: string, value: string, cls = '') => (
   <div className={`flex justify-between gap-4 py-1 border-b border-luxury-gray-5/30 text-xs ${cls}`}>
     <span className="text-luxury-gray-3">{label}</span>
@@ -36,7 +39,7 @@ const line = (label: string, value: string, cls = '') => (
 // eCommission note suppressed, for the linked roles paid inside the
 // Collective Realty Co. amount -- an advance belongs to the producing agent,
 // not to a team lead or referral agent riding on the same deal.
-function AgentMoneyColumn({ a, txn, showEcommission }: { a: any; txn: any; showEcommission: boolean }) {
+function AgentMoneyColumn({ a, txn, showEcommission, showInvoices = true, canViewBilling = false }: { a: any; txn: any; showEcommission: boolean; showInvoices?: boolean; canViewBilling?: boolean }) {
   const ecAmount = n(txn.ecommission_amount)
   const ecCovered = (a.staged || []).some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
   return (
@@ -49,6 +52,16 @@ function AgentMoneyColumn({ a, txn, showEcommission }: { a: any; txn: any; showE
         ) : a.name}
         {' '}({a.role})
       </p>
+      {canViewBilling && a.agent_id && (
+        <p className="mb-2">
+          <Link
+            href={`/admin/billing?agent=${a.agent_id}`}
+            className="text-xs text-luxury-accent hover:underline"
+          >
+            Check debts and credits
+          </Link>
+        </p>
+      )}
       {n(txn.sales_price) > 0 && line('Sales price', f$(txn.sales_price))}
       {n(txn.monthly_rent) > 0 && line('Monthly rent', f$(txn.monthly_rent))}
       {a.side && line('Side', String(a.side))}
@@ -56,17 +69,21 @@ function AgentMoneyColumn({ a, txn, showEcommission }: { a: any; txn: any; showE
       {line(`Agent split (${n(a.split_percentage) || '-'}%)`, f$(a.agent_gross))}
       {line('Brokerage split', f$(a.brokerage_split))}
       {n(a.btsa_amount) > 0 && line('+ BTSA (no split)', f$(a.btsa_amount))}
-      {n(a.processing_fee) > 0 && line('- Processing fee', `-${f$(a.processing_fee)}`)}
-      {n(a.coaching_fee) > 0 && line('- Coaching fee', `-${f$(a.coaching_fee)}`)}
-      {n(a.other_fees) > 0 && line(`- Other fees${a.other_fees_description ? ` (${a.other_fees_description})` : ''}`, `-${f$(a.other_fees)}`)}
-      {n(a.rebate_amount) > 0 && line('- Rebate', `-${f$(a.rebate_amount)}`)}
+      {n(a.processing_fee) > 0 && line('- Processing fee', `-${fAbs$(a.processing_fee)}`)}
+      {n(a.coaching_fee) > 0 && line('- Coaching fee', `-${fAbs$(a.coaching_fee)}`)}
+      {n(a.other_fees) > 0 && line(`- Other fees${a.other_fees_description ? ` (${a.other_fees_description})` : ''}`, `-${fAbs$(a.other_fees)}`)}
+      {n(a.rebate_amount) > 0 && line('- Rebate', `-${fAbs$(a.rebate_amount)}`)}
       {a.is_additional_comp && line('Additional compensation', f$(a.agent_net), 'font-semibold')}
       {!a.is_additional_comp && line('1099 amount', f$(a.amount_1099_reportable), 'font-semibold')}
       {(a.staged || []).map((d: any, i: number) => (
-        <div key={i}>{line(`- ${d.description || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700')}</div>
+        <div key={i}>
+          {d.is_credit
+            ? line(`+ ${d.description || 'Credit'}`, f$(d.amount_paid), 'text-green-600')
+            : line(`- ${d.description || 'Debt'}`, `-${fAbs$(d.amount_paid)}`, 'text-amber-700')}
+        </div>
       ))}
       {line('Net to agent', f$(a.net_to_agent), 'font-semibold')}
-      {(a.open_invoices || []).length > 0 && (
+      {showInvoices && (a.open_invoices || []).length > 0 && (
         <div className="mt-3">
           <p className="text-xs font-semibold text-amber-700 mb-1">
             Open invoices not collected on this deal ({a.open_invoices.length}) - {f$(a.open_invoices_total)}
@@ -146,6 +163,12 @@ export default function CdaApprovalPage() {
   const checklist = data.checklist || []
   const checklistDone = checklist.filter((c: any) => c.completed).length
   const linkedAgents = data.linked_agents || []
+  const canViewBilling = !!data.can_view_billing
+  // Open invoices are scoped by agent, not by TIA row, so a person who holds
+  // both a producing and a linked role would otherwise list them twice.
+  const producingAgentIds = new Set<string>(
+    (data.agents || []).map((a: any) => a.agent_id).filter(Boolean)
+  )
 
   return (
     <div className="min-h-screen bg-luxury-cream p-4 md:p-8">
@@ -201,7 +224,7 @@ export default function CdaApprovalPage() {
             <h2 className="section-title mb-3">Money on this Deal</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {data.agents.map((a: any) => (
-                <AgentMoneyColumn key={a.id} a={a} txn={txn} showEcommission />
+                <AgentMoneyColumn key={a.id} a={a} txn={txn} showEcommission canViewBilling={canViewBilling} />
               ))}
             </div>
             {linkedAgents.length > 0 && (
@@ -211,7 +234,14 @@ export default function CdaApprovalPage() {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {linkedAgents.map((a: any) => (
-                    <AgentMoneyColumn key={a.id} a={a} txn={txn} showEcommission={false} />
+                    <AgentMoneyColumn
+                      key={a.id}
+                      a={a}
+                      txn={txn}
+                      showEcommission={false}
+                      showInvoices={!producingAgentIds.has(a.agent_id)}
+                      canViewBilling={canViewBilling}
+                    />
                   ))}
                 </div>
               </div>

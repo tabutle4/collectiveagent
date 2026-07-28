@@ -71,6 +71,7 @@ interface CompanySettings {
   payload_retainer_fee: number
   board_requirement_days: number
   termination_notice_days: number
+  cda_due_soon_days?: number
   commission_payment_days: number
   // Referral Agent
   referral_annual_fee: number
@@ -845,6 +846,16 @@ export default function SettingsPage() {
                           className="input-luxury"
                         />
                         <p className="text-xs text-luxury-gray-3 mt-1">Days to join local board</p>
+                      </div>
+                      <div>
+                        <label className="field-label">CDA Due Soon (days)</label>
+                        <input
+                          type="number"
+                          value={settings.cda_due_soon_days ?? 7}
+                          onChange={(e) => updateSetting('cda_due_soon_days', Number(e.target.value))}
+                          className="input-luxury"
+                        />
+                        <p className="text-xs text-luxury-gray-3 mt-1">Flag a deal on Needs CDA this many days before closing</p>
                       </div>
                       <div>
                         <label className="field-label">Termination Notice (days)</label>

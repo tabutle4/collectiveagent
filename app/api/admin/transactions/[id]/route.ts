@@ -4,6 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
@@ -377,15 +378,38 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const primaryAgent =
         (agentUsers || []).find((u: any) => u.id === primaryAgentId) || (agentUsers || [])[0]
 
-      const { data: teamMemberships } = agentIds.length > 0
+      // Team affiliation is scoped to the deal, not to today. This page was
+      // showing whichever agreement is open right now, so an agent who has
+      // since left a team kept showing team splits on their old deals and an
+      // agent who just joined picked them up on deals that predate the
+      // agreement -- and it disagreed with the commission math, which has
+      // always been dated. resolveGoverningTeamAgreement is the same resolver
+      // cascade.ts and smart-calc use: purchase agreement execution date for
+      // sales, tenant move-in for leases, falling back to closing.
+      const governingDate =
+        (txnIsLease ? txn.move_in_date : txn.acceptance_date) ||
+        txn.closing_date ||
+        null
+      const governingByAgent = await Promise.all(
+        agentIds.map(async (aid: string) => ({
+          agentId: aid,
+          agreement: await resolveGoverningTeamAgreement(supabase, aid, governingDate),
+        }))
+      )
+      // The resolver returns the governing agreement's identity; this page also
+      // renders agreement_document_url, so re-read the full rows by those ids
+      // rather than restating the date logic here.
+      const governingIds = governingByAgent
+        .map(g => g.agreement?.id)
+        .filter(Boolean) as string[]
+      const { data: teamMemberships } = governingIds.length > 0
         ? await supabase
             .from('team_member_agreements')
             .select(`
               id, agent_id, agreement_document_url, firm_min_override,
               team:teams!team_member_agreements_team_id_fkey(id, team_name)
             `)
-            .in('agent_id', agentIds)
-            .is('end_date', null)
+            .in('id', governingIds)
         : { data: [] }
 
       const membershipIds = (teamMemberships || []).map((m: any) => m.id).filter(Boolean)

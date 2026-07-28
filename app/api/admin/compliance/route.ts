@@ -271,7 +271,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ submissions: result })
+    // How many days before closing a deal counts as "send the CDA now" on the
+    // Needs CDA tab. Configurable in Settings -> Terms; 7 if unset.
+    const { data: cdaSettings } = await supabaseAdmin
+      .from('company_settings')
+      .select('cda_due_soon_days')
+      .limit(1)
+      .maybeSingle()
+    const cdaDueSoonDays = Number(cdaSettings?.cda_due_soon_days ?? 7) || 7
+
+    return NextResponse.json({ submissions: result, cda_due_soon_days: cdaDueSoonDays })
   } catch (err: any) {
     console.error('admin compliance GET error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

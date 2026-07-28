@@ -80,6 +80,19 @@ const CDA_STATUS_LABELS: Record<string, string> = {
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
+// Whole days from today to a closing date. Negative once the date has passed.
+// Both sides are floored to midnight so a deal closing later today reads as 0.
+const daysUntil = (d: string | null): number | null => {
+  if (!d) return null
+  const ds = d.includes('T') ? d : `${d}T12:00:00`
+  const target = new Date(ds)
+  if (isNaN(target.getTime())) return null
+  const a = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  const now = new Date()
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return Math.round((a.getTime() - b.getTime()) / 86400000)
+}
+
 const fmtDateTime = (d: string | null) =>
   d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
 
@@ -188,6 +201,8 @@ export default function AdminCompliancePage() {
   const [error, setError] = useState('')
   const [flyerMsg, setFlyerMsg] = useState('')
   const [rows, setRows] = useState<TrackerRow[]>([])
+  // Threshold for the Needs CDA "send now" flag, from Settings -> Terms.
+  const [cdaDueSoonDays, setCdaDueSoonDays] = useState(7)
   const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda'>('all')
 
   // Deep-linkable tabs: /admin/compliance?tab=needs_cda lands directly on the
@@ -247,6 +262,7 @@ export default function AdminCompliancePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to load')
       setRows(data.submissions || [])
+      setCdaDueSoonDays(Number(data.cda_due_soon_days) || 7)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -1217,7 +1233,22 @@ export default function AdminCompliancePage() {
                         <span className="text-luxury-gray-4 text-xs">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">{fmtDate(r.closing_date) || '-'}</td>
+                    <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
+                      {fmtDate(r.closing_date) || '-'}
+                      {tab === 'needs_cda' && (() => {
+                        const d = daysUntil(r.closing_date)
+                        if (d === null || d > cdaDueSoonDays) return null
+                        return (
+                          <span className="block text-xs font-semibold text-red-600">
+                            {d < 0
+                              ? `Closed ${Math.abs(d)} ${Math.abs(d) === 1 ? 'day' : 'days'} ago - send now`
+                              : d === 0
+                                ? 'Closes today - send now'
+                                : `Closes in ${d} ${d === 1 ? 'day' : 'days'} - send now`}
+                          </span>
+                        )
+                      })()}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1 items-start">
                         {statusBadge(r.compliance_status)}

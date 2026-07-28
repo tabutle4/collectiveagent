@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { loadCdaData } from '@/lib/documents/cdaData'
+import { cdaPdfFilename } from '@/lib/documents/buildCdaPdf'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,11 +42,11 @@ export async function GET(
     // Every value below comes from the shared CDA model so the web CDA and
     // the emailed CDA PDF render identical numbers. See lib/documents/cdaData.ts.
     const {
-      agentName, agencyName, propertyAddr, role, logoUrl, generatedDate,
+      agencyName, propertyAddr, logoUrl, generatedDate,
       listingSide, buyingSide, btsaTotal, totalGrossCommission,
-      officeNet, officeLineLabel, agentPayees, rebateAmount, rebateLabel,
+      officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
       priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
-      titleContact, buyerContact, sellerContact, agent, txn, settings,
+      titleContact, buyerContact, sellerContact, txn, settings,
     } = model
 
     const html = `<!DOCTYPE html>
@@ -53,7 +54,7 @@ export async function GET(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CDA - ${agentName} - ${propertyAddr}</title>
+  <title>CDA - ${propertyAddr}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 11px; color: #333; line-height: 1.4; padding: 40px; max-width: 8.5in; margin: 0 auto; background: white; overflow-wrap: break-word; word-break: break-word; }
@@ -135,9 +136,7 @@ export async function GET(
 
   <div style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee">
     <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:8px">Agent Information</div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Agent</span><span style="font-weight:500">${agentName}</span></div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Role</span><span style="font-weight:500">${role}</span></div>
-    ${agent.license_number ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:#777">License</span><span style="font-weight:500">${agent.license_number}</span></div>` : ''}
+    ${(agentRoster || []).map((a: { name: string; role: string; license_number: string | null }) => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">${a.role}</span><span style="font-weight:500">${a.name}${a.license_number ? ` &middot; License ${a.license_number}` : ''}</span></div>`).join('')}
   </div>
 
   <div style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee">
@@ -154,7 +153,7 @@ export async function GET(
         ${officeNet > 0 ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${officeLineLabel}</td><td style="padding:4px 0">${agencyName}</td><td style="padding:4px 0;text-align:right">${fmt$(officeNet)}</td></tr>` : ''}
         ${(agentPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${listingSide > 0 ? 'Listing' : 'Buying'} agent commission</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
         ${(externalPayees || []).map((p: { name: string; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">External payout</td><td style="padding:4px 0">${p.name}</td><td style="padding:4px 0;text-align:right">${fmt$(p.amount)}</td></tr>`).join('')}
-        ${rebateAmount > 0 && rebateLabel ? `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rebateLabel}</td><td style="padding:4px 0">${rebateLabel.includes('Buyer') ? (buyerContact?.name || '--') : (sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">${fmt$(rebateAmount)}</td></tr>` : ''}
+        ${(rebatePayees || []).filter((rb: { amount: number }) => rb.amount > 0).map((rb: { label: string; side: string | null; amount: number }) => `<tr style="border-bottom:1px dotted #eee"><td style="padding:4px 0">${rb.label}</td><td style="padding:4px 0">${rb.side === 'buyer' ? (buyerContact?.name || '--') : rb.side === 'seller' ? (sellerContact?.name || '--') : (buyerContact?.name || sellerContact?.name || '--')}</td><td style="padding:4px 0;text-align:right">${fmt$(rb.amount)}</td></tr>`).join('')}
       </tbody>
     </table>
   </div>
@@ -194,7 +193,7 @@ export async function GET(
             return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html',
-        'X-PDF-Filename': `${agentName.replace(/\s+/g, '_')}_CDA.pdf`,
+        'X-PDF-Filename': cdaPdfFilename(propertyAddr),
       },
     })
   } catch (err: any) {

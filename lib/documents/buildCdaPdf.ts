@@ -155,9 +155,9 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
 
   // ── Agent Information ───────────────────────────────────────────────────────
   sectionTitle('Agent Information')
-  row('Agent', model.agentName)
-  row('Role', model.role)
-  if (model.agent?.license_number) row('License', String(model.agent.license_number))
+  for (const a of model.agentRoster || []) {
+    row(a.role, a.license_number ? `${a.name}  ·  License ${a.license_number}` : a.name)
+  }
   gap(6)
 
   // ── Payees ──────────────────────────────────────────────────────────────────
@@ -184,11 +184,14 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
   for (const p of model.externalPayees || []) {
     payeeRow('External payout', p.name, money(p.amount))
   }
-  if (model.rebateAmount > 0 && model.rebateLabel) {
-    const rebatePayee = model.rebateLabel.includes('Buyer')
+  for (const rb of model.rebatePayees || []) {
+    if (rb.amount <= 0) continue
+    const rebatePayee = rb.side === 'buyer'
       ? (model.buyerContact?.name || '--')
-      : (model.sellerContact?.name || '--')
-    payeeRow(model.rebateLabel, rebatePayee, money(model.rebateAmount))
+      : rb.side === 'seller'
+        ? (model.sellerContact?.name || '--')
+        : (model.buyerContact?.name || model.sellerContact?.name || '--')
+    payeeRow(rb.label, rebatePayee, money(rb.amount))
   }
   gap(6)
 
