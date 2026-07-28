@@ -77,8 +77,10 @@ const CDA_STATUS_LABELS: Record<string, string> = {
   cda_sent: 'Sent to Title',
 }
 
+// Date-only values ('2026-04-03') parse as midnight UTC, which renders as the
+// previous day in Central. Pin to noon so the calendar date is stable.
 const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+  d ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 
 // Whole days from today to a closing date. Negative once the date has passed.
 // Both sides are floored to midnight so a deal closing later today reads as 0.

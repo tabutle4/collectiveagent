@@ -163,7 +163,8 @@ interface Announcement {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-US', {
+  // Date-only values parse as midnight UTC, a day early in Central. Pin to noon.
+  return new Date(dateStr.length === 10 ? dateStr + 'T12:00:00' : dateStr).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

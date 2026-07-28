@@ -62,3 +62,46 @@ export async function resolveGoverningTeamAgreement(
     .maybeSingle()
   return (current as any) || null
 }
+
+// Resolves which people were team leads on a given team as of a deal's
+// governing date.
+//
+// Leadership changes hands. Looking up "who leads this team right now" puts the
+// current lead's name on a deal that closed under someone else, and pays team
+// lead splits to the wrong person. Same governing date as the membership
+// resolver above: execution date for sales, move-in for leases, falling back to
+// closing.
+//
+// A null start_date means the lead has held the role since before the record
+// was kept, so it counts. A null end_date means they still hold it. With no
+// usable governing date we fall back to the currently active leads, preserving
+// legacy behavior on deals with no dates entered.
+export async function resolveGoverningTeamLeads(
+  supabase: SupabaseLike,
+  teamIds: string[],
+  governingDate: string | null | undefined
+): Promise<any[]> {
+  if (teamIds.length === 0) return []
+  const raw = governingDate ? String(governingDate).slice(0, 10) : null
+  const safeDate = raw && DATE_RE.test(raw) ? raw : null
+
+  const base = supabase
+    .from('team_leads')
+    .select(`
+      team_id, agent_id, start_date, created_at,
+      agent:users!team_leads_agent_id_fkey(
+        id, first_name, last_name, preferred_first_name, preferred_last_name
+      )
+    `)
+    .in('team_id', teamIds)
+    .order('start_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
+
+  const { data } = safeDate
+    ? await base
+        .or(`start_date.is.null,start_date.lte.${safeDate}`)
+        .or(`end_date.is.null,end_date.gte.${safeDate}`)
+    : await base.is('end_date', null)
+
+  return data || []
+}

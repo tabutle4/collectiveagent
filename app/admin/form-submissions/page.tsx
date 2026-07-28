@@ -42,7 +42,7 @@ const MODE_BADGE: Record<string, string> = {
 
 const fmtDate = (d: string | null) =>
   d
-    ? new Date(d).toLocaleDateString('en-US', {
+    ? new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',

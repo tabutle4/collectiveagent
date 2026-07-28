@@ -39,7 +39,8 @@ const formatCurrency = (n: number) =>
 
 const fmtDate = (s: string | null) => {
   if (!s) return '--'
-  return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // Date-only values parse as midnight UTC, a day early in Central. Pin to noon.
+  return new Date(s.length === 10 ? s + 'T12:00:00' : s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function PMDashboardPage() {

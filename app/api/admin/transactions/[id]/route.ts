@@ -4,7 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
-import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
+import { resolveGoverningTeamAgreement, resolveGoverningTeamLeads } from '@/lib/transactions/teamAgreement'
 import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
@@ -426,18 +426,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const teamIdsFromMemberships = (teamMemberships || [])
         .map((m: any) => (Array.isArray(m.team) ? m.team[0]?.id : m.team?.id))
         .filter(Boolean)
-      const { data: teamLeads } = teamIdsFromMemberships.length > 0
-        ? await supabase
-            .from('team_leads')
-            .select(`
-              team_id, agent_id,
-              agent:users!team_leads_agent_id_fkey(
-                id, first_name, last_name, preferred_first_name, preferred_last_name
-              )
-            `)
-            .in('team_id', teamIdsFromMemberships)
-            .is('end_date', null)
-        : { data: [] }
+      // Scoped to the deal date like membership above -- leadership changes
+      // hands, and the current lead's name does not belong on an older deal.
+      const teamLeads = await resolveGoverningTeamLeads(
+        supabase,
+        teamIdsFromMemberships,
+        governingDate
+      )
 
       const membershipByAgent: Record<string, any> = {}
       for (const m of teamMemberships || []) {

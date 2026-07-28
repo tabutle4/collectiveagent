@@ -23,8 +23,9 @@ const FLYER_TYPE_LABEL: Record<string, string> = {
   under_contract: 'Under Contract',
 }
 
+// Date-only values parse as midnight UTC, a day early in Central. Pin to noon.
 const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 export default function AgentFlyerListPage() {
   const [loading, setLoading] = useState(true)

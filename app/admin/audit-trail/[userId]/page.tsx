@@ -46,7 +46,8 @@ const DOCUMENT_LABELS: Record<string, string> = {
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
+  // Date-only values parse as midnight UTC, a day early in Central. Pin to noon.
+  const date = new Date(dateStr.length === 10 ? dateStr + 'T12:00:00' : dateStr)
   return date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',

@@ -9,7 +9,7 @@ import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getLeadSourceBucket } from '@/lib/transactions/constants'
 import { computeCommission, computeGrossFromSides } from '@/lib/transactions/math'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
-import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
+import { resolveGoverningTeamAgreement, resolveGoverningTeamLeads } from '@/lib/transactions/teamAgreement'
 
 export const isLeaseType = isLeaseTransactionType
 
@@ -139,13 +139,9 @@ export async function computeCommissionBreakdown(args: {
     const teamRow: any = Array.isArray(membership.team) ? membership.team[0] : membership.team
     // Fetch all active co-leads. The total team_lead_pct payout is split
     // equally among them; each gets their own TIA row.
-    const { data: leads } = await supabase
-      .from('team_leads')
-      .select('agent_id, start_date, created_at')
-      .eq('team_id', teamRow.id)
-      .is('end_date', null)
-      .order('start_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true })
+    // Scoped to the deal's governing date -- team lead splits must go to
+    // whoever led the team when the deal was signed, not whoever leads today.
+    const leads = await resolveGoverningTeamLeads(supabase, [teamRow.id], governingDate)
     teamLeadIds = (leads || []).map((l: any) => l.agent_id).filter(Boolean)
 
     const { data: splits } = await supabase

@@ -21,7 +21,8 @@ const fmt$ = (n: any): string =>
 const fmtDate = (d: string | null | undefined): string => {
   if (!d) return ''
   try {
-    return new Date(d).toLocaleDateString('en-US', {
+    // Date-only values parse as midnight UTC, a day early in Central.
+    return new Date(d.length === 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
