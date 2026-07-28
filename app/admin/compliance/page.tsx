@@ -285,8 +285,19 @@ export default function AdminCompliancePage() {
 
   useEffect(() => { loadRows() }, [loadRows])
 
+  // The link filter is hidden on Pending checklist. If it was left on
+  // "unlinked" from another tab it would silently empty this one, so reset it.
+  useEffect(() => {
+    if (tab === 'pending_checklist' && linkFilter !== 'all') setLinkFilter('all')
+  }, [tab, linkFilter])
+
   const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
-  const pendingChecklist = (r: TrackerRow) => !r.checklist_complete
+  // Only deals whose compliance submission is actually linked to a transaction.
+  // An unlinked submission has no deal to run a checklist against, so it was
+  // padding the tab with rows nobody could action. Completeness of the
+  // compliance review itself is deliberately not part of this -- a linked deal
+  // belongs here whether or not compliance has been signed off.
+  const pendingChecklist = (r: TrackerRow) => !r.checklist_complete && !!r.transaction_id
   // Referred-out deals never get a CDA from CRC - the receiving brokerage
   // closes them - so they are excluded from the Needs CDA list.
   const isReferredOut = (r: TrackerRow) =>
@@ -1176,15 +1187,19 @@ export default function AdminCompliancePage() {
           />
         </div>
 
-        <select
-          value={linkFilter}
-          onChange={e => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
-          className="select-luxury text-xs py-1.5"
-        >
-          <option value="all">All rows</option>
-          <option value="linked">Linked only</option>
-          <option value="unlinked">Unlinked ({unlinkedCount})</option>
-        </select>
+        {/* Pending checklist is linked-only by definition, so this control has
+            nothing to filter there and "Unlinked" would always come back empty. */}
+        {tab !== 'pending_checklist' && (
+          <select
+            value={linkFilter}
+            onChange={e => setLinkFilter(e.target.value as 'all' | 'linked' | 'unlinked')}
+            className="select-luxury text-xs py-1.5"
+          >
+            <option value="all">All rows</option>
+            <option value="linked">Linked only</option>
+            <option value="unlinked">Unlinked ({unlinkedCount})</option>
+          </select>
+        )}
 
         <div className="flex items-center gap-1">
           <ArrowUpDown size={13} className="text-luxury-gray-4" />
