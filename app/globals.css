@@ -408,4 +408,8 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* The break after the final slide produces a trailing blank page. */
+  .print-slide:last-child {
+    page-break-after: auto;
+  }
 }

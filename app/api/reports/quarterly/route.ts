@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requireRole } from '@/lib/api-auth'
 
+// Referral Collective is a separate entity (an LFRO under TREC), not a
+// Collective Realty Co. office. This report covers CRC only, so RC agents are
+// excluded from headcount AND from production. A CRC agent who refers a deal
+// out still counts here — that is a CRC agent doing a referral, not an RC agent.
+const RC_MLS_CHOICE = 'Referral Collective (No MLS)'
+
 /**
  * GET /api/reports/quarterly
  * 
@@ -52,6 +58,10 @@ export async function GET(request: NextRequest) {
             { type: 'lte', column: 'join_date', value: endDateStr },
             { type: 'eq', column: 'is_licensed_agent', value: true },
             { type: 'eq', column: 'is_active', value: true },
+            // Referral Collective is a separate entity (LFRO). This is a
+            // Collective Realty Co. report, so RC agents are excluded here the
+            // same way the roster excludes them in app/agent-roster.html/route.ts.
+            { type: 'neq', column: 'mls_choice', value: RC_MLS_CHOICE },
           ],
         }
       ),
@@ -65,6 +75,7 @@ export async function GET(request: NextRequest) {
             { type: 'eq', column: 'status', value: 'active' },
             { type: 'eq', column: 'is_active', value: true },
             { type: 'eq', column: 'is_licensed_agent', value: true },
+            { type: 'neq', column: 'mls_choice', value: RC_MLS_CHOICE },
           ],
         }
       ),
@@ -98,7 +109,8 @@ export async function GET(request: NextRequest) {
            preferred_first_name,
            preferred_last_name,
            office,
-           headshot_url
+           headshot_url,
+           mls_choice
          )`
       ),
       
@@ -167,8 +179,16 @@ export async function GET(request: NextRequest) {
         .map(t => t.id)
     )
 
-    // Filter internal agents to only qualified transactions in range
-    const allRelevantRows = internalAgents.filter(ia => qualifiedTransactionIds.has(ia.transaction_id))
+    // A row belongs to Referral Collective, not CRC, when the agent on it is an
+    // RC agent. The entity lives on the user, not the transaction, so this is
+    // the only place it can be determined.
+    const isRcRow = (ia: any) => (ia.agent as any)?.mls_choice === RC_MLS_CHOICE
+
+    // Filter internal agents to only qualified transactions in range, and drop
+    // Referral Collective rows so RC production stays out of a CRC report.
+    const allRelevantRows = internalAgents.filter(
+      ia => qualifiedTransactionIds.has(ia.transaction_id) && !isRcRow(ia)
+    )
     // Production roles only: primary_agent and listing_agent count for firm volume/units/top producers
     // (co_agent, team_lead, referral_agent, momentum_partner do not add units or volume)
     // Installment/retainer rows have sales_volume=0 and units=0 by construction,
@@ -210,6 +230,7 @@ export async function GET(request: NextRequest) {
     const nonCancelledIds = new Set(transactions.map(t => t.id))
     internalAgents.forEach(row => {
       if (!row.installment_kind) return
+      if (isRcRow(row)) return
       if (row.payment_status !== 'paid') return
       if (!nonCancelledIds.has(row.transaction_id)) return
       const paid = row.payment_date ? String(row.payment_date).split('T')[0] : null

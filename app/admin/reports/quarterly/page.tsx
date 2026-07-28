@@ -38,10 +38,14 @@ interface QuarterlyData {
   }
 }
 
-function useAnimatedNumber(target: number, duration = 1800, active = true) {
+// instant=true skips the count-up entirely and reports the final figure on the
+// very first render. The print view needs this: printing captures whatever the
+// counter happens to be showing, so an animating number prints understated.
+function useAnimatedNumber(target: number, duration = 1800, active = true, instant = false) {
   const [value, setValue] = useState(0)
-  
+
   useEffect(() => {
+    if (instant) { setValue(target); return }
     if (!active) { setValue(0); return }
     let start: number | null = null
     let animationId: number
@@ -55,9 +59,9 @@ function useAnimatedNumber(target: number, duration = 1800, active = true) {
     }
     animationId = requestAnimationFrame(step)
     return () => cancelAnimationFrame(animationId)
-  }, [target, duration, active])
-  
-  return value
+  }, [target, duration, active, instant])
+
+  return instant ? target : value
 }
 
 function InitialBadge({ initials, size = 48, highlight = false, className = '' }: { initials: string; size?: number; highlight?: boolean; className?: string }) {
@@ -293,10 +297,10 @@ export default function QuarterlyPresentationPage() {
       <div className="hidden print:block">
         <div className="print-slide"><TitleSlide quarter={quarterLabel} /></div>
         <div className="print-slide"><AgendaSlide /></div>
-        <div className="print-slide"><GrowthSlide data={data} active /></div>
-        <div className="print-slide"><VolumeSlide data={data} active /></div>
-        {data.topTeams[0] && <div className="print-slide"><TeamSlide team={data.topTeams[0]} rank={1} quarter={data.quarter.quarter} active /></div>}
-        {data.topTeams[1] && <div className="print-slide"><TeamSlide team={data.topTeams[1]} rank={2} quarter={data.quarter.quarter} active /></div>}
+        <div className="print-slide"><GrowthSlide data={data} active instant /></div>
+        <div className="print-slide"><VolumeSlide data={data} active instant /></div>
+        {data.topTeams[0] && <div className="print-slide"><TeamSlide team={data.topTeams[0]} rank={1} quarter={data.quarter.quarter} active instant /></div>}
+        {data.topTeams[1] && <div className="print-slide"><TeamSlide team={data.topTeams[1]} rank={2} quarter={data.quarter.quarter} active instant /></div>}
         <div className="print-slide"><ProducersSlide type="LEASES" houston={data.topProducers.leases.houston} dallas={data.topProducers.leases.dallas} /></div>
         <div className="print-slide"><ProducersSlide type="SALES" houston={data.topProducers.sales.houston} dallas={data.topProducers.sales.dallas} /></div>
         <div className="print-slide"><RevealSlide agentNet={data.volume.totalAgentNet} quarter={data.quarter.quarter} year={data.quarter.year} /></div>
@@ -423,9 +427,9 @@ function AgendaSlide() {
   )
 }
 
-function GrowthSlide({ data, active }: { data: QuarterlyData; active: boolean }) {
-  const newAgents = useAnimatedNumber(data.growth.newAgents, 1200, active)
-  const totalAgents = useAnimatedNumber(data.growth.totalAgents, 1600, active)
+function GrowthSlide({ data, active, instant }: { data: QuarterlyData; active: boolean; instant?: boolean }) {
+  const newAgents = useAnimatedNumber(data.growth.newAgents, 1200, active, instant)
+  const totalAgents = useAnimatedNumber(data.growth.totalAgents, 1600, active, instant)
   
   return (
     <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
@@ -457,9 +461,9 @@ function GrowthSlide({ data, active }: { data: QuarterlyData; active: boolean })
   )
 }
 
-function VolumeSlide({ data, active }: { data: QuarterlyData; active: boolean }) {
-  const volume = useAnimatedNumber(data.volume.totalVolume, 2000, active)
-  const units = useAnimatedNumber(data.volume.totalUnits, 1500, active)
+function VolumeSlide({ data, active, instant }: { data: QuarterlyData; active: boolean; instant?: boolean }) {
+  const volume = useAnimatedNumber(data.volume.totalVolume, 2000, active, instant)
+  const units = useAnimatedNumber(data.volume.totalUnits, 1500, active, instant)
   
   return (
     <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
@@ -486,9 +490,9 @@ function VolumeSlide({ data, active }: { data: QuarterlyData; active: boolean })
   )
 }
 
-function TeamSlide({ team, rank, quarter, active }: { team: QuarterlyData['topTeams'][0]; rank: number; quarter: number; active: boolean }) {
-  const volume = useAnimatedNumber(team.volume, 1800, active)
-  const units = useAnimatedNumber(team.units, 1200, active)
+function TeamSlide({ team, rank, quarter, active, instant }: { team: QuarterlyData['topTeams'][0]; rank: number; quarter: number; active: boolean; instant?: boolean }) {
+  const volume = useAnimatedNumber(team.volume, 1800, active, instant)
+  const units = useAnimatedNumber(team.units, 1200, active, instant)
   
   return (
     <div className="absolute inset-0 p-6 sm:p-12 md:p-20 bg-black overflow-y-auto">
