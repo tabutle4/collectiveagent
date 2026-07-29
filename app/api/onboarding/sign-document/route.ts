@@ -170,14 +170,26 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('users').update(updateFields).eq('id', prospect.id)
     }
 
-    // Advance the onboarding session step
-    const nextStep = documentType === 'ica' ? 4 : documentType === 'commission_plan' ? 5 : 6
+    // Advance the onboarding session step.
+    //
+    // Referral agents skip the Commission Plan, so the steps shift down by one
+    // from the ICA onward:
+    //   Standard:  3 ICA  4 Commission Plan  5 Policy Manual  6 W-9
+    //   Referral:  3 ICA  4 Policy Manual    5 W-9
+    // The Policy Manual used to be hardcoded to step_5_completed_at, which for
+    // a referral agent is the W-9 slot -- so acknowledging the Policy Manual
+    // marked their W-9 complete when it was not.
+    const policyStep = isReferralAgent ? 4 : 5
+    const nextStep =
+      documentType === 'ica' ? 4
+        : documentType === 'commission_plan' ? 5
+          : policyStep + 1
     const completedField =
       documentType === 'ica'
         ? 'step_3_completed_at'
         : documentType === 'commission_plan'
           ? 'step_4_completed_at'
-          : 'step_5_completed_at'
+          : `step_${policyStep}_completed_at`
 
     const sessionUpdate: Record<string, any> = {
       user_id: prospect.id,
