@@ -41,6 +41,7 @@ import {
   formatMoney,
   initials,
   htmlToPlain,
+  sanitizeEmailHtml,
 } from '@/components/agent-email/shared'
 
 interface ThreadDetail {
@@ -1376,7 +1377,7 @@ function KV({
 function MessageBubble({ message }: { message: ThreadDetail['messages'][number] }) {
   const isOutbound = message.direction === 'outbound'
   const when = message.received_at || message.sent_at || null
-  const bodyHtml = message.body_html || null
+  const bodyHtml = message.body_html ? sanitizeEmailHtml(message.body_html) : null
   const bodyText = message.body_text || ''
 
   return (

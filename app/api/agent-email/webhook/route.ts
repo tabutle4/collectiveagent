@@ -386,16 +386,22 @@ async function processOutbound(m: {
   // "sent from Outlook" system note.
   //
   // Fix: look for a dashboard-sent outbound row on the same thread within
-  // the last 60 seconds. If found and recipients match, backfill the real
+  // the last 10 minutes. If found and recipients match, backfill the real
   // graph_message_id onto that row and return without inserting a duplicate.
-  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString()
+  // The window was 60 seconds, which was too tight: Graph's sent-items
+  // notification can lag the dashboard send by several minutes, and when it
+  // arrived late the match failed and we inserted a duplicate outbound row
+  // plus a false "sent from Outlook" note. 10 minutes covers realistic Graph
+  // latency while staying far shorter than the gap between two genuine
+  // replies to the same recipients on the same thread.
+  const dedupeWindowStart = new Date(Date.now() - 10 * 60_000).toISOString()
   const { data: recentDashboardSend } = await supabaseAdmin
     .from('email_thread_messages')
     .select('id, graph_message_id, to_addresses')
     .eq('thread_id', found.threadId)
     .eq('direction', 'outbound')
     .eq('sent_via_dashboard', true)
-    .gte('sent_at', oneMinuteAgo)
+    .gte('sent_at', dedupeWindowStart)
     .order('sent_at', { ascending: false })
     .limit(1)
     .maybeSingle()

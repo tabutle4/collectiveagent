@@ -78,9 +78,15 @@ export async function POST(
         )
     }
 
-    const subject = latestInbound?.subject && !/^re:/i.test(latestInbound.subject)
+    const rawSubject = latestInbound?.subject && !/^re:/i.test(latestInbound.subject)
       ? `Re: ${latestInbound.subject}`
       : latestInbound?.subject || (thread.subject || 'Re: (no subject)')
+    // Final guard: Graph's sendMail rejects a message with an empty or
+    // whitespace-only subject (ErrorMissingSubject). The fallback chain above
+    // normally prevents that, but a stored subject that is whitespace-only
+    // (for example a single space) would slip through, so we coerce anything
+    // blank to a safe default here.
+    const subject = rawSubject && rawSubject.trim() ? rawSubject : 'Re: (no subject)'
 
     // Build body
     const bodyHtml = plainTextToHtml(bodyText)

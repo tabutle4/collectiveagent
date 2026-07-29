@@ -235,3 +235,32 @@ export function htmlToPlain(html: string): string {
     .replace(/&gt;/g, '>')
     .trim()
 }
+
+// Neutralize inbound email HTML before rendering it raw. Inline images in
+// email reference their attachments with cid: URLs (content-id), which the
+// browser cannot resolve, so each one fires an ERR_UNKNOWN_URL_SCHEME
+// console error. A page full of them can flood the console and, in some
+// cases, break the render. Since the dashboard does not carry the attachment
+// parts, there is nothing for a cid: image to point at, so we replace those
+// images with a small inline placeholder and strip other unresolvable
+// schemes. We also drop <script> and inline event handlers as basic hygiene
+// (this is not a full sanitizer; it is a targeted fix for the cid: flood).
+export function sanitizeEmailHtml(html: string): string {
+  if (!html) return ''
+  let out = html
+  // Drop scripts entirely.
+  out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
+  // Replace any <img> whose src is a cid: reference with a tiny transparent
+  // placeholder so it renders nothing and fires no network request.
+  out = out.replace(/<img\b[^>]*>/gi, tag => {
+    if (/\bsrc\s*=\s*["']?\s*cid:/i.test(tag)) {
+      return '<span style="display:none"></span>'
+    }
+    return tag
+  })
+  // Neutralize any remaining cid: references in src or href attributes.
+  out = out.replace(/(\b(?:src|href)\s*=\s*["'])\s*cid:[^"']*(["'])/gi, '$1#$2')
+  // Strip inline event handlers (onload, onclick, onerror, etc.).
+  out = out.replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+  return out
+}

@@ -64,7 +64,9 @@ export async function POST(request: NextRequest) {
         html_content: htmlContent,
         subject_line: subjectLine,
         variables: [],
+        logo_url: '/logo.png',
         is_default: false,
+        is_active: true,
       })
       .select('id, name, subject_line, html_content')
       .single()

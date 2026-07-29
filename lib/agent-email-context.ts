@@ -126,30 +126,42 @@ export async function fetchAgentContext(userId: string): Promise<AgentContextRes
       monthlyFeeStatus = 'unknown'
     }
 
-    // Unpaid invoices (billing table)
+    // Unpaid invoices. These live in agent_debts (record_type = 'debt',
+    // debt_type custom_invoice or ecommission), not a "billing" table. We
+    // filter to record_type 'debt' so credits, which can share a debt_type,
+    // are never counted as money owed. Outstanding balance is
+    // amount_remaining, falling back to amount_owed.
     const { data: openInvoices } = await supabaseAdmin
-      .from('billing')
-      .select('amount_due, amount, status')
+      .from('agent_debts')
+      .select('amount_owed, amount_remaining, status, debt_type, record_type')
       .eq('agent_id', userId)
       .eq('status', 'outstanding')
+      .eq('record_type', 'debt')
+      .in('debt_type', ['custom_invoice', 'ecommission'])
 
     if (openInvoices) {
       unpaidInvoiceCount = openInvoices.length
       unpaidInvoiceTotal = openInvoices.reduce(
-        (a, inv) => a + Number(inv.amount_due ?? inv.amount ?? 0),
+        (a, inv) => a + Number(inv.amount_remaining ?? inv.amount_owed ?? 0),
         0
       )
     }
 
-    // Credits (agent_credits table)
+    // Credits. Like invoices, credits live in agent_debts, distinguished by
+    // record_type = 'credit' (not a separate agent_credits table). An
+    // available credit is one still outstanding; its remaining value is
+    // amount_remaining, falling back to amount_owed.
     const { data: credits } = await supabaseAdmin
-      .from('agent_credits')
-      .select('amount, is_applied')
+      .from('agent_debts')
+      .select('amount_owed, amount_remaining, status, record_type')
       .eq('agent_id', userId)
+      .eq('record_type', 'credit')
+      .eq('status', 'outstanding')
     if (credits) {
-      creditsBalance = credits
-        .filter(c => !c.is_applied)
-        .reduce((a, c) => a + Number(c.amount || 0), 0)
+      creditsBalance = credits.reduce(
+        (a, c) => a + Number(c.amount_remaining ?? c.amount_owed ?? 0),
+        0
+      )
     }
   } catch (e) {
     console.error('fetchAgentContext financial exception:', e)

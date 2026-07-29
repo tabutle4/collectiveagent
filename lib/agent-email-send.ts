@@ -47,10 +47,15 @@ export async function sendThreadReply(input: ThreadReplySendInput): Promise<Thre
   if (!fromUpn) return { ok: false, error: 'Missing sender mailbox' }
   if (!to || to.length === 0) return { ok: false, error: 'No recipients' }
 
+  // Graph's sendMail rejects an empty or whitespace-only subject
+  // (ErrorMissingSubject). Coerce blank subjects to a safe default rather
+  // than let the send fail.
+  const safeSubject = subject && subject.trim() ? subject : 'Re: (no subject)'
+
   const token = await getGraphToken()
 
   const message: Record<string, unknown> = {
-    subject,
+    subject: safeSubject,
     body: { contentType: 'HTML', content: bodyHtml },
     toRecipients: to.map(a => ({ emailAddress: { address: a } })),
   }
@@ -58,19 +63,16 @@ export async function sendThreadReply(input: ThreadReplySendInput): Promise<Thre
     message.ccRecipients = cc.map(a => ({ emailAddress: { address: a } }))
   }
 
-  const headers: Array<{ name: string; value: string }> = []
-  if (inReplyToMessageId) {
-    // In-Reply-To should be the Message-ID we are replying to, wrapped in <>
-    headers.push({ name: 'In-Reply-To', value: ensureAngleBrackets(inReplyToMessageId) })
-  }
-  if (referencesMessageIds && referencesMessageIds.length > 0) {
-    // References is space-separated Message-IDs, oldest first, each in <>
-    const refs = referencesMessageIds.map(ensureAngleBrackets).join(' ')
-    headers.push({ name: 'References', value: refs })
-  }
-  if (headers.length > 0) {
-    message.internetMessageHeaders = headers
-  }
+  // Note on threading: Graph's /sendMail only accepts internetMessageHeaders
+  // whose names begin with "x-" (or "X-"). Standard headers like In-Reply-To
+  // and References are rejected with ErrorInvalidInternetMessageHeader, which
+  // fails the whole send. We therefore do not set them here; the reply still
+  // threads for the recipient via the "Re: <subject>" subject line and the
+  // quoted history in the body. inReplyToMessageId / referencesMessageIds are
+  // accepted by this function for future use (for example a draft-then-send
+  // path) but are intentionally not attached to a direct sendMail.
+  void inReplyToMessageId
+  void referencesMessageIds
 
   const res = await fetch(
     `${GRAPH_BASE}/users/${encodeURIComponent(fromUpn)}/sendMail`,
@@ -91,13 +93,6 @@ export async function sendThreadReply(input: ThreadReplySendInput): Promise<Thre
     ok: false,
     error: `Graph sendMail failed: ${res.status} ${text.slice(0, 400)}`,
   }
-}
-
-function ensureAngleBrackets(id: string): string {
-  if (!id) return id
-  const trimmed = id.trim()
-  if (trimmed.startsWith('<') && trimmed.endsWith('>')) return trimmed
-  return `<${trimmed}>`
 }
 
 /**

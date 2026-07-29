@@ -1095,9 +1095,10 @@ function OversightScreen({
         // route uses toUserId; we get own id from the admins list by asking
         // the server who we are via the threads my_work trick is heavy.
         // Cleanest available: /api/admin/agent-email/prefs does not return
-        // id, so use a dedicated lightweight call to admins and match is not
-        // possible without id. We use the me endpoint below.
-        const meRes = await fetch('/api/session', { credentials: 'include' })
+        // Resolve our own user id from the current session so we can assign
+        // the thread to ourselves. The app exposes this at /api/auth/me,
+        // which returns { user: { id, ... } }.
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' })
         const meJson = await meRes.json().catch(() => null)
         const myId = meJson?.user?.id
         if (!myId) throw new Error('Could not resolve your user id')

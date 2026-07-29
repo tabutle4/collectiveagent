@@ -631,137 +631,140 @@ export async function findSubscriptionByClientState(
 
 // ─── One-time migration: undo the folder move, switch to category ──────────
 
-export interface UndoFolderMoveReport {
-  ranAt: string
-  perMailbox: Array<{
-    mailboxUpn: string
-    oldRulesDeleted: number
-    messagesMovedBackToInbox: number
-    folderDeleted: boolean
-    categoryEnsured: boolean
-    errors: string[]
-  }>
+export interface MailboxUndoResult {
+  mailboxUpn: string
+  oldRulesDeleted: number
+  messagesMovedBackToInbox: number
+  folderDeleted: boolean
+  categoryEnsured: boolean
+  errors: string[]
 }
 
-// For each admin mailbox:
-//   1. Delete any inbox rule that moves mail to "Work in Dashboard"
-//      (matched by the old and new display names, and by any rule whose
-//      action moves to the work folder).
-//   2. Move every message currently in "Work in Dashboard" back to the Inbox.
-//   3. Delete the now-empty "Work in Dashboard" folder.
-//   4. Ensure the "Agent Email" master category exists (black).
-//
-// Safe to re-run: if the folder is already gone and the rules are already
-// migrated, each mailbox reports zeros. Reconcile then (re)creates the
-// category-tagging rule on its normal schedule; this migration does not
-// create it, so run reconcile after.
-export async function undoFolderMoveAndSwitchToCategory(): Promise<UndoFolderMoveReport> {
+export interface UndoFolderMoveReport {
+  ranAt: string
+  perMailbox: MailboxUndoResult[]
+}
+
+// Undo the folder move for a SINGLE mailbox. Kept small enough to finish
+// inside the serverless gateway timeout even when the folder holds a lot of
+// mail. The all-mailboxes function below loops over this.
+//   1. Delete any inbox rule that moves mail to "Work in Dashboard".
+//   2. Move every message in "Work in Dashboard" back to the Inbox.
+//   3. Delete the now-empty folder.
+//   4. Ensure the black "Agent Email" master category exists.
+// Safe to re-run: an already-clean mailbox reports zeros.
+export async function undoFolderMoveForMailbox(upn: string): Promise<MailboxUndoResult> {
   const token = await getGraphToken()
+  const m: MailboxUndoResult = {
+    mailboxUpn: upn,
+    oldRulesDeleted: 0,
+    messagesMovedBackToInbox: 0,
+    folderDeleted: false,
+    categoryEnsured: false,
+    errors: [],
+  }
+  try {
+    // 1. Find and delete move-to-folder rules.
+    const rulesResp = await graphFetch(
+      token,
+      `/users/${upn}/mailFolders('inbox')/messageRules`
+    )
+    let workFolderId: string | null = null
+    if (rulesResp.ok) {
+      for (const rule of rulesResp.body?.value || []) {
+        const name = String(rule?.displayName || '')
+        const movesToFolder = rule?.actions?.moveToFolder
+        const isOurs =
+          name === 'Agent email \u2192 Work in Dashboard' ||
+          name === RULE_DISPLAY_NAME ||
+          Boolean(movesToFolder)
+        // Only delete rules that actually move (not the new category rule).
+        if (isOurs && movesToFolder) {
+          const del = await graphFetch(
+            token,
+            `/users/${upn}/mailFolders('inbox')/messageRules/${rule.id}`,
+            { method: 'DELETE' }
+          )
+          if (del.ok) m.oldRulesDeleted += 1
+          if (typeof movesToFolder === 'string') workFolderId = movesToFolder
+        }
+      }
+    }
+
+    // 2. Locate the Work in Dashboard folder (by id from the rule, or by name).
+    if (!workFolderId) {
+      const childList = await graphFetch(
+        token,
+        `/users/${upn}/mailFolders('inbox')/childFolders?$select=id,displayName&$top=100`
+      )
+      if (childList.ok) {
+        const found = (childList.body?.value || []).find(
+          (f: any) => f.displayName === WORK_FOLDER_NAME
+        )
+        if (found) workFolderId = found.id as string
+      }
+    }
+
+    // 3. Move messages back to Inbox, paging until empty.
+    if (workFolderId) {
+      let guard = 100
+      while (guard > 0) {
+        guard -= 1
+        const msgs = await graphFetch(
+          token,
+          `/users/${upn}/mailFolders/${workFolderId}/messages?$select=id&$top=50`
+        )
+        if (!msgs.ok) {
+          m.errors.push(`list folder messages: ${msgs.status}`)
+          break
+        }
+        const items = msgs.body?.value || []
+        if (items.length === 0) break
+        for (const item of items) {
+          const mv = await graphFetch(
+            token,
+            `/users/${upn}/messages/${item.id}/move`,
+            { method: 'POST', body: JSON.stringify({ destinationId: 'inbox' }) }
+          )
+          if (mv.ok) m.messagesMovedBackToInbox += 1
+          else m.errors.push(`move ${item.id}: ${mv.status}`)
+        }
+      }
+
+      // 4. Delete the empty folder.
+      const delFolder = await graphFetch(
+        token,
+        `/users/${upn}/mailFolders/${workFolderId}`,
+        { method: 'DELETE' }
+      )
+      if (delFolder.ok) m.folderDeleted = true
+      else m.errors.push(`delete folder: ${delFolder.status}`)
+    }
+
+    // 5. Ensure the category exists for the new rule.
+    await ensureAgentEmailCategory(token, upn)
+    m.categoryEnsured = true
+
+    // Clear the stored folder_id so reconcile does not think a folder exists.
+    await supabaseAdmin
+      .from('graph_mail_rules')
+      .update({ folder_id: '' })
+      .eq('mailbox_upn', upn)
+  } catch (err: any) {
+    m.errors.push(err?.message || String(err))
+  }
+  return m
+}
+
+// Loop over every admin mailbox. Prefer the per-mailbox route mode in
+// production; this all-at-once version can exceed the gateway timeout.
+// Reconcile then (re)creates the category-tagging rule; this migration does
+// not create it, so run reconcile after.
+export async function undoFolderMoveAndSwitchToCategory(): Promise<UndoFolderMoveReport> {
   const admins = await getActiveAdmins()
   const report: UndoFolderMoveReport = { ranAt: new Date().toISOString(), perMailbox: [] }
-
   for (const admin of admins) {
-    const upn = admin.email
-    const m = {
-      mailboxUpn: upn,
-      oldRulesDeleted: 0,
-      messagesMovedBackToInbox: 0,
-      folderDeleted: false,
-      categoryEnsured: false,
-      errors: [] as string[],
-    }
-    try {
-      // 1. Find and delete move-to-folder rules.
-      const rulesResp = await graphFetch(
-        token,
-        `/users/${upn}/mailFolders('inbox')/messageRules`
-      )
-      let workFolderId: string | null = null
-      if (rulesResp.ok) {
-        for (const rule of rulesResp.body?.value || []) {
-          const name = String(rule?.displayName || '')
-          const movesToFolder = rule?.actions?.moveToFolder
-          const isOurs =
-            name === 'Agent email \u2192 Work in Dashboard' ||
-            name === RULE_DISPLAY_NAME ||
-            Boolean(movesToFolder)
-          // Only delete rules that actually move (not the new category rule).
-          if (isOurs && movesToFolder) {
-            const del = await graphFetch(
-              token,
-              `/users/${upn}/mailFolders('inbox')/messageRules/${rule.id}`,
-              { method: 'DELETE' }
-            )
-            if (del.ok) m.oldRulesDeleted += 1
-            if (typeof movesToFolder === 'string') workFolderId = movesToFolder
-          }
-        }
-      }
-
-      // 2. Locate the Work in Dashboard folder (by id from the rule, or by name).
-      if (!workFolderId) {
-        const childList = await graphFetch(
-          token,
-          `/users/${upn}/mailFolders('inbox')/childFolders?$select=id,displayName&$top=100`
-        )
-        if (childList.ok) {
-          const found = (childList.body?.value || []).find(
-            (f: any) => f.displayName === WORK_FOLDER_NAME
-          )
-          if (found) workFolderId = found.id as string
-        }
-      }
-
-      // 3. Move messages back to Inbox, paging until empty.
-      if (workFolderId) {
-        let guard = 100
-        while (guard > 0) {
-          guard -= 1
-          const msgs = await graphFetch(
-            token,
-            `/users/${upn}/mailFolders/${workFolderId}/messages?$select=id&$top=50`
-          )
-          if (!msgs.ok) {
-            m.errors.push(`list folder messages: ${msgs.status}`)
-            break
-          }
-          const items = msgs.body?.value || []
-          if (items.length === 0) break
-          for (const item of items) {
-            const mv = await graphFetch(
-              token,
-              `/users/${upn}/messages/${item.id}/move`,
-              { method: 'POST', body: JSON.stringify({ destinationId: 'inbox' }) }
-            )
-            if (mv.ok) m.messagesMovedBackToInbox += 1
-            else m.errors.push(`move ${item.id}: ${mv.status}`)
-          }
-        }
-
-        // 4. Delete the empty folder.
-        const delFolder = await graphFetch(
-          token,
-          `/users/${upn}/mailFolders/${workFolderId}`,
-          { method: 'DELETE' }
-        )
-        if (delFolder.ok) m.folderDeleted = true
-        else m.errors.push(`delete folder: ${delFolder.status}`)
-      }
-
-      // 5. Ensure the category exists for the new rule.
-      await ensureAgentEmailCategory(token, upn)
-      m.categoryEnsured = true
-
-      // Clear the stored folder_id so reconcile does not think a folder exists.
-      await supabaseAdmin
-        .from('graph_mail_rules')
-        .update({ folder_id: '' })
-        .eq('mailbox_upn', upn)
-    } catch (err: any) {
-      m.errors.push(err?.message || String(err))
-    }
-    report.perMailbox.push(m)
+    report.perMailbox.push(await undoFolderMoveForMailbox(admin.email))
   }
-
   return report
 }
