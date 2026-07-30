@@ -18,3 +18,5 @@ deploy_pkg/
 *.zip
 *.patch
 tsconfig.tsbuildinfo
+.env
+app_export/
