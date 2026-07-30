@@ -77,6 +77,7 @@ export async function middleware(request: NextRequest) {
   const sessionToken = request.cookies.get('ca_session')?.value
 
   if (!sessionToken) {
+    console.log('middleware: no ca_session cookie', { pathname, search })
     const loginUrl = new URL('/auth/login', request.url)
     // Pass full path + search so deep links (e.g. ?tab=checks) survive login
     const fullPath = search ? `${pathname}${search}` : pathname
@@ -88,6 +89,7 @@ export async function middleware(request: NextRequest) {
   const session = await verifySessionToken(sessionToken)
 
   if (!session) {
+    console.log('middleware: invalid ca_session token', { pathname, search, tokenPrefix: sessionToken.slice(0, 12) })
     const loginUrl = new URL('/auth/login', request.url)
     const fullPath = search ? `${pathname}${search}` : pathname
     loginUrl.searchParams.set('redirect', fullPath)
@@ -98,6 +100,13 @@ export async function middleware(request: NextRequest) {
 
   // Check if session is expired
   if (session.exp * 1000 < Date.now()) {
+    console.log('middleware: expired ca_session token', {
+      pathname,
+      search,
+      exp: session.exp,
+      now: Date.now(),
+      userId: session.user?.id,
+    })
     const loginUrl = new URL('/auth/login', request.url)
     const response = NextResponse.redirect(loginUrl)
     response.cookies.delete('ca_session')
