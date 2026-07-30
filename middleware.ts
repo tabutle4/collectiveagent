@@ -127,13 +127,6 @@ export async function middleware(request: NextRequest) {
 
   // Referral access is not an auth check. It is a post-login route policy.
   // Keep auth focused on session validity and allow referral users to proceed.
-  
-  // The referral form is for Referral Collective agents and staff. Referral
-  // users are allowed through this auth gate; any page-specific restrictions
-  // should be enforced elsewhere in the app after login.
-  if (pathname.startsWith('/agent/referrals') && !isAdminRole) {
-    return NextResponse.redirect(new URL('/agent/profile', request.url))
-  }
 
   // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
