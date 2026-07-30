@@ -337,10 +337,11 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
   const [openGroup, setOpenGroup] = useState<string | null>(null)
 
   const userRole = user ? (user.role || '').toLowerCase() : ''
+  const mlsChoice = (user as { mls_choice?: string | null } | null)?.mls_choice
   const isAdmin = ['admin', 'broker', 'operations'].includes(userRole)
   const isTC = userRole === 'tc'
   const isSupport = userRole === 'support'
-  const isReferral = userRole === 'referral'
+  const isReferral = userRole === 'referral' || mlsChoice === 'Referral Collective (No MLS)'
   const isStaff = isAdmin || isTC || isSupport
 
   const restrictedAgentNav: NavItem[] = [

@@ -18,7 +18,8 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     }
 
     if (!loading && user) {
-      const isReferralRole = user.role === 'referral'
+      const mlsChoice = (user as { mls_choice?: string | null }).mls_choice
+      const isReferralRole = user.role === 'referral' || mlsChoice === 'Referral Collective (No MLS)'
       const referralAllowedPaths = [
         '/agent/profile',
         '/agent/calendar',
