@@ -67,11 +67,14 @@ export async function GET(
       .maybeSingle()
     const wiringReady = !!wiringDoc?.filename
 
-    const firstName = firstNameOf(model.titleContact?.name)
+    // The person, never the business. Addressing the title_company row's name
+    // blindly greets "Hello Stewart," when that field holds Stewart Title.
+    const firstName = firstNameOf(model.titleParty.repName)
 
     return NextResponse.json({
       to,
-      title_company: model.titleContact?.company || model.titleContact?.name || null,
+      title_company: model.titleParty.companyName,
+      title_rep_name: model.titleParty.repName,
       cc,
       wiring_ready: wiringReady,
       wiring_filename: wiringDoc?.filename || null,
@@ -158,7 +161,9 @@ export async function POST(
 
     // Compose. Subject/body come from the preview (editable); fall back to the
     // template if the client sent nothing.
-    const firstName = firstNameOf(model.titleContact?.name)
+    // The person, never the business. Addressing the title_company row's name
+    // blindly greets "Hello Stewart," when that field holds Stewart Title.
+    const firstName = firstNameOf(model.titleParty.repName)
     const subject = (subjectIn && subjectIn.trim()) || defaultSubject(model.propertyAddr)
     const bodyText = (bodyIn && bodyIn.trim()) || defaultBody(firstName)
     const bodyHtml = bodyText

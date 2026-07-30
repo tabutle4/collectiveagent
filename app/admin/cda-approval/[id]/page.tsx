@@ -20,6 +20,7 @@ const FIELDS: { key: string; label: string }[] = [
   { key: 'brokerage_referral_fee', label: 'Brokerage referral fee' },
   { key: 'title_company', label: 'Title company' },
   { key: 'title_officer_name', label: 'Title officer' },
+  { key: 'title_company_email', label: 'Title email' },
   { key: 'additional_notes', label: 'Notes' },
 ]
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
-import { loadCdaData } from '@/lib/documents/cdaData'
+import { loadCdaData, titleContactEmail } from '@/lib/documents/cdaData'
 import { cdaPdfFilename } from '@/lib/documents/buildCdaPdf'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,7 @@ export async function GET(
       listingSide, buyingSide, btsaTotal, totalGrossCommission,
       officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
       priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
-      titleContact, buyerContact, sellerContact, txn, settings,
+      titleContact, titleParty, buyerContact, sellerContact, txn, settings,
     } = model
 
     const html = `<!DOCTYPE html>
@@ -164,12 +164,12 @@ export async function GET(
     <p style="font-size:10px;color:#555">${notes}</p>
   </div>` : ''}
 
-  ${titleContact ? `
+  ${(titleParty.companyName || titleParty.repName) ? `
   <div style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #eee">
     <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:8px">Title Company</div>
-    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Company</span><span style="font-weight:500">${titleContact.company || titleContact.name || '--'}</span></div>
-    ${titleContact.name && titleContact.company ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Contact</span><span style="font-weight:500">${titleContact.name}</span></div>` : ''}
-    ${titleContact.email ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:#777">Email</span><span style="font-weight:500">${Array.isArray(titleContact.email) ? titleContact.email[0]?.value || '--' : titleContact.email}</span></div>` : ''}
+    <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Company</span><span style="font-weight:500">${titleParty.companyName || '--'}</span></div>
+    ${titleParty.repName ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;border-bottom:1px dotted #eee"><span style="color:#777">Contact</span><span style="font-weight:500">${titleParty.repName}</span></div>` : ''}
+    ${titleContactEmail(titleContact) ? `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span style="color:#777">Email</span><span style="font-weight:500">${titleContactEmail(titleContact)}</span></div>` : ''}
   </div>` : ''}
 
   ${txn.broker_approved_at ? `

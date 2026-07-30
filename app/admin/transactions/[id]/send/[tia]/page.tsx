@@ -132,7 +132,7 @@ function SendDocumentInner() {
 
   const recipientLine =
     mode === 'approval' ? 'Operations + broker (resolved by role)'
-    : mode === 'title' ? (title?.title_company ? `${title.title_company}${title?.to ? ` · ${title.to}` : ''}` : (title?.to || 'No title contact on this deal'))
+    : mode === 'title' ? ([title?.title_company, title?.title_rep_name, title?.to].filter(Boolean).join(' · ') || 'No title contact on this deal')
     : `${agentName}${agentEmail ? ` · ${agentEmail}` : ''}`
 
   return (

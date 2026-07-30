@@ -172,7 +172,7 @@ export async function buildCdaEmail(
   const { data: txn } = await supabaseAdmin
     .from('transactions')
     .select(
-      'id, property_address, property_city, property_state, property_zip, transaction_type, sales_price, closing_date, closed_date, title_company_name, title_company_email, title_company_contact_name'
+      'id, property_address, closing_date, closed_date'
     )
     .eq('id', transactionId)
     .single()
@@ -180,9 +180,9 @@ export async function buildCdaEmail(
 
   const recipients = await resolveRecipients(agent)
   const agentName = fmtName(agent)
-  const propertyLabel = [txn.property_address, txn.property_city, txn.property_state, txn.property_zip]
-    .filter(Boolean)
-    .join(', ')
+  // The deal carries one full address string; there are no separate city,
+  // state or zip columns to append.
+  const propertyLabel = txn.property_address || ''
 
   // Pull the brokerage legal name for the payee label. CDA emails only go to
   // CRC transactions (RC is excluded upstream on the UI), so the CRC name

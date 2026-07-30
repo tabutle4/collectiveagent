@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
 import type { CdaModel } from './cdaData'
+import { titleContactEmail } from './cdaData'
 
 /**
  * Renders a Commission Disbursement Authorization as a PDF from the shared
@@ -194,6 +195,21 @@ export async function buildCdaPdf(model: CdaModel): Promise<Uint8Array> {
     payeeRow(rb.label, rebatePayee, money(rb.amount))
   }
   gap(6)
+
+  // ── Title Company ───────────────────────────────────────────────────────────
+  // Same block the web CDA renders, so the copy title receives matches the one
+  // the office reviews. Company and Contact come from the shared resolver, so
+  // a business name can never land on the Contact line.
+  // Gated on what actually renders, not on the title_company row, so a deal
+  // carrying only a title_officer contact still gets a block.
+  if (model.titleParty.companyName || model.titleParty.repName) {
+    sectionTitle('Title Company')
+    row('Company', model.titleParty.companyName || '--')
+    if (model.titleParty.repName) row('Contact', model.titleParty.repName)
+    const titleEmail = titleContactEmail(model.titleContact)
+    if (titleEmail) row('Email', titleEmail)
+    gap(6)
+  }
 
   // ── Broker Approval (signature) ─────────────────────────────────────────────
   if (model.txn.broker_approved_at) {

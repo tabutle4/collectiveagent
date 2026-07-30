@@ -49,6 +49,66 @@ export interface CdaContact {
   company: string | null
 }
 
+/** The title officer and the title business, told apart. */
+export interface TitleParty {
+  /** The person to address. Null when only a business name is known. */
+  repName: string | null
+  /** The business. Null when only a person is known. */
+  companyName: string | null
+}
+
+/**
+ * Words that mark a string as a business name rather than a person's.
+ * Matched on whole words so a surname like Cole or Marco is never caught.
+ */
+const COMPANY_NAME_HINT =
+  /\b(title|escrow|closing|closings|abstract|agency|company|co|corp|corporation|inc|llc|llp|ltd|group|services|national|partners|holdings|bank|trust)\b\.?/i
+
+function cleanName(s: string | null | undefined): string | null {
+  const t = (s || '').trim()
+  return t || null
+}
+
+function looksLikeCompany(s: string | null): boolean {
+  return !!s && COMPANY_NAME_HINT.test(s)
+}
+
+/**
+ * Split a deal's title contact into the person and the business.
+ *
+ * transaction_contacts is written by several flows and they do not agree on
+ * what `name` holds. The compliance and under-contract forms put the title
+ * OFFICER in `name` and the business in `company`, which is what we want.
+ * The AI document reader is instructed "name: full name or company name" and
+ * only fills `company` when it differs, so an AI-sourced or hand-entered
+ * title_company row often carries the BUSINESS in `name` with `company` empty.
+ * Greeting off that field produces "Hello Stewart," to Stewart Title.
+ *
+ * A separate title_officer contact, when one exists, is always the person, so
+ * it wins. Otherwise the title_company row's name is accepted as the person
+ * only when it is neither the business repeated nor business-sounding. When no
+ * person can be established the rep is null and callers fall back to a neutral
+ * greeting -- addressing nobody beats addressing a company as a human.
+ */
+export function resolveTitleParty(
+  titleCompanyContact: CdaContact | undefined,
+  titleOfficerContact?: CdaContact | undefined
+): TitleParty {
+  const officer = cleanName(titleOfficerContact?.name)
+  const rowName = cleanName(titleCompanyContact?.name)
+  const rowCompany = cleanName(titleCompanyContact?.company)
+
+  const companyName = rowCompany || (looksLikeCompany(rowName) ? rowName : null)
+
+  let repName: string | null = officer
+  if (!repName && rowName) {
+    const sameAsCompany = !!rowCompany && rowName.toLowerCase() === rowCompany.toLowerCase()
+    if (!sameAsCompany && !looksLikeCompany(rowName)) repName = rowName
+  }
+
+  return { repName, companyName }
+}
+
 export interface CdaModel {
   agentName: string
   agencyName: string
@@ -82,6 +142,8 @@ export interface CdaModel {
   brokerageLines: string[]
   // Related records used by the renderers
   titleContact: CdaContact | undefined
+  /** Title officer vs title business, resolved once for every renderer. */
+  titleParty: TitleParty
   buyerContact: CdaContact | undefined
   sellerContact: CdaContact | undefined
   agent: any
@@ -146,6 +208,10 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     .eq('transaction_id', id)
 
   const titleContact = (contacts || []).find(c => c.contact_type === 'title_company')
+  // A deal may also carry a dedicated title_officer contact. It is always the
+  // person, so resolveTitleParty prefers it over the title_company row's name.
+  const titleOfficerContact = (contacts || []).find(c => c.contact_type === 'title_officer')
+  const titleParty = resolveTitleParty(titleContact, titleOfficerContact)
   const buyerContact = (contacts || []).find(c => c.contact_type === 'buyer' || c.contact_type === 'tenant')
   const sellerContact = (contacts || []).find(c => c.contact_type === 'seller' || c.contact_type === 'landlord')
 
@@ -378,7 +444,7 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     listingSide, buyingSide, btsaTotal, officeGross, totalGrossCommission,
     officeNet, officeLineLabel, agentPayees, agentRoster, rebatePayees,
     priceForDisplay, priceLabel, salesPricePct, externalPayees, extraRows, notes, brokerageLines,
-    titleContact, buyerContact, sellerContact, agent, txn, settings,
+    titleContact, titleParty, buyerContact, sellerContact, agent, txn, settings,
   }
 
   return { ok: true, model, tia, agent, txn }

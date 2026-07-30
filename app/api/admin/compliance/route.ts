@@ -160,6 +160,19 @@ export async function GET(request: NextRequest) {
     // side agent's net for the Needs CDA money columns.
     const paidByTxnAgent: Record<string, boolean> = {}
     const netByTxnAgent: Record<string, number> = {}
+    // Deal-level payout completeness. paidByTxnAgent only answers "did THIS
+    // row's agent get paid"; the Needs CDA tab needs "is everyone on the deal
+    // paid", because a deal with one agent still owed is not finished. A deal
+    // with no payee rows at all is left undefined here and treated as paid by
+    // the consumer, so this never strands a deal that has nobody to pay.
+    //
+    // Only rows carrying money gate the deal. A zero or negative payout -- a
+    // linked team lead or referral agent paid inside the Collective Realty Co.
+    // line, a row created before financials were entered -- is never marked
+    // paid by anyone because there is nothing to pay, so counting it would pin
+    // the deal on Needs CDA permanently.
+    const allPaidByTxn: Record<string, boolean> = {}
+    const owed = (v: any) => (parseFloat(String(v ?? 0)) || 0) > 0
     if (txnIds.length) {
       const internalAgents = await fetchByIds(
         'transaction_internal_agents',
@@ -171,8 +184,27 @@ export async function GET(request: NextRequest) {
         if (ia.payment_status === 'paid') {
           paidByTxnAgent[`${ia.transaction_id}:${ia.agent_id}`] = true
         }
+        if (owed(ia.agent_net)) {
+          allPaidByTxn[ia.transaction_id] =
+            (allPaidByTxn[ia.transaction_id] ?? true) && ia.payment_status === 'paid'
+        }
         const key = `${ia.transaction_id}:${ia.agent_id}`
         netByTxnAgent[key] = (netByTxnAgent[key] || 0) + (parseFloat(String(ia.agent_net ?? 0)) || 0)
+      }
+      // Outside brokerages are owed off the same check and are marked paid on
+      // the payouts report exactly like agents, so an unpaid one leaves the
+      // deal unfinished for the same reason an unpaid agent does.
+      const externalBrokerages = await fetchByIds(
+        'transaction_external_brokerages',
+        'transaction_id, payment_status, amount_1099_reportable, commission_amount',
+        'transaction_id',
+        txnIds
+      )
+      for (const eb of externalBrokerages || []) {
+        if (owed(eb.amount_1099_reportable ?? eb.commission_amount)) {
+          allPaidByTxn[eb.transaction_id] =
+            (allPaidByTxn[eb.transaction_id] ?? true) && eb.payment_status === 'paid'
+        }
       }
     }
 
@@ -230,6 +262,10 @@ export async function GET(request: NextRequest) {
         completed_at: r.reviewed_at,
         // Auto-derived, read-only
         paid: !!(r.transaction_id && r.agent_id && paidByTxnAgent[`${r.transaction_id}:${r.agent_id}`]),
+        // Every agent row AND every outside brokerage on the deal is marked
+        // paid. Defaults to true when the deal has no payee rows (or no
+        // transaction) so the Needs CDA tab keeps its existing behaviour there.
+        all_payees_paid: r.transaction_id ? (allPaidByTxn[r.transaction_id] ?? true) : true,
         // Sent by the app, OR marked sent by hand when it went to title
         // outside the app. Either signal counts; the manual mark never
         // overwrites the in-app one.

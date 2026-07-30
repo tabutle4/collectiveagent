@@ -19,6 +19,8 @@ interface TrackerRow {
   missing_notes: string | null
   completed_at: string | null
   paid: boolean
+  // Every agent AND every outside brokerage on the deal is marked paid.
+  all_payees_paid: boolean
   cda_sent: boolean
   cda_manual_status?: string | null
   cda_sent_manual_at?: string | null
@@ -304,15 +306,19 @@ export default function AdminCompliancePage() {
     String(r.transaction_type || '').includes('referred_out') ||
     String(r.side || '').toLowerCase() === 'referred_out' ||
     String((r.form_data || {}).representing || '').toLowerCase() === 'referred_out'
-  // A deal stays on Needs CDA until POST CLOSING is complete, not merely until
-  // the CDA is sent. Sending the CDA is the middle of the job, not the end --
-  // dropping the deal off the list at that point loses track of it while the
-  // post-closing work is still open.
+  // A deal stays on Needs CDA until POST CLOSING is complete AND everyone owed
+  // on it -- every agent and every outside brokerage -- is marked paid, not
+  // merely until the CDA is sent. Sending the CDA is the middle of the job, not
+  // the end -- dropping the deal off the list at that point loses track of it
+  // while the post-closing work is still open. Post closing can be signed off
+  // while someone on the deal is still owed money, so payout completeness is
+  // its own condition rather than an assumption baked into the post closing
+  // status.
   const needsCda = (r: TrackerRow) =>
     !r.is_lease &&
     !isReferredOut(r) &&
     r.compliance_status === 'complete' &&
-    (r.post_closing_status || 'not_started') !== 'complete'
+    ((r.post_closing_status || 'not_started') !== 'complete' || !r.all_payees_paid)
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
