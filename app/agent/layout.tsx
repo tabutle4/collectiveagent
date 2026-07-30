@@ -17,18 +17,35 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
       return
     }
 
-    if (!loading && user && pathname !== '/agent/fees') {
-      // monthly_fee_waived is not on the AuthContext User type yet; it is
-      // returned by /api/auth/me. Cast just that field rather than widening
-      // the shared type in this patch.
-      if (
-        isMonthlyFeeOverdue(user.monthly_fee_paid_through, {
-          waived: (user as { monthly_fee_waived?: boolean }).monthly_fee_waived,
-          division: user.division,
-        })
-      ) {
-        router.push('/agent/fees?unpaid=true')
+    if (!loading && user) {
+      const isReferralRole = user.role === 'referral'
+      const referralAllowedPaths = [
+        '/agent/profile',
+        '/agent/calendar',
+        '/agent/email-signature',
+        '/agent/referrals',
+        '/training-center',
+        '/roster',
+      ]
+
+      if (isReferralRole && !referralAllowedPaths.some(path => pathname === path || pathname.startsWith(`${path}/`))) {
+        router.push('/agent/profile')
         return
+      }
+
+      if (pathname !== '/agent/fees') {
+        // monthly_fee_waived is not on the AuthContext User type yet; it is
+        // returned by /api/auth/me. Cast just that field rather than widening
+        // the shared type in this patch.
+        if (
+          isMonthlyFeeOverdue(user.monthly_fee_paid_through, {
+            waived: (user as { monthly_fee_waived?: boolean }).monthly_fee_waived,
+            division: user.division,
+          })
+        ) {
+          router.push('/agent/fees?unpaid=true')
+          return
+        }
       }
     }
   }, [loading, user, router, pathname])

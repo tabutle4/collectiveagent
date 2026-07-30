@@ -125,22 +125,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
-  // Referral agents: restricted to profile, calendar, training center, roster
-  const isReferralRole = userRole === 'referral'
-  if (isReferralRole) {
-    if (!isReferralAllowedPath(pathname)) {
-      return NextResponse.redirect(new URL('/agent/profile', request.url))
-    }
-    const requestHeaders = new Headers(request.headers)
-    requestHeaders.set('x-user-id', session.user.id)
-    requestHeaders.set('x-user-email', session.user.email)
-    requestHeaders.set('x-user-role', session.user.role)
-    return NextResponse.next({ request: { headers: requestHeaders } })
-  }
+  // Referral access is not an auth check. It is a post-login route policy.
+  // Keep auth focused on session validity and allow referral users to proceed.
   
   // The referral form is for Referral Collective agents and staff. Referral
-  // agents already returned above, so anyone still here is one or the other.
-  // Staff reach it through adminAllowedAgentPaths below.
+  // users are allowed through this auth gate; any page-specific restrictions
+  // should be enforced elsewhere in the app after login.
   if (pathname.startsWith('/agent/referrals') && !isAdminRole) {
     return NextResponse.redirect(new URL('/agent/profile', request.url))
   }
