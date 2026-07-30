@@ -18,3 +18,8 @@ deploy_pkg/
 *.zip
 *.patch
 tsconfig.tsbuildinfo
+bm_api_out/
+bm_archive/
+bm_api_out/
+bm_archive/
+public/headshots/
