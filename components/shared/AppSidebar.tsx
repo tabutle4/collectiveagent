@@ -362,6 +362,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
   const referralAgentNav: NavItem[] = [
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/agent/referrals', label: 'Submit a Referral', icon: Share2 },
     { href: '/agent/calendar', label: 'Coaching Calendar', icon: CalendarDays },
     { href: '/training-center', label: 'Training Center', icon: BookOpen },
     { href: '/agent/email-signature', label: 'Email Signature', icon: Mail },

@@ -667,7 +667,11 @@ export async function createM365User({
   mlsChoice?: string | null
 }): Promise<{ officeEmail: string; stepErrors: string[] }> {
   const token = await getGraphToken()
-  const domain = 'collectiverealtyco.com'
+  // Referral Collective agents live on their own domain. Everyone else stays on
+  // the CRC domain. Keyed on mls_choice, the same marker the rest of the app
+  // uses to identify an RC agent.
+  const isReferralCollective = (mlsChoice || '') === 'Referral Collective (No MLS)'
+  const domain = isReferralCollective ? 'collectivetexas.com' : 'collectiverealtyco.com'
   const stepErrors: string[] = []
 
   // Build username: first name + last initial, stripped of non-ascii and spaces

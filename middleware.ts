@@ -51,7 +51,7 @@ const PUBLIC_PATHS = [
 const SHARED_PATHS = ['/transactions', '/training-center', '/profile', '/admin/checks']
 
 // Paths referral agents can access
-const REFERRAL_ALLOWED_PATHS = ['/agent/profile', '/agent/calendar', '/training-center', '/roster']
+const REFERRAL_ALLOWED_PATHS = ['/agent/profile', '/agent/calendar', '/agent/email-signature', '/agent/referrals', '/training-center', '/roster']
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(path => pathname.startsWith(path))
@@ -129,6 +129,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
   
+  // The referral form is for Referral Collective agents and staff. Referral
+  // agents already returned above, so anyone still here is one or the other.
+  // Staff reach it through adminAllowedAgentPaths below.
+  if (pathname.startsWith('/agent/referrals') && !isAdminRole) {
+    return NextResponse.redirect(new URL('/agent/profile', request.url))
+  }
+
   // Role-based access control for legacy paths
   if (pathname.startsWith('/admin') && !isAdminRole) {
     return NextResponse.redirect(new URL('/agent/profile', request.url))
@@ -136,7 +143,7 @@ export async function middleware(request: NextRequest) {
 
   // Admins are normally redirected out of the agent area, but they still need to
   // be able to open the shared agent forms and view agent flyer pages.
-  const adminAllowedAgentPaths = ['/agent/forms', '/agent/flyer']
+  const adminAllowedAgentPaths = ['/agent/forms', '/agent/flyer', '/agent/referrals']
   const isAdminAllowedAgentPath = adminAllowedAgentPaths.some(p => pathname.startsWith(p))
   if (pathname.startsWith('/agent') && isAdminRole && !isAdminAllowedAgentPath) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url))
