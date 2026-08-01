@@ -179,15 +179,18 @@ export async function GET(request: NextRequest) {
         .map(t => t.id)
     )
 
-    // A row belongs to Referral Collective, not CRC, when the agent on it is an
-    // RC agent. The entity lives on the user, not the transaction, so this is
-    // the only place it can be determined.
-    const isRcRow = (ia: any) => (ia.agent as any)?.mls_choice === RC_MLS_CHOICE
-
-    // Filter internal agents to only qualified transactions in range, and drop
-    // Referral Collective rows so RC production stays out of a CRC report.
+    // Entity belongs to the TRANSACTION, not to the agent. Referral Collective
+    // has no deals of its own yet - every RC-flagged agent moved across from
+    // CRC - so filtering production rows by the agent's current mls_choice
+    // retroactively erased the CRC production they earned while they were here.
+    // Corrected 2026-08-01 after that filter was found to understate 2025 by
+    // 13 deals and $1,183,500 of volume. When RC starts writing its own deals,
+    // filter on the transaction's entity instead. The roster queries above
+    // still exclude RC agents, correctly - "who is at CRC today" is the right
+    // question for headcount, and it is a different question from "who earned
+    // this in 2025".
     const allRelevantRows = internalAgents.filter(
-      ia => qualifiedTransactionIds.has(ia.transaction_id) && !isRcRow(ia)
+      ia => qualifiedTransactionIds.has(ia.transaction_id)
     )
     // Production roles only: primary_agent and listing_agent count for firm volume/units/top producers
     // (co_agent, team_lead, referral_agent, momentum_partner do not add units or volume)
@@ -230,7 +233,6 @@ export async function GET(request: NextRequest) {
     const nonCancelledIds = new Set(transactions.map(t => t.id))
     internalAgents.forEach(row => {
       if (!row.installment_kind) return
-      if (isRcRow(row)) return
       if (row.payment_status !== 'paid') return
       if (!nonCancelledIds.has(row.transaction_id)) return
       const paid = row.payment_date ? String(row.payment_date).split('T')[0] : null

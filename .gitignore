@@ -20,3 +20,11 @@ deploy_pkg/
 tsconfig.tsbuildinfo
 .env
 app_export/
+
+bm_api_out/
+app_export/
+app_export.zip
+__pycache__/
+*.log
+*.out
+*_log.csv
