@@ -328,16 +328,25 @@ export default function AdminCompliancePage() {
   // pending, plus submissions not yet linked to a transaction. Prospect, closed,
   // and cancelled (either spelling) are hidden unless explicitly chosen.
   const txnStatus = (r: TrackerRow) => (r.transaction_status || '').toLowerCase()
-  const statusPasses = (r: TrackerRow) => {
+  const statusPasses = (r: TrackerRow, forTab: string = tab) => {
     const s = txnStatus(r)
     if (statusFilter === 'all') return true
     if (statusFilter === 'closed') return s === 'closed'
     if (statusFilter === 'cancelled') return s === 'cancelled' || s === 'canceled'
+    // Needs CDA keeps closed deals under the default filter. Everywhere else
+    // "active deals" means the working set and a closed deal is finished, but
+    // here closing is precisely when the CDA falls due and the post-closing
+    // work begins. Hiding closed deals dropped them off this tab at the exact
+    // moment it was meant to start tracking them, while needsCda() would have
+    // held them until post closing was complete and everyone owed was paid.
+    if (forTab === 'needs_cda') {
+      return s === 'active' || s === 'pending' || s === '' || s === 'closed'
+    }
     return s === 'active' || s === 'pending' || s === '' // 'active' (default)
   }
-  const pendingComplianceCount = rows.filter(r => statusPasses(r) && pendingCompliance(r)).length
-  const pendingChecklistCount = rows.filter(r => statusPasses(r) && pendingChecklist(r)).length
-  const needsCdaCount = rows.filter(r => statusPasses(r) && needsCda(r)).length
+  const pendingComplianceCount = rows.filter(r => statusPasses(r, 'pending_compliance') && pendingCompliance(r)).length
+  const pendingChecklistCount = rows.filter(r => statusPasses(r, 'pending_checklist') && pendingChecklist(r)).length
+  const needsCdaCount = rows.filter(r => statusPasses(r, 'needs_cda') && needsCda(r)).length
   // Where the "Work Deal" link lands, per tab: Pending checklist opens the
   // Check & Payouts tab (where the checklist lives); Needs CDA opens the
   // Commissions tab (where the CDA is worked); All and Pending compliance open
@@ -1149,7 +1158,7 @@ export default function AdminCompliancePage() {
 
       <div className="flex gap-2 mb-6 flex-wrap items-center">
         {([
-          { key: 'all', label: `All (${rows.filter(statusPasses).length})` },
+          { key: 'all', label: `All (${rows.filter(r => statusPasses(r, 'all')).length})` },
           { key: 'pending_compliance', label: `Pending compliance (${pendingComplianceCount})` },
           { key: 'pending_checklist', label: `Pending checklist (${pendingChecklistCount})` },
           { key: 'needs_cda', label: `Needs CDA (${needsCdaCount})` },
