@@ -356,7 +356,7 @@ export default function AdminCompliancePage() {
     : tab === 'needs_cda' ? 'commissions'
     : 'documents'
   const visible = (() => {
-    let list = rows.filter(statusPasses)
+    let list = rows.filter(r => statusPasses(r))
     if (tab !== 'all') list = list.filter(tabPredicate[tab])
 
     if (linkFilter === 'linked') list = list.filter(r => r.transaction_id)
