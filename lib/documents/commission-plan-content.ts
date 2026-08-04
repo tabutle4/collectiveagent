@@ -11,6 +11,12 @@ export interface CommissionPlanOverrides {
   capAmountOverride?: number | null
   /** Post-cap split string override, e.g. '95/5'. Default from firm settings. */
   postCapSplitOverride?: string | null
+  /**
+   * Base (pre-cap) split string override, e.g. '90/10'. Parsed from a Custom
+   * plan name such as 'Custom - 90/10 Cap'. Null means the agent is on the
+   * plan's published standard split.
+   */
+  baseSplitOverride?: string | null
 }
 
 export interface CommissionPlanFields {
@@ -31,6 +37,48 @@ const fmtMoney = (n: number): string =>
   '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 
 /**
+ * The firm's published base split for each plan. An agent on a Custom plan
+ * overrides this through baseSplitOverride; everyone else prints the standard.
+ */
+const STANDARD_BASE_SPLIT: Record<CommissionPlanKey, string> = {
+  new_agent: '70/30',
+  no_cap: '85/15',
+  cap: '70/30',
+}
+
+/**
+ * Pulls the agent's negotiated base split out of a Custom plan name. The join
+ * form and the profile page both store custom plans as 'Custom - 90/10 Cap',
+ * so the split lives in the plan string rather than in its own column.
+ * Returns null for every standard plan and for any string whose two numbers
+ * don't add up to 100, so a malformed value falls back to the standard split
+ * instead of printing nonsense into a signed agreement.
+ */
+export function parseCustomBaseSplit(commissionPlan: string): string | null {
+  const plan = (commissionPlan || '').trim()
+  if (!plan.toLowerCase().startsWith('custom')) return null
+  const match = plan.match(/(\d{1,3})\s*\/\s*(\d{1,3})/)
+  if (!match) return null
+  const agentPct = Number(match[1])
+  const agencyPct = Number(match[2])
+  if (agentPct + agencyPct !== 100) return null
+  return `${agentPct}/${agencyPct}`
+}
+
+/**
+ * Builds the first row of the plan terms table. Reads the agent's override
+ * when one exists so a negotiated split prints the negotiated numbers.
+ */
+function buildBaseSplitRow(
+  overrides: CommissionPlanOverrides | undefined,
+  plan: CommissionPlanKey
+): string {
+  const split = overrides?.baseSplitOverride || STANDARD_BASE_SPLIT[plan]
+  const [agentPct, agencyPct] = split.split('/').map(s => s.trim())
+  return `Commission Split: ${agentPct} / ${agencyPct} (Agent / Agency)`
+}
+
+/**
  * Returns true when the agent has any override that differs from firm standard.
  * The comparison uses firm defaults rather than hardcoded values so that if
  * ops raises the standard cap, agents on that new standard are not falsely
@@ -38,13 +86,15 @@ const fmtMoney = (n: number): string =>
  */
 const hasCustomTerms = (
   o: CommissionPlanOverrides | undefined,
-  defaults: StandardPlanDefaults
+  defaults: StandardPlanDefaults,
+  plan: CommissionPlanKey
 ): boolean => {
   if (!o) return false
   if (o.qualifyingTransactionTarget != null && o.qualifyingTransactionTarget !== 5) return true
   if (o.waiveCoachingFee === true) return true
   if (o.capAmountOverride != null && o.capAmountOverride !== defaults.capAmount) return true
   if (o.postCapSplitOverride && o.postCapSplitOverride !== defaults.postCapSplit) return true
+  if (o.baseSplitOverride && o.baseSplitOverride !== STANDARD_BASE_SPLIT[plan]) return true
   return false
 }
 
@@ -103,7 +153,7 @@ function buildNewAgentRows(
     : `New Agent Training Fee: ${fmtMoney(defaults.coachingFee)} per transaction`
 
   return [
-    'Commission Split: 70 / 30 (Agent / Agency)',
+    buildBaseSplitRow(overrides, 'new_agent'),
     'Cap: None',
     `Applies To: ${dealLabel}`,
     coachingLine,
@@ -120,7 +170,7 @@ function buildCapRows(
   const [agentPct, agencyPct] = postCap.split('/').map(s => s.trim())
 
   return [
-    'Commission Split: 70 / 30 (Agent / Agency)',
+    buildBaseSplitRow(overrides, 'cap'),
     `Cap: ${fmtMoney(capAmt)}`,
     `Post-Cap Split: ${agentPct} / ${agencyPct} (Agent / Agency) - the ${agencyPct}% includes the post-cap processing fee`,
     'Applies To: All buyer, commercial, and listing transactions',
@@ -164,7 +214,7 @@ This Agreement does not expire and remains in effect until the Salespersons comm
 // ── Main content builder ──────────────────────────────────────────────────
 export function getCommissionPlanContent(fields: CommissionPlanFields) {
   const { agentName, effectiveDate, plan, overrides, standardDefaults } = fields
-  const customized = hasCustomTerms(overrides, standardDefaults)
+  const customized = hasCustomTerms(overrides, standardDefaults, plan)
   const target = overrides?.qualifyingTransactionTarget ?? 5
 
   let intro: string
@@ -176,7 +226,7 @@ export function getCommissionPlanContent(fields: CommissionPlanFields) {
   } else if (plan === 'no_cap') {
     intro = `The Salesperson has selected the No Cap Plan. This plan applies to all buyer deals, commercial deals, and listing transactions. It guarantees a consistently higher commission split, allowing the Salesperson to concentrate on growing their business without concerns about commission caps.`
     tableRows = [
-      'Commission Split: 85 / 15 (Agent / Agency)',
+      buildBaseSplitRow(overrides, 'no_cap'),
       'Cap: None',
       'Applies To: All buyer, commercial, and listing transactions',
       'Brokerage Processing Fee: May apply based on transaction type',
@@ -234,6 +284,14 @@ function buildNewAgentCustomSummary(
 ): string {
   const bits: string[] = []
   const target = overrides?.qualifyingTransactionTarget ?? 5
+  if (
+    overrides?.baseSplitOverride &&
+    overrides.baseSplitOverride !== STANDARD_BASE_SPLIT.new_agent
+  ) {
+    bits.push(
+      `the commission split is ${overrides.baseSplitOverride} instead of ${STANDARD_BASE_SPLIT.new_agent}`
+    )
+  }
   if (target !== 5) {
     bits.push(
       `this plan applies to the first ${target} sales transaction${
@@ -293,5 +351,6 @@ export function extractOverridesFromUser(user: any): CommissionPlanOverrides {
     capAmountOverride:
       user.cap_amount_override != null ? Number(user.cap_amount_override) : null,
     postCapSplitOverride: user.post_cap_split_override || null,
+    baseSplitOverride: parseCustomBaseSplit(user.commission_plan || ''),
   }
 }
