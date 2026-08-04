@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     // Authenticate by campaign_token
     const { data: prospect, error: prospectError } = await supabaseAdmin
       .from('users')
-      .select('id, first_name, last_name, email, payload_payee_id, mls_choice')
+      .select('id, first_name, last_name, email, payload_payee_id, mls_choice, monthly_fee_waived')
       .eq('campaign_token', token)
       .single()
 
@@ -195,8 +195,13 @@ export async function POST(request: NextRequest) {
       const yy = String(now.getFullYear()).slice(2)
       const startLabel = `${pad(now.getMonth() + 1)}/${pad(today)}/${yy}`
       const endLabel = `${pad(now.getMonth() + 1)}/${pad(daysInMonth)}/${yy}`
-      proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
-      proratedAmount = Math.round((standardMonthlyFee / daysInMonth) * remainingDays * 100) / 100
+      // Agents with users.monthly_fee_waived set pay the onboarding fee only.
+      // Leaving proratedAmount at 0 skips the line item below and keeps
+      // invoiceAmount at the onboarding fee.
+      if (!prospect.monthly_fee_waived) {
+        proratedLabel = `Prorated Monthly Fee - ${startLabel} to ${endLabel}`
+        proratedAmount = Math.round((standardMonthlyFee / daysInMonth) * remainingDays * 100) / 100
+      }
 
       params.append('description', 'Onboarding Invoice')
       params.append('items[0][type]', 'Onboarding Fee')
