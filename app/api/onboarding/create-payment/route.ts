@@ -165,11 +165,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 2: Build invoice based on agent type
+    // Step 2: Build invoice based on agent type.
+    // Referral Collective is a separate company from Collective Realty Co., so
+    // its membership fees have to settle on the RC processing account. There is
+    // deliberately NO fallback to the CRC account: routing RC money into CRC
+    // commingles two entities' funds, which is worse than failing the payment
+    // and telling somebody why.
+    const processingId = isReferralAgent
+      ? process.env.PAYLOAD_RC_PROCESSING_ID
+      : process.env.PAYLOAD_PROCESSING_ID
+    if (!processingId) {
+      const entity = isReferralAgent ? 'Referral Collective' : 'Collective Realty Co.'
+      console.error(`Missing Payload processing account for ${entity}`)
+      return NextResponse.json(
+        { error: `Payment account for ${entity} is not configured. Please contact office@collectiverealtyco.com.` },
+        { status: 503 }
+      )
+    }
     const params = new URLSearchParams({
       type: 'bill',
       due_date: now.toISOString().split('T')[0],
-      processing_id: process.env.PAYLOAD_PROCESSING_ID!,
+      processing_id: processingId,
       customer_id: payloadCustomerId,
     })
 
