@@ -553,6 +553,9 @@ export default function OnboardingPage() {
 
   // Determine if this is a referral agent based on mls_choice
   const isReferralAgent = prospect?.mls_choice === 'Referral Collective (No MLS)'
+  // Agents with users.monthly_fee_waived set pay the onboarding fee only. Same
+  // flag the billing crons honor, so the prorated first month is dropped here too.
+  const monthlyFeeWaived = !!prospect?.monthly_fee_waived
   const STEPS = isReferralAgent ? STEPS_REFERRAL : STEPS_STANDARD
   const brokerageName = isReferralAgent ? referralSettings.brokerage_name : 'Collective Realty Co.'
 
@@ -1454,6 +1457,7 @@ const checkout = new window.Payload.Checkout({
                       </div>
                       <p className="text-sm font-semibold text-luxury-gray-1">${standardSettings.onboarding_fee.toFixed(2)}</p>
                     </div>
+                    {!monthlyFeeWaived && (
                     <div className="inner-card flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-luxury-gray-1">Prorated Monthly Fee</p>
@@ -1478,13 +1482,16 @@ const checkout = new window.Payload.Checkout({
                         })()}
                       </p>
                     </div>
+                    )}
                   </>
                 )}
               </div>
               <div className="mt-4 pt-4 border-t border-luxury-gray-5/50">
                 <p className="text-xs text-luxury-gray-3">
-                  {isReferralAgent 
+                  {isReferralAgent
                     ? 'Processing fees are passed to the payer. Annual membership renews each year.'
+                    : monthlyFeeWaived
+                    ? 'Processing fees are passed to the payer. Your monthly fee is waived.'
                     : `Processing fees are passed to the payer. Monthly fees of $${standardSettings.monthly_fee} are due by the 5th of each month thereafter.`}
                 </p>
               </div>
