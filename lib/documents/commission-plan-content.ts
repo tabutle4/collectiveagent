@@ -1,4 +1,5 @@
 import type { StandardPlanDefaults } from './plan-defaults'
+import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 
 export type CommissionPlanKey = 'new_agent' | 'no_cap' | 'cap'
 
@@ -47,22 +48,20 @@ const STANDARD_BASE_SPLIT: Record<CommissionPlanKey, string> = {
 }
 
 /**
- * Pulls the agent's negotiated base split out of a Custom plan name. The join
- * form and the profile page both store custom plans as 'Custom - 90/10 Cap',
- * so the split lives in the plan string rather than in its own column.
- * Returns null for every standard plan and for any string whose two numbers
- * don't add up to 100, so a malformed value falls back to the standard split
- * instead of printing nonsense into a signed agreement.
+ * Pulls the agent's negotiated base split out of their plan name. The join
+ * form and the profile page both store custom plans as text ('Custom - 90/10
+ * Cap'), so the split lives in the plan string rather than in its own column.
+ *
+ * This delegates to the same parser the payout cascade uses, deliberately.
+ * The cascade recovers the split from this string whenever no commission_plans
+ * row matches, so if the document parsed the string differently the agreement
+ * could print one split while the agent got paid another. One parser makes
+ * that disagreement impossible. Returns null for every standard plan, which
+ * falls back to the plan's published split.
  */
 export function parseCustomBaseSplit(commissionPlan: string): string | null {
-  const plan = (commissionPlan || '').trim()
-  if (!plan.toLowerCase().startsWith('custom')) return null
-  const match = plan.match(/(\d{1,3})\s*\/\s*(\d{1,3})/)
-  if (!match) return null
-  const agentPct = Number(match[1])
-  const agencyPct = Number(match[2])
-  if (agentPct + agencyPct !== 100) return null
-  return `${agentPct}/${agencyPct}`
+  const parsed = parseCustomPlanSplit(commissionPlan)
+  return parsed ? `${parsed.agentPct}/${parsed.firmPct}` : null
 }
 
 /**
