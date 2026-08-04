@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getFirmMinimumPct } from '@/lib/transactions/cascade'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
+import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,11 +65,29 @@ export async function POST(request: NextRequest) {
 
     // Side-aware processing fee with waive / half-off state.
     const side = String(body.side || '')
-    const txnType = String(body.transaction_type || '')
-    const { data: pfts } = await supabaseAdmin.from('processing_fee_types').select('*')
-    const pft = (pfts || []).find((f: any) => String(f.code || '') === txnType)
-      || (pfts || []).find((f: any) => String(f.code || '').includes(isLease ? 'tenant' : 'buyer'))
-      || null
+    // Resolve the fee code the same way the submission does, so the number the
+    // agent attests to is the number the payout engine will charge. The form
+    // sends its raw fields: 'representing' plus the tenant sub-type, and the
+    // tenant sub-type is 'apartment' rather than a fee code. Passing those
+    // straight to the lookup misses for every sale and for apartment leases.
+    // feeCodeFromRepresenting is the same helper compliance-cda writes into
+    // transactions.transaction_type, so preview and payout agree by construction.
+    const txnType =
+      feeCodeFromRepresenting(
+        String(body.representing || ''),
+        String(body.transaction_type || '')
+      ) || String(body.transaction_type || '')
+    // Match the payout cascade exactly: active rows only, case-insensitive
+    // exact match on the code, no fuzzy fallback. The old fallback grabbed
+    // "any code containing tenant/buyer", so a landlord or commercial lease
+    // borrowed the apartment tenant fee and quoted a fee that is never charged.
+    const { data: pfts } = await supabaseAdmin
+      .from('processing_fee_types')
+      .select('*')
+      .eq('is_active', true)
+    const pft = (pfts || []).find(
+      (f: any) => String(f.code || '').toLowerCase() === txnType.toLowerCase()
+    ) || null
     const baseFee = Number(pft?.processing_fee ?? 0)
     const buySide = side === 'buyer' || side === 'tenant'
     let fee = baseFee

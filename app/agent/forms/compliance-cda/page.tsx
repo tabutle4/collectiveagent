@@ -304,6 +304,7 @@ export default function ComplianceCdaForm() {
           body: JSON.stringify({
             is_lease: summaryIsLease,
             side: summarySide,
+            representing: form.representing || '',
             transaction_type: form.tenant_transaction_type || '',
             agent_id: onBehalfAgent?.id || undefined,
           }),
@@ -312,7 +313,7 @@ export default function ComplianceCdaForm() {
       } catch { /* preview is best-effort; the box still shows the math */ }
     }, 350)
     return () => clearTimeout(t)
-  }, [mode, summaryIsLease, summarySide, form.tenant_transaction_type, onBehalfAgent])
+  }, [mode, summaryIsLease, summarySide, form.representing, form.tenant_transaction_type, onBehalfAgent])
 
   const commissionSummary = (() => {
     const basis = parseFloat(form.commission_basis_price || '') || 0
