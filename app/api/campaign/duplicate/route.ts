@@ -30,9 +30,9 @@ function convertHardcodedToStepsConfig(currentYear: number, newYear: number) {
           {
             heading: 'Make Your Deals Count!',
             items: [
-              "If you've already been paid for your deal by November 22nd, it's counted because it's closed out in Brokermint.",
+              "If you've already been paid for your deal by November 22nd, it's counted because it's closed out in Collective Agent.",
               'For unpaid leases/apartments, ensure by November 28th:',
-              '  • Transaction is created in Brokermint',
+              '  • Transaction is created in Collective Agent',
               '  • Transaction is in **Pending** status',
               `  • Closing date is entered (between November 23, ${currentYear - 1} and November 22, ${currentYear})`,
               '  • Sales price is calculated as: Rent × Months in Lease Term',

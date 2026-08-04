@@ -247,8 +247,9 @@ export async function computeCommissionBreakdown(args: {
       const firmAtMin = Math.round(minBasis * firmSplitPct) / 100
       const adj = Math.round((firmAtMin - brokerageSplit) * 100) / 100
       if (adj > 0) {
-        brokerageSplit = firmAtMin
-        agentGross = Math.round((agentGross - adj) * 100) / 100
+        // Report the shortfall, do not move the money. The firm minimum is
+        // charged by adding a fee to the deal by hand, so taking it out of the
+        // agent's gross here as well would collect it twice.
         firmMinimumAdjustment = adj
         firmMinimumPctApplied = firmMinPct
       }

@@ -353,8 +353,9 @@ export async function POST(request: NextRequest) {
           const firmAtMin = round2(minBasis * (100 - agentSplitPct - teamLeadPct) / 100)
           const adj = round2(firmAtMin - firmPortion)
           if (adj > 0) {
-            brokerageSplit = round2(brokerageSplit + adj)
-            agentGross = round2(agentGross - adj)
+            // Report the shortfall, do not move the money. The firm minimum is
+            // charged by adding a fee to the deal by hand, so taking it out of
+            // the agent's gross here as well would collect it twice.
             firm_minimum_adjustment = adj
             firm_minimum_pct = minPct
           }
@@ -431,6 +432,12 @@ export async function POST(request: NextRequest) {
       is_team_member: !!teamMembership,
       has_team_splits: teamSplits.length > 0,
       lead_source,
+      // Firm minimum shortfall. Reported, never applied: the fee is added to
+      // the deal by hand, so moving the money here too would collect it twice.
+      // Returned so the number is visible to callers instead of being computed
+      // and dropped on the floor.
+      firm_minimum_adjustment,
+      firm_minimum_pct,
       // Backward compat for existing callers that read office_gross
       office_gross: agentBasis,
     })

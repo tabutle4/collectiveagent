@@ -94,10 +94,21 @@ export function complianceIsDirectLease(b: any): boolean {
  * fields for leases and referred-out deals. The validator must never require a
  * field the agent cannot see. Exported because the form imports it, so the two
  * can never drift apart again.
+ *
+ * Business sales are excluded too. The asset there is the business rather than
+ * real property, so there is frequently no title company and no loan type in
+ * the residential sense. Requiring them would leave the agent unable to submit.
+ * Commercial property sales are NOT excluded; those do go through title.
  */
 export function complianceShowsTitleAndLoan(b: any): boolean {
   const rep = b.representing
-  return rep !== 'tenant' && rep !== 'landlord' && rep !== 'referred_out'
+  return (
+    rep !== 'tenant' &&
+    rep !== 'landlord' &&
+    rep !== 'referred_out' &&
+    rep !== 'business_buyer' &&
+    rep !== 'business_seller'
+  )
 }
 
 // ── Rules per form ───────────────────────────────────────────────────────────

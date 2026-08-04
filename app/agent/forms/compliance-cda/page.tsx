@@ -18,6 +18,10 @@ const REPRESENTATION_OPTIONS = [
   { value: 'buyer', label: 'Buyer' },
   { value: 'nc_buyer', label: 'New Construction Buyer' },
   { value: 'seller', label: 'Seller' },
+  { value: 'commercial_buyer', label: 'Commercial Buyer' },
+  { value: 'commercial_seller', label: 'Commercial Seller' },
+  { value: 'business_buyer', label: 'Business Buyer' },
+  { value: 'business_seller', label: 'Business Seller' },
   { value: 'tenant', label: 'Tenant' },
   { value: 'landlord', label: 'Landlord' },
   { value: 'referred_out', label: 'I referred this client to an external agent.' },
@@ -27,6 +31,7 @@ const TENANT_TYPES = [
   { value: 'apartment', label: 'Apartment' },
   { value: 'tenant_non_apt_v2', label: 'Tenant Lease (not apartment)' },
   { value: 'tenant_simplyhome_v2', label: 'Builder Home Rental' },
+  { value: 'commercial', label: 'Commercial Lease' },
 ]
 
 const REFERRED_CLIENT_TYPES = [
@@ -468,7 +473,7 @@ export default function ComplianceCdaForm() {
       if (!retainer.client_name.trim()) { setError('Client name is required.'); return }
       if (!retainer.retainer_transaction_type) { setError('Transaction type is required.'); return }
       if (!retainer.retainer_amount || parseFloat(retainer.retainer_amount) <= 0) { setError('Retainer amount is required.'); return }
-      if (!retainer.docs_confirmed) { setError('You must confirm all required documents are signed and uploaded to BoldTrail.'); return }
+      if (!retainer.docs_confirmed) { setError('You must confirm all required documents are signed and uploaded to the Dotloop loop.'); return }
       payload = { ...payload, ...retainer, retainer_amount: parseFloat(retainer.retainer_amount), confirm_new_deal: confirmedNewDeal }
     } else if (mode === 'subsequent') {
       if (!searchDone || !foundTransaction) { setError('Please find your transaction first.'); return }
@@ -701,7 +706,7 @@ export default function ComplianceCdaForm() {
             {retainer.retainer_transaction_type && requiredDocs.length > 0 && (
               <section>
                 <h2 className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-3">Required Documents</h2>
-                <p className="text-xs text-luxury-gray-3 mb-3">All of the following must be signed by the client and uploaded to BoldTrail before submitting:</p>
+                <p className="text-xs text-luxury-gray-3 mb-3">All of the following must be signed by the client and uploaded to the Dotloop loop before submitting:</p>
                 <ul className="space-y-1 mb-4">
                   {requiredDocs.map(doc => (
                     <li key={doc} className="flex items-center gap-2 text-xs text-luxury-gray-2">
@@ -712,7 +717,7 @@ export default function ComplianceCdaForm() {
                 </ul>
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input type="checkbox" className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" checked={retainer.docs_confirmed} onChange={e => setRField('docs_confirmed', e.target.checked)} />
-                  <span className="text-xs text-luxury-gray-2">I confirm that all required documents have been signed by the client and uploaded to BoldTrail Back Office.</span>
+                  <span className="text-xs text-luxury-gray-2">I confirm that all required documents have been signed by the client and uploaded to the Dotloop loop.</span>
                 </label>
               </section>
             )}

@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
            <p style="margin:0 0 6px;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Type:</strong> ${typeLabel[retainer_transaction_type] || retainer_transaction_type}</p>
            <p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Amount:</strong> $${amount.toFixed(2)} (agent net $${(amount - 45).toFixed(2)} after $45 processing fee)</p>
          </div>
-         <p style="font-size:13px;color:#555555;margin:0 0 16px;">Agent confirmed all required documents are signed and uploaded to BoldTrail. Please confirm payment received and process payout.</p>
+         <p style="font-size:13px;color:#555555;margin:0 0 16px;">Agent confirmed all required documents are signed and uploaded to the Dotloop loop. Please confirm payment received and process payout.</p>
          <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/transactions/${transactionId}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Transaction</a></p>
          ${buildFormAnswersHtml(submissionData)}`,
         { title: 'New Retainer Submission', preheader: `Retainer for ${client_name}` }
@@ -1183,6 +1183,8 @@ export async function POST(request: NextRequest) {
     // Client type derives from representation; title from the title fields.
     const clientContactType =
       representing === 'seller' ? 'seller'
+      : representing === 'commercial_seller' ? 'seller'
+      : representing === 'business_seller' ? 'seller'
       : representing === 'landlord' ? 'landlord'
       : representing === 'tenant' ? 'tenant'
       : representing === 'referred_out' ? null

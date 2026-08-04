@@ -908,6 +908,20 @@ export default function AgentCardFinancials({
         />
       )}
 
+      {/* Firm minimum shortfall. Reported only - the fee is added to the deal by
+          hand, so the cascade deliberately does not move the money. Without this
+          line the shortfall is computed and never seen by anyone. */}
+      {num(calc?.firm_minimum_adjustment) > 0 && (
+        <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2.5 mt-2">
+          <span>
+            Below the firm minimum
+            {num(calc?.firm_minimum_pct) > 0 ? ` of ${num(calc?.firm_minimum_pct)}%` : ''} by{' '}
+            {fmt$(num(calc?.firm_minimum_adjustment))}. Nothing was deducted from the agent.
+            Add a fee to collect it.
+          </span>
+        </div>
+      )}
+
       {/* TOTALS - billing panel goes between adjustments and totals (rendered by parent) */}
       <div className="border-t border-luxury-gray-5/50 mt-3 pt-2 space-y-1">
         <div className="flex justify-between items-center text-xs">

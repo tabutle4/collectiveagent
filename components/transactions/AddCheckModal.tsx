@@ -52,6 +52,15 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
   const [selectedTxn, setSelectedTxn] = useState<TxnRow | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [confirmedNoProspect, setConfirmedNoProspect] = useState(false)
+  // Pasting the whole address off a check rarely substring-matches how the deal
+  // was stored, so the search comes back empty and somebody creates a duplicate
+  // transaction. Typing surfaces matches partway through instead.
+  const [pasteBlocked, setPasteBlocked] = useState(false)
+  useEffect(() => {
+    if (!pasteBlocked) return
+    const t = setTimeout(() => setPasteBlocked(false), 4000)
+    return () => clearTimeout(t)
+  }, [pasteBlocked])
 
   const [checkId, setCheckId] = useState<string | null>(null)
   const [checkImageUrl, setCheckImageUrl] = useState<string | null>(null)
@@ -465,9 +474,22 @@ export default function AddCheckModal({ onClose, onSaved }: Props) {
                   className="input-luxury text-sm pl-9"
                   value={search}
                   onChange={e => { setSearch(e.target.value); setConfirmedNoProspect(false) }}
+                  onPaste={e => { e.preventDefault(); setPasteBlocked(true) }}
+                  onDrop={e => { e.preventDefault(); setPasteBlocked(true) }}
                   placeholder="Start typing..."
                 />
               </div>
+
+              {pasteBlocked && (
+                <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2.5 mb-3">
+                  <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    Please type the address instead of pasting it. A pasted address
+                    usually will not match how the deal was entered, which is how
+                    duplicate transactions get created.
+                  </span>
+                </div>
+              )}
 
               {loadingTxns && (
                 <div className="flex items-center gap-2 text-xs text-luxury-gray-3 py-4">

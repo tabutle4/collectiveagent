@@ -34,6 +34,11 @@ interface Props {
  * blank unit box is ambiguous: it could mean "no unit" or "I skipped it".
  * Forcing an answer removes the ambiguity. The yes/no itself is not stored
  * anywhere; only the unit value is.
+ *
+ * Pasting is blocked on every field. A pasted address carries whatever
+ * formatting it had at the source, which is what makes the same property show
+ * up two ways and breaks address matching later. Typing it out forces the
+ * agent to read what they are entering.
  */
 export default function AddressInput({
   value,
@@ -45,6 +50,22 @@ export default function AddressInput({
   // null means the agent has not answered yet. Seeded to true when a unit is
   // already present, so editing an existing address does not re-ask.
   const [hasUnit, setHasUnit] = useState<boolean | null>(value.unit ? true : null)
+
+  // Shown for a few seconds after a blocked paste so the field does not just
+  // silently ignore the agent.
+  const [pasteBlocked, setPasteBlocked] = useState(false)
+  useEffect(() => {
+    if (!pasteBlocked) return
+    const t = setTimeout(() => setPasteBlocked(false), 4000)
+    return () => clearTimeout(t)
+  }, [pasteBlocked])
+
+  // Paste and drag-drop are both blocked. Drop is the same bypass by another
+  // route, so blocking only paste would leave the hole open.
+  const noPaste = {
+    onPaste: (e: React.ClipboardEvent) => { e.preventDefault(); setPasteBlocked(true) },
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setPasteBlocked(true) },
+  }
 
   const set = (key: keyof AddressFields, v: string) => {
     onChange({ ...value, [key]: v })
@@ -81,6 +102,13 @@ export default function AddressInput({
 
   return (
     <div className="space-y-3">
+      {pasteBlocked && (
+        <div className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2.5">
+          Please type the address instead of pasting it. Pasted addresses keep the
+          formatting they came with, which stops the same property from matching
+          across the app.
+        </div>
+      )}
       <div>
         <label className="block text-sm mb-2 text-luxury-gray-1">
           Street Address {required && <span className="text-red-500">*</span>}
@@ -89,6 +117,7 @@ export default function AddressInput({
           type="text"
           value={value.street_address}
           onChange={e => set('street_address', e.target.value)}
+          {...noPaste}
           className="input-luxury"
           placeholder="1303 Gardenia Drive"
           required={required}
@@ -143,6 +172,7 @@ export default function AddressInput({
             type="text"
             value={value.unit}
             onChange={e => set('unit', e.target.value)}
+            {...noPaste}
             className="input-luxury"
             placeholder="B110"
             required={required}
@@ -161,6 +191,7 @@ export default function AddressInput({
             type="text"
             value={value.city}
             onChange={e => set('city', e.target.value)}
+            {...noPaste}
             className="input-luxury"
             placeholder="Houston"
             required={required}
@@ -176,6 +207,7 @@ export default function AddressInput({
             inputMode="numeric"
             value={value.zip}
             onChange={e => set('zip', e.target.value)}
+            {...noPaste}
             className="input-luxury"
             placeholder="77018"
             required={required}
@@ -192,6 +224,7 @@ export default function AddressInput({
           type="text"
           value={value.state}
           onChange={e => set('state', e.target.value)}
+          {...noPaste}
           onBlur={handleStateBlur}
           className="input-luxury"
           placeholder="TX"

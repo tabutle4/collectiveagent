@@ -668,13 +668,13 @@ export default function CampaignForm({
                   <h3 className="font-medium mb-3">Make Your Deals Count!</h3>
                   <p className="text-sm text-luxury-gray-1 mb-3">
                     If you've already been paid for your deal by November 22nd, it's counted because
-                    it's closed out in Brokermint.
+                    it's closed out in Collective Agent.
                   </p>
                   <p className="text-sm font-medium mb-2">
                     For unpaid leases/apartments, ensure by November 28th:
                   </p>
                   <ul className="list-disc list-inside space-y-1 text-sm text-luxury-gray-1 ml-4">
-                    <li>Transaction is created in Brokermint</li>
+                    <li>Transaction is created in Collective Agent</li>
                     <li>
                       Transaction is in <strong>Pending</strong> status
                     </li>
