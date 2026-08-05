@@ -145,14 +145,21 @@ export default function GlobalSearch({ open, onClose, isStaff }: GlobalSearchPro
     [allResults, selectedIndex]
   )
 
+  // Staff open the full transaction record. Agents work from the transaction
+  // list and read a deal by expanding its row, so they go to the list with that
+  // row already open. Neither role goes to /transactions/[id], which is an
+  // unfinished page that renders nothing.
+  const transactionHref = (id: string) =>
+    isStaff ? `/admin/transactions/${id}` : `/transactions?open=${id}`
+
   const handleResultClick = (result: SearchResult) => {
     if (result.type === 'user') {
       router.push(`/admin/users/${result.id}`)
     } else if (result.type === 'transaction') {
-      router.push(`/transactions/${result.id}`)
+      router.push(transactionHref(result.id))
     } else if (result.type === 'contact') {
       // Navigate to the transaction this contact belongs to
-      router.push(`/transactions/${result.transactionId}`)
+      router.push(transactionHref(result.transactionId))
     }
     onClose()
   }

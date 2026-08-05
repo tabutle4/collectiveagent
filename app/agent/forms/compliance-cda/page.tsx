@@ -506,8 +506,12 @@ export default function ComplianceCdaForm() {
       if (form.external_referral && !form.external_referral_brokerage_name.trim()) { setError('External referral: enter the receiving brokerage name.'); return }
       if (!form.flyer_display_type) { setError('Please select what to show on your flyer.'); return }
       if (form.flyer_display_type === 'division' && !form.flyer_division) { setError('Please select a division for your flyer.'); return }
-      if (!foundTransaction && !newAddressComplete) {
-        setError('No existing transaction is linked, so a new one will be created. Complete the property address, including whether it has a unit.')
+      if (needsPropertyAddress && !newAddressComplete) {
+        setError(
+          attachedToRetainer
+            ? 'This retainer has no property address on it yet. Complete the property address, including whether it has a unit.'
+            : 'No existing transaction is linked, so a new one will be created. Complete the property address, including whether it has a unit.'
+        )
         return
       }
 
@@ -519,7 +523,7 @@ export default function ComplianceCdaForm() {
         // address yet and the server writes this one onto it.
         transaction_id: foundTransaction?.id || attachTo?.id || null,
         confirm_new_deal: confirmedNewDeal,
-        ...(foundTransaction ? {} : {
+        ...(!needsPropertyAddress ? {} : {
           street_address: newAddress.street_address,
           unit: newAddress.unit,
           city: newAddress.city,
@@ -578,6 +582,14 @@ export default function ComplianceCdaForm() {
     ? (user.division as string[]).filter(Boolean)
     : String(user?.division || '').split('|').map((s: string) => s.trim()).filter(Boolean)
 
+  // A retainer prospect stands in for a deal that has no property yet: its
+  // property_address is the client's name, so it carries no street, city, or
+  // zip. Attaching to one therefore still has to collect the real address,
+  // whether the agent reached it through the search or through the duplicate
+  // panel. Only a normal existing transaction already has an address of its own.
+  const linkedProspect = foundTransaction?.status === 'prospect'
+  const needsPropertyAddress = !foundTransaction || linkedProspect
+  const attachedToRetainer = linkedProspect || !!attachTo
   const selectedRetainerType = RETAINER_TYPES.find(t => t.value === retainer.retainer_transaction_type)
   const requiredDocs = retainer.retainer_transaction_type ? RETAINER_DOCS[retainer.retainer_transaction_type] || [] : []
 
@@ -644,7 +656,27 @@ export default function ComplianceCdaForm() {
                       <p className="text-sm font-medium text-luxury-gray-1">{m.client_name}</p>
                       <p className="text-xs text-luxury-gray-3">Created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                     </div>
-                    <a href={`/transactions/${m.id}`} className="btn btn-secondary text-xs flex-shrink-0">View Deal</a>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <a href={`/transactions?open=${m.id}`} className="btn btn-secondary text-xs">View Deal</a>
+                      {/* The retainer already exists, so there is nothing to
+                          submit a second time. What the agent actually needs
+                          from here is compliance on that same deal, which the
+                          compliance mode attaches to the prospect. Without
+                          this, the only way out of this panel was "Not the
+                          same", which files a duplicate retainer. */}
+                      <button
+                        onClick={() => {
+                          setMode('compliance')
+                          setAttachTo({ id: m.id, client_name: m.client_name })
+                          setForm(prev => ({ ...prev, client_name: prev.client_name || m.client_name || '' }))
+                          setDuplicateMatches([])
+                          setError('')
+                        }}
+                        className="btn btn-primary text-xs"
+                      >
+                        Same client - file compliance
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -808,18 +840,24 @@ export default function ComplianceCdaForm() {
               </div>
               {searchDone && (
                 <div className={`mt-3 p-3 rounded text-xs ${foundTransaction ? 'bg-green-50 text-green-700' : 'bg-luxury-gray-5/30 text-luxury-gray-3'}`}>
-                  {foundTransaction ? `Found: ${foundTransaction.property_address} - Status: ${foundTransaction.status}` : 'No existing transaction found. Enter the full address below and we will create one.'}
+                  {foundTransaction
+                    ? linkedProspect
+                      ? `Found your retainer for ${foundTransaction.client_name || foundTransaction.property_address}. Enter the property address below to finish setting up the deal.`
+                      : `Found: ${foundTransaction.property_address} - Status: ${foundTransaction.status}`
+                    : 'No existing transaction found. Enter the full address below and we will create one.'}
                 </div>
               )}
 
-              {/* Nothing linked, so this submission will create a transaction.
-                  Ask for the address in parts, the same way every other form
-                  does, so a new transaction can never be created with a partial
-                  address. Shown whenever nothing is linked, including when the
-                  agent skips the search. */}
-              {!foundTransaction && (
+              {/* Either nothing is linked, so this submission creates a
+                  transaction, or the agent linked a retainer prospect, which
+                  holds the client's name in place of an address. Both need the
+                  address in parts, the same way every other form does, so no
+                  deal is ever left with a partial or placeholder address. */}
+              {needsPropertyAddress && (
                 <div className="mt-4 p-4 border border-luxury-gray-5 rounded space-y-3">
-                  <p className="text-xs font-semibold text-luxury-gray-1">Property address for the new transaction</p>
+                  <p className="text-xs font-semibold text-luxury-gray-1">
+                    {attachedToRetainer ? 'Property address for this retainer deal' : 'Property address for the new transaction'}
+                  </p>
                   <AddressInput
                     required
                     value={newAddress}

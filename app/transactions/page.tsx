@@ -28,6 +28,30 @@ export default function TransactionsPage() {
   // Cap progress for the agent strip - only shown when the plan has a cap.
   const [capInfo, setCapInfo] = useState<any>(null)
 
+  // Deep link: /transactions?open=<id> lands on this list with that deal's row
+  // already expanded. Agents read a deal by expanding its row here rather than
+  // on a detail page, so anything elsewhere in the app that points at one deal
+  // has to arrive this way. Read from window.location rather than
+  // useSearchParams to avoid the Suspense boundary that would require.
+  useEffect(() => {
+    const open = new URLSearchParams(window.location.search).get('open')
+    if (open) setExpandedId(open)
+  }, [])
+  // The rows only exist once the deals have loaded, so bring the deep-linked
+  // one into view then. Without this the row is expanded but can be far down a
+  // long list, which reads as the link having done nothing.
+  useEffect(() => {
+    if (!expandedId || !transactions.length) return
+    // The table and the card list are the same deals at two breakpoints, and
+    // the hidden one still has a node, so scroll to whichever is on screen.
+    const candidates = [
+      document.getElementById(`txn-${expandedId}`),
+      document.getElementById(`txn-m-${expandedId}`),
+    ]
+    const row = candidates.find(el => el && (el as HTMLElement).offsetParent !== null)
+    if (row) row.scrollIntoView({ block: 'center' })
+  }, [transactions.length])
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -348,12 +372,19 @@ export default function TransactionsPage() {
           >
             <Download size={14} /> Download Report
           </button>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="btn btn-primary flex items-center gap-1.5"
-          >
-            <Plus size={14} /> New Transaction
-          </button>
+          {/* Creating a deal is office work: agents file a compliance request
+              and the office creates the transaction from it. The POST route
+              already enforces can_create_transactions, so gate the button on
+              the same permission rather than on role, which keeps per-user
+              overrides working. */}
+          {permissions.can_create_transactions && (
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="btn btn-primary flex items-center gap-1.5"
+            >
+              <Plus size={14} /> New Transaction
+            </button>
+          )}
         </div>
       </div>
 
@@ -503,6 +534,7 @@ export default function TransactionsPage() {
                   {filtered.map(t => (
                     <Fragment key={t.id}>
                     <tr
+                      id={`txn-${t.id}`}
                       className="tr-luxury-clickable"
                       onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                     >
@@ -570,6 +602,7 @@ export default function TransactionsPage() {
               {filtered.map(t => (
                 <div
                   key={t.id}
+                  id={`txn-m-${t.id}`}
                   className="inner-card cursor-pointer"
                   onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
                 >
