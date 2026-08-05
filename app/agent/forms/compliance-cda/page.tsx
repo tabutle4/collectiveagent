@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Search, AlertCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react'
 import { LEAD_SOURCES, LOAN_TYPES, FLYER_DIVISIONS } from '@/lib/transactions/constants'
@@ -102,6 +102,11 @@ export default function ComplianceCdaForm() {
   const [error, setError] = useState('')
   const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
   const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
+  // True while the as-you-type retainer lookup is what put matches on screen,
+  // so a name edit can clear them again. A match that came back from a submit
+  // is not cleared this way: the agent has to answer it.
+  const [matchesFromLookup, setMatchesFromLookup] = useState(false)
+  const matchesFromLookupRef = useRef(false)
   const [commissionConfirmed, setCommissionConfirmed] = useState(false)
   // Compliance mode: attach this submission to a retainer prospect the agent picked
   const [attachTo, setAttachTo] = useState<{ id: string; client_name: string } | null>(null)
@@ -287,6 +292,69 @@ export default function ComplianceCdaForm() {
       }
     } catch { setSearchDone(true) } finally { setSearching(false) }
   }, [addressSearch, mode, isAdmin, onBehalfAgent])
+
+  // Check for an existing retainer while the client name is being typed, so
+  // the agent finds out on the first field instead of after filling the whole
+  // form and pressing submit. Whichever mode is active supplies the name:
+  // retainer mode from its own client field, compliance mode from the form's.
+  // The submit-time check still runs and is still the one that decides; this
+  // only surfaces the answer earlier.
+  const lookupName = mode === 'retainer' ? retainer.client_name : mode === 'compliance' ? form.client_name : ''
+  // The server matches on the first word of the name, so that is the unit of
+  // work here too: it decides when a dismissal stops applying.
+  const lookupTerm = lookupName.trim().split(' ')[0].toLowerCase()
+  // "Not the same - create new" answers the question for THAT client. Typing a
+  // different client is a different question, so the lookup runs again. Without
+  // this, one dismissal would silence the check for the rest of the session.
+  const dismissedTermRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (confirmedNewDeal) dismissedTermRef.current = lookupTerm
+    // Intentionally only when the answer is given, not on every name change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmedNewDeal])
+  useEffect(() => {
+    // Nothing to ask once the agent has attached to a retainer, or has already
+    // said this exact client is a new deal.
+    if (attachTo) return
+    if (confirmedNewDeal) {
+      if (dismissedTermRef.current === lookupTerm) return
+      // A different client than the one that was dismissed. Clear the flag so
+      // the submit-time check runs again too, otherwise the server would skip
+      // it for this new client on the strength of an answer about another one.
+      setConfirmedNewDeal(false)
+      return
+    }
+    if (lookupTerm.length < 2) {
+      setDuplicateMatches(prev => (prev.length && matchesFromLookupRef.current ? [] : prev))
+      matchesFromLookupRef.current = false
+      setMatchesFromLookup(false)
+      return
+    }
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const behalfParam = isAdmin && onBehalfAgent ? `&on_behalf_of_agent_id=${onBehalfAgent.id}` : ''
+        const res = await fetch(`/api/agent/forms/compliance-cda?client_name=${encodeURIComponent(lookupTerm)}${behalfParam}`)
+        const data = await res.json()
+        if (cancelled) return
+        const found = data.matches || []
+        if (found.length) {
+          matchesFromLookupRef.current = true
+          setMatchesFromLookup(true)
+          setDuplicateMatches(found)
+        } else if (matchesFromLookupRef.current) {
+          matchesFromLookupRef.current = false
+          setMatchesFromLookup(false)
+          setDuplicateMatches([])
+        }
+      } catch { /* typing must never be blocked by a failed lookup */ }
+    }, 400)
+    return () => { cancelled = true; clearTimeout(t) }
+    // matchesFromLookup is read through a ref, not a dependency: including it
+    // would re-run this effect every time the lookup sets it and fire a second
+    // identical request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lookupTerm, mode, attachTo, confirmedNewDeal, isAdmin, onBehalfAgent])
 
   // ── Commission Summary (everything that affects the commission) ──────────
   // Percent bases: BTSA and rebate = % of the SALES PRICE (commission basis
@@ -629,7 +697,7 @@ export default function ComplianceCdaForm() {
           ] as const).map(opt => (
             <button
               key={opt.value}
-              onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false); setAttachTo(null) }}
+              onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false); setAttachTo(null); setMatchesFromLookup(false); matchesFromLookupRef.current = false; dismissedTermRef.current = null }}
               className={`text-left p-4 rounded border transition-colors ${mode === opt.value ? 'border-luxury-accent bg-luxury-accent/5' : 'border-luxury-gray-5/50 hover:border-luxury-gray-3'}`}
             >
               <p className={`text-sm font-semibold mb-1 ${mode === opt.value ? 'text-luxury-accent' : 'text-luxury-gray-1'}`}>{opt.label}</p>
@@ -691,7 +759,12 @@ export default function ComplianceCdaForm() {
             </div>
           </section>
         )}
-        {mode === 'retainer' && duplicateMatches.length === 0 && (
+        {/* The form stays on screen when the panel came from the as-you-type
+            lookup: the agent is still typing the name and taking the fields
+            away mid-keystroke would be jarring. A panel raised by a submit
+            still replaces the form, because that one is a question the agent
+            has to answer before anything else happens. */}
+        {mode === 'retainer' && (duplicateMatches.length === 0 || matchesFromLookup) && (
           <>
             <div className="flex items-start gap-2 p-3 bg-luxury-gray-5/20 rounded text-xs text-luxury-gray-2">
               <Info size={13} className="flex-shrink-0 mt-0.5 text-luxury-accent" />

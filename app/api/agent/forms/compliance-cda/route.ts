@@ -28,6 +28,35 @@ function retainerNameTerm(clientName: any): string {
   return String(clientName || '').trim().split(' ')[0].replace(/[^a-zA-Z0-9]/g, '')
 }
 
+// Open retainers this agent already has for a client with a similar name.
+// One definition used in three places: the as-you-type lookup on the form, the
+// retainer submission check, and the compliance submission check. They must
+// agree, or the form shows a match the submit does not honor, or the reverse.
+async function findRetainerProspects(agentId: string, clientName: any) {
+  const term = retainerNameTerm(clientName)
+  if (!term) return []
+  const { data: tiaRows } = await supabaseAdmin
+    .from('transaction_internal_agents')
+    .select('transaction_id')
+    .eq('agent_id', agentId)
+    .eq('installment_kind', 'retainer')
+  if (!tiaRows?.length) return []
+  const ids = Array.from(new Set(tiaRows.map((r: any) => r.transaction_id).filter(Boolean)))
+  if (!ids.length) return []
+  const { data: prospects } = await supabaseAdmin
+    .from('transactions')
+    .select('id, client_name, property_address, created_at, status')
+    .in('id', ids)
+    .or(`client_name.ilike.%${term}%,property_address.ilike.%${term}%`)
+    .eq('status', 'prospect')
+  return (prospects || []).map((t: any) => ({
+    id: t.id,
+    client_name: t.client_name || t.property_address,
+    created_at: t.created_at,
+    is_prospect: true,
+  }))
+}
+
 function computeGrossFromRate(basisPrice: any, rate: any, rateType: any): number | null {
   const clean = (v: any) => parseFloat(String(v ?? '').replace(/[^0-9.]/g, ''))
   const basis = clean(basisPrice)
@@ -102,6 +131,20 @@ export async function GET(request: NextRequest) {
     onBehalfOfAgentId && STAFF_ROLES.includes(String(auth.user.role || '').toLowerCase())
       ? onBehalfOfAgentId
       : auth.user.id
+  // As-you-type retainer lookup. The form asks on every change to the client
+  // name, so the agent is told a retainer already exists while they are still
+  // on the first field, instead of after filling the whole form and pressing
+  // submit. Same query the submit-time checks run.
+  const clientNameLookup = searchParams.get('client_name')
+  if (clientNameLookup !== null) {
+    try {
+      return NextResponse.json({ matches: await findRetainerProspects(lookupAgentId, clientNameLookup) })
+    } catch {
+      // A failed lookup must never block typing. The submit-time check still
+      // catches the duplicate.
+      return NextResponse.json({ matches: [] })
+    }
+  }
   try {
     let txn: any = null
     if (transactionId) {
@@ -193,32 +236,9 @@ export async function POST(request: NextRequest) {
       // confirm_new_deal=true means agent already reviewed the matches and confirmed this is a new deal.
       const { confirm_new_deal } = body
       if (!confirm_new_deal) {
-        const { data: existingTiaRows } = await supabaseAdmin
-          .from('transaction_internal_agents')
-          .select('transaction_id')
-          .eq('agent_id', agentId)
-          .eq('installment_kind', 'retainer')
-
-        const nameTerm = retainerNameTerm(client_name)
-        if (existingTiaRows?.length && nameTerm) {
-          const existingIds = existingTiaRows.map((r: any) => r.transaction_id)
-          const { data: matchingTxns } = await supabaseAdmin
-            .from('transactions')
-            .select('id, client_name, property_address, created_at, status')
-            .in('id', existingIds)
-            .or(`client_name.ilike.%${nameTerm}%,property_address.ilike.%${nameTerm}%`)
-            .eq('status', 'prospect')
-          if (matchingTxns?.length) {
-            return NextResponse.json({
-              success: false,
-              duplicate_check: true,
-              matches: matchingTxns.map((t: any) => ({
-                id: t.id,
-                client_name: t.client_name || t.property_address,
-                created_at: t.created_at,
-              })),
-            })
-          }
+        const matchingTxns = await findRetainerProspects(agentId, client_name)
+        if (matchingTxns.length) {
+          return NextResponse.json({ success: false, duplicate_check: true, matches: matchingTxns })
         }
       }
 
@@ -1008,32 +1028,9 @@ export async function POST(request: NextRequest) {
     // duplicate check: same query, same response shape, and the form shows the
     // matches so the agent decides.
     if (!txn && !body.confirm_new_deal && client_name?.trim()) {
-      const { data: retainerTias } = await supabaseAdmin
-        .from('transaction_internal_agents')
-        .select('transaction_id')
-        .eq('agent_id', agentId)
-        .eq('installment_kind', 'retainer')
-      const nameTerm = retainerNameTerm(client_name)
-      if (retainerTias?.length && nameTerm) {
-        const retainerIds = retainerTias.map((r: any) => r.transaction_id)
-        const { data: prospectTxns } = await supabaseAdmin
-          .from('transactions')
-          .select('id, client_name, property_address, created_at, status')
-          .in('id', retainerIds)
-          .or(`client_name.ilike.%${nameTerm}%,property_address.ilike.%${nameTerm}%`)
-          .eq('status', 'prospect')
-        if (prospectTxns?.length) {
-          return NextResponse.json({
-            success: false,
-            duplicate_check: true,
-            matches: prospectTxns.map((t: any) => ({
-              id: t.id,
-              client_name: t.client_name || t.property_address,
-              created_at: t.created_at,
-              is_prospect: true,
-            })),
-          })
-        }
+      const prospectTxns = await findRetainerProspects(agentId, client_name)
+      if (prospectTxns.length) {
+        return NextResponse.json({ success: false, duplicate_check: true, matches: prospectTxns })
       }
     }
 
