@@ -16,6 +16,18 @@ import { formatNameToTitleCase } from '@/lib/nameFormatter'
 // and must NEVER be written to gross_commission directly - that bug produced
 // deals whose commission equaled the full sale price. Returns null when the
 // inputs cannot produce a plausible figure; the office sets it at review.
+// Retainer prospects do not all carry the client's name the same way. The
+// retainer form writes it to client_name AND property_address, but records
+// created by other paths leave client_name null and keep the name only in
+// property_address ("Marlene Howard - Retainer", "Prospect - Ismaela Yuill").
+// Searching client_name alone missed every one of those, so an agent filing
+// compliance was told no retainer existed when one did. Match on either field.
+// The term is the first word of the typed name, stripped to letters and digits
+// so it can never break the PostgREST or() filter syntax.
+function retainerNameTerm(clientName: any): string {
+  return String(clientName || '').trim().split(' ')[0].replace(/[^a-zA-Z0-9]/g, '')
+}
+
 function computeGrossFromRate(basisPrice: any, rate: any, rateType: any): number | null {
   const clean = (v: any) => parseFloat(String(v ?? '').replace(/[^0-9.]/g, ''))
   const basis = clean(basisPrice)
@@ -187,13 +199,14 @@ export async function POST(request: NextRequest) {
           .eq('agent_id', agentId)
           .eq('installment_kind', 'retainer')
 
-        if (existingTiaRows?.length) {
+        const nameTerm = retainerNameTerm(client_name)
+        if (existingTiaRows?.length && nameTerm) {
           const existingIds = existingTiaRows.map((r: any) => r.transaction_id)
           const { data: matchingTxns } = await supabaseAdmin
             .from('transactions')
             .select('id, client_name, property_address, created_at, status')
             .in('id', existingIds)
-            .ilike('client_name', `%${client_name.trim().split(' ')[0]}%`)
+            .or(`client_name.ilike.%${nameTerm}%,property_address.ilike.%${nameTerm}%`)
             .eq('status', 'prospect')
           if (matchingTxns?.length) {
             return NextResponse.json({
@@ -1000,13 +1013,14 @@ export async function POST(request: NextRequest) {
         .select('transaction_id')
         .eq('agent_id', agentId)
         .eq('installment_kind', 'retainer')
-      if (retainerTias?.length) {
+      const nameTerm = retainerNameTerm(client_name)
+      if (retainerTias?.length && nameTerm) {
         const retainerIds = retainerTias.map((r: any) => r.transaction_id)
         const { data: prospectTxns } = await supabaseAdmin
           .from('transactions')
           .select('id, client_name, property_address, created_at, status')
           .in('id', retainerIds)
-          .ilike('client_name', `%${client_name.trim().split(' ')[0]}%`)
+          .or(`client_name.ilike.%${nameTerm}%,property_address.ilike.%${nameTerm}%`)
           .eq('status', 'prospect')
         if (prospectTxns?.length) {
           return NextResponse.json({
