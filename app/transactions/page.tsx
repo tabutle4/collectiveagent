@@ -40,6 +40,13 @@ export default function TransactionsPage() {
   // The rows only exist once the deals have loaded, so bring the deep-linked
   // one into view then. Without this the row is expanded but can be far down a
   // long list, which reads as the link having done nothing.
+  //
+  // expandedId is read here but deliberately kept OUT of the dependency list.
+  // Adding it would scroll the page every time someone expands a row by hand,
+  // which is jarring. The cost of leaving it out is small and one-directional:
+  // if the deals reload and come back with the same count, a deep link will not
+  // re-centre the row. The row is still expanded, just not scrolled to. Do not
+  // "fix" this by completing the dependency list.
   useEffect(() => {
     if (!expandedId || !transactions.length) return
     // The table and the card list are the same deals at two breakpoints, and

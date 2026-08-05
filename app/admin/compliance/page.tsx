@@ -217,7 +217,7 @@ export default function AdminCompliancePage() {
   const [rows, setRows] = useState<TrackerRow[]>([])
   // Threshold for the Needs CDA "send now" flag, from Settings -> Terms.
   const [cdaDueSoonDays, setCdaDueSoonDays] = useState(7)
-  const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda'>('all')
+  const [tab, setTab] = useState<'all' | 'pending_compliance' | 'pending_checklist' | 'needs_cda' | 'post_closing'>('all')
 
   // Deep-linkable tabs: /admin/compliance?tab=needs_cda lands directly on the
   // Needs CDA tab (bookmarkable, shareable). Read once on mount from
@@ -225,9 +225,9 @@ export default function AdminCompliancePage() {
   // boundary requirement on statically rendered client pages.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    if (t === 'all' || t === 'pending_compliance' || t === 'pending_checklist' || t === 'needs_cda') {
+    if (t === 'all' || t === 'pending_compliance' || t === 'pending_checklist' || t === 'needs_cda' || t === 'post_closing') {
       setTab(t)
-      if (t === 'needs_cda') setSortBy('closing')
+      if (t === 'needs_cda' || t === 'post_closing') setSortBy('closing')
     }
   }, [])
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'closed' | 'cancelled'>('active')
@@ -306,40 +306,51 @@ export default function AdminCompliancePage() {
     String(r.transaction_type || '').includes('referred_out') ||
     String(r.side || '').toLowerCase() === 'referred_out' ||
     String((r.form_data || {}).representing || '').toLowerCase() === 'referred_out'
-  // A deal stays on Needs CDA until POST CLOSING is complete AND everyone owed
-  // on it -- every agent and every outside brokerage -- is marked paid, not
-  // merely until the CDA is sent. Sending the CDA is the middle of the job, not
-  // the end -- dropping the deal off the list at that point loses track of it
-  // while the post-closing work is still open. Post closing can be signed off
-  // while someone on the deal is still owed money, so payout completeness is
-  // its own condition rather than an assumption baked into the post closing
-  // status.
+  // Transaction status, lowercased once. Declared here because the Needs CDA
+  // predicate below reads it, not just the status filter further down.
+  const txnStatus = (r: TrackerRow) => (r.transaction_status || '').toLowerCase()
+  // Needs CDA: compliance is complete, and the deal is either not closed yet or
+  // has not been paid out. Nothing here reads whether the CDA was actually
+  // sent -- most deals closed before CDAs were sent from the app at all, so
+  // that status would filter out the work rather than describe it. Once a deal
+  // is both closed and fully paid it is finished here, and anything left is
+  // post-closing work.
   const needsCda = (r: TrackerRow) =>
     !r.is_lease &&
     !isReferredOut(r) &&
     r.compliance_status === 'complete' &&
-    ((r.post_closing_status || 'not_started') !== 'complete' || !r.all_payees_paid)
+    (txnStatus(r) !== 'closed' || !r.all_payees_paid)
+  // Post closing: compliance is signed off but the post-closing work is not
+  // finished. Leases and referred-out deals are excluded here for the same
+  // reasons they are excluded from Needs CDA. Leases would also fall out on
+  // their own, since the route already reports them as post-closing complete,
+  // but stating it here keeps this tab readable without going to the API to
+  // work out why leases are missing.
+  const postClosingOpen = (r: TrackerRow) =>
+    !r.is_lease &&
+    !isReferredOut(r) &&
+    r.compliance_status === 'complete' &&
+    (r.post_closing_status || 'not_started') !== 'complete'
   const tabPredicate: Record<string, (r: TrackerRow) => boolean> = {
     pending_compliance: pendingCompliance,
     pending_checklist: pendingChecklist,
     needs_cda: needsCda,
+    post_closing: postClosingOpen,
   }
   // Transaction status filter. "Active deals" = the working set: active or
   // pending, plus submissions not yet linked to a transaction. Prospect, closed,
   // and cancelled (either spelling) are hidden unless explicitly chosen.
-  const txnStatus = (r: TrackerRow) => (r.transaction_status || '').toLowerCase()
   const statusPasses = (r: TrackerRow, forTab: string = tab) => {
     const s = txnStatus(r)
     if (statusFilter === 'all') return true
     if (statusFilter === 'closed') return s === 'closed'
     if (statusFilter === 'cancelled') return s === 'cancelled' || s === 'canceled'
-    // Needs CDA keeps closed deals under the default filter. Everywhere else
-    // "active deals" means the working set and a closed deal is finished, but
-    // here closing is precisely when the CDA falls due and the post-closing
-    // work begins. Hiding closed deals dropped them off this tab at the exact
-    // moment it was meant to start tracking them, while needsCda() would have
-    // held them until post closing was complete and everyone owed was paid.
-    if (forTab === 'needs_cda') {
+    // Needs CDA and Post closing both let closed deals through the default
+    // filter, because both are about work that runs up to and past the closing.
+    // Neither needs a payment condition here: needsCda already drops a closed
+    // deal once everyone is paid, and postClosingOpen already drops one once
+    // the post-closing work is signed off.
+    if (forTab === 'needs_cda' || forTab === 'post_closing') {
       return s === 'active' || s === 'pending' || s === '' || s === 'closed'
     }
     return s === 'active' || s === 'pending' || s === '' // 'active' (default)
@@ -347,6 +358,7 @@ export default function AdminCompliancePage() {
   const pendingComplianceCount = rows.filter(r => statusPasses(r, 'pending_compliance') && pendingCompliance(r)).length
   const pendingChecklistCount = rows.filter(r => statusPasses(r, 'pending_checklist') && pendingChecklist(r)).length
   const needsCdaCount = rows.filter(r => statusPasses(r, 'needs_cda') && needsCda(r)).length
+  const postClosingCount = rows.filter(r => statusPasses(r, 'post_closing') && postClosingOpen(r)).length
   // Where the "Work Deal" link lands, per tab: Pending checklist opens the
   // Check & Payouts tab (where the checklist lives); Needs CDA opens the
   // Commissions tab (where the CDA is worked); All and Pending compliance open
@@ -375,7 +387,10 @@ export default function AdminCompliancePage() {
     list.sort((a, b) => {
       if (sortBy === 'recent') return time(b.submitted_at) - time(a.submitted_at)
       // Needs CDA works like the Brokermint CDA report: soonest closing first.
-      if (sortBy === 'closing') return tab === 'needs_cda' ? time(a.closing_date) - time(b.closing_date) : time(b.closing_date) - time(a.closing_date)
+      // Post closing ascends for the opposite reason and the same effect: the
+      // deal that closed longest ago is the most overdue, so it belongs at the
+      // top of the worklist rather than buried under this week's closings.
+      if (sortBy === 'closing') return tab === 'needs_cda' || tab === 'post_closing' ? time(a.closing_date) - time(b.closing_date) : time(b.closing_date) - time(a.closing_date)
       if (sortBy === 'agent') return (a.agent_name || '').localeCompare(b.agent_name || '')
       if (sortBy === 'status') return (a.compliance_status || '').localeCompare(b.compliance_status || '')
       return 0
@@ -1162,12 +1177,13 @@ export default function AdminCompliancePage() {
           { key: 'pending_compliance', label: `Pending compliance (${pendingComplianceCount})` },
           { key: 'pending_checklist', label: `Pending checklist (${pendingChecklistCount})` },
           { key: 'needs_cda', label: `Needs CDA (${needsCdaCount})` },
+          { key: 'post_closing', label: `Post closing (${postClosingCount})` },
         ] as const).map(t => (
           <button
             key={t.key}
             onClick={() => {
               setTab(t.key)
-              if (t.key === 'needs_cda') setSortBy('closing')
+              if (t.key === 'needs_cda' || t.key === 'post_closing') setSortBy('closing')
               // Keep the URL in sync so the current tab is always copyable.
               window.history.replaceState(null, '', t.key === 'all' ? window.location.pathname : `?tab=${t.key}`)
             }}

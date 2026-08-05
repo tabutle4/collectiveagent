@@ -303,7 +303,11 @@ export async function GET(request: NextRequest) {
         is_lease: isLeaseTransactionType(txn?.transaction_type),
         checklist_complete: r.transaction_id ? (checklistCompleteByTxn[r.transaction_id] || false) : false,
         transaction_status: txn?.status || null,
-        // Post closing compliance, tracked per deal
+        // Post closing compliance, tracked per deal. Leases are forced to
+        // 'complete' because they have no post-closing work. The compliance
+        // page's Post closing tab relies on this to keep leases off the list
+        // instead of checking the type itself, so giving leases a real status
+        // here would put every lease in the system on that tab.
         post_closing_status: isLeaseTransactionType(txn?.transaction_type) ? 'complete' : (postClosing?.status || 'not_started'),
         post_closing_completed_at: postClosing?.completed_at || null,
         post_closing_notes: postClosing?.notes || null,

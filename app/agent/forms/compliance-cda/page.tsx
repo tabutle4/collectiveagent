@@ -695,6 +695,15 @@ export default function ComplianceCdaForm() {
             { value: 'subsequent' as Mode, label: 'Subsequent Compliance', desc: 'Resubmit after uploading missing documents' },
             { value: 'retainer' as Mode, label: 'Retainer Submission', desc: 'Submit retainer for a buyer or tenant rep' },
           ] as const).map(opt => (
+            // Picking a mode here means starting over, so it clears everything
+            // including any attached retainer. That clearing lives on this
+            // button on purpose and must NOT be moved into a general "reset on
+            // every mode change" handler: the "Same client - file compliance"
+            // button in the retainer duplicate panel also switches mode, and it
+            // has to KEEP the attachment, which is the whole point of it. A
+            // shared reset would silently unlink the retainer there, and the
+            // agent would get no warning that the submission is no longer
+            // attached.
             <button
               key={opt.value}
               onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false); setAttachTo(null); setMatchesFromLookup(false); matchesFromLookupRef.current = false; dismissedTermRef.current = null }}
