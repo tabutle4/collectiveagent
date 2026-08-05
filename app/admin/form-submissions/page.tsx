@@ -21,13 +21,17 @@ interface SubmissionRow {
   data: Record<string, any>
 }
 
+// href is where the form itself is filled out, so a tab can offer to open the
+// form it is showing submissions for. Admins are allowed into /agent/forms by
+// middleware, and /prospective-agent-form is public. The All tab has no single
+// form behind it, so it has no href.
 const MODE_FILTERS = [
-  { value: 'all', label: 'All' },
-  { value: 'pre-listing', label: 'Pre-Listing' },
-  { value: 'just-listed', label: 'Just Listed' },
-  { value: 'under_contract', label: 'New Contract' },
-  { value: 'compliance', label: 'Compliance & CDA' },
-  { value: 'prospective-agent', label: 'Prospective Agent' },
+  { value: 'all', label: 'All', href: null },
+  { value: 'pre-listing', label: 'Pre-Listing', href: '/agent/forms/pre-listing' },
+  { value: 'just-listed', label: 'Just Listed', href: '/agent/forms/just-listed' },
+  { value: 'under_contract', label: 'New Contract', href: '/agent/forms/under-contract' },
+  { value: 'compliance', label: 'Compliance & CDA', href: '/agent/forms/compliance-cda' },
+  { value: 'prospective-agent', label: 'Prospective Agent', href: '/prospective-agent-form' },
 ]
 
 const MODE_BADGE: Record<string, string> = {
@@ -134,6 +138,8 @@ export default function AllSubmissionsPage() {
       })
     : rows
 
+  const activeFilter = MODE_FILTERS.find(f => f.value === modeFilter)
+
   const linkFor = (r: SubmissionRow) => {
     if (r.transaction_id) return `/admin/transactions/${r.transaction_id}`
     return null
@@ -164,6 +170,18 @@ export default function AllSubmissionsPage() {
               </button>
             ))}
           </div>
+          {/* Open the form this tab is showing submissions for. New tab, so
+              whoever is reviewing keeps their place in the list. */}
+          {activeFilter?.href && (
+            <a
+              href={activeFilter.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-luxury-accent hover:underline whitespace-nowrap"
+            >
+              Open the {activeFilter.label} form <ExternalLink size={11} />
+            </a>
+          )}
           <div className="md:ml-auto">
             <input
               type="text"
