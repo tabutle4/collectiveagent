@@ -4262,17 +4262,35 @@ export default function AdminTransactionDetailPage() {
                       const agentNet = parseFloat(a.agent_net || calc?.agent_net || 0)
                       const amount1099 = a.amount_1099_reportable || (agentGross - processingFee - coachingFee - otherFees)
                       const isDeleting = deleteConfirm === a.id
-                      // A second-check co_agent row shares its agent_id with the
-                      // agent's primary/listing row. Statements and CDAs are now
-                      // aggregated per agent, so the extra card should not show
-                      // its own duplicate Statement/CDA/Send buttons.
+                      // A statement covers every row the agent holds on the deal,
+                      // so only one card per agent should offer to send it. This
+                      // used to catch the second-check co_agent case only. Now
+                      // that team lead, momentum partner and referral rows also
+                      // get a Send Statement button, the same agent can hold two
+                      // eligible cards -- 8 deals do today -- and each would have
+                      // sent the identical document. Pick one card per agent with
+                      // the same role priority the statement route anchors on,
+                      // breaking ties on id so exactly one always wins.
+                      const STATEMENT_ANCHOR_PRIORITY: Record<string, number> = {
+                        primary_agent: 0, listing_agent: 1, co_agent: 2,
+                      }
+                      const anchorRank = (r: any) =>
+                        STATEMENT_ANCHOR_PRIORITY[r.agent_role] ?? 9
                       const isSecondCheckDuplicate =
-                        a.agent_role === 'co_agent' &&
                         agents.some((o: any) =>
                           o.id !== a.id &&
                           o.agent_id === a.agent_id &&
-                          (o.agent_role === 'primary_agent' || o.agent_role === 'listing_agent')
+                          (anchorRank(o) < anchorRank(a) ||
+                            (anchorRank(o) === anchorRank(a) && String(o.id) < String(a.id)))
                         )
+                      // Team leads, momentum partners and referral agents are
+                      // paid out of the brokerage side, not by title, so no CDA
+                      // and nothing to send title. They are still owed a
+                      // statement for the money they earned on the deal.
+                      const isOverrideRole =
+                        a.agent_role === 'team_lead' ||
+                        a.agent_role === 'momentum_partner' ||
+                        a.agent_role === 'referral_agent'
 
                       return (
                         <div key={a.id} className="inner-card">
@@ -4520,7 +4538,7 @@ export default function AdminTransactionDetailPage() {
                               These open a preview page (the doc + a Send button)
                               instead of sending blind. CDA send stays gated on
                               deal-level approval. */}
-                          {!isSecondCheckDuplicate && a.agent_role !== 'team_lead' && a.agent_role !== 'momentum_partner' && a.agent_role !== 'referral_agent' && userPermissions.includes('can_generate_cda') && (
+                          {!isSecondCheckDuplicate && userPermissions.includes('can_generate_cda') && (
                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-luxury-gray-5/50">
                               <button
                                 onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=statement`)}
@@ -4529,24 +4547,28 @@ export default function AdminTransactionDetailPage() {
                                 <Send size={12} />
                                 {a.agent_statement_sent_date ? 'Resend Statement' : 'Send Statement'}
                               </button>
-                              <button
-                                onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=cda`)}
-                                disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
-                                title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
-                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                              >
-                                <Send size={12} />
-                                Send CDA
-                              </button>
-                              <button
-                                onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=title`)}
-                                disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
-                                title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending to title' : ''}
-                                className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
-                              >
-                                <Send size={12} />
-                                Send to Title
-                              </button>
+                              {!isOverrideRole && (
+                                <button
+                                  onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=cda`)}
+                                  disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
+                                  title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending' : ''}
+                                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  <Send size={12} />
+                                  Send CDA
+                                </button>
+                              )}
+                              {!isOverrideRole && (
+                                <button
+                                  onClick={() => window.location.assign(`/admin/transactions/${id}/send/${a.id}?type=title`)}
+                                  disabled={!(txn.cda_status === 'approved' || txn.cda_status === 'sent')}
+                                  title={!(txn.cda_status === 'approved' || txn.cda_status === 'sent') ? 'CDA must be approved before sending to title' : ''}
+                                  className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  <Send size={12} />
+                                  Send to Title
+                                </button>
+                              )}
                               {a.agent_statement_sent_date && (
                                 <span className="text-xs text-luxury-gray-3 self-center">
                                   Sent {new Date(a.agent_statement_sent_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}

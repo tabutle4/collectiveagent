@@ -220,14 +220,38 @@ export async function GET(
     // Additional-comp rows (extra checks to the same agent) add their own 1099
     // and net on top of the primary row.
     const extraComp1099 = extraRows.reduce((s, r) => s + rowAmount1099(r), 0)
-    // Per-row disbursement to the agent: base rows carry agent_gross; extra
-    // co_agent rows carry agent_net (no gross). Used for the commission split.
+    // Per-row disbursement to the agent. Rows built from a split carry
+    // agent_gross. Rows whose comp was entered as a flat amount do not: team
+    // lead overrides, momentum partner fees, referral splits and second checks
+    // all store the money in amount_1099_reportable and leave gross at zero.
+    // For those, run the canonical formula backwards from the 1099 to recover
+    // the figure the deductions come out of. agent_net was the old fallback and
+    // is already net of the fees and of anything withheld, so subtracting the
+    // fees again below took them out twice and the column never tied. On 179
+    // team lead rows, 20 momentum partner rows and 5 referral rows that is the
+    // difference between a statement that reconciles and one that shows no
+    // total at all.
     const rowAgentDisburse = (r: any): number => {
       const g = parseFloat(r.agent_gross || 0)
-      return g > 0 ? g : parseFloat(r.agent_net || 0)
+      if (g > 0) return g
+      const stored = rowAmount1099(r)
+      if (!stored) return parseFloat(r.agent_net || 0)
+      return Math.round((
+        stored
+        - (parseFloat(r.btsa_amount) || 0)
+        + (parseFloat(r.processing_fee) || 0)
+        + (parseFloat(r.coaching_fee) || 0)
+        + (parseFloat(r.other_fees) || 0)
+        + (parseFloat(r.rebate_amount) || 0)
+      ) * 100) / 100
     }
     const extraAgentAmount = extraRows.reduce((s, r) => s + rowAgentDisburse(r), 0)
-    const agentDisburseTotal = agentGross + extraAgentAmount
+    // The anchor row goes through the same helper as the extras. When it
+    // carries a gross this is identical to reading agentGross; when it does not
+    // -- every team lead, momentum partner and referral statement -- reading
+    // agentGross gave zero, so the column started from nothing and subtracted
+    // fees from it.
+    const agentDisburseTotal = rowAgentDisburse(baseTia) + extraAgentAmount
     // Totals reflect every row for this agent on the deal.
     const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
     // Amount withheld = what was actually applied against this agent's cards on
@@ -239,6 +263,13 @@ export async function GET(
     const agentBasis = parseFloat(baseTia.agent_basis || 0)
     const splitPct = parseFloat(baseTia.split_percentage || 0)
     const brokerageSplitPct = 100 - splitPct
+    // No basis, no gross and no split percentage means the comp was entered as
+    // a flat amount rather than derived from a split. There is nothing truthful
+    // to print in the basis/split/brokerage lines for those, and what printed
+    // instead was a compensation basis the agent has no claim to followed by
+    // "Your Split 0% of basis $0.00". Show the amount under its role instead.
+    const isOverrideComp =
+      agentBasis === 0 && parseFloat(baseTia.agent_gross || 0) === 0 && splitPct === 0
 
     const showCapProgress = isCapPlan(plan)
     const showNewAgentProgress = isNewAgentPlan(plan)
@@ -326,6 +357,7 @@ export async function GET(
       compensation_basis: fmt$(crcSide),
       agent_split_amount: fmt$(agentDisburseTotal),
       agent_split_pct: agentSplitPct,
+      is_override_comp: isOverrideComp,
       brokerage_pct: brokeragePctEff,
       split_percentage: splitPct.toString(),
       brokerage_split_pct: brokerageSplitPct.toString(),
@@ -421,6 +453,45 @@ function generateStatementHTML(data: Record<string, any>): string {
   </div>` : ''
 
   const brokerageSplitNote = data.show_cap_progress ? ' · counts toward cap' : ''
+
+  // How the agent's money was arrived at. Split-based comp walks the basis down
+  // through the split; flat comp has no split to walk, so it states the amount
+  // under the role it was earned in. Built here rather than inline because the
+  // two versions are long enough that nesting them inside the document would
+  // bury the rest of the calculation.
+  const compensationSection = data.is_override_comp ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>${data.role} commission <span style="color: #999; font-size: 9px; margin-left: 6px;">agreed amount, not a split of the basis</span></span>
+        <span style="font-weight: 500;">${data.agent_split_amount}</span>
+      </div>` : `
+      ${data.has_additional_income ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Base commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span style="font-weight: 500;">${data.base_commission}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Additional income <span style="color: #999; font-size: 9px; margin-left: 6px;">shared income</span></span>
+        <span style="font-weight: 500;">${data.additional_income}</span>
+      </div>
+      ` : ''}
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span style="font-weight: 500;">${data.compensation_basis}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.agent_split_pct}% of basis</span></span>
+        <span style="font-weight: 500;">${data.agent_split_amount}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+        <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_pct}%${brokerageSplitNote}</span></span>
+        <span style="font-weight: 500;">${data.brokerage_split}</span>
+      </div>`
+
+  // Same distinction inside the 1099 box recap: a percentage there is only
+  // meaningful when there was a split behind it.
+  const recapTopLine = data.is_override_comp
+    ? `${data.role} commission`
+    : `Your Split (${data.agent_split_pct}%)`
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -527,28 +598,7 @@ function generateStatementHTML(data: Record<string, any>): string {
   <div style="margin-bottom: 20px;">
     <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Commission calculation</div>
     <div style="font-size: 11px; color: #333;">
-      ${data.has_additional_income ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Base commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
-        <span style="font-weight: 500;">${data.base_commission}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Additional income <span style="color: #999; font-size: 9px; margin-left: 6px;">shared income</span></span>
-        <span style="font-weight: 500;">${data.additional_income}</span>
-      </div>
-      ` : ''}
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
-        <span style="font-weight: 500;">${data.compensation_basis}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.agent_split_pct}% of basis</span></span>
-        <span style="font-weight: 500;">${data.agent_split_amount}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-        <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_pct}%${brokerageSplitNote}</span></span>
-        <span style="font-weight: 500;">${data.brokerage_split}</span>
-      </div>
+      ${compensationSection}
 
       ${data.btsa_amount ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
@@ -615,7 +665,7 @@ function generateStatementHTML(data: Record<string, any>): string {
       <div style="font-size: 9px; color: #666; line-height: 1.4;">This is your <strong>taxable income</strong>. It goes on your 1099 at year end.</div>
       <div style="background: #f0f0f0; padding: 8px; border-radius: 4px; margin-top: 10px; font-size: 9px;">
         <div style="display: flex; justify-content: space-between; padding: 2px 0;">
-          <span style="color: #666;">Your Split (${data.agent_split_pct}%)</span>
+          <span style="color: #666;">${recapTopLine}</span>
           <span style="font-weight: 500; color: #333;">${data.agent_split_amount}</span>
         </div>
         ${data.processing_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Processing Fee</span><span style="color: #333;">- ${data.processing_fee}</span></div>` : ''}
