@@ -199,10 +199,23 @@ export async function GET(
     }
 
     // Breakdown values come from the primary row.
+    // Every figure on the statement has to cover all of this agent's rows on
+    // the deal. The 1099 total and the withheld total already do; the
+    // deductions did not, because they were read off the anchor row alone. On a
+    // deal where the agent holds a second commission row carrying its own fees,
+    // that made the calculation stop adding up: the split totalled every row
+    // while the fees subtracted from only one.
+    const sumAgentRows = (field: string): number =>
+      agentRows.reduce((s: number, r: any) => s + (parseFloat(r[field]) || 0), 0)
+
+    // Gross stays anchored on the primary row on purpose: the other rows are
+    // added back separately as extraAgentAmount just below, so summing here
+    // would count them twice.
     const agentGross = parseFloat(baseTia.agent_gross || 0)
-    const processingFee = parseFloat(baseTia.processing_fee || 0)
-    const coachingFee = parseFloat(baseTia.coaching_fee || 0)
-    const otherFees = parseFloat(baseTia.other_fees || 0)
+    const processingFee = sumAgentRows('processing_fee')
+    const coachingFee = sumAgentRows('coaching_fee')
+    const otherFees = sumAgentRows('other_fees')
+    const rebateAmount = sumAgentRows('rebate_amount')
     const totalFees = processingFee + coachingFee + otherFees
     // Additional-comp rows (extra checks to the same agent) add their own 1099
     // and net on top of the primary row.
@@ -243,7 +256,9 @@ export async function GET(
     // CRC's actual side commission: office side minus the co-op paid to outside
     // brokerages. This is what gets split between the agent and the brokerage.
     const crcSide = Math.max(0, Math.round((officeGross - externalTotal) * 100) / 100)
-    const btsaAmount = parseFloat(baseTia.btsa_amount || 0)
+    // Also summed across every row: BTSA is added to the 1099 the same way the
+    // fees are subtracted from it, so it has to be gathered the same way.
+    const btsaAmount = sumAgentRows('btsa_amount')
     // Commission percent: use the sale price, or the monthly rent for leases,
     // as the basis. Always compute when a basis is available (was showing 0%
     // whenever sales_price was blank, e.g. on leases).
@@ -275,6 +290,12 @@ export async function GET(
     // agent_net does not reflect withholdings recovered on this check (e.g. a
     // monthly brokerage fee), so derive it here.
     const netPayout = Math.round((amount1099 - debtsDeducted) * 100) / 100
+    // Does the calculation column arrive at the 1099 the deal actually stores?
+    const calcReconciles =
+      Math.abs(
+        (agentDisburseTotal + btsaAmount - processingFee - coachingFee - otherFees - rebateAmount) -
+          amount1099
+      ) < 0.02
 
     const debts = (appliedDebts || []).map(d => ({
       description: d.description || d.debt_type?.replace(/_/g, ' ') || 'Balance owed',
@@ -313,6 +334,19 @@ export async function GET(
       processing_fee: processingFee > 0 ? fmt$(processingFee) : null,
       coaching_fee: coachingFee > 0 ? fmt$(coachingFee) : null,
       other_fees: otherFees > 0 ? fmt$(otherFees) : null,
+      // A rebate reduces the 1099 the same way a fee does, so it has to appear
+      // wherever the deductions are listed. Without it the calculation shows a
+      // split and a set of fees that do not add up to the 1099 figure beneath
+      // them, and the missing amount has no label to explain it.
+      rebate_amount: rebateAmount > 0 ? fmt$(rebateAmount) : null,
+      // Only close the calculation with running totals when the deal's own
+      // numbers actually produce them. Rows imported from Brokermint, and
+      // anything edited before the canonical math was enforced, carry a stored
+      // 1099 that does not equal split + BTSA - fees - rebate. Printing a total
+      // under those would put a figure on the page that visibly disagrees with
+      // the lines above it. The deductions still show; only the totals are
+      // held back, and the three boxes below still carry both figures.
+      calc_reconciles: calcReconciles,
       amount_1099: fmt$(amount1099),
       has_extra_comp: extraComp1099 > 0,
       extra_comp_amount: fmt$(extraComp1099),
@@ -432,6 +466,25 @@ function generateStatementHTML(data: Record<string, any>): string {
     <span class="doc-title">COMMISSION STATEMENT</span>
   </div>
 
+  <!-- Read first: this document is an internal record for the agent, not a
+       disbursement instruction. It carries no signature and no authorization,
+       so a title company must never fund from it. The CDA is the only document
+       that authorizes payment. Placed above everything else, and styled to
+       stay legible on a phone, because it is most likely to be forwarded to
+       title from a phone. -->
+  <div style="border: 2px solid #b42318; background: #fef3f2; border-radius: 6px; padding: 12px 14px; margin-bottom: 24px;">
+    <div style="font-size: 12px; font-weight: 700; color: #b42318; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+      This is not a Commission Disbursement Authorization
+    </div>
+    <p style="font-size: 11px; color: #5c1b16; line-height: 1.5;">
+      <strong>Title companies and closing agents must not disburse funds based on this document.</strong>
+      It is an unsigned internal accounting summary prepared for the agent named below, and it carries
+      no authorization to pay any party. Disbursement may only be made from a signed Commission
+      Disbursement Authorization issued by Collective Realty Co. To request one, contact
+      <a href="mailto:transactions@collectiverealtyco.com" style="color: #b42318;">transactions@collectiverealtyco.com</a>.
+    </p>
+  </div>
+
   <div class="grid-2" style="margin-bottom: 24px;">
     <div style="background: #fafafa; padding: 12px; border-radius: 6px;">
       <div style="display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #eee; font-size: 11px;">
@@ -488,12 +541,6 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
         <span style="font-weight: 500;">${data.compensation_basis}</span>
       </div>
-      ${data.btsa_amount ? `
-      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>+ BTSA <span style="color: #999; font-size: 9px; margin-left: 6px;">paid in addition to commission</span></span>
-        <span style="font-weight: 500;">${data.btsa_amount}</span>
-      </div>
-      ` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
         <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.agent_split_pct}% of basis</span></span>
         <span style="font-weight: 500;">${data.agent_split_amount}</span>
@@ -502,6 +549,59 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_pct}%${brokerageSplitNote}</span></span>
         <span style="font-weight: 500;">${data.brokerage_split}</span>
       </div>
+
+      ${data.btsa_amount ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>+ BTSA <span style="color: #999; font-size: 9px; margin-left: 6px;">paid in addition to commission</span></span>
+        <span style="font-weight: 500;">${data.btsa_amount}</span>
+      </div>
+      ` : ''}
+
+      <!-- The deductions and the final figure continue in this same section,
+           directly under the splits. The split on its own is not what anyone
+           is paid, and when it was the last line here it could be read as a
+           final amount. The three boxes below still carry the same numbers as
+           a fuller explanation; this is the short version in one column. -->
+      ${data.processing_fee ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px solid #ddd;">
+        <span>Less Processing Fee</span>
+        <span style="font-weight: 500;">- ${data.processing_fee}</span>
+      </div>
+      ` : ''}
+      ${data.coaching_fee ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>Less Coaching Fee</span>
+        <span style="font-weight: 500;">- ${data.coaching_fee}</span>
+      </div>
+      ` : ''}
+      ${data.other_fees ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>Less Other Fees</span>
+        <span style="font-weight: 500;">- ${data.other_fees}</span>
+      </div>
+      ` : ''}
+      ${data.rebate_amount ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>Less Rebate</span>
+        <span style="font-weight: 500;">- ${data.rebate_amount}</span>
+      </div>
+      ` : ''}
+      ${data.calc_reconciles ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>Your 1099 income <span style="color: #999; font-size: 9px; margin-left: 6px;">taxable</span></span>
+        <span style="font-weight: 500;">${data.amount_1099}</span>
+      </div>
+      ${data.has_debts ? `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
+        <span>Less Amounts Withheld <span style="color: #999; font-size: 9px; margin-left: 6px;">balances owed</span></span>
+        <span style="font-weight: 500;">- ${data.total_debts_deducted}</span>
+      </div>
+      ` : ''}
+      <div style="display: flex; justify-content: space-between; padding: 8px 0 0; margin-top: 4px; border-top: 2px solid #C5A278;">
+        <span style="font-weight: 700; color: #333;">Amount paid to agent</span>
+        <span style="font-weight: 700; color: #333;">${data.agent_net}</span>
+      </div>
+      ` : ''}
     </div>
   </div>
 
