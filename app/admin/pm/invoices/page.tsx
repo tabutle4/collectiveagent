@@ -4,6 +4,15 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Receipt, Search, ArrowLeft, Send, CheckCircle, Clock, AlertTriangle, DollarSign, Pencil, X, Plus } from 'lucide-react'
 
+// Sending is what mints the Payload payment link, so every invoice that is not
+// paid and not cancelled has to stay sendable. This was gated on 'pending'
+// alone, which meant a tenant lost the ability to pay online at the exact
+// moment they went past due -- the late fee cron flips the status to 'overdue'
+// and the Send button disappeared with it. Mirrors the Mark Paid gate that sits
+// beside it. The send route reuses an existing payment link rather than
+// creating a second charge, so re-sending cannot double-bill anyone.
+const SENDABLE_STATUSES = ['pending', 'sent', 'overdue']
+
 // ---- Tenant Invoice types ----
 interface TenantInvoice {
   id: string
@@ -421,7 +430,7 @@ function TenantInvoicesTab() {
                   </div>
                   <div className="flex gap-2 flex-wrap mt-2">
                     <button onClick={() => openEdit(inv)} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Pencil size={11} />Edit</button>
-                    {inv.status === 'pending' && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? '...' : 'Send'}</button>}
+                    {SENDABLE_STATUSES.includes(inv.status) && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? '...' : 'Send'}</button>}
                     {['sent','overdue','pending'].includes(inv.status) && <button onClick={() => setMarkPaidInvoice(inv)} className="btn btn-primary text-xs py-1 px-2 flex items-center gap-1"><CheckCircle size={11} />Mark Paid</button>}
                   </div>
                 </div>
@@ -459,7 +468,7 @@ function TenantInvoicesTab() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => openEdit(inv)} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Pencil size={11} />Edit</button>
-                          {inv.status === 'pending' && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? 'Sending...' : 'Send'}</button>}
+                          {SENDABLE_STATUSES.includes(inv.status) && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? 'Sending...' : 'Send'}</button>}
                           {['sent','overdue','pending'].includes(inv.status) && <button onClick={() => setMarkPaidInvoice(inv)} className="btn btn-primary text-xs py-1 px-2 flex items-center gap-1"><CheckCircle size={11} />Mark Paid</button>}
                           {inv.status === 'paid' && inv.paid_at && <span className="text-xs text-green-600">Paid {formatDate(inv.paid_at)}</span>}
                           {inv.payload_payment_link_url && !['paid','cancelled'].includes(inv.status) && (
@@ -728,7 +737,7 @@ function LandlordInvoicesTab() {
                   </div>
                   <div className="flex gap-2 flex-wrap mt-2">
                     <button onClick={() => openEdit(inv)} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Pencil size={11} />Edit</button>
-                    {inv.status === 'pending' && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? '...' : 'Send'}</button>}
+                    {SENDABLE_STATUSES.includes(inv.status) && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? '...' : 'Send'}</button>}
                     {['sent','overdue','pending'].includes(inv.status) && <button onClick={() => setMarkPaidInvoice(inv)} className="btn btn-primary text-xs py-1 px-2 flex items-center gap-1"><CheckCircle size={11} />Mark Paid</button>}
                   </div>
                 </div>
@@ -763,7 +772,7 @@ function LandlordInvoicesTab() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button onClick={() => openEdit(inv)} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Pencil size={11} />Edit</button>
-                          {inv.status === 'pending' && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? 'Sending...' : 'Send'}</button>}
+                          {SENDABLE_STATUSES.includes(inv.status) && <button onClick={() => sendInvoice(inv.id)} disabled={sendingId === inv.id} className="btn btn-secondary text-xs py-1 px-2 flex items-center gap-1"><Send size={11} />{sendingId === inv.id ? 'Sending...' : 'Send'}</button>}
                           {['sent','overdue','pending'].includes(inv.status) && <button onClick={() => setMarkPaidInvoice(inv)} className="btn btn-primary text-xs py-1 px-2 flex items-center gap-1"><CheckCircle size={11} />Mark Paid</button>}
                           {inv.status === 'paid' && inv.paid_at && <span className="text-xs text-green-600">Paid {formatDate(inv.paid_at)}</span>}
                           {inv.payload_payment_link_url && !['paid','cancelled'].includes(inv.status) && (
