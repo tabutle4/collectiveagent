@@ -75,19 +75,35 @@ export default function AddAgentModal({
     if (def) setSide(def)
   }, [role, transaction?.transaction_type, transaction?.other_side_transaction_type, isIntermediary])
 
-  // Filter excludes anyone already on this txn (no duplicates)
-  const existingAgentIds = useMemo(
-    () => new Set((existingAgents || []).map(a => a.agent_id)),
-    [existingAgents]
+  // Filter excludes anyone already on the side being added to.
+  //
+  // It used to exclude anyone already on the transaction at all, which made an
+  // intermediary deal impossible to build: the brokerage represents both sides,
+  // so the same agent legitimately holds a row on each -- primary on one, co-agent
+  // on the other. Searching for them returned "No matching agents" with no
+  // explanation, and there was no way through it. Four deals already carry that
+  // shape, so nothing in the data objects to it either.
+  //
+  // Scoping to the side keeps the guard that matters, which is the same agent
+  // twice on one side. Before a side is chosen the old behavior stands, so the
+  // list never opens up more than the choice justifies.
+  const existingAgentIdsOnSide = useMemo(
+    () =>
+      new Set(
+        (existingAgents || [])
+          .filter(a => !side || a.side === side)
+          .map(a => a.agent_id)
+      ),
+    [existingAgents, side]
   )
   const filtered = useMemo(() => {
     const term = searchText.trim().toLowerCase()
-    const list = allUsers.filter(u => !existingAgentIds.has(u.id))
+    const list = allUsers.filter(u => !existingAgentIdsOnSide.has(u.id))
     if (!term) return list.slice(0, 12)
     return list
       .filter(u => fmtName(u).toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term))
       .slice(0, 25)
-  }, [allUsers, searchText, existingAgentIds])
+  }, [allUsers, searchText, existingAgentIdsOnSide])
 
   const submit = async () => {
     if (!selectedUser) { setError('Pick an agent'); return }
