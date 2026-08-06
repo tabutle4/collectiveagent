@@ -235,27 +235,112 @@ export async function POST(request: NextRequest) {
       // Check for existing retainer transactions for this agent with a similar client name.
       // confirm_new_deal=true means agent already reviewed the matches and confirmed this is a new deal.
       const { confirm_new_deal } = body
-      if (!confirm_new_deal) {
+      // body.transaction_id means the agent already answered this question by
+      // picking one of the matches, so raising the same panel again would loop
+      // them straight back to it. The attach branch below re-derives the
+      // allowed set server-side, so skipping the panel here does not skip the
+      // ownership check.
+      if (!confirm_new_deal && !String(body.transaction_id || '').trim()) {
         const matchingTxns = await findRetainerProspects(agentId, client_name)
         if (matchingTxns.length) {
           return NextResponse.json({ success: false, duplicate_check: true, matches: matchingTxns })
         }
       }
 
-      const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
-        .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), submitted_by: agentId, updated_at: now })
-        .select('id').single()
-      if (createErr || !newTxn) { console.error('Failed to create retainer transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
-      const transactionId = newTxn.id
-      await supabaseAdmin.from('transaction_internal_agents').insert({
-        transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent',
+      // A retainer prospect can already exist without its compliance ever
+      // having been filed -- the office creates one, or an earlier attempt got
+      // part way. When the agent picks that record off the duplicate panel, the
+      // submission attaches to it instead of creating a second prospect for the
+      // same client. The money fields are written the same way either path, so
+      // the record ends up identical to one filed in a single pass.
+      const attachRetainerId = String(body.transaction_id || '').trim()
+      let transactionId: string
+      // Set when the attach target already carries a basis the office entered.
+      let officeHasPriced = false
+      let existingBasis = 0
+      const retainerFields = {
         installment_kind: 'retainer', agent_basis: amount, processing_fee: 45,
         amount_1099_reportable: Math.round((amount - 45) * 100) / 100,
         agent_net: Math.round((amount - 45) * 100) / 100,
         payment_status: 'pending', split_percentage: 0, agent_gross: 0, brokerage_split: 0,
         coaching_fee: 0, team_lead_commission: 0, btsa_amount: 0, rebate_amount: 0,
         other_fees: 0, sales_volume: 0, units: 0, debts_deducted: 0, counts_toward_progress: false, updated_at: now,
-      })
+      }
+
+      if (attachRetainerId) {
+        // Ownership and the existing row are the same question, so one query
+        // answers both: a retainer row on this transaction, belonging to this
+        // agent. Checked by id rather than by name. The panel matched on the
+        // client name, but the agent can correct that name before submitting,
+        // and re-deriving the allowed set from the corrected name rejects the
+        // record they just picked with no way back to it -- the lookup that
+        // raised the panel keys on the same name. Id gives the same security
+        // property: the agent must already hold a retainer row on the deal.
+        // limit(1) rather than maybeSingle(): a prospect can carry a second
+        // commission row for the same agent that is not a retainer, and one of
+        // these already does.
+        const { data: existingRows, error: existingErr } = await supabaseAdmin
+          .from('transaction_internal_agents')
+          .select('id, payment_status, agent_basis')
+          .eq('transaction_id', attachRetainerId)
+          .eq('agent_id', agentId)
+          .eq('installment_kind', 'retainer')
+          .order('created_at', { ascending: true })
+          .limit(1)
+        // A failed read must never be read as "no row here". Treating it that
+        // way would let the request carry on and write a second retainer row to
+        // a prospect that already has one, doubling the basis and the 1099
+        // while the agent sees success and the office is told it attached
+        // correctly. Nothing is written if this read did not answer.
+        if (existingErr) {
+          console.error('Failed to load the existing retainer row:', existingErr)
+          return NextResponse.json({ error: 'Could not read that retainer, so nothing was changed. Please try again.' }, { status: 500 })
+        }
+        const existingRow = existingRows?.[0] || null
+        // The deal also has to still be open. A retainer that has been turned
+        // into a live transaction is no longer something to file against.
+        const { data: targetTxn, error: targetErr } = await supabaseAdmin
+          .from('transactions')
+          .select('id, status')
+          .eq('id', attachRetainerId)
+          .maybeSingle()
+        if (targetErr) {
+          console.error('Failed to load the retainer prospect:', targetErr)
+          return NextResponse.json({ error: 'Could not read that retainer, so nothing was changed. Please try again.' }, { status: 500 })
+        }
+        if (!existingRow || !targetTxn || targetTxn.status !== 'prospect') {
+          return NextResponse.json({ error: 'That retainer is no longer available to attach to. Start the submission again to pick it from the list.' }, { status: 400 })
+        }
+        if (existingRow.payment_status === 'paid') {
+          // Writing over a paid row would silently restate money that has
+          // already gone out, and accepting the submission without writing
+          // would tell the agent it worked when nothing was recorded.
+          return NextResponse.json({ error: 'This retainer has already been paid out, so it cannot be resubmitted. Contact the office if something on it needs to change.' }, { status: 400 })
+        }
+        transactionId = attachRetainerId
+        await supabaseAdmin.from('transactions').update({
+          transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'),
+          updated_at: now,
+        }).eq('id', transactionId)
+        // A basis already on the row means the office has priced it. The agent
+        // resubmitting must not reset a waived fee or a corrected amount back
+        // to what the form collected, so leave the money alone and say so in
+        // the office notification instead.
+        officeHasPriced = parseFloat(existingRow.agent_basis || 0) > 0
+        existingBasis = officeHasPriced ? parseFloat(existingRow.agent_basis || 0) : 0
+        if (!officeHasPriced) {
+          await supabaseAdmin.from('transaction_internal_agents').update(retainerFields).eq('id', existingRow.id)
+        }
+      } else {
+        const { data: newTxn, error: createErr } = await supabaseAdmin.from('transactions')
+          .insert({ property_address: formatNameToTitleCase(client_name.trim()), client_name: formatNameToTitleCase(client_name.trim()), status: 'prospect', transaction_type: feeCodeFromRetainerType(retainer_transaction_type) || (isLease ? 'tenant_non_apt_v2' : 'buyer_v2'), submitted_by: agentId, updated_at: now })
+          .select('id').single()
+        if (createErr || !newTxn) { console.error('Failed to create retainer transaction:', createErr); return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 }) }
+        transactionId = newTxn.id
+        await supabaseAdmin.from('transaction_internal_agents').insert({
+          transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', ...retainerFields,
+        })
+      }
       const submissionData = { submission_mode: 'retainer', client_name, retainer_transaction_type, retainer_amount: amount, docs_confirmed }
       const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
         .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
@@ -270,6 +355,7 @@ export async function POST(request: NextRequest) {
            <p style="margin:0;font-size:13px;color:#555555;"><strong style="color:#1a1a1a;">Amount:</strong> $${amount.toFixed(2)} (agent net $${(amount - 45).toFixed(2)} after $45 processing fee)</p>
          </div>
          <p style="font-size:13px;color:#555555;margin:0 0 16px;">Agent confirmed all required documents are signed and uploaded to the Dotloop loop. Please confirm payment received and process payout.</p>
+         ${attachRetainerId ? `<p style="font-size:13px;color:#555555;margin:0 0 16px;">This was filed against an existing retainer for this client rather than creating a new one.${officeHasPriced ? ` The commission row already carried a basis of $${existingBasis.toFixed(2)}, so it was left as entered and the agent's figure above was not written to it.` : ''}</p>` : ''}
          <p style="text-align:center;margin:24px 0 0;"><a href="${appUrl}/transactions/${transactionId}" style="display:inline-block;padding:12px 28px;background-color:#C5A278;color:#ffffff;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;">View Transaction</a></p>
          ${buildFormAnswersHtml(submissionData)}`,
         { title: 'New Retainer Submission', preheader: `Retainer for ${client_name}` }

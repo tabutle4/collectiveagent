@@ -542,7 +542,10 @@ export default function ComplianceCdaForm() {
       if (!retainer.retainer_transaction_type) { setError('Transaction type is required.'); return }
       if (!retainer.retainer_amount || parseFloat(retainer.retainer_amount) <= 0) { setError('Retainer amount is required.'); return }
       if (!retainer.docs_confirmed) { setError('You must confirm all required documents are signed and uploaded to the Dotloop loop.'); return }
-      payload = { ...payload, ...retainer, retainer_amount: parseFloat(retainer.retainer_amount), confirm_new_deal: confirmedNewDeal }
+      // transaction_id set means the agent picked an existing retainer prospect
+      // off the duplicate panel, so the server writes to that record instead of
+      // creating another one for the same client.
+      payload = { ...payload, ...retainer, retainer_amount: parseFloat(retainer.retainer_amount), confirm_new_deal: confirmedNewDeal, transaction_id: attachTo?.id || null }
     } else if (mode === 'subsequent') {
       if (!searchDone || !foundTransaction) { setError('Please find your transaction first.'); return }
       // Subsequent renders the same field block as compliance, so it validates
@@ -696,14 +699,7 @@ export default function ComplianceCdaForm() {
             { value: 'retainer' as Mode, label: 'Retainer Submission', desc: 'Submit retainer for a buyer or tenant rep' },
           ] as const).map(opt => (
             // Picking a mode here means starting over, so it clears everything
-            // including any attached retainer. That clearing lives on this
-            // button on purpose and must NOT be moved into a general "reset on
-            // every mode change" handler: the "Same client - file compliance"
-            // button in the retainer duplicate panel also switches mode, and it
-            // has to KEEP the attachment, which is the whole point of it. A
-            // shared reset would silently unlink the retainer there, and the
-            // agent would get no warning that the submission is no longer
-            // attached.
+            // including any attached retainer and the as-you-type lookup state.
             <button
               key={opt.value}
               onClick={() => { setMode(opt.value); setSearchDone(false); setFoundTransaction(null); setLastSubmission(null); setAddressSearch(''); setError(''); setDuplicateMatches([]); setConfirmedNewDeal(false); setAttachTo(null); setMatchesFromLookup(false); matchesFromLookupRef.current = false; dismissedTermRef.current = null }}
@@ -733,25 +729,24 @@ export default function ComplianceCdaForm() {
                       <p className="text-sm font-medium text-luxury-gray-1">{m.client_name}</p>
                       <p className="text-xs text-luxury-gray-3">Created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                     </div>
+                    {/* A retainer prospect can exist without its compliance
+                        having been filed, so a match is not a dead end: the
+                        agent picks it and this submission attaches to that
+                        record rather than creating a second prospect for the
+                        same client. It stays inside retainer mode -- switching
+                        to compliance from here asked for a closing date and a
+                        commission summary for a deal that has not happened. */}
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <a href={`/transactions?open=${m.id}`} className="btn btn-secondary text-xs">View Deal</a>
-                      {/* The retainer already exists, so there is nothing to
-                          submit a second time. What the agent actually needs
-                          from here is compliance on that same deal, which the
-                          compliance mode attaches to the prospect. Without
-                          this, the only way out of this panel was "Not the
-                          same", which files a duplicate retainer. */}
                       <button
                         onClick={() => {
-                          setMode('compliance')
                           setAttachTo({ id: m.id, client_name: m.client_name })
-                          setForm(prev => ({ ...prev, client_name: prev.client_name || m.client_name || '' }))
                           setDuplicateMatches([])
                           setError('')
                         }}
                         className="btn btn-primary text-xs"
                       >
-                        Same client - file compliance
+                        Submit for this retainer
                       </button>
                     </div>
                   </div>
@@ -773,6 +768,13 @@ export default function ComplianceCdaForm() {
             away mid-keystroke would be jarring. A panel raised by a submit
             still replaces the form, because that one is a question the agent
             has to answer before anything else happens. */}
+        {mode === 'retainer' && attachTo && (
+          <div className="flex items-start gap-2 p-3 bg-luxury-accent/5 border border-luxury-accent/40 rounded text-xs text-luxury-gray-2">
+            <Info size={13} className="flex-shrink-0 mt-0.5 text-luxury-accent" />
+            <span>This will be filed against your existing retainer for <strong className="text-luxury-gray-1">{attachTo.client_name}</strong> rather than creating a new one.</span>
+            <button onClick={() => setAttachTo(null)} className="ml-auto text-luxury-gray-3 underline flex-shrink-0">Undo</button>
+          </div>
+        )}
         {mode === 'retainer' && (duplicateMatches.length === 0 || matchesFromLookup) && (
           <>
             <div className="flex items-start gap-2 p-3 bg-luxury-gray-5/20 rounded text-xs text-luxury-gray-2">
