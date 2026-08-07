@@ -13,6 +13,7 @@ import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 import {
   buildStatementEmail,
   buildCdaEmail,
+  buildPaymentSentEmail,
 } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
 
@@ -2888,6 +2889,126 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         success: true,
         reversed_id: recordId,
         all_reversed_ids: (allApplied || []).map(r => r.id),
+      })
+    }
+
+    // ── Mark payment sent (TIA) ──────────────────────────────────────────────
+    // Records that the payment has been initiated and tells the agent. This is
+    // a different moment from mark_paid: marking paid means the money has
+    // cleared the office bank, which is days after the agent needed to know.
+    // Deliberately does not touch payment_status -- the row is still owed until
+    // it clears, and every report in the app decides that by comparing against
+    // 'paid'. Only the sent date, method and reference are recorded.
+    if (action === 'mark_payment_sent') {
+      const {
+        internal_agent_id,
+        payment_sent_date,
+        payment_method,
+        payment_reference,
+      } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+
+      const { data: tia, error: tiaError } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, payment_status, payment_sent_date')
+        .eq('id', internal_agent_id)
+        .single()
+      if (tiaError || !tia) throw new Error('Agent record not found')
+
+      if (tia.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'This row is already marked paid, so the payment has already cleared.' },
+          { status: 409 }
+        )
+      }
+      if (tia.payment_sent_date) {
+        return NextResponse.json(
+          { error: 'This payment was already recorded as sent, so the agent has been notified.' },
+          { status: 409 }
+        )
+      }
+
+      const sentDate = payment_sent_date || new Date().toISOString().split('T')[0]
+      const tiaUpdate: Record<string, any> = {
+        payment_sent_date: sentDate,
+        updated_at: new Date().toISOString(),
+      }
+      // Method and reference are known at initiation and are what the agent is
+      // told. Only write them if given, so a blank field never wipes a value
+      // the office already recorded.
+      if (payment_method) tiaUpdate.payment_method = payment_method
+      if (payment_reference) tiaUpdate.payment_reference = payment_reference
+
+      // Build the email BEFORE claiming the row. Every figure in it comes from a
+      // read that can fail, and a failed read produces a plausible-looking zero
+      // rather than an error. Doing this first means a database problem aborts
+      // with nothing written, so the button stays clickable and the office can
+      // try again -- rather than the row being marked sent while the agent is
+      // either told a wrong number or told nothing at all.
+      let preview
+      try {
+        preview = await buildPaymentSentEmail(id, internal_agent_id, sentDate)
+      } catch (e: any) {
+        console.error('Could not build the payment sent notice:', e)
+        return NextResponse.json(
+          { error: `${e?.message || 'Could not read this payout'} Nothing was recorded, so you can try again.` },
+          { status: 500 }
+        )
+      }
+      if (!preview.to) {
+        return NextResponse.json(
+          { error: 'No email address on file for this agent, so there is nobody to notify. Nothing was recorded.' },
+          { status: 400 }
+        )
+      }
+
+      // Conditional on the date still being null, so two admins clicking at the
+      // same moment cannot both pass the check above and both send. The read
+      // guard alone is a read-then-write race, and this is the one path where
+      // losing it means the agent gets the same notice twice.
+      const { data: claimed, error: updateError } = await supabase
+        .from('transaction_internal_agents')
+        .update(tiaUpdate)
+        .eq('id', internal_agent_id)
+        .is('payment_sent_date', null)
+        .select('id')
+      if (updateError) throw updateError
+      if (!claimed || claimed.length === 0) {
+        return NextResponse.json(
+          { error: 'This payment was already recorded as sent, so the agent has been notified.' },
+          { status: 409 }
+        )
+      }
+
+      // Only the send itself is best-effort now, and only because by this point
+      // the row is claimed: the money has already left, so a Resend outage must
+      // not make it look like recording that failed. The figures are known good
+      // -- what is uncertain is delivery, and the response says which happened.
+      let emailed = false
+      let emailError: string | null = null
+      try {
+        const { error: sendError } = await resend.emails.send({
+          from: 'Collective Realty Co. <transactions@coachingbrokeragetools.com>',
+          to: [preview.to],
+          cc: preview.cc ? [preview.cc] : undefined,
+          replyTo: preview.replyTo,
+          subject: preview.subject,
+          html: preview.html,
+        })
+        if (sendError) emailError = sendError.message || 'Send failed'
+        else emailed = true
+      } catch (e: any) {
+        emailError = e?.message || 'Send failed'
+      }
+      if (emailError) console.error('Payment sent notice failed:', emailError)
+
+      return NextResponse.json({
+        success: true,
+        payment_sent_date: sentDate,
+        emailed,
+        email_error: emailError,
       })
     }
 

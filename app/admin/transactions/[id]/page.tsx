@@ -2080,6 +2080,9 @@ export default function AdminTransactionDetailPage() {
     error: null,
   })
 
+  // Holds the tia id whose payment-sent notice is in flight, so only that one
+  // card's button shows a spinner rather than every card on the deal.
+  const [sendingPaymentNotice, setSendingPaymentNotice] = useState<string | null>(null)
   // Mark Paid modal state
   // Debt/credit selection lives on the per-card billing panel (billingApplied
   // state). The modal only collects payment metadata.
@@ -2945,6 +2948,48 @@ export default function AdminTransactionDetailPage() {
     }
   }
 
+
+  // Records that the payment was initiated and emails the agent. Separate from
+  // Mark Paid, which is the later moment when the funds clear the office bank.
+  // Confirms first because it sends mail the moment it is clicked.
+  const markPaymentSent = async (agent: any) => {
+    const name = fmtName(agent.user)
+    if (!confirm(`Record the payment to ${name} as sent and email them now?`)) return
+    setSendingPaymentNotice(agent.id)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mark_payment_sent',
+          internal_agent_id: agent.id,
+          payment_sent_date: new Date().toISOString().split('T')[0],
+          payment_method: agent.payment_method || null,
+          payment_reference: agent.payment_reference || null,
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        alert(d.error || 'Failed to record the payment as sent')
+        return
+      }
+      setData((prev: any) => ({
+        ...prev,
+        agents: prev.agents.map((a: any) =>
+          a.id === agent.id ? { ...a, payment_sent_date: d.payment_sent_date } : a
+        ),
+      }))
+      // The date is saved either way, so say plainly whether the mail went. A
+      // silent failure here means the agent is never told and nobody knows.
+      if (!d.emailed) {
+        alert(`Recorded as sent, but the email did not go out: ${d.email_error || 'unknown error'}`)
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to record the payment as sent')
+    } finally {
+      setSendingPaymentNotice(null)
+    }
+  }
 
   // ── Mark Paid Modal Functions ────────────────────────────────────────────────
 
@@ -4392,6 +4437,28 @@ export default function AdminTransactionDetailPage() {
                                 >
                                   Mark Paid
                                 </button>
+                              )}
+                              {/* Payment sent is a separate, earlier moment from
+                                  Mark Paid. Mark Paid means the money cleared the
+                                  office bank; this is when it was initiated, and
+                                  it is what the agent gets told about. Once
+                                  recorded it becomes a label, since sending the
+                                  notice twice is worse than not sending it. */}
+                              {!isPaid && (
+                                a.payment_sent_date ? (
+                                  <span className="text-xs text-luxury-gray-3">
+                                    Payment sent {fmtDate(a.payment_sent_date)}
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => markPaymentSent(a)}
+                                    disabled={sendingPaymentNotice === a.id}
+                                    className="btn btn-secondary text-xs px-3 py-1 disabled:opacity-50"
+                                    title="Record that the payment has been initiated and email the agent"
+                                  >
+                                    {sendingPaymentNotice === a.id ? 'Sending...' : 'Payment sent'}
+                                  </button>
+                                )
                               )}
                               {isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
                                 <button
