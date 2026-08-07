@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { pmLateFeeWarningEmail } from '@/lib/email/pm-layout'
+import { lateFeeWarningDay } from '@/lib/pm/lateFeeSchedule'
 
 // GET /api/cron/pm/send-late-fee-warnings
 //
 // Runs daily. Finds unpaid tenant invoices where today is exactly one day
 // before the late fee applies, then emails each tenant a warning.
 //
-// Late fee applies after: due_date + late_fee_grace_days (from lease).
-// Warning sent when: today === due_date + late_fee_grace_days - 1
+// When the fee lands, and so when to warn, come from lateFeeSchedule.ts. The
+// charging cron calls the same helper, which is what keeps the day this email
+// names and the day the fee is actually charged from drifting apart.
 //
 // Schedule: 0 12 * * * (7:00 AM CT / 12:00 PM UTC)
 // Runs after the late fee cron (0 11 * * *) so there is no overlap.
@@ -87,17 +89,12 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        // Calculate the day the late fee applies:
-        // late fee applies after grace period from due date
-        const graceDays = lease.late_fee_grace_days ?? 2
+        // When the fee lands, and therefore when to warn, both come from the
+        // shared helper the charging cron uses. Computing it here independently
+        // is how these two jobs kept drifting apart and telling tenants a fee
+        // arrives on a day it does not.
         const dueDate = new Date(`${invoice.due_date}T12:00:00`)
-        const lateFeeDate = new Date(dueDate)
-        lateFeeDate.setDate(lateFeeDate.getDate() + graceDays + 1)
-        lateFeeDate.setHours(0, 0, 0, 0)
-
-        // Warning day = the day before late fee applies
-        const warningDate = new Date(lateFeeDate)
-        warningDate.setDate(warningDate.getDate() - 1)
+        const warningDate = lateFeeWarningDay(invoice.due_date, lease)
 
         // Only send if today is exactly the warning day
         if (today.getTime() !== warningDate.getTime()) {

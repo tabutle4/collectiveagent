@@ -1,51 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-
-const PAYLOAD_SECRET_KEY = process.env.PAYLOAD_SECRET_KEY || ''
-
-// Helper to delete a payment link from Payload
-async function deletePayloadPaymentLink(paymentLinkId: string): Promise<boolean> {
-  try {
-    const res = await fetch(`https://api.payload.com/payment_links/${paymentLinkId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(PAYLOAD_SECRET_KEY + ':').toString('base64'),
-      },
-    })
-    if (res.ok) {
-      console.log('Deleted Payload payment link:', paymentLinkId)
-      return true
-    } else {
-      console.log('Failed to delete payment link:', paymentLinkId, res.status)
-      return false
-    }
-  } catch (err) {
-    console.error('Error deleting payment link:', paymentLinkId, err)
-    return false
-  }
-}
-
-// Helper to delete an invoice from Payload
-async function deletePayloadInvoice(invoiceId: string): Promise<boolean> {
-  try {
-    const res = await fetch(`https://api.payload.com/invoices/${invoiceId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(PAYLOAD_SECRET_KEY + ':').toString('base64'),
-      },
-    })
-    if (res.ok) {
-      console.log('Deleted Payload invoice:', invoiceId)
-      return true
-    } else {
-      console.log('Failed to delete invoice:', invoiceId, res.status)
-      return false
-    }
-  } catch (err) {
-    console.error('Error deleting invoice:', invoiceId, err)
-    return false
-  }
-}
+// Imported rather than redefined: two copies of a function that deletes a
+// payment instrument is how they drift.
+import {
+  deletePayloadPaymentLink,
+  deletePayloadInvoice,
+} from '@/lib/payload/voidTenantPaymentLink'
 
 // Clean up Payload when lease is fully paid
 async function cleanupPayloadForLease(supabase: any, leaseId: string) {

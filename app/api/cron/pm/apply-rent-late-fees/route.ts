@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase'
+import { voidStalePaymentLink } from '@/lib/payload/voidTenantPaymentLink'
+import { firstChargeableDay } from '@/lib/pm/lateFeeSchedule'
 
 // GET - Apply late fees to overdue rent invoices
 // Runs daily via Vercel cron
@@ -27,7 +30,6 @@ export async function GET(request: NextRequest) {
     // The grace period now comes from the lease as well. It was hardcoded to 3
     // here while the warning email read late_fee_grace_days off the lease, so
     // on any lease not set to 2 the warning went out on the wrong day.
-    const DEFAULT_GRACE_DAYS = 2
     const DEFAULT_CAP_PCT = 12
 
     // Unpaid invoices whose due date has passed. late_fee_applied_at is no
@@ -35,20 +37,33 @@ export async function GET(request: NextRequest) {
     // and excluding rows that already carry a fee froze it at its first value.
     // The column is still stamped on first application, because the warning
     // email uses it to tell "fee not yet charged" from "fee charged".
-    const todayStr = today.toISOString().split('T')[0]
-    const { data: invoices, error: fetchError } = await supabase
-      .from('tenant_invoices')
-      .select(`
+    //
+    // Batched through fetchAllRows because dropping that filter widened this to
+    // every unpaid past-due invoice, and a plain select stops silently at the
+    // 1000th row with no ordering to say which thousand. yesterday rather than
+    // today because the helper has no 'lt'; on a date column the two are the
+    // same set.
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    const invoices = await fetchAllRows<any>(
+      'tenant_invoices',
+      `
         id, rent_amount, late_fee, total_amount, due_date, lease_id, late_fee_applied_at,
+        payload_payment_link_id, payload_payment_link_url, payload_invoice_id,
         pm_leases(
           id, monthly_rent, late_fee_cap_pct, late_fee_grace_days,
           late_fee_initial, late_fee_daily, late_fee_max_days
         )
-      `)
-      .in('status', ['pending', 'sent', 'overdue'])
-      .lt('due_date', todayStr)
-
-    if (fetchError) throw fetchError
+      `,
+      {
+        filters: [
+          { type: 'in', column: 'status', value: ['pending', 'sent', 'overdue'] },
+          { type: 'lte', column: 'due_date', value: yesterdayStr },
+        ],
+      },
+      supabase
+    )
 
     if (!invoices || invoices.length === 0) {
       return NextResponse.json({
@@ -60,6 +75,10 @@ export async function GET(request: NextRequest) {
 
     let applied = 0
     let skipped = 0
+    // Counted separately from errors: these invoices had their fee applied
+    // correctly but still have a live link at the old amount, so they read as
+    // successes in `applied` and need someone to look at them by hand.
+    let staleLinks = 0
     const errors: string[] = []
 
     for (const invoice of invoices) {
@@ -74,16 +93,13 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        // First chargeable day = due date + grace + 1, the same arithmetic the
-        // warning email uses so the two jobs agree on when the fee lands.
-        const graceDays = lease.late_fee_grace_days ?? DEFAULT_GRACE_DAYS
-        const dueDate = new Date(`${invoice.due_date}T12:00:00`)
-        const firstChargeableDay = new Date(dueDate)
-        firstChargeableDay.setDate(firstChargeableDay.getDate() + graceDays + 1)
-        firstChargeableDay.setHours(0, 0, 0, 0)
+        // When the fee lands comes from the shared helper, which also applies
+        // the statutory grace floor. The warning email calls the same function,
+        // so the day it names and the day this job charges cannot drift.
+        const firstDay = firstChargeableDay(invoice.due_date, lease)
 
         // Still inside the grace period.
-        if (today.getTime() < firstChargeableDay.getTime()) {
+        if (today.getTime() < firstDay.getTime()) {
           skipped++
           continue
         }
@@ -94,7 +110,7 @@ export async function GET(request: NextRequest) {
         // stops, independently of the statutory cap.
         const MS_PER_DAY = 24 * 60 * 60 * 1000
         let accrualDays = Math.floor(
-          (today.getTime() - firstChargeableDay.getTime()) / MS_PER_DAY
+          (today.getTime() - firstDay.getTime()) / MS_PER_DAY
         )
         if (lease.late_fee_max_days != null) {
           accrualDays = Math.min(accrualDays, Number(lease.late_fee_max_days))
@@ -132,6 +148,24 @@ export async function GET(request: NextRequest) {
           })
           .eq('id', invoice.id)
 
+        // The amount just moved, so any outstanding payment link is now stale.
+        // Void it here rather than leaving it live: the link collects the old
+        // figure and the payment webhook closes the invoice at whatever arrives,
+        // so a tenant paying in good faith would come up short and the invoice
+        // would read paid. Clearing the ids makes the next Send, or the tenant's
+        // own portal visit, mint a fresh link at the current total. Deliberately
+        // after the fee is written -- if Payload is down the ledger is still
+        // right and the link stays put, which keeps the mismatch visible.
+        if (!updateError && invoice.payload_payment_link_url) {
+          const voided = await voidStalePaymentLink(invoice)
+          if (!voided) {
+            staleLinks++
+            errors.push(
+              `Invoice ${invoice.id}: fee updated but the stale payment link could not be voided - it is still collecting the old amount`
+            )
+          }
+        }
+
         if (updateError) {
           errors.push(`Invoice ${invoice.id}: ${updateError.message}`)
         } else {
@@ -143,12 +177,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log(`PM late fees: ${applied} applied, ${skipped} skipped, ${errors.length} errors`)
+    console.log(`PM late fees: ${applied} applied, ${skipped} skipped, ${staleLinks} stale links not voided, ${errors.length} errors`)
 
     return NextResponse.json({
       success: true,
       applied,
       skipped,
+      stale_links_not_voided: staleLinks,
       total_checked: invoices.length,
       errors: errors.length ? errors : undefined,
     })
