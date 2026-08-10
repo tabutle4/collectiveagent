@@ -346,6 +346,7 @@ export default function AppSidebar({ children, logoUrl }: AppSidebarProps) {
 
   const restrictedAgentNav: NavItem[] = [
     { href: '/agent/profile', label: 'Profile', icon: UserCog },
+    { href: '/transactions', label: 'Transactions', icon: Receipt },
     { href: '/agent/checklist', label: 'Checklist', icon: ClipboardList },
     { href: '/agent/fees', label: 'Fees', icon: CircleDollarSign },
     { href: '/admin/checks', label: 'Checks', icon: Landmark },
