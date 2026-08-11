@@ -28,3 +28,7 @@ __pycache__/
 *.log
 *.out
 *_log.csv
+
+*.patch
+*.zip
+*.log
