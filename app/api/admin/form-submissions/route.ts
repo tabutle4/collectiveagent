@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
 
     let rows = submissions || []
     if (mode && mode !== 'all') {
-      rows = rows.filter((r: any) => (r.data?.submission_mode || 'compliance') === mode)
+      // Retainers are filed from the Compliance & CDA form, so they belong on
+      // that tab next to the compliance submissions rather than only under All.
+      const modes = mode === 'compliance' ? ['compliance', 'retainer'] : [mode]
+      rows = rows.filter((r: any) => modes.includes(r.data?.submission_mode || 'compliance'))
     }
 
     // Batch load agent names

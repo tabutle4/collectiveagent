@@ -255,6 +255,34 @@ export async function POST(request: NextRequest) {
       // the record ends up identical to one filed in a single pass.
       const attachRetainerId = String(body.transaction_id || '').trim()
       let transactionId: string
+      // Read this agent's existing retainer submission on the target once, up
+      // front. Two things below need it: officeHasPriced compares the basis on
+      // the commission row against what the agent last submitted, and the
+      // resubmit branch updates this row in place instead of inserting.
+      let existingSubmissionId: string | null = null
+      let priorResubmitCount = 0
+      let priorAmount = 0
+      if (attachRetainerId) {
+        const { data: priorSub, error: priorErr } = await supabaseAdmin
+          .from('agent_form_submissions')
+          .select('id, data')
+          .eq('transaction_id', attachRetainerId)
+          .eq('agent_id', agentId)
+          .filter('data->>submission_mode', 'eq', 'retainer')
+          .order('submitted_at', { ascending: true })
+          .limit(1)
+        // Same rule as the retainer row read below: a failed read must never be
+        // taken as "there is nothing here". Reading it that way would insert a
+        // second submission and treat the agent's own figure as the office's,
+        // while telling the agent it worked.
+        if (priorErr) {
+          console.error('Failed to load the existing retainer submission:', priorErr)
+          return NextResponse.json({ error: 'Could not read that retainer, so nothing was changed. Please try again.' }, { status: 500 })
+        }
+        existingSubmissionId = priorSub?.[0]?.id || null
+        priorResubmitCount = Number(priorSub?.[0]?.data?.resubmit_count) || 0
+        priorAmount = Number(priorSub?.[0]?.data?.retainer_amount) || 0
+      }
       // Set when the attach target already carries a basis the office entered.
       let officeHasPriced = false
       let existingBasis = 0
@@ -326,8 +354,16 @@ export async function POST(request: NextRequest) {
         // resubmitting must not reset a waived fee or a corrected amount back
         // to what the form collected, so leave the money alone and say so in
         // the office notification instead.
-        officeHasPriced = parseFloat(existingRow.agent_basis || 0) > 0
-        existingBasis = officeHasPriced ? parseFloat(existingRow.agent_basis || 0) : 0
+        // The office has priced this row only when the basis differs from what
+        // the agent last submitted. Testing for non-zero cannot tell the two
+        // apart: the minimum retainer is $250, so a first filing always leaves
+        // a non-zero basis and every resubmission looked like an office price.
+        // The money row then kept the old figure while the submission showed
+        // the new one, which matters most when the agent is correcting the
+        // type, since rental and buyer sit in different amount bands.
+        const currentBasis = parseFloat(existingRow.agent_basis || 0)
+        officeHasPriced = currentBasis > 0 && Math.abs(currentBasis - priorAmount) > 0.005
+        existingBasis = officeHasPriced ? currentBasis : 0
         if (!officeHasPriced) {
           await supabaseAdmin.from('transaction_internal_agents').update(retainerFields).eq('id', existingRow.id)
         }
@@ -341,10 +377,55 @@ export async function POST(request: NextRequest) {
           transaction_id: transactionId, agent_id: agentId, agent_role: 'primary_agent', ...retainerFields,
         })
       }
-      const submissionData = { submission_mode: 'retainer', client_name, retainer_transaction_type, retainer_amount: amount, docs_confirmed }
-      const { data: submission } = await supabaseAdmin.from('agent_form_submissions')
-        .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
-        .select('id').single()
+      // Attaching to an existing retainer is a resubmission, not a new filing.
+      // The deal and the commission row are already reused above; the
+      // submission has to be too, or Leah gets a second row on her queue for
+      // the same retainer and has to clear the stale one by hand every time an
+      // agent fixes something. existingSubmissionId was read above the attach
+      // branch because officeHasPriced needs the same row.
+      const submissionData: Record<string, any> = { submission_mode: 'retainer', client_name, retainer_transaction_type, retainer_amount: amount, docs_confirmed }
+      // The duplicate row used to be the only record that a resubmission
+      // happened. Updating in place would lose that, so the count and the date
+      // carry it on the row itself.
+      if (existingSubmissionId) {
+        submissionData.resubmit_count = priorResubmitCount + 1
+        submissionData.resubmitted_at = now
+      }
+
+      let submission: { id: string } | null = null
+      if (existingSubmissionId) {
+        const { data: updated, error: updateErr } = await supabaseAdmin.from('agent_form_submissions')
+          .update({
+            submitted_at: now,
+            status: 'submitted',
+            data: submissionData,
+            // Leah's rejection notes describe the version the agent just
+            // replaced, so leaving them would show a stale reason against new
+            // work. Cleared here for the same reason set-status clears them on
+            // complete. reviewed_at and reviewed_by go with them: the row is
+            // awaiting review again, not reviewed.
+            admin_notes: null,
+            reviewed_at: null,
+            reviewed_by: null,
+            updated_at: now,
+          })
+          .eq('id', existingSubmissionId)
+          .select('id').single()
+        // Falling through on a failed update would show the agent the success
+        // screen and send the office the "submission received" email while
+        // Leah's queue still held the old row -- her rejection notes intact,
+        // status still incomplete. The agent stops chasing, and nobody knows.
+        if (updateErr || !updated) {
+          console.error('Failed to update the existing retainer submission:', updateErr)
+          return NextResponse.json({ error: 'Could not update that retainer, so nothing was changed. Please try again.' }, { status: 500 })
+        }
+        submission = updated
+      } else {
+        const { data: inserted } = await supabaseAdmin.from('agent_form_submissions')
+          .insert({ form_id: formRecord?.id || null, agent_id: agentId, submitted_at: now, status: 'submitted', transaction_id: transactionId, data: submissionData, updated_at: now })
+          .select('id').single()
+        submission = inserted || null
+      }
       const typeLabel: Record<string, string> = { residential_rental: 'Residential Rental', residential_buyer: 'Residential Buyer', commercial_rental: 'Commercial Rental' }
       const notifyHtml = getEmailLayout(
         `<p style="margin:0 0 16px;font-size:14px;color:#555555;">A retainer submission has been received.</p>

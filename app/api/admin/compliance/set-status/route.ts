@@ -37,7 +37,12 @@ export async function POST(request: NextRequest) {
       .eq('id', submission_id)
       .maybeSingle()
 
-    if (!sub || (sub.data?.submission_mode || '') !== 'compliance') {
+    // Retainers are reviewable too, but their status is theirs alone. See the
+    // isRetainer guard further down: a retainer never derives the deal's
+    // compliance status and never touches the checks.
+    const submissionMode = sub?.data?.submission_mode || ''
+    const isRetainer = submissionMode === 'retainer'
+    if (!sub || !['compliance', 'retainer'].includes(submissionMode)) {
       return NextResponse.json({ error: 'Compliance submission not found' }, { status: 404 })
     }
 
@@ -66,7 +71,15 @@ export async function POST(request: NextRequest) {
     if (updErr) throw updErr
 
     // Dual-write the transaction as the worst status across its sides.
-    if (sub.transaction_id) {
+    //
+    // Retainers stop here on purpose. A retainer is a prospect with no
+    // documents and no checklist, and transactions.compliance_status is read by
+    // twenty files including the agent transaction list, the dashboard, the
+    // payouts report and the checks search. Letting a retainer write it would
+    // make every open retainer look like a compliance-tracked deal across the
+    // whole app. Leah's sign-off lives on the submission row, which is what the
+    // tracker reads, and goes no further.
+    if (sub.transaction_id && !isRetainer) {
       const { data: allSides } = await supabaseAdmin
         .from('agent_form_submissions')
         .select('id, status, reviewed_at')

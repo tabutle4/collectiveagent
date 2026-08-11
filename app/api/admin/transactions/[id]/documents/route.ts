@@ -179,7 +179,20 @@ export async function GET(
       .filter('data->>submission_mode', 'eq', 'compliance')
       .order('submitted_at', { ascending: true })
 
-    const sideAgentIds = Array.from(new Set((sideSubs || []).map((s: any) => s.agent_id).filter(Boolean)))
+    // Retainers on this deal. Deliberately kept out of `submissions`: a side is
+    // a compliance submission that owns a document checklist and drives the
+    // transaction's derived status, and a retainer has neither. Returned on its
+    // own so the tab can show it read-only.
+    const { data: retainerSubs } = await supabase
+      .from('agent_form_submissions')
+      .select('id, agent_id, status, submitted_at, admin_notes, data')
+      .eq('transaction_id', id)
+      .filter('data->>submission_mode', 'eq', 'retainer')
+      .order('submitted_at', { ascending: true })
+
+    const sideAgentIds = Array.from(new Set(
+      [...(sideSubs || []), ...(retainerSubs || [])].map((s: any) => s.agent_id).filter(Boolean)
+    ))
     const agentNameMap: Record<string, string> = {}
     if (sideAgentIds.length) {
       const { data: agents } = await supabase
@@ -219,6 +232,19 @@ export async function GET(
       }
     })
 
+    let retainers = (retainerSubs || []).map((s: any) => ({
+      id: s.id,
+      agent_id: s.agent_id,
+      agent_name: agentNameMap[s.agent_id] || 'Unknown agent',
+      status: s.status,
+      submitted_at: s.submitted_at,
+      admin_notes: s.admin_notes,
+      client_name: s.data?.client_name || null,
+      retainer_transaction_type: s.data?.retainer_transaction_type || null,
+      retainer_amount: s.data?.retainer_amount ?? null,
+      docs_confirmed: !!s.data?.docs_confirmed,
+    }))
+
     // Per-side visibility: admins see every side; an agent sees only their own
     // side's submission and docs (their tagged docs plus shared untagged ones).
     let visibleDocs = uploadedDocs || []
@@ -228,6 +254,7 @@ export async function GET(
         submissions.filter(s => s.agent_id === auth.user!.id).map(s => s.id)
       )
       submissions = submissions.filter(s => s.agent_id === auth.user!.id)
+      retainers = retainers.filter(r => r.agent_id === auth.user!.id)
       if (submissions.length > 0) {
         visibleDocs = visibleDocs.filter(
           (d: any) => d.submission_id === null || mySubmissionIds.has(d.submission_id)
@@ -240,6 +267,7 @@ export async function GET(
       required_docs: requiredDocs,
       uploaded_docs: visibleDocs,
       submissions,
+      retainer_submissions: retainers,
     })
   } catch (err: any) {
     console.error('transaction documents GET error:', err)

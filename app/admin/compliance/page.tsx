@@ -11,6 +11,7 @@ interface TrackerRow {
   agent_id: string | null
   agent_name: string
   submitted_at: string
+  submission_mode: string
   side: string | null
   compliance_status: string
   post_closing_status: string
@@ -109,6 +110,12 @@ const daysUntil = (d: string | null): number | null => {
 
 const fmtDateTime = (d: string | null) =>
   d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
+
+const RETAINER_TYPE_LABELS: Record<string, string> = {
+  residential_rental: 'Residential Rental',
+  residential_buyer: 'Residential Buyer',
+  commercial_rental: 'Commercial Rental',
+}
 
 const fmtMoney = (v: any) => {
   const n = parseFloat(v)
@@ -299,7 +306,7 @@ export default function AdminCompliancePage() {
   // padding the tab with rows nobody could action. Completeness of the
   // compliance review itself is deliberately not part of this -- a linked deal
   // belongs here whether or not compliance has been signed off.
-  const pendingChecklist = (r: TrackerRow) => !r.checklist_complete && !!r.transaction_id
+  const pendingChecklist = (r: TrackerRow) => r.submission_mode !== 'retainer' && !r.checklist_complete && !!r.transaction_id
   // Referred-out deals never get a CDA from CRC - the receiving brokerage
   // closes them - so they are excluded from the Needs CDA list.
   const isReferredOut = (r: TrackerRow) =>
@@ -316,6 +323,7 @@ export default function AdminCompliancePage() {
   // is both closed and fully paid it is finished here, and anything left is
   // post-closing work.
   const needsCda = (r: TrackerRow) =>
+    r.submission_mode !== 'retainer' &&
     !r.is_lease &&
     !isReferredOut(r) &&
     r.compliance_status === 'complete' &&
@@ -327,6 +335,7 @@ export default function AdminCompliancePage() {
   // but stating it here keeps this tab readable without going to the API to
   // work out why leases are missing.
   const postClosingOpen = (r: TrackerRow) =>
+    r.submission_mode !== 'retainer' &&
     !r.is_lease &&
     !isReferredOut(r) &&
     r.compliance_status === 'complete' &&
@@ -345,6 +354,10 @@ export default function AdminCompliancePage() {
     if (statusFilter === 'all') return true
     if (statusFilter === 'closed') return s === 'closed'
     if (statusFilter === 'cancelled') return s === 'cancelled' || s === 'canceled'
+    // A retainer's deal is created as a prospect and stays one until a real
+    // compliance submission converts it, so the default Active deals filter
+    // would hide every retainer. Let prospects through for retainers only.
+    if (r.submission_mode === 'retainer') return s === 'prospect' || s === 'active' || s === 'pending' || s === ''
     // Needs CDA and Post closing both let closed deals through the default
     // filter, because both are about work that runs up to and past the closing.
     // Neither needs a payment condition here: needsCda already drops a closed
@@ -1014,6 +1027,33 @@ export default function AdminCompliancePage() {
                                   </li>
                                 ))}
                               </ul>
+                            </div>
+                          )}
+
+                          {/* Retainers store a far smaller answer set than a
+                              compliance submission, so FIELD_GROUPS matches
+                              nothing on them and the drawer would open blank. */}
+                          {r.submission_mode === 'retainer' && (
+                            <div>
+                              <p className="text-[10px] text-luxury-gray-3 uppercase tracking-wider mb-1.5">Retainer</p>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
+                                <div>
+                                  <span className="text-luxury-gray-3 block">Client</span>
+                                  <span className="text-luxury-gray-1 break-words">{r.form_data?.client_name || 'Not provided'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-luxury-gray-3 block">Type</span>
+                                  <span className="text-luxury-gray-1 break-words">{RETAINER_TYPE_LABELS[r.form_data?.retainer_transaction_type] || r.form_data?.retainer_transaction_type || 'Not provided'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-luxury-gray-3 block">Amount</span>
+                                  <span className="text-luxury-gray-1 break-words">{hasValue(r.form_data?.retainer_amount) ? fmtMoney(r.form_data.retainer_amount) : 'Not provided'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-luxury-gray-3 block">Documents confirmed</span>
+                                  <span className="text-luxury-gray-1 break-words">{yesNo(!!r.form_data?.docs_confirmed)}</span>
+                                </div>
+                              </div>
                             </div>
                           )}
 

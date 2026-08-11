@@ -252,6 +252,22 @@ export async function GET(
     // agentGross gave zero, so the column started from nothing and subtracted
     // fees from it.
     const agentDisburseTotal = rowAgentDisburse(baseTia) + extraAgentAmount
+    // Per-row breakdown. The figures above already combine every row this agent
+    // holds on the deal, but nothing on the page said which rows or under what
+    // role. These use the same two helpers the totals use -- rowAgentDisburse
+    // and rowAmount1099 -- over the same agentRows array, so the rows always
+    // add to the totals printed beneath them rather than being a second,
+    // separately derived set of numbers that could drift. Only built when the
+    // agent holds more than one row; a single-row statement is unchanged.
+    const rowBreakdown = agentRows.length > 1
+      ? [...agentRows]
+          .sort((a, b) => (ROLE_PRIORITY[a.agent_role] ?? 9) - (ROLE_PRIORITY[b.agent_role] ?? 9))
+          .map((r: any) => ({
+            role: formatRole(r.agent_role),
+            disburse: fmt$(rowAgentDisburse(r)),
+            amount_1099: fmt$(rowAmount1099(r)),
+          }))
+      : []
     // Totals reflect every row for this agent on the deal.
     const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
     // Amount withheld = what was actually applied against this agent's cards on
@@ -380,6 +396,8 @@ export async function GET(
       // held back, and the three boxes below still carry both figures.
       calc_reconciles: calcReconciles,
       amount_1099: fmt$(amount1099),
+      has_row_breakdown: rowBreakdown.length > 0,
+      row_breakdown: rowBreakdown,
       has_extra_comp: extraComp1099 > 0,
       extra_comp_amount: fmt$(extraComp1099),
       has_debts: debtsDeducted > 0,
@@ -599,6 +617,30 @@ function generateStatementHTML(data: Record<string, any>): string {
     <div style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #333;">Commission calculation</div>
     <div style="font-size: 11px; color: #333;">
       ${compensationSection}
+
+      ${data.has_row_breakdown ? `
+      <div style="margin: 8px 0 2px; padding: 8px 10px; background: #fafafa; border-radius: 4px;">
+        <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin-bottom: 6px;">Breakdown by role</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+          <tr>
+            <th style="text-align: left; font-weight: 500; color: #888; padding: 2px 0;">Role</th>
+            <th style="text-align: right; font-weight: 500; color: #888; padding: 2px 0;">Compensation</th>
+            <th style="text-align: right; font-weight: 500; color: #888; padding: 2px 0;">1099</th>
+          </tr>
+          ${data.row_breakdown.map((r: any) => `
+          <tr>
+            <td style="text-align: left; color: #666; padding: 2px 0; border-top: 1px dotted #ddd;">${r.role}</td>
+            <td style="text-align: right; color: #333; padding: 2px 0; border-top: 1px dotted #ddd;">${r.disburse}</td>
+            <td style="text-align: right; color: #333; padding: 2px 0; border-top: 1px dotted #ddd;">${r.amount_1099}</td>
+          </tr>`).join('')}
+          <tr>
+            <td style="text-align: left; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">Total</td>
+            <td style="text-align: right; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">${data.agent_split_amount}</td>
+            <td style="text-align: right; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">${data.amount_1099}</td>
+          </tr>
+        </table>
+      </div>
+      ` : ''}
 
       ${data.btsa_amount ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">

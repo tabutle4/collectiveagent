@@ -40,8 +40,11 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
+    // Retainers ride along with compliance submissions. They carry a much
+    // smaller answer set and only ever surface on the All and Pending
+    // compliance tabs; the client filters them off the other three.
     const rows = (allRows || []).filter(
-      (r: any) => (r.data?.submission_mode || '') === 'compliance'
+      (r: any) => ['compliance', 'retainer'].includes(r.data?.submission_mode || '')
     )
     const recheckByTxn: Record<string, { submitted_at: string; changed_fields: string[] | null }> = {}
     for (const r of allRows || []) {
@@ -255,6 +258,7 @@ export async function GET(request: NextRequest) {
         agent_id: r.agent_id,
         agent_name: agentMap[r.agent_id] || 'Unknown',
         submitted_at: r.submitted_at,
+        submission_mode: d.submission_mode || 'compliance',
         side: d.representing || null,
         // The truth: submission status + Leah's fields
         compliance_status: r.status,

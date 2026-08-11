@@ -55,6 +55,12 @@ const fmt$ = (n: number | null | undefined) => {
   }).format(Number(n))
 }
 
+const RETAINER_TYPE_LABELS: Record<string, string> = {
+  residential_rental: 'Residential Rental',
+  residential_buyer: 'Residential Buyer',
+  commercial_rental: 'Commercial Rental',
+}
+
 const fmtDate = (d: string | null | undefined) => {
   if (!d) return '--'
   // Add noon time to date-only strings to prevent timezone shift
@@ -573,6 +579,7 @@ function ComplianceDocumentsTab({
     required_docs: any[]
     uploaded_docs: any[]
     submissions?: any[]
+    retainer_submissions?: any[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1034,6 +1041,65 @@ function ComplianceDocumentsTab({
   const [editableSubject, setEditableSubject] = useState('')
   const [editableRejected, setEditableRejected] = useState<{ name: string; notes: string }[]>([])
 
+  const [retainerPreview, setRetainerPreview] = useState<any>(null)
+  const [retainerStatus, setRetainerStatus] = useState<'complete' | 'incomplete'>('incomplete')
+  const [retainerNotes, setRetainerNotes] = useState('')
+  const [retainerSubject, setRetainerSubject] = useState('')
+  const [retainerSending, setRetainerSending] = useState(false)
+
+  // Retainer review is the same two-step as the compliance review above:
+  // preview first so Leah sees the exact subject and wording, then send.
+  const openRetainerPreview = async (submissionId: string) => {
+    setPreviewLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/retainer-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview', submission_id: submissionId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setRetainerPreview({ ...data, submission_id: submissionId })
+      setRetainerStatus(data.status === 'complete' ? 'complete' : 'incomplete')
+      setRetainerNotes(data.notes || '')
+      setRetainerSubject(data.subject || '')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const sendRetainerEmail = async () => {
+    if (!retainerPreview) return
+    setRetainerSending(true)
+    setSendResult(null)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/transactions/${transactionId}/retainer-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send',
+          submission_id: retainerPreview.submission_id,
+          status: retainerStatus,
+          notes: retainerNotes,
+          subject: retainerSubject,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setRetainerPreview(null)
+      setSendResult(`Retainer review sent to ${data.sent_to}. Marked ${data.status}.`)
+      load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRetainerSending(false)
+    }
+  }
+
   const openEmailPreview = async () => {
     const reviewed = docsData?.uploaded_docs.filter(
       d => d.compliance_status === 'approved' || d.compliance_status === 'rejected'
@@ -1465,6 +1531,114 @@ function ComplianceDocumentsTab({
         </div>
       )}
 
+      {/* Retainer submissions on this deal, read-only. A retainer has no
+          document checklist, so it is shown as its own card rather than as a
+          side with slots it can never fill. */}
+      {(docsData?.retainer_submissions?.length || 0) > 0 && (
+        <div className="container-card">
+          <p className="section-title mb-3">Retainer Submission</p>
+          <div className="space-y-4">
+            {docsData!.retainer_submissions!.map((r: any) => (
+              <div key={r.id}>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="text-[11px] text-luxury-gray-3">{r.agent_name}</span>
+                  <span className="text-[11px] text-luxury-gray-3">Submitted {fmtDate(r.submitted_at)}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                    r.status === 'complete' ? 'text-green-700 bg-green-50 border-green-200'
+                    : r.status === 'incomplete' ? 'text-red-700 bg-red-50 border-red-200'
+                    : 'text-luxury-gray-2 bg-luxury-gray-5/40 border-luxury-gray-5'
+                  }`}>{String(r.status || '').replace(/_/g, ' ')}</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-2 text-xs">
+                  <div>
+                    <span className="text-luxury-gray-3 block">Client</span>
+                    <span className="text-luxury-gray-1 break-words">{r.client_name || 'Not provided'}</span>
+                  </div>
+                  <div>
+                    <span className="text-luxury-gray-3 block">Type</span>
+                    <span className="text-luxury-gray-1 break-words">{RETAINER_TYPE_LABELS[r.retainer_transaction_type] || r.retainer_transaction_type || 'Not provided'}</span>
+                  </div>
+                  <div>
+                    <span className="text-luxury-gray-3 block">Amount</span>
+                    <span className="text-luxury-gray-1 break-words">{r.retainer_amount == null ? 'Not provided' : fmt$(Number(r.retainer_amount))}</span>
+                  </div>
+                  <div>
+                    <span className="text-luxury-gray-3 block">Documents confirmed</span>
+                    <span className="text-luxury-gray-1 break-words">{r.docs_confirmed ? 'Yes' : 'No'}</span>
+                  </div>
+                </div>
+                {r.admin_notes && (
+                  <p className="text-xs text-luxury-gray-1 whitespace-pre-wrap mt-2">{r.admin_notes}</p>
+                )}
+                <div className="mt-3">
+                  <button
+                    onClick={() => openRetainerPreview(r.id)}
+                    disabled={previewLoading}
+                    className="btn btn-secondary text-xs"
+                  >
+                    {previewLoading ? 'Loading...' : 'Review and Send Retainer Email'}
+                  </button>
+                </div>
+                {retainerPreview?.submission_id === r.id && (
+                  <div className="mt-3 border-t border-luxury-gray-5 pt-3 space-y-3">
+                    <div className="text-[11px] text-luxury-gray-3">
+                      <p>To: {retainerPreview.to}</p>
+                      <p>Cc: {retainerPreview.cc}</p>
+                    </div>
+                    <div>
+                      <label className="field-label">Subject</label>
+                      <input
+                        type="text"
+                        value={retainerSubject}
+                        onChange={e => setRetainerSubject(e.target.value)}
+                        className="input-luxury"
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Result</label>
+                      <select
+                        value={retainerStatus}
+                        onChange={e => setRetainerStatus(e.target.value === 'complete' ? 'complete' : 'incomplete')}
+                        className="select-luxury"
+                      >
+                        <option value="incomplete">Action required</option>
+                        <option value="complete">Complete</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">Notes to the agent</label>
+                      <textarea
+                        value={retainerNotes}
+                        onChange={e => setRetainerNotes(e.target.value)}
+                        rows={4}
+                        className="input-luxury"
+                        placeholder={retainerStatus === 'incomplete' ? 'What the agent needs to fix' : 'Optional'}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={sendRetainerEmail}
+                        disabled={retainerSending}
+                        className="btn btn-primary text-xs"
+                      >
+                        {retainerSending ? 'Sending...' : 'Send'}
+                      </button>
+                      <button
+                        onClick={() => setRetainerPreview(null)}
+                        disabled={retainerSending}
+                        className="btn btn-secondary text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Compliance is per side: one stacked section per compliance submission
           (agent + side). Docs tagged to a side show under it; untagged docs are
           shared and appear under every side. Single-side deals render as before. */}
@@ -1490,6 +1664,15 @@ function ComplianceDocumentsTab({
             }`}>{String(side.status || '').replace(/_/g, ' ')}</span>
           </div>
         )}
+      {/* Reviewer's compliance notes. admin_notes is written by the compliance
+          tracker when a side is marked incomplete and cleared when it is marked
+          complete, so it always describes what is outstanding right now. */}
+      {side?.admin_notes && (
+        <div className="container-card">
+          <p className="section-title mb-3">Compliance Notes</p>
+          <p className="text-xs text-luxury-gray-1 whitespace-pre-wrap">{side.admin_notes}</p>
+        </div>
+      )}
       {/* Compliance request details, read-only, rendered from the submission's
           raw form JSON so the coordinator sees what the agent requested before
           working the document slots below. */}
