@@ -20,6 +20,28 @@
 // LAST side finished review.
 import { supabaseAdmin } from '@/lib/supabase'
 
+// Modes that can act as a compliance side.
+export const SIDE_MODES_FILTER = '("compliance","retainer")'
+
+/**
+ * Pick the submissions that act as compliance sides for ONE transaction.
+ *
+ * Compliance submissions win outright. The retainer is used only when the deal
+ * has no compliance submission at all, which is the retainer-only prospect
+ * case. This matters because the compliance form can attach to a retainer
+ * prospect and convert it: from that moment the deal has a real side, and the
+ * old retainer must stop contributing or a still-submitted retainer would pin a
+ * fully reviewed deal at in_review forever.
+ *
+ * Callers holding submissions for several transactions must group by
+ * transaction_id first and call this per transaction.
+ */
+export function pickSideSubmissions<T extends { data?: any }>(subs: T[]): T[] {
+  const compliance = subs.filter(s => (s.data?.submission_mode || '') === 'compliance')
+  if (compliance.length > 0) return compliance
+  return subs.filter(s => (s.data?.submission_mode || '') === 'retainer')
+}
+
 export type DerivedCompliance = {
   status: string | null
   complete_date: string | null
@@ -61,17 +83,27 @@ export async function deriveComplianceForTransactions(
     .from('agent_form_submissions')
     .select('transaction_id, status, reviewed_at, data')
     .in('transaction_id', ids)
-    .filter('data->>submission_mode', 'eq', 'compliance')
+    .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
+
+  // Group by deal first: pickSideSubmissions decides per transaction whether
+  // the sides are its compliance submissions or its retainer.
+  const subsByTxn: Record<string, any[]> = {}
+  for (const s of subs || []) {
+    if (!s.transaction_id) continue
+    if (!subsByTxn[s.transaction_id]) subsByTxn[s.transaction_id] = []
+    subsByTxn[s.transaction_id].push(s)
+  }
 
   const statusesByTxn: Record<string, string[]> = {}
   const reviewedByTxn: Record<string, string[]> = {}
-  for (const s of subs || []) {
-    if (!s.transaction_id) continue
-    if (!statusesByTxn[s.transaction_id]) statusesByTxn[s.transaction_id] = []
-    statusesByTxn[s.transaction_id].push(s.status)
-    if (s.reviewed_at) {
-      if (!reviewedByTxn[s.transaction_id]) reviewedByTxn[s.transaction_id] = []
-      reviewedByTxn[s.transaction_id].push(s.reviewed_at)
+  for (const txnId of Object.keys(subsByTxn)) {
+    for (const s of pickSideSubmissions(subsByTxn[txnId])) {
+      if (!statusesByTxn[txnId]) statusesByTxn[txnId] = []
+      statusesByTxn[txnId].push(s.status)
+      if (s.reviewed_at) {
+        if (!reviewedByTxn[txnId]) reviewedByTxn[txnId] = []
+        reviewedByTxn[txnId].push(s.reviewed_at)
+      }
     }
   }
 

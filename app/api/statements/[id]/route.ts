@@ -265,9 +265,37 @@ export async function GET(
           .map((r: any) => ({
             role: formatRole(r.agent_role),
             disburse: fmt$(rowAgentDisburse(r)),
+            btsa: parseFloat(r.btsa_amount) || 0,
+            processing: parseFloat(r.processing_fee) || 0,
+            coaching: parseFloat(r.coaching_fee) || 0,
+            other: parseFloat(r.other_fees) || 0,
+            rebate: parseFloat(r.rebate_amount) || 0,
             amount_1099: fmt$(rowAmount1099(r)),
           }))
       : []
+
+    // Which deduction columns to print. A row-level figure is only shown when
+    // some row on this statement actually carries it, so a clean deal keeps the
+    // three-column table it has today and a deal with fees shows exactly the
+    // ones it has. The deal-level lines below are already sumAgentRows() over
+    // the same fields, so each column totals to the line beneath it.
+    const breakdownCols: { key: string; label: string; negative: boolean }[] = []
+    if (rowBreakdown.some(r => r.btsa !== 0)) breakdownCols.push({ key: 'btsa', label: 'BTSA', negative: false })
+    if (rowBreakdown.some(r => r.processing !== 0)) breakdownCols.push({ key: 'processing', label: 'Processing', negative: true })
+    if (rowBreakdown.some(r => r.coaching !== 0)) breakdownCols.push({ key: 'coaching', label: 'Coaching', negative: true })
+    if (rowBreakdown.some(r => r.other !== 0)) breakdownCols.push({ key: 'other', label: 'Other fees', negative: true })
+    if (rowBreakdown.some(r => r.rebate !== 0)) breakdownCols.push({ key: 'rebate', label: 'Rebate', negative: true })
+
+    const breakdownColTotals: Record<string, string> = {}
+    for (const c of breakdownCols) {
+      breakdownColTotals[c.key] = fmt$(rowBreakdown.reduce((sum, r: any) => sum + (r[c.key] || 0), 0))
+    }
+    const rowBreakdownOut = rowBreakdown.map((r: any) => ({
+      role: r.role,
+      disburse: r.disburse,
+      amount_1099: r.amount_1099,
+      cells: breakdownCols.map(c => fmt$(r[c.key] || 0)),
+    }))
     // Totals reflect every row for this agent on the deal.
     const amount1099 = agentRows.reduce((s, r) => s + rowAmount1099(r), 0)
     // Amount withheld = what was actually applied against this agent's cards on
@@ -397,7 +425,9 @@ export async function GET(
       calc_reconciles: calcReconciles,
       amount_1099: fmt$(amount1099),
       has_row_breakdown: rowBreakdown.length > 0,
-      row_breakdown: rowBreakdown,
+      row_breakdown: rowBreakdownOut,
+      breakdown_cols: breakdownCols.map(c => c.label),
+      breakdown_col_totals: breakdownCols.map(c => breakdownColTotals[c.key]),
       has_extra_comp: extraComp1099 > 0,
       extra_comp_amount: fmt$(extraComp1099),
       has_debts: debtsDeducted > 0,
@@ -625,17 +655,20 @@ function generateStatementHTML(data: Record<string, any>): string {
           <tr>
             <th style="text-align: left; font-weight: 500; color: #888; padding: 2px 0;">Role</th>
             <th style="text-align: right; font-weight: 500; color: #888; padding: 2px 0;">Compensation</th>
+            ${(data.breakdown_cols || []).map((label: string) => `<th style="text-align: right; font-weight: 500; color: #888; padding: 2px 0;">${label}</th>`).join('')}
             <th style="text-align: right; font-weight: 500; color: #888; padding: 2px 0;">1099</th>
           </tr>
           ${data.row_breakdown.map((r: any) => `
           <tr>
             <td style="text-align: left; color: #666; padding: 2px 0; border-top: 1px dotted #ddd;">${r.role}</td>
             <td style="text-align: right; color: #333; padding: 2px 0; border-top: 1px dotted #ddd;">${r.disburse}</td>
+            ${(r.cells || []).map((v: string) => `<td style="text-align: right; color: #666; padding: 2px 0; border-top: 1px dotted #ddd;">${v}</td>`).join('')}
             <td style="text-align: right; color: #333; padding: 2px 0; border-top: 1px dotted #ddd;">${r.amount_1099}</td>
           </tr>`).join('')}
           <tr>
             <td style="text-align: left; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">Total</td>
             <td style="text-align: right; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">${data.agent_split_amount}</td>
+            ${(data.breakdown_col_totals || []).map((v: string) => `<td style="text-align: right; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">${v}</td>`).join('')}
             <td style="text-align: right; font-weight: 600; color: #333; padding: 4px 0 0; border-top: 1px solid #ccc;">${data.amount_1099}</td>
           </tr>
         </table>

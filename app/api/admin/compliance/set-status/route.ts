@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
+import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,11 +38,12 @@ export async function POST(request: NextRequest) {
       .eq('id', submission_id)
       .maybeSingle()
 
-    // Retainers are reviewable too, but their status is theirs alone. See the
-    // isRetainer guard further down: a retainer never derives the deal's
-    // compliance status and never touches the checks.
+    // Retainers are reviewable and, on a retainer-only deal, they are the side:
+    // the sign-off derives the deal's compliance status and stamps the checks
+    // exactly as a compliance side would. Once a real compliance submission
+    // exists on the deal, pickSideSubmissions hands over and the retainer stops
+    // contributing.
     const submissionMode = sub?.data?.submission_mode || ''
-    const isRetainer = submissionMode === 'retainer'
     if (!sub || !['compliance', 'retainer'].includes(submissionMode)) {
       return NextResponse.json({ error: 'Compliance submission not found' }, { status: 404 })
     }
@@ -79,13 +81,16 @@ export async function POST(request: NextRequest) {
     // make every open retainer look like a compliance-tracked deal across the
     // whole app. Leah's sign-off lives on the submission row, which is what the
     // tracker reads, and goes no further.
-    if (sub.transaction_id && !isRetainer) {
-      const { data: allSides } = await supabaseAdmin
+    if (sub.transaction_id) {
+      const { data: allSideRows } = await supabaseAdmin
         .from('agent_form_submissions')
-        .select('id, status, reviewed_at')
+        .select('id, status, reviewed_at, data')
         .eq('transaction_id', sub.transaction_id)
-        .filter('data->>submission_mode', 'eq', 'compliance')
-      const statuses = (allSides || []).map((s: any) => (s.id === submission_id ? status : s.status))
+        .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
+      // On a retainer-only deal the retainer is the side; once a real
+      // compliance submission exists it takes over and the retainer stops.
+      const allSides = pickSideSubmissions(allSideRows || [])
+      const statuses = allSides.map((s: any) => (s.id === submission_id ? status : s.status))
       const derived = statuses.includes('incomplete')
         ? 'incomplete'
         : statuses.some((s: string) => s === 'in_review' || s === 'submitted')

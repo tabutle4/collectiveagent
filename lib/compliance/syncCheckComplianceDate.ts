@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase'
+import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
 
 /**
  * Keep checks_received.compliance_complete_date in step with the compliance
@@ -18,15 +19,19 @@ import { supabaseAdmin } from '@/lib/supabase'
 export async function syncCheckComplianceDate(transactionId: string): Promise<string | null> {
   if (!transactionId) return null
 
-  const { data: sides } = await supabaseAdmin
+  const { data: sideRows } = await supabaseAdmin
     .from('agent_form_submissions')
-    .select('id, status, reviewed_at')
+    .select('id, status, reviewed_at, data')
     .eq('transaction_id', transactionId)
-    .filter('data->>submission_mode', 'eq', 'compliance')
+    .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
 
-  // No compliance submissions: this is a legacy or non-compliance deal. Leave
-  // whatever is on the checks alone rather than clearing a hand-entered date.
-  if (!sides || sides.length === 0) return null
+  // A retainer deal has no compliance submission, so its retainer is the side.
+  // Once converted, pickSideSubmissions drops it and only compliance counts.
+  const sides = pickSideSubmissions(sideRows || [])
+
+  // No sides at all: legacy or non-compliance deal. Leave whatever is on the
+  // checks alone rather than clearing a hand-entered date.
+  if (sides.length === 0) return null
 
   const allComplete = sides.every((s: any) => s.status === 'complete')
   const completeDate = allComplete

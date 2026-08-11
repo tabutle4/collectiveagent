@@ -3,6 +3,7 @@ import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getCentralDateString } from '@/lib/timezone'
+import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,12 +116,21 @@ export async function GET(request: NextRequest) {
         .from('agent_form_submissions')
         .select('transaction_id, agent_id, status, data')
         .in('transaction_id', txnIds)
-        .filter('data->>submission_mode', 'eq', 'compliance')
+        .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
+      // Group by deal first so pickSideSubmissions can decide per transaction
+      // whether the sides are its compliance submissions or its retainer.
+      const subsByTxn: Record<string, any[]> = {}
       for (const s of sideSubs || []) {
         if (!s.transaction_id) continue
-        sideStatusByTxnAgent[`${s.transaction_id}:${s.agent_id}`] = s.status
-        if (!sideStatusesByTxn[s.transaction_id]) sideStatusesByTxn[s.transaction_id] = []
-        sideStatusesByTxn[s.transaction_id].push(s.status)
+        if (!subsByTxn[s.transaction_id]) subsByTxn[s.transaction_id] = []
+        subsByTxn[s.transaction_id].push(s)
+      }
+      for (const txnId of Object.keys(subsByTxn)) {
+        for (const s of pickSideSubmissions(subsByTxn[txnId])) {
+          sideStatusByTxnAgent[`${txnId}:${s.agent_id}`] = s.status
+          if (!sideStatusesByTxn[txnId]) sideStatusesByTxn[txnId] = []
+          sideStatusesByTxn[txnId].push(s.status)
+        }
       }
     }
 

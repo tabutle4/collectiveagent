@@ -3,6 +3,8 @@ import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { buildRetainerReviewEmail } from '@/lib/email/buildComplianceEmail'
+import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
+import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,13 +23,12 @@ const RESUBMIT_PATH = '/agent/forms/compliance-cda?mode=retainer'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
 const RESUBMIT_URL = `${APP_URL}${RESUBMIT_PATH}`
 
-// The retainer sibling of compliance-review. Deliberately narrower: it writes
-// the retainer's own agent_form_submissions row and nothing else. A retainer is
-// a prospect with no documents and no checklist, and transactions.compliance_status
-// is read by the agent transaction list, the admin dashboard, the payouts report
-// and the checks search. Letting a retainer write it would make every open
-// retainer look like a compliance-tracked deal across the whole app, so this
-// route never touches the transaction and never calls syncCheckComplianceDate.
+// The retainer sibling of compliance-review. Sending the review writes the
+// retainer's own submission row, then derives the deal's compliance status and
+// stamps the checks the same way the compliance review does, so a retainer
+// reads as a real deal on the payouts report and the transaction page.
+// pickSideSubmissions keeps that safe on a converted deal: once the prospect
+// carries a real compliance submission, the retainer stops contributing.
 async function loadRetainer(id: string, submissionId?: string | null) {
   const { data: txn } = await supabase
     .from('transactions')
@@ -153,6 +154,37 @@ export async function POST(
         updated_at: nowIso,
       })
       .eq('id', submission.id)
+
+    // Derive the deal from its sides, the same as compliance-review does. On a
+    // retainer-only prospect the retainer is the only side, so this carries the
+    // sign-off to the transaction and the checks.
+    const { data: allSideRows } = await supabase
+      .from('agent_form_submissions')
+      .select('id, status, data')
+      .eq('transaction_id', id)
+      .filter('data->>submission_mode', 'in', SIDE_MODES_FILTER)
+    const allSides = pickSideSubmissions(allSideRows || [])
+    let derivedTxnStatus: string = status
+    if (allSides.length > 0) {
+      const statuses = allSides.map((s: any) => (s.id === submission.id ? status : s.status))
+      derivedTxnStatus = statuses.includes('incomplete')
+        ? 'incomplete'
+        : statuses.some((s: string) => s === 'in_review' || s === 'submitted')
+          ? 'in_review'
+          : 'complete'
+    }
+
+    await supabase
+      .from('transactions')
+      .update({
+        compliance_status: derivedTxnStatus,
+        compliance_approved_at: derivedTxnStatus === 'complete' ? nowIso : null,
+        updated_at: nowIso,
+      })
+      .eq('id', id)
+
+    // The pay-by deadline follows the sign-off, whichever screen it came from.
+    await syncCheckComplianceDate(id)
 
     await supabase.from('compliance_reviews').insert({
       transaction_id: id,
