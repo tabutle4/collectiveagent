@@ -74,13 +74,14 @@ export async function POST(request: NextRequest) {
 
     // Dual-write the transaction as the worst status across its sides.
     //
-    // Retainers stop here on purpose. A retainer is a prospect with no
-    // documents and no checklist, and transactions.compliance_status is read by
-    // twenty files including the agent transaction list, the dashboard, the
-    // payouts report and the checks search. Letting a retainer write it would
-    // make every open retainer look like a compliance-tracked deal across the
-    // whole app. Leah's sign-off lives on the submission row, which is what the
-    // tracker reads, and goes no further.
+    // Retainers go through here too. On a retainer-only prospect the retainer
+    // IS the side, so its sign-off derives transactions.compliance_status and
+    // stamps the checks exactly as a compliance side would, which is what makes
+    // a retainer read correctly on the payouts report and the transaction page
+    // instead of sitting at not_submitted forever. pickSideSubmissions below is
+    // what keeps that safe: the moment the prospect is converted and carries a
+    // real compliance submission, the old retainer stops contributing, so a
+    // stale submitted retainer cannot pin a fully reviewed deal at in_review.
     if (sub.transaction_id) {
       const { data: allSideRows } = await supabaseAdmin
         .from('agent_form_submissions')
