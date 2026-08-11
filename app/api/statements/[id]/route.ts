@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
 import { AGENT_ROLE_OPTIONS } from '@/lib/transactions/constants'
+import { sideCategory } from '@/lib/transactions/sides'
 
 const formatRole = (role: string | null | undefined): string => {
   if (!role) return 'Agent'
@@ -168,16 +169,62 @@ export async function GET(
       (s, e) => s + parseFloat(e.amount_1099_reportable || 0), 0
     )
 
-    // Additional income folded into CRC's side. Shown as its own input to the
-    // compensation basis (base + additional = basis), matching how the deal is
-    // actually built.
+    // Additional income folded into the compensation basis. Shown as its own
+    // input to it (base + additional = basis), matching how the deal is built.
+    //
+    // Scoped to the sides this agent is actually on. The basis is now the sum of
+    // this agent's rows, so subtracting the whole deal's additional income would
+    // mix an agent-scoped figure with a deal-scoped one: on a two-agent deal the
+    // statement would print the other side's additional income as though it were
+    // this agent's, and where it exceeds their basis the section stops adding up
+    // altogether. `side` on this table is 'listing' / 'buying' while a
+    // commission row's side is 'seller' / 'buyer' / 'landlord' / 'tenant', so
+    // sideCategory maps between them rather than a fourth vocabulary being
+    // invented here.
     const { data: additionalIncomeStmt } = await supabase
       .from('transaction_additional_income')
-      .select('amount')
+      .select('amount, side')
       .eq('transaction_id', tia.transaction_id)
-    const additionalIncomeTotal = (additionalIncomeStmt || []).reduce(
-      (s, a) => s + parseFloat(a.amount || 0), 0
+    const agentSideCategories = new Set(
+      agentRows.map((r: any) => sideCategory(r.side)).filter(Boolean) as string[]
     )
+    const additionalIncomeTotal = (additionalIncomeStmt || [])
+      .filter((a: any) => {
+        // No side on any of the agent's commission rows means there is nothing
+        // to compare against. That happens on legacy rows, and on live ones:
+        // the side select on the agent card offers a blank option, so clearing
+        // it is two clicks, and team lead and momentum rows inherit whatever
+        // they were built from.
+        //
+        // Falling through to the filter would drop every additional-income row,
+        // the line would vanish, and base commission would silently equal the
+        // basis -- the section still reconciles, so nobody would catch it.
+        // Returning true unconditionally is no better: on a deal with a second
+        // producing agent it puts the other side's income on this agent's
+        // statement, reconciling perfectly while being wrong, which is the
+        // mixture this filter exists to prevent. When this agent is the only
+        // producer, the deal's additional income is theirs by definition and
+        // the deal-scoped figure is correct.
+        if (agentSideCategories.size === 0) return isSoleProducingAgent
+        // Run the income row's side through the same mapper as the commission
+        // row's, rather than trusting it to already be a category.
+        //
+        // sideCategory maps the four commission-row values and returns null for
+        // everything else -- INCLUDING 'listing' and 'buying', the two values it
+        // produces. It is not idempotent. Both writers on this table store those
+        // two today, so a bare sideCategory(a.side) would return null for every
+        // row and drop the entire additional-income line. The `||` below is what
+        // keeps today's values working and is load-bearing, not defensive
+        // padding: do not remove it. Its purpose is to also let a stray 'seller'
+        // or 'tenant' map correctly rather than being silently ignored.
+        const cat = sideCategory(a.side) || (a.side ? String(a.side) : null)
+        // A row with no side of its own cannot be attributed to one side, so it
+        // counts only when the agent holds more than one side and it must
+        // therefore be at least partly theirs.
+        if (!cat) return agentSideCategories.size >= 2
+        return agentSideCategories.has(cat)
+      })
+      .reduce((s: number, a: any) => s + parseFloat(a.amount || 0), 0)
 
     // Per-row 1099 helper. Prefer the stored reportable amount; fall back to
     // the canonical formula only when it is missing.
@@ -384,25 +431,55 @@ export async function GET(
     const commissionPct = commissionBasisForPct > 0
       ? ((grossCommission / commissionBasisForPct) * 100).toFixed(2)
       : '0'
+    // What the agent's split was actually calculated against.
+    //
+    // This used to print CRC's side -- office gross less anything paid out to
+    // external brokerages. That is the brokerage's figure, not the agent's, and
+    // the two are only the same when the agent is the sole producer on a
+    // single-sided deal. On an intermediary deal CRC's side covers both sides;
+    // on a deal with more than one producing agent it covers the others too. In
+    // both cases the printed basis was larger than anything this agent's
+    // percentage was taken from, so the split looked smaller than the rate they
+    // are actually on.
+    //
+    // Each commission row already stores the basis it was split against, so the
+    // sum of this agent's rows is the honest figure for this statement. Falls
+    // back to CRC's side when the rows carry no positive basis at all. That is
+    // usually flat comp, where isOverrideComp suppresses this whole section --
+    // but not always: isOverrideComp also requires gross and split_percentage to
+    // be zero, so a row with a percentage and no basis still prints here, and
+    // CRC's side is the only figure left to show.
+    const agentBasisTotal = Math.round(
+      agentRows.reduce((sum: number, r: any) => sum + (parseFloat(r.agent_basis) || 0), 0) * 100
+    ) / 100
+    const compensationBasis = agentBasisTotal > 0 ? agentBasisTotal : crcSide
+
     // Brokerage's cut for the commission-calculation section. When this agent
-    // is the only producing agent on the deal, derive it as CRC's side minus
-    // the agent's full payout so the section reconciles (Split + Additional +
-    // Brokerage = CRC side). With multiple producing agents the side also covers
-    // the others, so fall back to this row's stored brokerage_split.
+    // is the only producing agent on the deal, derive it as the basis minus the
+    // agent's full payout so the section reconciles (Split + Additional +
+    // Brokerage = basis).
+    //
+    // With multiple producing agents, fall back to the stored brokerage_split --
+    // summed across every one of this agent's rows, not read off the anchor row
+    // alone. The basis is now the sum of the agent's rows, so a second row's
+    // brokerage cut belongs in the total the same way its basis does; reading
+    // only the anchor left the section short by exactly that row's share.
     const brokerageSplit = isSoleProducingAgent
-      ? Math.max(0, Math.round((crcSide - agentDisburseTotal) * 100) / 100)
-      : parseFloat(baseTia.brokerage_split || 0)
+      ? Math.max(0, Math.round((compensationBasis - agentDisburseTotal) * 100) / 100)
+      : sumAgentRows('brokerage_split')
     // Brokermint-style basis: base commission plus additional income equals the
     // compensation basis that the split is calculated on. Base is the side less
     // the additional that was folded into it.
-    const baseCommission = Math.max(0, Math.round((crcSide - additionalIncomeTotal) * 100) / 100)
+    const baseCommission = Math.max(0, Math.round((compensationBasis - additionalIncomeTotal) * 100) / 100)
     // Effective split percentages derived from the actual dollars, so the label
     // is always truthful even if an additional was entered at an off-plan rate.
-    const agentSplitPct = crcSide > 0
-      ? (agentDisburseTotal / crcSide * 100).toFixed(2).replace(/\.00$/, '')
+    // Both percentages are of compensationBasis, the same figure printed on the
+    // basis line, so the rates shown are rates of what the reader can see.
+    const agentSplitPct = compensationBasis > 0
+      ? (agentDisburseTotal / compensationBasis * 100).toFixed(2).replace(/\.00$/, '')
       : (splitPct.toString())
-    const brokeragePctEff = crcSide > 0
-      ? (brokerageSplit / crcSide * 100).toFixed(2).replace(/\.00$/, '')
+    const brokeragePctEff = compensationBasis > 0
+      ? (brokerageSplit / compensationBasis * 100).toFixed(2).replace(/\.00$/, '')
       : brokerageSplitPct.toString()
     // Net cash to the agent = taxable income minus anything withheld. The stored
     // agent_net does not reflect withholdings recovered on this check (e.g. a
@@ -441,7 +518,7 @@ export async function GET(
       base_commission: fmt$(baseCommission),
       has_additional_income: additionalIncomeTotal > 0,
       additional_income: fmt$(additionalIncomeTotal),
-      compensation_basis: fmt$(crcSide),
+      compensation_basis: fmt$(compensationBasis),
       agent_split_amount: fmt$(agentDisburseTotal),
       agent_split_pct: agentSplitPct,
       is_override_comp: isOverrideComp,
@@ -559,7 +636,7 @@ function generateStatementHTML(data: Record<string, any>): string {
       </div>` : `
       ${data.has_additional_income ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Base commission <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span>Base commission <span style="color: #999; font-size: 9px; margin-left: 6px;">before additional income</span></span>
         <span style="font-weight: 500;">${data.base_commission}</span>
       </div>
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
@@ -568,7 +645,7 @@ function generateStatementHTML(data: Record<string, any>): string {
       </div>
       ` : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
-        <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">CRC's side</span></span>
+        <span>Compensation basis <span style="color: #999; font-size: 9px; margin-left: 6px;">what your split is taken from</span></span>
         <span style="font-weight: 500;">${data.compensation_basis}</span>
       </div>
       ${data.has_split_lines ? `
