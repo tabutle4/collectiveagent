@@ -18,7 +18,7 @@
 // Completion date: only meaningful when derived status is complete. It is the
 // latest reviewed_at across the sides, so pay-by math keys off the date the
 // LAST side finished review.
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 
 // Modes that can act as a compliance side.
 export const SIDE_MODES_FILTER = '("compliance","retainer")'
@@ -36,6 +36,59 @@ export const SIDE_MODES_FILTER = '("compliance","retainer")'
  * Callers holding submissions for several transactions must group by
  * transaction_id first and call this per transaction.
  */
+/**
+ * How many sides of the deal the submissions on hand actually cover, and how
+ * many the deal expects.
+ *
+ * Counting submissions is wrong: two agents co-listing the buyer side file two
+ * submissions but cover one side. Counting distinct `representing` values is
+ * the real measure. Older submissions can carry no `representing` at all, and
+ * in that case coverage cannot be determined from them, so fall back to the
+ * submission count rather than collapsing every unknown into a single side and
+ * reporting a complete deal as incomplete.
+ */
+export function sidesCovered(subs: any[]): number {
+  const vals = subs.map(s => String(s.data?.representing || '').toLowerCase().trim())
+  if (vals.some(v => !v)) return subs.length
+  return new Set(vals).size
+}
+
+/**
+ * A deal marked intermediary has CRC on both sides and needs both reviewed
+ * before it is compliant. Every other deal expects one side.
+ */
+export function expectedSides(isIntermediary: boolean | null | undefined): number {
+  return isIntermediary ? 2 : 1
+}
+
+/**
+ * The worst status across the sides, with a missing side counted as outstanding.
+ *
+ * The ladder alone can only see sides that filed. On an intermediary deal where
+ * the buyer side was approved and the seller side never submitted, the only
+ * status present is 'complete' and the deal reads complete -- a side that does
+ * not exist cannot be counted as outstanding. So coverage is checked first: if
+ * fewer sides are covered than the deal expects, the deal is incomplete no
+ * matter how good the sides on hand look.
+ */
+export function deriveSideStatus(
+  sides: any[],
+  isIntermediary: boolean | null | undefined
+): string | null {
+  if (sides.length === 0) return null
+  if (sidesCovered(sides) < expectedSides(isIntermediary)) return 'incomplete'
+  const statuses = sides.map((s: any) => s.status)
+  if (statuses.includes('incomplete')) return 'incomplete'
+  if (statuses.some((s: string) => s === 'in_review' || s === 'submitted')) return 'in_review'
+  // Every side must actually say 'complete'. A bare `return 'complete'` here
+  // would make an unrecognised status -- 'draft', null, anything a future
+  // writer adds -- derive complete, and three routes share this function. It is
+  // unreachable today because set-status enforces ALLOWED_STATUSES with a 400,
+  // but the failure direction matters more than the current reachability: an
+  // unknown status should hold a deal short of compliant, not wave it through.
+  return statuses.every((s: string) => s === 'complete') ? 'complete' : null
+}
+
 export function pickSideSubmissions<T extends { data?: any }>(subs: T[]): T[] {
   const compliance = subs.filter(s => (s.data?.submission_mode || '') === 'compliance')
   if (compliance.length > 0) return compliance
@@ -94,10 +147,23 @@ export async function deriveComplianceForTransactions(
     subsByTxn[s.transaction_id].push(s)
   }
 
+  // Whether each deal has CRC on both sides. Read here because the ladder below
+  // cannot see a side that never filed, and is_intermediary is the only thing
+  // that says a second side was expected.
+  const txnRows = await fetchAllRows<{ id: string; is_intermediary: boolean | null }>(
+    'transactions',
+    'id, is_intermediary',
+    { filters: [{ type: 'in', column: 'id', value: ids }] }
+  )
+  const intermediaryByTxn: Record<string, boolean> = {}
+  for (const t of txnRows || []) intermediaryByTxn[t.id] = !!t.is_intermediary
+
+  const sidesByTxn: Record<string, any[]> = {}
   const statusesByTxn: Record<string, string[]> = {}
   const reviewedByTxn: Record<string, string[]> = {}
   for (const txnId of Object.keys(subsByTxn)) {
-    for (const s of pickSideSubmissions(subsByTxn[txnId])) {
+    sidesByTxn[txnId] = pickSideSubmissions(subsByTxn[txnId])
+    for (const s of sidesByTxn[txnId]) {
       if (!statusesByTxn[txnId]) statusesByTxn[txnId] = []
       statusesByTxn[txnId].push(s.status)
       if (s.reviewed_at) {
@@ -120,11 +186,7 @@ export async function deriveComplianceForTransactions(
       }
       continue
     }
-    const status = statuses.includes('incomplete')
-      ? 'incomplete'
-      : statuses.some(s => s === 'in_review' || s === 'submitted')
-        ? 'in_review'
-        : 'complete'
+    const status = deriveSideStatus(sidesByTxn[id] || [], intermediaryByTxn[id])
     let complete_date: string | null = null
     if (status === 'complete') {
       const dates = (reviewedByTxn[id] || []).sort()

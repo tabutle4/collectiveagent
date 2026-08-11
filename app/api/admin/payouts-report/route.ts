@@ -3,7 +3,7 @@ import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getCentralDateString } from '@/lib/timezone'
-import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
+import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
           .in('transaction_id', txnIds),
         supabaseAdmin
           .from('transactions')
-          .select('id, property_address, compliance_status, transaction_type, office_net, office_gross')
+          .select('id, property_address, compliance_status, transaction_type, office_net, office_gross, is_intermediary')
           .in('id', txnIds),
       ])
       internalAgents = agentsRes.data || []
@@ -111,6 +111,7 @@ export async function GET(request: NextRequest) {
     // the whole deal is. Load side statuses for the deals in view.
     const sideStatusByTxnAgent: Record<string, string> = {}
     const sideStatusesByTxn: Record<string, string[]> = {}
+    const sidesByTxn: Record<string, any[]> = {}
     if (txnIds.length) {
       const { data: sideSubs } = await supabaseAdmin
         .from('agent_form_submissions')
@@ -126,7 +127,9 @@ export async function GET(request: NextRequest) {
         subsByTxn[s.transaction_id].push(s)
       }
       for (const txnId of Object.keys(subsByTxn)) {
-        for (const s of pickSideSubmissions(subsByTxn[txnId])) {
+        const picked = pickSideSubmissions(subsByTxn[txnId])
+        sidesByTxn[txnId] = picked
+        for (const s of picked) {
           sideStatusByTxnAgent[`${txnId}:${s.agent_id}`] = s.status
           if (!sideStatusesByTxn[txnId]) sideStatusesByTxn[txnId] = []
           sideStatusesByTxn[txnId].push(s.status)
@@ -319,14 +322,13 @@ export async function GET(request: NextRequest) {
       }))
 
       const address = check.property_address || txn?.property_address || 'Unknown'
-      const sideStatuses = txn ? sideStatusesByTxn[txn.id] || [] : []
-      const sidesDerived = sideStatuses.length === 0
-        ? null
-        : sideStatuses.includes('incomplete')
-          ? 'incomplete'
-          : sideStatuses.some(s => s === 'in_review' || s === 'submitted')
-            ? 'in_review'
-            : 'complete'
+      // deriveSideStatus checks side coverage before the status ladder: an
+      // intermediary deal with only one side filed is incomplete even when that
+      // side is approved, because the missing side files no row and so cannot
+      // show up as outstanding on its own.
+      const sidesDerived = txn
+        ? deriveSideStatus(sidesByTxn[txn.id] || [], txn.is_intermediary)
+        : null
       // Single source: sidesDerived comes from compliance submissions and
       // txn.compliance_status is dual-written by the compliance page. The
       // stored per-check compliance_complete_date is consulted only as a

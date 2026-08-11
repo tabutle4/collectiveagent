@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
-import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
+import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,14 +91,20 @@ export async function POST(request: NextRequest) {
       // On a retainer-only deal the retainer is the side; once a real
       // compliance submission exists it takes over and the retainer stops.
       const allSides = pickSideSubmissions(allSideRows || [])
-      const statuses = allSides.map((s: any) => (s.id === submission_id ? status : s.status))
-      const derived = statuses.includes('incomplete')
-        ? 'incomplete'
-        : statuses.some((s: string) => s === 'in_review' || s === 'submitted')
-          ? 'in_review'
-          : statuses.length > 0 && statuses.every((s: string) => s === 'complete')
-            ? 'complete'
-            : null
+      // Apply the status being set now, so the derivation reflects this save
+      // rather than the row's pre-save value.
+      const sidesForDerive = allSides.map((s: any) =>
+        s.id === submission_id ? { ...s, status } : s
+      )
+      // is_intermediary says whether a second side is expected. Without it, an
+      // intermediary deal whose only filed side is approved derives complete,
+      // because the side that never submitted contributes no row to check.
+      const { data: txnRow } = await supabaseAdmin
+        .from('transactions')
+        .select('is_intermediary')
+        .eq('id', sub.transaction_id)
+        .maybeSingle()
+      const derived = deriveSideStatus(sidesForDerive, txnRow?.is_intermediary)
       if (derived) {
         await supabaseAdmin
           .from('transactions')
