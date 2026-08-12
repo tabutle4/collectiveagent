@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, requirePermission } from '@/lib/api-auth'
-import { getGraphToken, getDelegatedTokenForUser } from '@/lib/microsoft-graph'
+import { getGraphToken } from '@/lib/microsoft-graph'
 
 const GROUP_ID = process.env.MICROSOFT_GROUP_ID!
 
@@ -133,33 +133,38 @@ export async function DELETE(request: NextRequest) {
 
     const eventUrl = `https://graph.microsoft.com/v1.0/groups/${GROUP_ID}/calendar/events/${encodeURIComponent(eventId)}`
 
-    // Use delegated token — app-only token cannot delete group calendar events
-    const token = await getDelegatedTokenForUser(auth.user.id)
+    // App-only token, and that is the whole mechanism. Microsoft does not send
+    // meeting cancellations for deletes made with application permissions;
+    // a delegated token deletes as the organizer and always mails attendees.
+    //
+    // This used to use a delegated token on the premise that an app-only token
+    // cannot delete group calendar events. That is not true -- the coaching
+    // schedule route creates and deletes events on this same group calendar
+    // with getGraphToken() and has been running in production.
+    //
+    // It also used to PATCH attendees to [] first, on the theory that an event
+    // with no attendees deletes quietly. Removing attendees is itself a change
+    // Outlook notifies on: Microsoft reads every attendee absent from the array
+    // as removed and mails each one a cancellation. On a recurring occurrence
+    // that also forks an exception. So the step meant to keep this quiet was
+    // what sent the mail, before the delete even ran.
+    //
+    // Graph has no sendCancellations query parameter -- the delete-event
+    // reference documents none, and unknown parameters are ignored. Do not add
+    // one here believing it does anything.
+    const token = await getGraphToken()
 
-    // Step 1: Strip attendees so no cancellation emails go out.
-    // If this fails, abort rather than deleting with attendees still attached
-    // since that would send the exact cancellation email this exists to prevent.
-    const patchRes = await fetch(eventUrl, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ attendees: [] }),
-    })
-    if (!patchRes.ok) {
-      const err = await patchRes.json().catch(() => ({}))
-      console.error('calendar events DELETE - attendee strip failed:', err)
-      return NextResponse.json(
-        { error: 'Could not remove attendees before deleting. Event was not deleted to avoid sending a cancellation email. Try again.' },
-        { status: 500 }
-      )
-    }
-
-    // Step 2: Delete the now-attendee-free event
     const res = await fetch(eventUrl, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok && res.status !== 204) {
-      return NextResponse.json({ error: 'Failed to delete event' }, { status: 500 })
+      const err = await res.json().catch(() => ({}))
+      console.error('calendar events DELETE - Graph error:', err)
+      return NextResponse.json(
+        { error: err?.error?.message || 'Failed to delete event' },
+        { status: 500 }
+      )
     }
     return NextResponse.json({ success: true })
   } catch (err: any) {

@@ -1714,9 +1714,18 @@ export default function ProfilePage({
                       value={licenseForm.association}
                       onChange={e => handleLicenseChange('association', e.target.value)}
                     >
+                      {/* 'MetroTex' and the missing 'Both' were the problem
+                          here: the join form writes 'MetroTex | NTREIS' or
+                          'Both', neither of which matched, so an agent opening
+                          their own profile saw a blank dropdown and could
+                          overwrite a correct value by picking the nearest
+                          option. CCAR and TAR are left in place -- no other
+                          list offers them, so removing them is a data question,
+                          not a bug fix. */}
                       <option value="">Select association...</option>
                       <option value="HAR">HAR</option>
-                      <option value="MetroTex">MetroTex</option>
+                      <option value="MetroTex | NTREIS">MetroTex | NTREIS</option>
+                      <option value="Both">Both</option>
                       <option value="CCAR">CCAR</option>
                       <option value="TAR">TAR</option>
                     </select>

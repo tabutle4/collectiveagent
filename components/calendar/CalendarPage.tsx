@@ -281,7 +281,13 @@ export default function CalendarPage({ isAdmin = false }: CalendarPageProps) {
     setDeleting(true)
     try {
       const res = await fetch(`/api/calendar/events?eventId=${eventId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete event')
+      if (!res.ok) {
+        // Surface what the route actually said. It returns specific messages
+        // and this used to replace all of them with one generic string, so a
+        // permission or Graph failure looked identical to any other failure.
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Failed to delete event')
+      }
       setSelectedEvent(null)
       await loadEvents()
     } catch (err: any) {

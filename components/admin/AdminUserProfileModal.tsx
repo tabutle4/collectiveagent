@@ -39,10 +39,16 @@ const officeOptions = [
   { value: 'DFW', label: 'Dallas/DFW' },
 ]
 
+// Values must match the strings the join form writes, not just read well.
+// This list said 'Metrotex/NTREIS' while app/onboard/[token]/page.tsx writes
+// 'HAR', 'MetroTex | NTREIS' or 'Both', so a Dallas agent who joined through
+// the form had a value no option here matched and the dropdown rendered blank
+// -- it looked like onboarding never set it, and picking the nearest option
+// would have overwritten a correct value with a wrong one.
 const associationOptions = [
   { value: '', label: 'Select association...' },
   { value: 'HAR', label: 'HAR' },
-  { value: 'Metrotex/NTREIS', label: 'Metrotex/NTREIS' },
+  { value: 'MetroTex | NTREIS', label: 'MetroTex | NTREIS' },
   { value: 'Both', label: 'Both' },
 ]
 
@@ -554,7 +560,10 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           const updateRes = await fetch('/api/users/profile', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: data.user.id, ...updatePayload }),
+            // The route reads { id, updates }. Spreading the payload flat left
+            // updates undefined, so every field on this call was silently
+            // dropped -- association and commission plan among them.
+            body: JSON.stringify({ id: data.user.id, updates: updatePayload }),
           })
 
           if (!updateRes.ok) {
@@ -630,7 +639,9 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
         const updateRes = await fetch('/api/users/profile', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: freshUser?.id || user.id, ...payload }),
+          // The route reads { id, updates }. Spreading the payload flat left
+          // updates undefined, so Save wrote nothing and still reported success.
+          body: JSON.stringify({ id: freshUser?.id || user.id, updates: payload }),
         })
 
         if (!updateRes.ok) {
