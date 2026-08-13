@@ -13,6 +13,18 @@ function normalizeCommissionPlan(plan: string): string {
   // Post-Cap must be tested before the generic cap catch-all below, or a
   // post_cap agent displays (and can be silently re-saved) as Cap Plan.
   if (p === 'post_cap' || p.includes('post cap') || p.includes('post-cap') || p.includes('post_cap')) return 'post_cap'
+  // The canonical commission_plans codes, matched exactly and before the
+  // substring tests below. These are what actually gets stored -- the join
+  // form and the admin modal both write them -- but none of the tests below
+  // match '70_30_new': it has no 'new_agent', no 'new agent', and its split
+  // is written '70_30', not '70/30'. So it fell through, returned unmapped,
+  // matched no <option>, and the dropdown rendered empty. An agent on the New
+  // Agent Plan looked like their plan had never saved. '85_15_no_cap' and
+  // '70_30_cap' happen to survive on the 'no_cap' and 'cap' substrings; they
+  // are listed here so the mapping does not depend on that coincidence.
+  if (p === '70_30_new') return 'new_agent'
+  if (p === '85_15_no_cap') return 'no_cap'
+  if (p === '70_30_cap') return 'cap'
   if (p.includes('new_agent') || p.includes('new agent') || p.includes('70/30') || p === 'new_agent') return 'new_agent'
   if (p.includes('no_cap') || p.includes('no cap') || p.includes('85/15') || p === 'no_cap') return 'no_cap'
   if (p.includes('cap') && !p.includes('no')) return 'cap'
@@ -323,7 +335,19 @@ export default function ProfileScreen({
           // broker plan in commission_plans).
           if (raw === 'Custom Lease 0/100') return 'broker_lease'
           if (raw.toLowerCase().startsWith('custom lease')) return 'custom'
-          return raw || 'lease'
+          // Same failure as commission_plan above: the options are 'lease',
+          // 'broker_lease' and 'custom', but the canonical code '85_15_lease'
+          // and the 'Lease Plan' string AddAgentModal writes match none of
+          // them, so both rendered as an empty dropdown.
+          // Exact match first: 'broker_lease' contains the substring 'lease',
+          // so the catch-all below would flatten a legacy row holding that
+          // literal into plain Lease Plan -- the same bug being fixed here.
+          // The app can't write it (the save side converts broker_lease to
+          // 'Custom Lease 0/100' and this file is the column's only writer),
+          // but a hand-entered row would hit it.
+          if (raw === 'broker_lease') return 'broker_lease'
+          if (!raw || raw === '85_15_lease' || raw.toLowerCase().includes('lease')) return 'lease'
+          return raw
         })(),
         lease_custom_split: (() => {
           const raw = freshUserData.lease_commission_plan || ''
@@ -331,7 +355,12 @@ export default function ProfileScreen({
           const match = raw.match(/Custom Lease (\d+)\//)
           return match ? match[1] : ''
         })(),
-        role: freshUserData.role || '',
+        // Lowercased because /api/users/create writes 'Agent' and 'Admin'
+        // capitalised while every comparison in the app tests lowercase
+        // (role === 'agent', role === 'admin', and so on). The capitalised
+        // form matched no <option>, so anyone created through the admin
+        // screen showed a blank Role dropdown.
+        role: (freshUserData.role || '').toLowerCase(),
         full_nav_access: freshUserData.full_nav_access ?? false,
         is_licensed_agent: freshUserData.is_licensed_agent ?? true,
         special_commission_notes: freshUserData.special_commission_notes || '',
@@ -1316,6 +1345,7 @@ export default function ProfileScreen({
                       onChange={e => handleRealEstateChange('role', e.target.value)}
                     >
                       <option value="">Select role...</option>
+                      <option value="admin">Admin</option>
                       <option value="agent">Agent</option>
                       <option value="referral">Referral</option>
                       <option value="tc">TC</option>
