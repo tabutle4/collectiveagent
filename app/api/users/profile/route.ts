@@ -20,46 +20,70 @@ export async function GET(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     // Fetch team membership from new tables
-    const { data: teamMembership } = await supabaseAdmin
+    // limit(1) rather than maybeSingle(): maybeSingle tolerates zero rows but
+    // errors on two, and an agent holding live agreements with two teams would
+    // come back as data null with the error discarded -- indistinguishable
+    // from having no team at all. Newest agreement wins.
+    const { data: membershipRows, error: membershipErr } = await supabaseAdmin
       .from('team_member_agreements')
       .select('team_id')
       .eq('agent_id', id)
       .is('end_date', null)
-      .maybeSingle()
+      .order('effective_date', { ascending: false })
+      .limit(1)
+    if (membershipErr) console.error('team_member_agreements lookup failed:', membershipErr)
+    const teamMembership = membershipRows?.[0] || null
 
     let teamName = null
     let isTeamLead = false
     let teamMembers: any[] = []
 
-    if (teamMembership) {
+    // Team leads are looked up independently of membership. A lead does not
+    // necessarily hold a row in team_member_agreements -- she leads the team,
+    // she is not a member of it -- and this whole block used to be gated on
+    // that row existing, with the team_leads check nested inside it. So a
+    // lead came back with teamName null and isTeamLead false, which the
+    // compliance form reads as "not on a team": the Team option for the Just
+    // Sold flyer was disabled and she could not pick her own team.
+    //
+    // Same limit(1) reasoning as the membership query above, and it matters
+    // more here: dropping the old .eq('team_id', ...) filter is exactly what
+    // makes this fix work, and it is also what makes two rows reachable.
+    // Nothing prevents one person leading two teams -- app/api/teams/route.ts
+    // inserts lead rows per team with no cross-team check -- so on maybeSingle
+    // a two-team lead would land back in the state this change exists to fix,
+    // silently. Newest leadership wins.
+    const { data: leadRows, error: leadErr } = await supabaseAdmin
+      .from('team_leads')
+      .select('id, team_id')
+      .eq('agent_id', id)
+      .is('end_date', null)
+      .order('start_date', { ascending: false })
+      .limit(1)
+    if (leadErr) console.error('team_leads lookup failed:', leadErr)
+    const leadRecord = leadRows?.[0] || null
+
+    isTeamLead = !!leadRecord
+    const teamId = teamMembership?.team_id || leadRecord?.team_id || null
+
+    if (teamId) {
       // Get team name
             const { data: team } = await supabaseAdmin
         .from('teams')
         .select('team_name')
-        .eq('id', teamMembership.team_id)
+        .eq('id', teamId)
         .single()
-      
+
       if (team) {
         teamName = team.team_name
       }
-
-      // Check if user is a team lead
-      const { data: leadRecord } = await supabaseAdmin
-        .from('team_leads')
-        .select('id')
-        .eq('agent_id', id)
-        .eq('team_id', teamMembership.team_id)
-        .is('end_date', null)
-        .maybeSingle()
-      
-      isTeamLead = !!leadRecord
 
       // If user is a team lead, fetch all team members
       if (isTeamLead) {
         const { data: members } = await supabaseAdmin
           .from('team_member_agreements')
           .select('agent_id')
-          .eq('team_id', teamMembership.team_id)
+          .eq('team_id', teamId)
           .is('end_date', null)
 
         if (members && members.length > 0) {
