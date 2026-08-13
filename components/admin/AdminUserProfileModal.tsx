@@ -572,7 +572,26 @@ export default function AdminUserProfileModal({ user, onClose, onSaved }: Props)
           }
         }
 
-        onSaved(data.user)
+        // Re-read from the database, the way the edit path below already does.
+        // /api/users/create only inserts email, names, roles and is_active, so
+        // the user object it returns has none of the fields the PATCH above
+        // just wrote. Handing that object back made a new agent's commission
+        // plan and association render blank straight after saving, even though
+        // both were stored correctly.
+        //
+        // .catch on the parse, not just the ok-check: a route-level failure
+        // returns JSON and falls through the ternary, but a platform 502 or 504
+        // returns HTML and .json() throws before the ternary is reached. That
+        // throw would hit the outer catch, skip onSaved and onClose, and show
+        // "Failed to create user" -- after the agent had already been created
+        // and its fields written. Pressing Save again then fails on duplicate
+        // email, so a complete agent would look like a total failure.
+        const createdRes = await fetch(`/api/users/profile?id=${data.user.id}`)
+        const createdData = await createdRes.json().catch(() => ({} as any))
+        if (!createdRes.ok || !createdData.user) {
+          console.error('Error fetching created user:', createdData?.error)
+        }
+        onSaved(createdRes.ok && createdData.user ? createdData.user : data.user)
 
         onClose()
       } else {
