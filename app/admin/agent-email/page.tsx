@@ -1003,6 +1003,17 @@ function OversightScreen({
   const nudge = useCallback(
     async (thread: ThreadListItem) => {
       if (!thread.assignee) return
+      // The automated 24h nudge was removed, so this button is now the only
+      // thing that chases an assignee. Ask the sender to read the thread
+      // first: the common case is that it was already dealt with over the
+      // phone and the thread just needs closing, in which case nudging is
+      // both wrong and irritating.
+      if (
+        !confirm(
+          `Read the latest email on this thread before nudging ${thread.assignee.name}. If it no longer needs attention, close it with Handled instead. Send the nudge?`
+        )
+      )
+        return
       setBusyId(thread.id)
       try {
         const firstName = thread.assignee.name.split(/\s+/)[0]
@@ -1145,7 +1156,7 @@ function OversightScreen({
               {loading ? 'Loading...' : `${threads.length} in flight across ${groups.length} ${groups.length === 1 ? 'person' : 'people'}`}
             </h1>
             <p className="text-[11.5px] text-luxury-gray-3 italic mt-0.5">
-              Yellow dot: quiet for a day. Red dot: quiet for two. Nudge sends them a note and an email; take over moves it to your desk.
+              Yellow dot: quiet for a day. Red dot: quiet for two. Nothing chases them automatically, so read the thread before you nudge; take over moves it to your desk.
             </p>
           </div>
           <button

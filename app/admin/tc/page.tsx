@@ -1,6 +1,7 @@
 'use client'
 
 import { Plus } from 'lucide-react'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc  Dashboard (landing page for Transaction Coordination)
@@ -37,26 +38,6 @@ export default function TcDashboardPage() {
         title="Dashboard coming soon"
         description="This dashboard will show Leah's daily TC workspace: 4 counter tiles (Active, Closing this week, Needs approval, Shift review), a 'Needs attention today' queue, this week's schedule, and a filterable list of all TC deals."
       />
-    </div>
-  )
-}
-
-export function PhasePlaceholder({
-  phase,
-  title,
-  description,
-}: {
-  phase: string
-  title: string
-  description: string
-}) {
-  return (
-    <div className="container-card text-center max-w-2xl mx-auto">
-      <div className="inline-block px-3 py-1 rounded-full bg-luxury-accent/10 text-luxury-accent text-xs font-semibold mb-3">
-        {phase}
-      </div>
-      <h2 className="text-sm font-semibold text-luxury-gray-1 mb-2">{title}</h2>
-      <p className="text-xs text-luxury-gray-3 max-w-md mx-auto leading-relaxed">{description}</p>
     </div>
   )
 }

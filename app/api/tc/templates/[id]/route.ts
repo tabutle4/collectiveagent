@@ -14,10 +14,10 @@ import type { TcAttachmentRef } from '@/types/tc-module'
  * still be traced back to the template that generated it.
  */
 
-type Params = { params: Promise<{ id: string }> | { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 async function resolveId(params: Params['params']): Promise<string | null> {
-  const resolved = params instanceof Promise ? await params : params
+  const resolved = await params
   const id = resolved?.id
   if (!id || typeof id !== 'string') return null
   return id

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 import type { PreferredVendor } from '@/types/tc-module'
 
 /**

@@ -72,6 +72,3 @@ export async function DELETE(
     return NextResponse.json({ error: err?.message || 'Failed to remove tag' }, { status: 500 })
   }
 }
-
-// Also export the default tag list for the UI to display.
-export const DEFAULT_TAG_LIST = DEFAULT_TAGS

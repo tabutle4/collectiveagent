@@ -79,12 +79,11 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
 export default function TeamDetailPage({
   params,
 }: {
-  params: Promise<{ teamId: string }> | { teamId: string }
+  params: Promise<{ teamId: string }>
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const resolvedParams = typeof params === 'object' && 'then' in params ? use(params) : params
-  const teamId = resolvedParams.teamId
+  const { teamId } = use(params)
 
   // Check if we should highlight a specific member
   const highlightMemberId = searchParams.get('member')

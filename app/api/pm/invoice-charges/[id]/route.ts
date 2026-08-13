@@ -44,13 +44,13 @@ async function syncInvoiceTotal(supabase: any, invoiceId: string) {
 // Removes a line-item charge and re-syncs the parent invoice total.
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_invoices')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     const { data: charge } = await supabase

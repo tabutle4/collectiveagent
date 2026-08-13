@@ -71,12 +71,10 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
 export default function AgreementDetailPage({
   params,
 }: {
-  params: Promise<{ teamId: string; agreementId: string }> | { teamId: string; agreementId: string }
+  params: Promise<{ teamId: string; agreementId: string }>
 }) {
   const router = useRouter()
-  const resolvedParams =
-    typeof params === 'object' && 'then' in params ? use(params) : params
-  const { teamId, agreementId } = resolvedParams
+  const { teamId, agreementId } = use(params)
 
   const [user, setUser] = useState<any>(null)
   const [permissions, setPermissions] = useState<string[]>([])

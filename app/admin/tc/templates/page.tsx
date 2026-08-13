@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 import type { TcEmailTemplate } from '@/types/tc-module'
 
 /**

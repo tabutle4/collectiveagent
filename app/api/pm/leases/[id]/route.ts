@@ -5,13 +5,13 @@ import { requirePermission } from '@/lib/api-auth'
 // GET - Get single lease with related data
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     const { data: lease, error } = await supabase
@@ -45,13 +45,13 @@ export async function GET(
 // PATCH - Update lease
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_leases')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
     const updates = await request.json()
 
@@ -88,13 +88,13 @@ export async function PATCH(
 // DELETE - Delete lease (only if no paid invoices)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_leases')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     // Check for paid invoices

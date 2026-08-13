@@ -18,14 +18,14 @@ const normalizeUuidInput = (value: string | null | undefined): string | null => 
 // GET - Get single email template (any authenticated user can view)
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuth(request)
   if (auth.error) return auth.error
 
   try {
     // Handle both async and sync params (Next.js 15+)
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
@@ -54,14 +54,14 @@ export async function GET(
 // PUT - Update email template
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_email_templates')
   if (auth.error) return auth.error
 
   try {
     // Handle both async and sync params (Next.js 15+)
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {
@@ -174,14 +174,14 @@ export async function PUT(
 // DELETE - Delete email template (cannot delete default templates)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_email_templates')
   if (auth.error) return auth.error
 
   try {
     // Handle both async and sync params (Next.js 15+)
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {

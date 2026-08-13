@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc/[id]  TC deal detail page

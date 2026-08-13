@@ -1124,7 +1124,7 @@ export function AssignEscalateModal({
       <p className="text-[12.5px] text-luxury-gray-3 mb-4">
         {isEscalate
           ? 'Status changes to "Waiting on [person]" and they get an email right away.'
-          : 'Not urgent, just a better fit for them. Status carries over. They see it in-app; a nudge email goes out only if it sits untouched for a day.'}
+          : 'Not urgent, just a better fit for them. Status carries over. They see it in-app, and it returns to the shared New bucket if it sits untouched for two days.'}
       </p>
       <div className="mb-3">
         <label className="block text-[10.5px] uppercase text-luxury-gray-3 font-medium mb-1">

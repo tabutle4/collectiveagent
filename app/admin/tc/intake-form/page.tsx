@@ -1,6 +1,6 @@
 'use client'
 
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc/intake-form  Intake form schema editor

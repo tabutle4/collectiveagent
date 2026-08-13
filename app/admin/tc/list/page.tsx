@@ -1,6 +1,6 @@
 'use client'
 
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc/list  Deals list (filterable table of TC transactions)

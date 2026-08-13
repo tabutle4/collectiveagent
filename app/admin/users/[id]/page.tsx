@@ -1,9 +1,9 @@
 'use client'
 
 import { use } from 'react'
-import ProfilePage from '@/app/profile/page'
+import ProfileScreen from '@/components/profile/ProfileScreen'
 
 export default function AdminUserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  return <ProfilePage userId={id} isAdmin={true} />
+  return <ProfileScreen userId={id} isAdmin={true} />
 }

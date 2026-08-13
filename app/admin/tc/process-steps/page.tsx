@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Plus, X, Mail, ExternalLink, Search } from 'lucide-react'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 import type { TcProcessStep, TcEmailTemplate, PreferredVendor } from '@/types/tc-module'
 
 /**

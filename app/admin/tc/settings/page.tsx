@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Save, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 import type { TcSettings } from '@/types/tc-module'
 import FileUploadDropzone from '@/components/tc/FileUploadDropzone'
 import RichTextEditor from '@/components/tc/RichTextEditor'

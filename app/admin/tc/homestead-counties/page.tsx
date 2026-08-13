@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, X } from 'lucide-react'
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc/homestead-counties  Manage the homestead_links table

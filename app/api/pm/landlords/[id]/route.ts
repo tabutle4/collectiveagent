@@ -5,13 +5,13 @@ import { requirePermission } from '@/lib/api-auth'
 // GET - Get single landlord with all related data
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     const { data: landlord, error } = await supabase
@@ -63,13 +63,13 @@ export async function GET(
 // PATCH - Update landlord
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_landlords')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
     const updates = await request.json()
 
@@ -115,13 +115,13 @@ export async function PATCH(
 // DELETE - Delete landlord (only if no properties/leases)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_landlords')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     // Check for active properties

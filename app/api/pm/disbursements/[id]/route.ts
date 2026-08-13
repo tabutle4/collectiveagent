@@ -7,13 +7,13 @@ export const dynamic = 'force-dynamic'
 // GET - Get single disbursement
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
 
     const { data: disbursement, error } = await supabase
@@ -50,13 +50,13 @@ export async function GET(
 // PATCH - Update disbursement (mark as paid, update status, etc.)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_process_pm_disbursements')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
     const updates = await request.json()
 

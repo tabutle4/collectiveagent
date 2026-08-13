@@ -18,14 +18,14 @@ const normalizeUuidInput = (value: string | null | undefined): string | null => 
 // POST - Duplicate email template
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_email_templates')
   if (auth.error) return auth.error
 
   try {
     // Handle both async and sync params (Next.js 15+)
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     // Normalize and validate ID
     const normalizedId = normalizeUuidInput(resolvedParams?.id)
     if (!normalizedId) {

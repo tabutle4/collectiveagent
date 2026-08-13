@@ -1,6 +1,6 @@
 'use client'
 
-import { PhasePlaceholder } from '../page'
+import { PhasePlaceholder } from '@/components/admin/PhasePlaceholder'
 
 /**
  * /admin/tc/calendar  Full calendar view for TC events

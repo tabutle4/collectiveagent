@@ -8,13 +8,13 @@ import { requirePermission } from '@/lib/api-auth'
 // route when a Rent Disbursement is created for full-service landlords.
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } | Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_pm_invoices')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const supabase = createClient()
     const body = await request.json()
     const { payment_method, payment_notes, paid_at, disbursement_id } = body

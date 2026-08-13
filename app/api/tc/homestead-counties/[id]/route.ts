@@ -22,13 +22,13 @@ const normalizeUuidInput = (value: string | null | undefined): string | null => 
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_coordination')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const id = normalizeUuidInput(resolvedParams?.id)
     if (!id) {
       return NextResponse.json({ error: 'County ID is required' }, { status: 400 })
@@ -105,13 +105,13 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requirePermission(request, 'can_manage_coordination')
   if (auth.error) return auth.error
 
   try {
-    const resolvedParams = params instanceof Promise ? await params : params
+    const resolvedParams = await params
     const id = normalizeUuidInput(resolvedParams?.id)
     if (!id) {
       return NextResponse.json({ error: 'County ID is required' }, { status: 400 })

@@ -1,7 +1,7 @@
 'use client'
 
-import ProfilePage from '@/app/profile/page'
+import ProfileScreen from '@/components/profile/ProfileScreen'
 
 export default function AgentProfilePage() {
-  return <ProfilePage />
+  return <ProfileScreen />
 }
