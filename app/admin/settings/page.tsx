@@ -34,6 +34,7 @@ interface CompanySettings {
   brokerage_zip: string
   brokerage_main_email: string
   executive_email: string
+  license_report_email?: string
   website?: string
   // Shared accounts
   canva_username?: string
@@ -576,6 +577,18 @@ export default function SettingsPage() {
                     />
                     <p className="text-xs text-luxury-gray-3 mt-1">
                       CC'd on commission statements and CDAs. Owner and ops only.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="field-label">License Report Email</label>
+                    <input
+                      type="text"
+                      value={settings.license_report_email || ''}
+                      onChange={(e) => updateSetting('license_report_email', e.target.value)}
+                      className="input-luxury"
+                    />
+                    <p className="text-xs text-luxury-gray-3 mt-1">
+                      Weekly TREC license check. Separate more than one address with a comma.
                     </p>
                   </div>
                 </div>

@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/agent-email-reminders",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/verify-licenses",
+      "schedule": "0 13 * * 1"
     }
   ]
 }
