@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
+import { deriveComplianceForTransactions, complianceEmailLine, complianceSidesHtml, complianceActionHtml } from '@/lib/compliance/derive'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -66,6 +67,22 @@ export async function POST(request: NextRequest) {
         })
       : null
 
+    // Deal-level compliance, from the same helper the payouts report uses, so
+    // the email cannot tell an agent the file is clear while the report says
+    // otherwise.
+    const derived = check.transaction_id
+      ? await deriveComplianceForTransactions([check.transaction_id])
+      : {}
+    const derivedForTxn = check.transaction_id ? derived[check.transaction_id] : undefined
+    // A standalone check has no transaction, so there is no file whose
+    // compliance could be outstanding. Saying nothing is the only honest
+    // option: the default sentence would send the agent chasing paperwork
+    // that does not exist, which is the same error in the other direction as
+    // telling them a file is clear when it is not.
+    const complianceLine = check.transaction_id ? complianceEmailLine(derivedForTxn) : ''
+    const actionHtml = check.transaction_id ? complianceActionHtml(derivedForTxn) : ''
+    const sidesHtml = complianceSidesHtml(derivedForTxn)
+
     const subject = `Check Received - ${address}`
 
     const htmlBody = getEmailLayout(
@@ -73,7 +90,9 @@ export async function POST(request: NextRequest) {
       <p>Your check for <strong>${address}</strong> is being processed.${formattedDate ? ` The date on the check is <strong>${formattedDate}</strong>, which is the date it is expected to clear.` : ''}</p>
       ${emailSection(
         'What Happens Next',
-        `<p>Commission payments are processed within 10-14 business days from receiving completed compliance and check. This often happens faster, but the guarantee per your agent agreement is 30 days.</p>`
+        `${sidesHtml}${complianceLine ? `<p>${complianceLine}</p>` : ''}
+        <p>Commission payments are processed within 10-14 business days from receiving completed compliance and check. This often happens faster, but the guarantee per your agent agreement is 30 days.</p>
+        ${actionHtml}`
       )}
       ${emailButton('View My Checks', 'https://agent.collectiverealtyco.com/admin/checks')}
       ${emailButton('View Compliance Process', 'https://visit.collectiverealtyco.com/compliance')}

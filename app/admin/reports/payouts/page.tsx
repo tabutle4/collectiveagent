@@ -39,6 +39,8 @@ interface PayoutRow {
   cleared_date: string | null
   received_date: string | null
   compliance_status: string
+  sides_complete: number | null
+  sides_expected: number | null
   checklist_complete: boolean
   pay_by_date: string | null
   crc_transferred: boolean
@@ -105,6 +107,20 @@ function complianceLabel(status: string): { label: string; cls: string } {
     incomplete:    { label: 'incomplete',    cls: 'text-red-500' },
   }
   return map[status] || { label: status, cls: 'text-luxury-gray-3' }
+}
+
+// Only intermediary deals get a fraction. A single-sided deal reading "1/1"
+// on every row buries the two-sided ones this exists to surface. Null counts
+// mean the deal filed no sides and its status came from the stored date, so
+// there is nothing honest to count.
+function sidesBadge(row: PayoutRow, className = '') {
+  if (row.sides_expected === null || row.sides_complete === null) return null
+  if (row.sides_expected < 2) return null
+  const done = row.sides_complete >= row.sides_expected
+  const cls = done ? 'text-green-700 bg-green-50' : 'text-yellow-700 bg-yellow-50'
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded ${className} ${cls}`}>{row.sides_complete}/{row.sides_expected} sides</span>
+  )
 }
 
 function agentNames(row: PayoutRow): string {
@@ -272,6 +288,7 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
             <span className={`text-xs tabular-nums ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</span>
           )}
           {label && <span className={`text-xs ${cls}`}>{label}</span>}
+          {sidesBadge(row)}
           {row.pay_by_date && (
             <span className="text-xs text-luxury-gray-3">pay by {fmtDate(row.pay_by_date)}</span>
           )}
@@ -374,6 +391,7 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
       <td className={`py-2 px-2 text-xs whitespace-nowrap ${dateKey === 'cleared_date' ? clearedDateClass(dateVal) : 'text-luxury-gray-3'}`}>{fmtDate(dateVal)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">
         <span className={cls}>{label}</span>
+        {sidesBadge(row, 'ml-2')}
       </td>
       <td className="py-2 px-2 text-xs text-luxury-gray-3 whitespace-nowrap">{fmtDate(row.pay_by_date)}</td>
       <td className="py-2 px-2 text-xs whitespace-nowrap">

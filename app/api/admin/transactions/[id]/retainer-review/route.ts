@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { RETAINER_FORM_URL } from '@/lib/compliance/derive'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { Resend } from 'resend'
@@ -17,11 +18,10 @@ const CC_EMAIL = 'compliance@collectiverealtyco.com'
 // Where an agent goes to fix a rejected retainer. Retainer mode detects the
 // existing submission and updates it in place, so this does not create a
 // second retainer for the same client.
-const RESUBMIT_PATH = '/agent/forms/compliance-cda?mode=retainer'
-// Same fallback the PM and campaign routes use. Without it a missing env var
-// would put a relative href in an email, where it cannot resolve.
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://agent.collectiverealtyco.com'
-const RESUBMIT_URL = `${APP_URL}${RESUBMIT_PATH}`
+// Single source in lib/compliance/derive.ts, shared with the check emails.
+// It carries the same NEXT_PUBLIC_APP_URL fallback, so a missing env var
+// still yields an absolute href.
+const RESUBMIT_URL = RETAINER_FORM_URL
 
 // The retainer sibling of compliance-review. Sending the review writes the
 // retainer's own submission row, then derives the deal's compliance status and

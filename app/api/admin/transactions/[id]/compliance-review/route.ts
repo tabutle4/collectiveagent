@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { COMPLIANCE_RECHECK_URL } from '@/lib/compliance/derive'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
@@ -12,9 +13,8 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 const TC_DISPLAY_NAME = 'Leah Parpan'
 const FROM_EMAIL = 'Collective Realty Co. <transactions@coachingbrokeragetools.com>'
 const CC_EMAIL = 'compliance@collectiverealtyco.com'
-const RECHECK_URL = 'https://visit.collectiverealtyco.com/recheck'
-// TODO: Replace RECHECK_URL with in-app recheck form URL once built.
-// Pull from company_settings once a recheck_url column is added.
+// Single source in lib/compliance/derive.ts, shared with the check emails.
+const RECHECK_URL = COMPLIANCE_RECHECK_URL
 
 // Shared helper: load transaction, the side under review, its docs, and build
 // the email payload. Compliance is per side: each compliance submission (one per

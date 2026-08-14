@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { sendMailAs } from '@/lib/microsoft-graph-mail'
 import { getEmailLayout, emailSection, emailSignature } from '@/lib/email/layout'
+import { deriveComplianceForTransactions, complianceEmailLine, complianceSidesHtml, complianceActionHtml } from '@/lib/compliance/derive'
 
 const REPLY_TO = 'transactions@collectiverealtyco.com'
 
@@ -106,6 +107,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No agents on this transaction' }, { status: 400 })
     }
 
+    // Deal-level compliance, from the same helper the payouts report uses, so
+    // the email cannot tell an agent the file is clear while the report says
+    // otherwise. Resolved once for the deal, not per recipient.
+    const derived = await deriveComplianceForTransactions([check.transaction_id])
+    const complianceLine = complianceEmailLine(derived[check.transaction_id])
+    const actionHtml = complianceActionHtml(derived[check.transaction_id])
+    const sidesHtml = complianceSidesHtml(derived[check.transaction_id])
+
     const address = check.property_address || txn?.property_address || 'your transaction'
     const clearDate = check.cleared_date ? fmtDate(check.cleared_date) : null
 
@@ -145,7 +154,7 @@ export async function POST(request: NextRequest) {
         <p style="font-size:13px;color:#888;margin:4px 0 16px 0;">Your role: <strong>${roleLabel}</strong></p>
         ${clearSentence}
         ${photoLink}
-        ${emailSection('What Happens Next', `<p>${nextStepsText}</p>`)}
+        ${emailSection('What Happens Next', `${sidesHtml}<p>${complianceLine}</p><p>${nextStepsText}</p>${actionHtml}`)}
         <p style="margin:12px 0;"><a href="https://agent.collectiverealtyco.com/admin/checks" style="color:#C5A278;">View My Checks</a></p>
         <p style="margin:12px 0;"><a href="https://visit.collectiverealtyco.com/compliance" style="color:#C5A278;">View Compliance Process</a></p>
         ${savedSignatureHtml

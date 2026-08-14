@@ -3,7 +3,7 @@ import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { getCentralDateString } from '@/lib/timezone'
-import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus } from '@/lib/compliance/derive'
+import { SIDE_MODES_FILTER, pickSideSubmissions, deriveSideStatus, expectedSides } from '@/lib/compliance/derive'
 
 export const dynamic = 'force-dynamic'
 
@@ -336,6 +336,15 @@ export async function GET(request: NextRequest) {
       // matching the fallback in lib/compliance/derive.ts.
       const complianceStatus = sidesDerived || txn?.compliance_status || (check.compliance_complete_date ? 'complete' : 'not_submitted')
 
+      // Side progress for the report. Only meaningful when sides actually
+      // filed: a historical deal with no submissions derives its status from
+      // the stored date, and counting its (zero) sides would print 0/1 next to
+      // a green "complete". Those send null and the report shows no fraction.
+      const sideRows = txn ? sidesByTxn[txn.id] || [] : []
+      const sidesExpected = sideRows.length > 0 ? expectedSides(txn?.is_intermediary) : null
+      const sidesComplete =
+        sidesExpected === null ? null : sideRows.filter((s: any) => s.status === 'complete').length
+
       // Standalone check with direct agent
       const standaloneAgentName = check.agent_id ? agentNames[check.agent_id] : null
 
@@ -372,6 +381,8 @@ export async function GET(request: NextRequest) {
           ? (payByDateFor[check.transaction_id || `check:${check.id}`] || null)
           : null,
         compliance_status: complianceStatus,
+        sides_complete: sidesComplete,
+        sides_expected: sidesExpected,
         checklist_complete: check.transaction_id ? (checklistCompleteByTxn[check.transaction_id] || false) : false,
         crc_transferred: check.crc_transferred || false,
         agents_paid: check.agents_paid || false,
