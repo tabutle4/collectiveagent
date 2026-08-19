@@ -15,8 +15,15 @@ import { SIDE_MODES_FILTER, pickSideSubmissions } from '@/lib/compliance/derive'
  * A deal counts as complete only when every side is complete, and the date is
  * the latest side's completion date. Anything less than fully complete clears
  * the date, so a pay-by deadline can never outlive its sign-off.
+ *
+ * Pass clearWhenNoSides when the caller has just removed the deal's last side,
+ * so a deal that drops to zero submissions has its dates cleared rather than
+ * left standing.
  */
-export async function syncCheckComplianceDate(transactionId: string): Promise<string | null> {
+export async function syncCheckComplianceDate(
+  transactionId: string,
+  options: { clearWhenNoSides?: boolean } = {}
+): Promise<string | null> {
   if (!transactionId) return null
 
   const { data: sideRows } = await supabaseAdmin
@@ -31,7 +38,20 @@ export async function syncCheckComplianceDate(transactionId: string): Promise<st
 
   // No sides at all: legacy or non-compliance deal. Leave whatever is on the
   // checks alone rather than clearing a hand-entered date.
-  if (sides.length === 0) return null
+  //
+  // clearWhenNoSides inverts that for the one caller that has just taken the
+  // deal's last side away. There the empty result is not "we know nothing about
+  // this deal", it is "this deal no longer has a sign-off", and a pay-by date
+  // must not outlive it. Only the unlink path passes it; every other caller
+  // keeps the protective default.
+  if (sides.length === 0) {
+    if (!options.clearWhenNoSides) return null
+    await supabaseAdmin
+      .from('checks_received')
+      .update({ compliance_complete_date: null, updated_at: new Date().toISOString() })
+      .eq('transaction_id', transactionId)
+    return null
+  }
 
   const allComplete = sides.every((s: any) => s.status === 'complete')
   const completeDate = allComplete

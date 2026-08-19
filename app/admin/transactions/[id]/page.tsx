@@ -28,6 +28,7 @@ import {
   CheckCircle,
   Maximize2,
   Minimize2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
@@ -36,6 +37,7 @@ import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
 import CheckNotifyModal from '@/components/transactions/CheckNotifyModal'
+import MoveCheckModal from '@/components/checks/MoveCheckModal'
 import LowCommissionFlagPanel from '@/components/transactions/LowCommissionFlagPanel'
 import AddAgentModal from '@/components/transactions/AddAgentModal'
 import AgentBillingPanel from '@/components/transactions/AgentBillingPanel'
@@ -2204,6 +2206,7 @@ export default function AdminTransactionDetailPage() {
   const [emailDraft, setEmailDraft] = useState({ to: '', subject: '', body: '' })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [checkNotifyModal, setCheckNotifyModal] = useState<{ checkId: string; check: any } | null>(null)
+  const [moveCheckTarget, setMoveCheckTarget] = useState<{ id: string; amount: number } | null>(null)
   const [checklistExpanded, setChecklistExpanded] = useState(true)
   const [aiReview, setAiReview] = useState<{
     overall: string
@@ -2811,6 +2814,10 @@ export default function AdminTransactionDetailPage() {
     } finally {
       setAddingCheck(false)
     }
+  }
+
+  const openMoveCheckModal = (check: any) => {
+    setMoveCheckTarget({ id: check.id, amount: parseFloat(check.check_amount || 0) })
   }
 
   const deleteCheck = async (checkId: string) => {
@@ -4947,6 +4954,14 @@ export default function AdminTransactionDetailPage() {
                             </button>
                             <button
                               type="button"
+                              onClick={e => { e.stopPropagation(); openMoveCheckModal(check) }}
+                              className="text-luxury-gray-3 hover:text-luxury-accent transition-colors"
+                              title="Move this check to another deal"
+                            >
+                              <ArrowRightLeft size={14} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={e => { e.stopPropagation(); deleteCheck(check.id) }}
                               className="text-luxury-gray-3 hover:text-red-500 transition-colors"
                               title="Delete check"
@@ -6445,6 +6460,19 @@ export default function AdminTransactionDetailPage() {
             } else {
               alert(`Check notification sent to ${sent} agent${sent !== 1 ? 's' : ''}.`)
             }
+          }}
+        />
+      )}
+
+      {moveCheckTarget && (
+        <MoveCheckModal
+          checkId={moveCheckTarget.id}
+          checkLabel={`${fmt$(moveCheckTarget.amount)} check`}
+          currentAddress={txn?.property_address || null}
+          onClose={() => setMoveCheckTarget(null)}
+          onMoved={() => {
+            setMoveCheckTarget(null)
+            loadData()
           }}
         />
       )}

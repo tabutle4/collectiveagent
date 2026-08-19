@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
+import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -142,6 +143,14 @@ export async function POST(request: NextRequest) {
         await ensurePrimaryTia(transactionId, subAgent.agent_id)
       }
       await autoCascadeTransaction(transactionId)
+      // The sign-off travels with the submission, so the checks on both deals
+      // have to be re-stamped: the new deal may now be complete, and the deal
+      // the submission left may no longer be. Without this the pay-by date on
+      // the payouts report keeps the state it had before the relink.
+      await syncCheckComplianceDate(transactionId)
+      if (sub.transaction_id && sub.transaction_id !== transactionId) {
+        await syncCheckComplianceDate(sub.transaction_id)
+      }
 
       return NextResponse.json({ success: true, transaction_id: transactionId })
     }
@@ -165,6 +174,12 @@ export async function POST(request: NextRequest) {
         .update({ transaction_id: null, updated_at: new Date().toISOString() })
         .eq('id', submissionId)
       if (updErr) throw updErr
+
+      // The deal just lost a side, so its checks must not keep a pay-by date
+      // that no longer has a sign-off behind it. clearWhenNoSides covers the
+      // common shape: the submission removed was the deal's only one, which
+      // leaves zero sides and would otherwise take the helper's early return.
+      await syncCheckComplianceDate(sub.transaction_id, { clearWhenNoSides: true })
 
       return NextResponse.json({ success: true, unlinked: true })
     }
@@ -287,6 +302,9 @@ export async function POST(request: NextRequest) {
       // New deal created from a submission: cascade so the commission tab is
       // populated the moment a basis exists on the submission data.
       await autoCascadeTransaction(newTxn.id)
+      // A brand new deal has no checks yet, but the submission may already be
+      // signed off, so stamp for the case where a check is linked immediately.
+      await syncCheckComplianceDate(newTxn.id)
 
       return NextResponse.json({ success: true, transaction_id: newTxn.id, created: true })
     }

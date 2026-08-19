@@ -1027,14 +1027,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // ── Link existing check to transaction ───────────────────────────────────
     if (action === 'link_check') {
       const { check_id } = body
+      // Read the deal the check is leaving before the write, so both sides can
+      // be brought back in step afterwards.
+      const { data: priorCheck } = await supabase
+        .from('checks_received')
+        .select('transaction_id')
+        .eq('id', check_id)
+        .single()
+      const priorTxnId = priorCheck?.transaction_id || null
+      // Clear the stamp in the same write, for the same reason the relink route
+      // does: the date belongs to the deal the check is leaving, and the sync
+      // below writes nothing when the destination has no submissions yet.
       const { error } = await supabase
         .from('checks_received')
-        .update({ transaction_id: id, updated_at: new Date().toISOString() })
+        .update({
+          transaction_id: id,
+          compliance_complete_date: null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', check_id)
       if (error) throw error
       // Linking an existing check can complete a deal's commission picture:
       // cascade so tia rows reflect it.
       await autoCascadeTransaction(id)
+      // Same reason create_check syncs: a check joining an already complete
+      // deal needs the compliance date stamped on it or it never gets a
+      // pay-by date on the payouts report.
+      await syncCheckComplianceDate(id)
+      if (priorTxnId && priorTxnId !== id) {
+        await autoCascadeTransaction(priorTxnId)
+        await syncCheckComplianceDate(priorTxnId)
+      }
       return NextResponse.json({ success: true })
     }
 

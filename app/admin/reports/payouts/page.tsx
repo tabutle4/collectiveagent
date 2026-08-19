@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X } from 'lucide-react'
+import { RefreshCw, Plus, Trash2, Save, ChevronDown, ChevronUp, ExternalLink, Check, X, ArrowRightLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/context/AuthContext'
 import MarkPaidPanelModal from '@/components/transactions/MarkPaidPanelModal'
+import MoveCheckModal from '@/components/checks/MoveCheckModal'
 
 // Types
 
@@ -194,11 +195,12 @@ function groupByTransaction(rows: PayoutRow[]): PayoutRow[] {
 
 // Mobile card - clean stacked layout
 
-function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: { 
+function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
+  onMoveCheck?: (row: PayoutRow) => void
 }) {
   const { label, cls } = complianceLabel(row.compliance_status)
   const dateVal = dateKey === 'cleared_date' ? row.cleared_date : (row.cleared_date || row.received_date)
@@ -304,17 +306,31 @@ function PayoutCard({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
           <p className="text-xs text-luxury-gray-3 italic">{notes}</p>
         </div>
       )}
+
+      {onMoveCheck && (
+        <div className="px-4 pb-3">
+          <button
+            type="button"
+            onClick={() => onMoveCheck(row)}
+            className="btn btn-secondary text-xs flex items-center gap-1.5"
+          >
+            <ArrowRightLeft size={13} />
+            Move Check
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 // Desktop table row - all columns visible, table scrolls horizontally if needed
 
-function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: { 
+function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: { 
   row: PayoutRow; 
   dateKey: 'cleared_date' | 'received_date'
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
+  onMoveCheck?: (row: PayoutRow) => void
 }) {
   // Only show unpaid agents/externals in table cells
   const agents = unpaidAgents(row)
@@ -402,6 +418,18 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
       <td className="py-2 px-2 text-xs text-luxury-gray-3 max-w-[130px]">
         <span className="truncate block">{cleanNotes(row.notes) || '-'}</span>
       </td>
+      <td className="py-2 px-2 text-xs whitespace-nowrap">
+        {onMoveCheck && (
+          <button
+            type="button"
+            onClick={() => onMoveCheck(row)}
+            className="text-luxury-gray-3 hover:text-luxury-accent transition-colors"
+            title="Move this check to another deal"
+          >
+            <ArrowRightLeft size={14} />
+          </button>
+        )}
+      </td>
     </tr>
   )
 }
@@ -411,11 +439,12 @@ function PayoutTableRow({ row, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
 type SortKey = 'date' | 'compliance' | 'pay_by' | null
 type SortDir = 'asc' | 'desc'
 
-function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid }: {
+function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, onMarkAgentPaid, onMarkExternalPaid, onMoveCheck }: {
   rows: PayoutRow[]; title: string; collapsed: boolean; onToggle: () => void
   dateLabel: string; dateKey: 'cleared_date' | 'received_date'
   onMarkAgentPaid?: (tiaId: string, checkId: string) => void
   onMarkExternalPaid?: (externalId: string, checkId: string) => void
+  onMoveCheck?: (row: PayoutRow) => void
 }) {
   // Pay by is the default sort, oldest first, so the deals closest to their
   // deadline are at the top. Rows with no pay-by date sort to the bottom.
@@ -470,7 +499,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
             {displayRows.length === 0 ? (
               <p className="text-xs text-luxury-gray-3 text-center py-4">No records</p>
             ) : (
-              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
+              displayRows.map(row => <PayoutCard key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
             )}
             {rows.length > 0 && (
               <div className="container-card rounded-lg flex items-center justify-between px-4 py-2 mt-1">
@@ -514,13 +543,14 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                   </th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Checklist</th>
                   <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Notes</th>
+                  <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Move</th>
                 </tr>
               </thead>
               <tbody>
                 {displayRows.length === 0 ? (
-                  <tr><td colSpan={14} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
+                  <tr><td colSpan={15} className="py-6 text-center text-xs text-luxury-gray-3">No records</td></tr>
                 ) : (
-                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} />)
+                  displayRows.map(row => <PayoutTableRow key={row.check_id} row={row} dateKey={dateKey} onMarkAgentPaid={onMarkAgentPaid} onMarkExternalPaid={onMarkExternalPaid} onMoveCheck={onMoveCheck} />)
                 )}
               </tbody>
               {rows.length > 0 && (
@@ -534,7 +564,7 @@ function PayoutsTable({ rows, title, collapsed, onToggle, dateLabel, dateKey, on
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{a3Tot > 0 ? fmt(a3Tot) : '-'}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(extTot)}</td>
                     <td className="pt-2 pb-1 px-2 text-xs font-semibold text-right text-luxury-gray-1 whitespace-nowrap">{fmt(agentTot)}</td>
-                    <td colSpan={6} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{txnCount} transaction{txnCount !== 1 ? 's' : ''}</td>
+                    <td colSpan={7} className="pt-2 pb-1 px-2 text-xs text-luxury-gray-3">{txnCount} transaction{txnCount !== 1 ? 's' : ''}</td>
                   </tr>
                 </tfoot>
               )}
@@ -599,6 +629,8 @@ export default function PayoutsReportPage() {
   const [markPaidDate, setMarkPaidDate] = useState('')
   const [markPaidMethod, setMarkPaidMethod] = useState('ach')
   const [markPaidSaving, setMarkPaidSaving] = useState(false)
+
+  const [moveCheckRow, setMoveCheckRow] = useState<PayoutRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -697,6 +729,10 @@ export default function PayoutsReportPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
+  }
+
+  const openMoveCheck = (row: PayoutRow) => {
+    setMoveCheckRow(row)
   }
 
   const openAgentMarkPaid = (tiaId: string, checkId: string) => {
@@ -836,8 +872,8 @@ export default function PayoutsReportPage() {
       <div className="flex flex-col">
 
         <div className="order-2 lg:order-1">
-          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
-          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} />
+          <PayoutsTable rows={paidRows} title="Paid Most Recently" collapsed={paidCollapsed} onToggle={() => setPaidCollapsed(v => !v)} dateLabel="Paid" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} onMoveCheck={openMoveCheck} />
+          <PayoutsTable rows={holdRows} title="On Hold" collapsed={holdCollapsed} onToggle={() => setHoldCollapsed(v => !v)} dateLabel="Cleared" dateKey="cleared_date" onMarkAgentPaid={openAgentMarkPaid} onMarkExternalPaid={openExternalMarkPaid} onMoveCheck={openMoveCheck} />
         </div>
 
         {/* Landlord Disbursements */}
@@ -1252,6 +1288,19 @@ export default function PayoutsReportPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {moveCheckRow && (
+        <MoveCheckModal
+          checkId={moveCheckRow.check_id}
+          checkLabel={`${fmt(moveCheckRow.check_amount)} check`}
+          currentAddress={moveCheckRow.address}
+          onClose={() => setMoveCheckRow(null)}
+          onMoved={() => {
+            setMoveCheckRow(null)
+            load()
+          }}
+        />
       )}
     </div>
   )
