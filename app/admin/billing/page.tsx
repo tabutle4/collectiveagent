@@ -162,7 +162,7 @@ export default function AdminBillingPage() {
       const creditsData = await creditsRes.json()
 
       const activeAgents = (usersData.users || []).filter(
-        (u: any) => u.status === 'active' && u.is_licensed_agent === true
+        (u: any) => u.status === 'active' && u.is_active === true && u.is_licensed_agent === true
       )
       setAgents(activeAgents)
 
