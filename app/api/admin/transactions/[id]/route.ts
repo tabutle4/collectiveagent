@@ -633,6 +633,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         checks,
         checklist,
         company_settings: settings || null,
+        // The Overview tab's Compliance control reads the stored
+        // transactions.compliance_status, which is dual-written and can fall
+        // behind what the compliance page actually recorded. Send the derived
+        // view alongside it so Overview can show the same status and side
+        // fraction the payouts report shows, instead of a stale dropdown.
+        compliance_derived: {
+          status: derivedCompliance.status || null,
+          sides_expected: derivedCompliance.expected ?? null,
+          sides_complete: (derivedCompliance.sides || []).filter(
+            (side: { status: string }) => side.status === 'complete'
+          ).length,
+          sides_filed: (derivedCompliance.sides || []).length,
+        },
       })
     }
 

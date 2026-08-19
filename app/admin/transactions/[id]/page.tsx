@@ -48,6 +48,33 @@ import { FIELD_GROUPS, hasValue } from '@/lib/compliance/fieldGroups'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Side fraction for the Overview compliance row. Same rules the payouts report
+// applies: only intermediary deals get a fraction, because a single-sided deal
+// reading "1/1" everywhere buries the two-sided ones this exists to surface,
+// and a deal that filed no sides has nothing honest to count.
+//
+// This counts the mapped status from sideStatusLabel, while deriveSideStatus --
+// which produces the status shown in the dropdown beside this badge -- compares
+// the raw value. The two agree only because 'complete' is the sole reachable
+// status that maps to complete. If a new status is ever added to
+// ALLOWED_STATUSES in compliance/set-status and mapped to complete here, this
+// badge would count it and the dropdown next to it would not, disagreeing
+// inside a single UI row.
+function sidesBadge(
+  derived: { sides_expected: number | null; sides_complete: number; sides_filed: number } | null | undefined
+) {
+  if (!derived) return null
+  if (derived.sides_filed === 0) return null
+  if (derived.sides_expected === null || derived.sides_expected < 2) return null
+  const done = derived.sides_complete >= derived.sides_expected
+  const cls = done ? 'text-green-700 bg-green-50' : 'text-yellow-700 bg-yellow-50'
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>
+      {derived.sides_complete}/{derived.sides_expected} sides
+    </span>
+  )
+}
+
 const fmt$ = (n: number | null | undefined) => {
   if (n == null) return '--'
   return new Intl.NumberFormat('en-US', {
@@ -3558,6 +3585,20 @@ export default function AdminTransactionDetailPage() {
   const checklist = data?.checklist || []
   const settings = data?.company_settings
   const agents = data?.agents || []
+  // Compliance as the compliance page actually recorded it. The stored column
+  // on the transaction is dual-written and drifts, so the derived value wins
+  // for display while the dropdown keeps writing the stored column.
+  const complianceDerived = data?.compliance_derived
+  const complianceDisplayStatus =
+    complianceDerived?.status || txn?.compliance_status || 'not_submitted'
+  // Lock the control only when the status came from filed submissions, because
+  // that is the only case where the tooltip's advice is actionable. A historical
+  // deal with no submissions still derives 'complete' -- storedFallback in
+  // derive.ts reports the hand-entered check date that way, with sides: [] --
+  // and sending someone to a compliance page with nothing on it would take away
+  // the only control that deal has ever had.
+  const complianceLocked =
+    !!complianceDerived?.status && (complianceDerived?.sides_filed ?? 0) > 0
 
   // Producing agents on this deal — the rows that get a CDA/statement.
   // Mirrors the per-card filter: excludes team lead / momentum / referral
@@ -3935,24 +3976,35 @@ export default function AdminTransactionDetailPage() {
                   </div>
                   <div className="flex justify-between items-center py-1.5 border-b border-luxury-gray-5/30">
                     <span className="field-label shrink-0">Compliance</span>
-                    <select
-                      value={txn.compliance_status || 'not_submitted'}
-                      onChange={e => setComplianceStatus(e.target.value)}
-                      className={`text-xs px-2 py-0.5 rounded border-0 cursor-pointer ${
-                        txn.compliance_status === 'complete'
-                          ? 'bg-green-50 text-green-700'
-                          : txn.compliance_status === 'incomplete'
-                            ? 'bg-red-50 text-red-600'
-                            : txn.compliance_status === 'in_review'
-                              ? 'bg-purple-50 text-purple-700'
-                              : 'bg-luxury-light text-luxury-gray-3'
-                      }`}
-                    >
-                      <option value="not_submitted">Not requested</option>
-                      <option value="in_review">In review</option>
-                      <option value="incomplete">Incomplete</option>
-                      <option value="complete">Complete</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      {sidesBadge(complianceDerived)}
+                      <select
+                        value={complianceDisplayStatus}
+                        onChange={e => setComplianceStatus(e.target.value)}
+                        disabled={complianceLocked}
+                        title={
+                          complianceLocked
+                            ? 'Compliance status comes from the compliance request page. Change it there.'
+                            : undefined
+                        }
+                        className={`text-xs px-2 py-0.5 rounded border-0 disabled:cursor-not-allowed ${
+                          complianceLocked ? '' : 'cursor-pointer'
+                        } ${
+                          complianceDisplayStatus === 'complete'
+                            ? 'bg-green-50 text-green-700'
+                            : complianceDisplayStatus === 'incomplete'
+                              ? 'bg-red-50 text-red-600'
+                              : complianceDisplayStatus === 'in_review'
+                                ? 'bg-purple-50 text-purple-700'
+                                : 'bg-luxury-light text-luxury-gray-3'
+                        }`}
+                      >
+                        <option value="not_submitted">Not requested</option>
+                        <option value="in_review">In review</option>
+                        <option value="incomplete">Incomplete</option>
+                        <option value="complete">Complete</option>
+                      </select>
+                    </div>
                   </div>
                   <FieldRow
                     label="Representing"

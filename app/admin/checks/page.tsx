@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, X, ExternalLink, Image, Loader2, Plus, Download } from 'lucide-react'
+import { Search, X, ExternalLink, Image, Loader2, Plus, Download, ArrowRightLeft } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 import AddCheckModal from '@/components/transactions/AddCheckModal'
+import MoveCheckModal from '@/components/checks/MoveCheckModal'
 
 interface AgentRow {
   agent_id: string
@@ -99,6 +100,10 @@ export default function ChecksPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const isAdmin = user ? ADMIN_ROLES.includes((user.role || '').toLowerCase()) : false
+  // Moving a check writes to both deals, so it is offered only to the same
+  // permission the relink route enforces rather than to every admin role.
+  const canMoveCheck = hasPermission('can_manage_checks')
+  const [moveCheckTarget, setMoveCheckTarget] = useState<CheckRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -332,7 +337,7 @@ export default function ChecksPage() {
               {/* Mobile cards */}
               <div className="md:hidden space-y-3">
                 {sortedChecks.map(c => (
-                  <MobileCard key={c.id} check={c} isAdmin={isAdmin} />
+                  <MobileCard key={c.id} check={c} isAdmin={isAdmin} onMoveCheck={canMoveCheck ? setMoveCheckTarget : undefined} />
                 ))}
               </div>
 
@@ -358,11 +363,12 @@ export default function ChecksPage() {
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-left">Contacts</th>
                       <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Photo</th>
                       {isAdmin && <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Deal</th>}
+                      {canMoveCheck && <th className="pb-2 px-2 text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest text-center">Move</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedChecks.map(c => (
-                      <DesktopRow key={c.id} check={c} isAdmin={isAdmin} />
+                      <DesktopRow key={c.id} check={c} isAdmin={isAdmin} onMoveCheck={canMoveCheck ? setMoveCheckTarget : undefined} />
                     ))}
                   </tbody>
                 </table>
@@ -379,11 +385,21 @@ export default function ChecksPage() {
           onSaved={() => { setShowAddCheck(false); load() }}
         />
       )}
+
+      {moveCheckTarget && (
+        <MoveCheckModal
+          checkId={moveCheckTarget.id}
+          checkLabel={`${fmt(moveCheckTarget.check_amount)} check`}
+          currentAddress={moveCheckTarget.property_address}
+          onClose={() => setMoveCheckTarget(null)}
+          onMoved={() => { setMoveCheckTarget(null); load() }}
+        />
+      )}
     </div>
   )
 }
 
-function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }) {
+function DesktopRow({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdmin: boolean; onMoveCheck?: (check: CheckRow) => void }) {
   const agentNames = c.agents.map(a => a.name.split(' ')[0]).join(', ') || '-'
   const contactSummary = c.contacts
     .filter(ct => ct.name)
@@ -440,11 +456,23 @@ function DesktopRow({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
           )}
         </td>
       )}
+      {onMoveCheck && (
+        <td className="py-2 px-2 text-center">
+          <button
+            type="button"
+            onClick={() => onMoveCheck(c)}
+            className="text-luxury-gray-3 hover:text-luxury-accent transition-colors"
+            title="Move this check to another deal"
+          >
+            <ArrowRightLeft size={13} />
+          </button>
+        </td>
+      )}
     </tr>
   )
 }
 
-function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }) {
+function MobileCard({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdmin: boolean; onMoveCheck?: (check: CheckRow) => void }) {
   const txnHref = c.transaction_id
     ? (isAdmin ? `/admin/transactions/${c.transaction_id}` : `/agent/transactions/${c.transaction_id}`)
     : null
@@ -516,6 +544,15 @@ function MobileCard({ check: c, isAdmin }: { check: CheckRow; isAdmin: boolean }
             <Link href={txnHref} className="text-luxury-accent hover:opacity-70 flex items-center gap-1 text-xs ml-auto">
               <ExternalLink size={12} /> Deal
             </Link>
+          )}
+          {onMoveCheck && (
+            <button
+              type="button"
+              onClick={() => onMoveCheck(c)}
+              className="text-luxury-accent hover:opacity-70 flex items-center gap-1 text-xs ml-3"
+            >
+              <ArrowRightLeft size={12} /> Move
+            </button>
           )}
         </div>
       </div>
