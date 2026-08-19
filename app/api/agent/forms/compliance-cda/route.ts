@@ -8,7 +8,8 @@ import { normalizeAddressForStorage, toTitleCase, normalizePropertyStats, normal
 import { checkRequired, requiredFieldsError, complianceRules, complianceIsLease } from '@/lib/forms/requiredFields'
 import { feeCodeFromRepresenting, feeCodeFromRetainerType } from '@/lib/transactions/feeCode'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
-import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
+import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/lib/transactions/cascade'
+import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 // Convert compliance-form commission inputs into a gross commission dollar
@@ -738,7 +739,13 @@ export async function POST(request: NextRequest) {
         // first submission (invoice for regular plans, brokerage-net repayment
         // for broker plans). Duplicate-guarded by the notes tag / TEB lookup.
         const ecSubAmount = fieldMap.has_ecommission ? (parseFloat(String(fieldMap.ecommission_amount ?? 0)) || 0) : 0
-        if (ecSubAmount > 0 && (changedFields.includes('has_ecommission') || changedFields.includes('ecommission_amount'))) {
+        // NOT gated on ecSubAmount > 0. Unchecking has_ecommission, or
+        // correcting the amount to zero, writes null to the transaction column
+        // above, so the debt and the payout row have to follow it down to zero
+        // or the agent's check stays short and eCommission still gets paid for
+        // an advance the agent just said does not exist. Only the two INSERTs
+        // below need a positive amount; the syncs do not.
+        if (changedFields.includes('has_ecommission') || changedFields.includes('ecommission_amount')) {
           const { data: subAgentProfile } = await supabaseAdmin
             .from('users').select('commission_plan, lease_commission_plan').eq('id', agentId).single()
           const subPlanCode = String(
@@ -748,6 +755,7 @@ export async function POST(request: NextRequest) {
           // Same policy as a first submission: the external payout record is
           // ALWAYS created (eCommission is owed their money either way); the
           // agent-side repayment debt only exists off the broker plan.
+          let recordsInserted = false
           const { data: existingEcTebSub } = await supabaseAdmin
             .from('transaction_external_brokerages')
             .select('id')
@@ -756,7 +764,7 @@ export async function POST(request: NextRequest) {
             .ilike('brokerage_name', 'eCommission%')
             .limit(1)
             .maybeSingle()
-          if (!existingEcTebSub) {
+          if (!existingEcTebSub && ecSubAmount > 0) {
             await supabaseAdmin.from('transaction_external_brokerages').insert({
               transaction_id: txn.id,
               brokerage_role: 'other',
@@ -770,17 +778,20 @@ export async function POST(request: NextRequest) {
                 ? 'Broker plan deal: eCommission advance repaid from brokerage net. Auto-created from the agent compliance form.'
                 : 'eCommission advance repayment. Collected from the agent payout (see the matching eCommission debt) and paid out here. Auto-created from the agent compliance form.',
             })
+            recordsInserted = true
           }
+          let existingDebtSub: { id: string } | null = null
           if (!isBrokerPlanSub) {
             const tagSub = `auto:compliance-ecommission:${txn.id}`
-            const { data: existingDebtSub } = await supabaseAdmin
+            const { data: foundDebtSub } = await supabaseAdmin
               .from('agent_debts')
               .select('id')
               .eq('agent_id', agentId)
               .ilike('notes', `%${tagSub}%`)
               .limit(1)
               .maybeSingle()
-            if (!existingDebtSub) {
+            existingDebtSub = foundDebtSub
+            if (!existingDebtSub && ecSubAmount > 0) {
               await supabaseAdmin.from('agent_debts').insert({
                 agent_id: agentId,
                 debt_type: 'ecommission',
@@ -792,7 +803,26 @@ export async function POST(request: NextRequest) {
                 record_type: 'debt',
                 notes: `Reported by agent on the compliance form. ${tagSub}`,
               })
+              recordsInserted = true
             }
+          }
+          // Records that already existed get the current figure pushed onto
+          // them, zero included. syncEcommissionRecords refuses to rewrite a
+          // debt that has already been staged (it reports 'locked' instead) and
+          // recomputes office_net, which both tables feed.
+          if (existingEcTebSub || existingDebtSub) {
+            await syncEcommissionRecords(txn.id, ecSubAmount)
+          }
+          // A NEW payout row changes an office_net input on its own, and this
+          // has to be a plain `if`, not an `else if`: when the debt already
+          // exists but the payout row does not, syncEcommissionRecords reports
+          // 'locked'/'unchanged' and skips its own recompute while the insert
+          // above just moved an input. Reachable in sequence -- debt staged,
+          // payout row missing, agent resubmits -- and office net would then
+          // overstate by the full advance. recomputeOfficeNet is idempotent, so
+          // running it twice costs nothing.
+          if (recordsInserted) {
+            await recomputeOfficeNet(txn.id)
           }
         }
         // External referral on a resubmission: the fee is charged to the agent's

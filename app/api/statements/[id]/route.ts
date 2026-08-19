@@ -464,8 +464,39 @@ export async function GET(
     // alone. The basis is now the sum of the agent's rows, so a second row's
     // brokerage cut belongs in the total the same way its basis does; reading
     // only the anchor left the section short by exactly that row's share.
+    // Splits carved out of THIS agent's commission before agent_gross: the team
+    // lead's cut and the momentum partner's revenue share. Each sits on its own
+    // TIA row linked back by source_tia_id, so it is not one of this agent's
+    // rows and never appeared anywhere on their statement. The sole-producer
+    // derivation below is basis minus the agent's payout, which meant those two
+    // carve-outs landed inside the brokerage figure -- a 20% firm split printed
+    // as 35% and the agent could reasonably conclude the brokerage kept it all.
+    // Listing them separately is what lets the section still reconcile:
+    // Your Split + carve-outs + Brokerage = basis.
+    const CARVE_OUT_LABELS: Record<string, string> = {
+      team_lead: 'Team lead split',
+      momentum_partner: 'Momentum partner split',
+    }
+    const carveOutRows = allTxnRows.filter(
+      (r: any) => CARVE_OUT_LABELS[r.agent_role] && allTiaIds.includes(r.source_tia_id)
+    )
+    const carveOutTotal = Math.round(
+      carveOutRows.reduce((s: number, r: any) => s + rowAgentDisburse(r), 0) * 100
+    ) / 100
+    const carveOutLines = carveOutRows.map((r: any) => {
+      const amount = rowAgentDisburse(r)
+      return {
+        label: CARVE_OUT_LABELS[r.agent_role],
+        amount: fmt$(amount),
+        // Percentage of the same basis line the reader can see above, so the
+        // three shares on screen visibly add to 100% of it.
+        pct: compensationBasis > 0
+          ? (amount / compensationBasis * 100).toFixed(2).replace(/\.00$/, '')
+          : null,
+      }
+    })
     const brokerageSplit = isSoleProducingAgent
-      ? Math.max(0, Math.round((compensationBasis - agentDisburseTotal) * 100) / 100)
+      ? Math.max(0, Math.round((compensationBasis - agentDisburseTotal - carveOutTotal) * 100) / 100)
       : sumAgentRows('brokerage_split')
     // Brokermint-style basis: base commission plus additional income equals the
     // compensation basis that the split is calculated on. Base is the side less
@@ -523,6 +554,8 @@ export async function GET(
       agent_split_pct: agentSplitPct,
       is_override_comp: isOverrideComp,
       brokerage_pct: brokeragePctEff,
+      has_carve_out_lines: carveOutLines.length > 0,
+      carve_out_lines: carveOutLines,
       split_percentage: splitPct.toString(),
       brokerage_split_pct: brokerageSplitPct.toString(),
       agent_gross: fmt$(agentGross),
@@ -663,6 +696,11 @@ function generateStatementHTML(data: Record<string, any>): string {
         <span>Your Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.agent_split_pct}% of basis</span></span>
         <span style="font-weight: 500;">${data.agent_split_amount}</span>
       </div>`}
+      ${data.has_carve_out_lines ? data.carve_out_lines.map((l: any) => `
+      <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ddd;">
+        <span>${l.label}${l.pct ? ` <span style="color: #999; font-size: 9px; margin-left: 6px;">${l.pct}% of basis, paid separately</span>` : ''}</span>
+        <span style="font-weight: 500;">${l.amount}</span>
+      </div>`).join('') : ''}
       <div style="display: flex; justify-content: space-between; padding: 4px 0;">
         <span>Brokerage Split <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.brokerage_pct}%${brokerageSplitNote}</span></span>
         <span style="font-weight: 500;">${data.brokerage_split}</span>

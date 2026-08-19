@@ -6,6 +6,7 @@ import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
 import { resolveGoverningTeamAgreement } from '@/lib/transactions/teamAgreement'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
+import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_view_all_transactions')
@@ -248,6 +249,98 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
+// The transaction detail page saves with PATCH { transaction, contacts }. This
+// route only exported GET and POST, so every one of those saves returned 405
+// and the page swallowed it into console.error -- the edit looked like it saved
+// and never did. Same permission as the POST update_transaction action below;
+// no new access is granted here.
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission(request, 'can_edit_transactions')
+  if (auth.error) return auth.error
+
+  try {
+    const { id } = await params
+    const body = await request.json()
+    const { transaction, contacts } = body
+
+    let ecommission = null
+    if (transaction && Object.keys(transaction).length > 0) {
+      // An eCommission amount edited here has to reach the debt and the payout
+      // row too, or the transaction field drifts away from the money and the
+      // approval screens start disagreeing with the CDA.
+      const { data: before } = await supabase
+        .from('transactions')
+        .select('ecommission_amount')
+        .eq('id', id)
+        .single()
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          ...normalizeTransactionEntryFields(transaction),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+      if (error) throw error
+
+      if (transaction.ecommission_amount !== undefined) {
+        const nextAmount = transaction.has_ecommission === false
+          ? 0
+          : parseFloat(String(transaction.ecommission_amount ?? 0)) || 0
+        const priorAmount = parseFloat(String(before?.ecommission_amount ?? 0)) || 0
+        if (Math.abs(nextAmount - priorAmount) >= 0.01) {
+          ecommission = await syncEcommissionRecords(id, nextAmount)
+        }
+      }
+    }
+
+    // Client contacts are replaced: the page sends the full list it is showing,
+    // so anything the user removed has to go. INSERT FIRST, then delete the
+    // rows that were there before, and only by id. Deleting first is not safe:
+    // there is no transaction around these two calls, so a failed insert would
+    // leave the deal with no clients at all and nothing to restore them from,
+    // and transaction_contacts is where the CDA reads the client name.
+    // Inserting first fails safe -- the throw happens while the old rows are
+    // still present. A failed delete leaves duplicates, which is visible and
+    // repairable, unlike losing the only copy.
+    if (Array.isArray(contacts)) {
+      const rows = contacts
+        .filter((c: any) => c && c.name)
+        .map((c: any) => ({
+          transaction_id: id,
+          contact_type: 'client',
+          name: c.name,
+          email: c.email || null,
+          phone: c.phone || null,
+        }))
+      // An empty list is far more likely a form that failed to load, or every
+      // name blanked by accident, than an instruction to erase every client on
+      // the deal. Removing the last client is not doable from here by design.
+      if (rows.length > 0) {
+        const { data: priorClients } = await supabase
+          .from('transaction_contacts')
+          .select('id')
+          .eq('transaction_id', id)
+          .eq('contact_type', 'client')
+        const { error: insError } = await supabase.from('transaction_contacts').insert(rows)
+        if (insError) throw insError
+        const priorIds = (priorClients || []).map((c: any) => c.id)
+        if (priorIds.length > 0) {
+          const { error: delError } = await supabase
+            .from('transaction_contacts')
+            .delete()
+            .in('id', priorIds)
+          if (delError) throw delError
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, ecommission })
+  } catch (error) {
+    console.error('PATCH /api/transactions/[id] failed', error)
+    return NextResponse.json({ error: 'Failed to save transaction' }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(request, 'can_edit_transactions')
   if (auth.error) return auth.error
@@ -258,6 +351,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { action } = body
 
     // ── Update transaction fields ────────────────────────────────────────────
+    // Writes whatever keys the caller sends. No caller passes ecommission_amount
+    // today, but if one ever does it must go through syncEcommissionRecords the
+    // way the PATCH handler above does, or the transaction column drifts away
+    // from the debt and the payout row again.
     if (action === 'update_transaction') {
       const { updates } = body
       const { error } = await supabase

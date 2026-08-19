@@ -691,7 +691,7 @@ CREATE TABLE public.agent_debts (
   description text,
   amount_owed numeric NOT NULL,
   amount_paid numeric DEFAULT 0,
-  amount_remaining numeric DEFAULT (amount_owed - amount_paid),
+  amount_remaining numeric GENERATED ALWAYS AS (amount_owed - amount_paid) STORED,
   date_incurred date NOT NULL,
   due_date date,
   date_resolved date,

@@ -1,4 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase'
+import {
+  ECOMMISSION_DEBT_TYPE,
+  ECOMMISSION_PAYEE_NAME,
+} from '@/lib/transactions/ecommission'
 
 /**
  * Shared CDA data loader + computation.
@@ -13,12 +17,11 @@ import { supabaseAdmin } from '@/lib/supabase'
  */
 
 /**
- * debt_type for an eCommission commission advance. Withheld from the agent like
- * any other staged debt, but owed to eCommission -- an outside company -- so it
- * is disbursed to them, never kept by the brokerage.
- * Keep in sync with DEBT_TYPES in components/transactions/AgentBillingPanel.tsx.
+ * Re-exported so existing importers of this module keep working. The constant
+ * now lives in lib/transactions/ecommission.ts alongside the display helpers
+ * the approval screens use, so there is exactly one definition of it.
  */
-export const ECOMMISSION_DEBT_TYPE = 'ecommission'
+export { ECOMMISSION_DEBT_TYPE }
 
 function fmtDate(d: string | null | undefined): string {
   if (!d) return '--'
@@ -365,7 +368,17 @@ export async function loadCdaData(id: string, tia_id: string): Promise<LoadCdaRe
     Math.round((ecommissionDebtsTotal - ecommissionExternalTotal) * 100) / 100
   )
   if (ecommissionUncovered > 0) {
-    externalPayees.push({ name: 'eCommission (Advance Repayment)', amount: ecommissionUncovered })
+    // Fold the shortfall into the eCommission payee line already on the deal
+    // instead of pushing a second line. When the advance amount is corrected on
+    // the debt but not on the payout row, the two disagree by the difference,
+    // and two payee rows with the same name for one advance reads as an error
+    // on a document going to title. One line, correct total either way.
+    const existingEcPayee = externalPayees.find(p => /^ecommission/i.test(p.name))
+    if (existingEcPayee) {
+      existingEcPayee.amount = Math.round((existingEcPayee.amount + ecommissionUncovered) * 100) / 100
+    } else {
+      externalPayees.push({ name: ECOMMISSION_PAYEE_NAME, amount: ecommissionUncovered })
+    }
   }
   // A client rebate is the AGENT's money going to the client, not the
   // brokerage's. It is already subtracted inside amount_1099_reportable, so the

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { appliedEcommissionTotal, ecommissionNotice } from '@/lib/transactions/ecommission'
 
 const FIELDS: { key: string; label: string }[] = [
   { key: 'team_or_office', label: 'Team / office' },
@@ -41,8 +42,10 @@ const line = (label: string, value: string, cls = '') => (
 // Collective Realty Co. amount -- an advance belongs to the producing agent,
 // not to a team lead or referral agent riding on the same deal.
 function AgentMoneyColumn({ a, txn, showEcommission, showInvoices = true, canViewBilling = false }: { a: any; txn: any; showEcommission: boolean; showInvoices?: boolean; canViewBilling?: boolean }) {
-  const ecAmount = n(txn.ecommission_amount)
-  const ecCovered = (a.staged || []).some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
+  // The staged debt is the money that leaves the payout, so it is the figure
+  // shown. transactions.ecommission_amount is only the agent's reported number
+  // and goes stale the moment the amount is corrected.
+  const ecNotice = ecommissionNotice(txn.ecommission_amount, appliedEcommissionTotal(a.staged))
   return (
     <div>
       <p className="text-xs font-semibold text-luxury-gray-3 uppercase tracking-widest mb-2">
@@ -100,10 +103,12 @@ function AgentMoneyColumn({ a, txn, showEcommission, showInvoices = true, canVie
           ))}
         </div>
       )}
-      {showEcommission && ecAmount > 0 && (
-        ecCovered
-          ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
-          : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+      {showEcommission && ecNotice && (
+        <p className={ecNotice.tone === 'applied'
+          ? 'text-xs text-amber-700 mt-2'
+          : 'text-xs text-red-600 mt-2 font-semibold'}>
+          {ecNotice.text}
+        </p>
       )}
       {a.adjustment_notes && (
         <p className="text-xs text-luxury-gray-3 mt-2">{a.adjustment_notes}</p>

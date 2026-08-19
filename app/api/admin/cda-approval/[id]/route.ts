@@ -75,6 +75,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           // from a debt -- it adds to the payout instead of subtracting. Same
           // convention as recomputeOfficeNet and the CDA.
           is_credit: d.record_type === 'credit',
+          // Passed through so the page can total the eCommission repayment by
+          // debt_type instead of by matching the description text.
+          debt_type: d.debt_type || null,
+          record_type: d.record_type || null,
           amount_paid: num(d.amount_paid),
         }))
       const stagedTotal = staged.reduce(

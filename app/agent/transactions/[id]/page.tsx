@@ -97,6 +97,7 @@ export default function AgentTransactionDetailPage() {
   const [requiredDocs, setRequiredDocs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [saveNotice, setSaveNotice] = useState<{ text: string; isError: boolean } | null>(null)
   const [activeSlide, setActiveSlide] = useState(0)
   const [form, setForm] = useState<TransactionForm | null>(null)
   const [teamNames, setTeamNames] = useState<string[]>([])
@@ -302,9 +303,23 @@ export default function AgentTransactionDetailPage() {
       })
 
       if (!res.ok) throw new Error('Failed to save')
+      // An eCommission correction cannot be applied to a debt that has already
+      // been staged onto a payout. The save itself succeeded, so without this
+      // the user is told everything landed when the amount did not.
+      const saved = await res.json().catch(() => null)
+      const ec = saved?.ecommission
+      setSaveNotice(
+        ec && (ec.debt === 'locked' || ec.payout_row === 'locked')
+          ? {
+              text: 'Saved, but the eCommission amount could not be updated because it is already applied to a payout. Unstage the debt on the transaction, correct the amount, then stage it again.',
+              isError: false,
+            }
+          : null
+      )
       await loadData()
     } catch (error) {
       console.error('Error saving transaction:', error)
+      setSaveNotice({ text: 'Could not save. Nothing was changed.', isError: true })
     } finally {
       setSaving(false)
     }
@@ -374,6 +389,12 @@ export default function AgentTransactionDetailPage() {
           </button>
         </div>
       </div>
+
+      {saveNotice && (
+        saveNotice.isError
+          ? <div className="p-2.5 bg-red-50 rounded text-xs text-red-700 mb-4">{saveNotice.text}</div>
+          : <p className="text-xs text-amber-700 mb-4">{saveNotice.text}</p>
+      )}
 
       <div className="flex gap-6">
         {/* Left: form slides */}

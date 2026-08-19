@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Send } from 'lucide-react'
+import { appliedEcommissionTotal, ecommissionNotice } from '@/lib/transactions/ecommission'
 
 // Preview-then-send page for transaction documents. Reached from the
 // Commissions tab. Nothing sends blind — the exact document is shown first,
@@ -229,8 +230,10 @@ function SendDocumentInner() {
           const outstandingTotal = outstanding.reduce((s: number, d: any) => s + n(d.amount_remaining ?? d.amount_owed), 0)
           const licExp = u?.license_expiration ? new Date(u.license_expiration) : null
           const licDays = licExp ? Math.floor((licExp.getTime() - Date.now()) / 86400000) : null
-          const ecAmount = n(txn.ecommission_amount)
-          const ecCovered = staged.some((d: any) => String(d.description || '').toLowerCase().includes('ecommission'))
+          // The staged debt is the money that leaves the payout, so it is the
+          // figure shown. transactions.ecommission_amount is only the agent's
+          // reported number and goes stale the moment the amount is corrected.
+          const ecNotice = ecommissionNotice(txn.ecommission_amount, appliedEcommissionTotal(staged))
           const line = (label: string, value: string, cls = '') => (
             <div className={`flex justify-between gap-4 py-1 border-b border-luxury-gray-5/30 text-xs ${cls}`}>
               <span className="text-luxury-gray-3">{label}</span>
@@ -283,10 +286,12 @@ function SendDocumentInner() {
                   {staged.map((d: any) => line(`- ${d.description || d.debt_type || 'Debt'}`, `-${f$(d.amount_paid)}`, 'text-amber-700'))}
                   {line('Net to agent', f$(netToAgent), 'font-semibold')}
                   {line('Office net (deal)', f$(txn.office_net))}
-                  {ecAmount > 0 && (
-                    ecCovered
-                      ? <p className="text-xs text-amber-700 mt-2">eCommission Advance {f$(ecAmount)} - repayment is applied above.</p>
-                      : <p className="text-xs text-red-600 mt-2 font-semibold">eCommission Advance {f$(ecAmount)} reported on this deal but NO repayment is applied to this payout.</p>
+                  {ecNotice && (
+                    <p className={ecNotice.tone === 'applied'
+                      ? 'text-xs text-amber-700 mt-2'
+                      : 'text-xs text-red-600 mt-2 font-semibold'}>
+                      {ecNotice.text}
+                    </p>
                   )}
                   {agent.adjustment_notes && (
                     <p className="text-xs text-luxury-gray-3 mt-2">{agent.adjustment_notes}</p>
