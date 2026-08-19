@@ -41,7 +41,7 @@ const fmtMoney = (n: number): string =>
  * The firm's published base split for each plan. An agent on a Custom plan
  * overrides this through baseSplitOverride; everyone else prints the standard.
  */
-const STANDARD_BASE_SPLIT: Record<CommissionPlanKey, string> = {
+export const STANDARD_BASE_SPLIT: Record<CommissionPlanKey, string> = {
   new_agent: '70/30',
   no_cap: '85/15',
   cap: '70/30',

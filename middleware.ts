@@ -13,6 +13,7 @@ const PUBLIC_PATHS = [
   '/api/auth/logout',
   '/prospective-agent-form',
   '/referral-collective-information',
+  '/collective-realty-information',
   '/api/prospects',
   '/api/forms',
   '/api/payload/webhook',

@@ -21,7 +21,7 @@ export interface StandardPlanDefaults {
  * not yet seeded. Matches the firm's current documented standard so the
  * behavior is identical to the pre-migration state even under fallback.
  */
-const HARD_FALLBACK: StandardPlanDefaults = {
+export const HARD_FALLBACK: StandardPlanDefaults = {
   coachingFee: 500,
   capAmount: 18000,
   postCapSplit: '97/3',
