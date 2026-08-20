@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase, fetchAllRows } from '@/lib/supabase'
 import { sendProspectWelcomeEmail, sendNewProspectNotification } from '@/lib/email'
 import { requirePermission } from '@/lib/api-auth'
+import { createFollowUpToken } from '@/lib/prospects/followUpToken'
 import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -22,12 +23,13 @@ const requiredFields = [
   'phone',
   'location',
   'mls_choice',
-  'expectations',
-  'accountability',
-  'lead_generation',
-  'additional_info',
   'how_heard',
 ]
+
+// expectations, accountability, lead_generation and additional_info moved off
+// this form. They are now asked after submission, on the success screen and in
+// the welcome email, through /api/prospects/follow-up. They were never
+// required for a prospect record to be complete.
 
 if (!isReferralAgent) {
   requiredFields.push('association_status')
@@ -78,10 +80,10 @@ for (const field of requiredFields) {
         mls_choice: formData.mls_choice,
         association_status_on_join: formData.association_status,
         previous_brokerage: formData.previous_brokerage || null,
-        expectations: formData.expectations,
-        accountability: formData.accountability,
-        lead_generation: formData.lead_generation,
-        additional_info: formData.additional_info,
+        expectations: formData.expectations || null,
+        accountability: formData.accountability || null,
+        lead_generation: formData.lead_generation || null,
+        additional_info: formData.additional_info || null,
         how_heard: formData.how_heard,
         how_heard_other: formData.how_heard_other || null,
         referring_agent: formData.referring_agent || null,
@@ -165,11 +167,30 @@ for (const field of requiredFields) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://collectiveagentapp.com'
     const joinLink = `${appUrl}/onboard/${campaign_token}`
 
+    // Scoped token for the optional follow-up questions. Minting must never
+    // break the submission, so a failure here just means no follow-up link.
+    let followUpToken = ''
+    try {
+      followUpToken = await createFollowUpToken(prospect.id)
+    } catch (tokenError) {
+      console.error('Error creating follow-up token:', tokenError)
+    }
+
+    const followUpLink = followUpToken
+      ? `${appUrl}/prospective-agent-form/success` +
+        `?name=${encodeURIComponent(prospect.preferred_first_name || '')}` +
+        `&email=${encodeURIComponent(prospect.email)}` +
+        `&type=${isReferralAgent ? 'referral' : 'standard'}` +
+        `&t=${encodeURIComponent(followUpToken)}`
+      : ''
+
     try {
       await sendProspectWelcomeEmail({
         preferred_first_name: prospect.preferred_first_name,
         email: prospect.email,
         join_link: joinLink,
+        follow_up_link: followUpLink,
+        mls_choice: prospect.mls_choice,
       })
     } catch (emailError) {
       console.error('Error sending prospect email:', emailError)
@@ -183,6 +204,7 @@ for (const field of requiredFields) {
         email: prospect.email,
         phone: prospect.phone,
         location: prospect.location,
+        mls_choice: prospect.mls_choice,
         form_data: formData,
       })
     } catch (notifyError) {
@@ -196,6 +218,7 @@ for (const field of requiredFields) {
         preferred_first_name: prospect.preferred_first_name,
         email: prospect.email,
       },
+      followUpToken,
     })
   } catch (error) {
     console.error('Prospect submission error:', error)

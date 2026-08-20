@@ -26,10 +26,6 @@ function ProspectiveAgentFormContent() {
     mls_choice: '',
     association_status: '',
     previous_brokerage: '',
-    expectations: '',
-    accountability: '',
-    lead_generation: '',
-    additional_info: '',
     how_heard: '',
     how_heard_other: '',
     referring_agent: '',
@@ -151,8 +147,12 @@ function ProspectiveAgentFormContent() {
         return
       }
 
+      const followUp = data.followUpToken
+        ? `&t=${encodeURIComponent(data.followUpToken)}`
+        : ''
+
       router.push(
-        `/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}&type=${formData.mls_choice === 'Referral Collective (No MLS)' ? 'referral' : 'standard'}`
+        `/prospective-agent-form/success?name=${encodeURIComponent(formData.preferred_first_name)}&email=${encodeURIComponent(formData.email)}&type=${formData.mls_choice === 'Referral Collective (No MLS)' ? 'referral' : 'standard'}${followUp}`
       )
     } catch (err) {
       setError('An error occurred. Please try again.')
@@ -395,61 +395,6 @@ function ProspectiveAgentFormContent() {
                     )}
                   </div>
                 )}
-
-                {/* Your Expectations */}
-                <div className="container-card">
-                  <h2 className="section-title">Your Expectations</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        What expectations do you have for {brokerageName}? *
-                      </label>
-                      <textarea
-                        name="expectations"
-                        value={formData.expectations}
-                        onChange={handleChange}
-                        className="textarea-luxury"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        Do you want to be held accountable? *
-                      </label>
-                      <textarea
-                        name="accountability"
-                        value={formData.accountability}
-                        onChange={handleChange}
-                        className="textarea-luxury"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        How do you plan to produce business leads? *
-                      </label>
-                      <textarea
-                        name="lead_generation"
-                        value={formData.lead_generation}
-                        onChange={handleChange}
-                        className="textarea-luxury"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-luxury-gray-3 mb-1.5">
-                        Is there anything you would like to add? *
-                      </label>
-                      <textarea
-                        name="additional_info"
-                        value={formData.additional_info}
-                        onChange={handleChange}
-                        className="textarea-luxury"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
 
                 {/* Referral & Team Information */}
                 <div className="container-card">

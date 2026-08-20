@@ -251,25 +251,25 @@ export default function ProspectDetailPage() {
               <p className="text-luxury-gray-2 font-medium mb-1">
                 What expectations do you have for Collective Realty Co.?
               </p>
-              <p className="text-luxury-gray-1 italic">"{prospect.expectations}"</p>
+              <p className="text-luxury-gray-1 italic">{prospect.expectations ? `"${prospect.expectations}"` : 'N/A'}</p>
             </div>
             <div>
               <p className="text-luxury-gray-2 font-medium mb-1">
                 Do you want to be held accountable?
               </p>
-              <p className="text-luxury-gray-1 italic">"{prospect.accountability}"</p>
+              <p className="text-luxury-gray-1 italic">{prospect.accountability ? `"${prospect.accountability}"` : 'N/A'}</p>
             </div>
             <div>
               <p className="text-luxury-gray-2 font-medium mb-1">
                 How do you plan to produce business leads?
               </p>
-              <p className="text-luxury-gray-1 italic">"{prospect.lead_generation}"</p>
+              <p className="text-luxury-gray-1 italic">{prospect.lead_generation ? `"${prospect.lead_generation}"` : 'N/A'}</p>
             </div>
             <div>
               <p className="text-luxury-gray-2 font-medium mb-1">
                 Is there anything you would like to add?
               </p>
-              <p className="text-luxury-gray-1 italic">"{prospect.additional_info}"</p>
+              <p className="text-luxury-gray-1 italic">{prospect.additional_info ? `"${prospect.additional_info}"` : 'N/A'}</p>
             </div>
           </div>
         </div>

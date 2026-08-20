@@ -101,6 +101,7 @@ export async function sendProspectWelcomeEmail(prospect: {
   email: string
   join_link: string
   mls_choice?: string
+  follow_up_link?: string
 }) {
   const isReferral = prospect.mls_choice === 'Referral Collective (No MLS)'
 
@@ -161,6 +162,13 @@ export async function sendProspectWelcomeEmail(prospect: {
         <p style="text-align: center; color: #aaaaaa; font-size: 14px; margin: 0 0 15px 0;">Courtney Okanlomo<br>courtneyo@collectiverealtyco.com<br>(281) 989-8604</p>
         <div style="text-align: center;"><a href="https://collectiverealtyco.setmore.com/services/1fe35e59-6d4f-4392-8227-c831b31cefd0" class="btn btn-white">Schedule Call</a></div>
       </div>
+      ${prospect.follow_up_link ? `
+      <div class="option-box">
+        <h3 class="option-title">Tell Us a Little More</h3>
+        <p class="option-description">Four short questions about your goals and how you work. Entirely optional, and it helps us prepare for our first conversation.</p>
+        <div style="text-align: center;"><a href="${prospect.follow_up_link}" class="btn btn-white">Answer a Few Questions</a></div>
+      </div>
+      ` : ''}
     `,
     closing: `
       <div class="signature">
