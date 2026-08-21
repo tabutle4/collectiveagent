@@ -2687,7 +2687,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             (payloadInvoice?.description || '') + ' ' +
             (payloadInvoice?.items || []).map((i: any) => i?.description || '').join(' ')
           ).toLowerCase()
-          const re = new RegExp(`\b(${MONTHS.join('|')})\s+(20\d{2})\b`, 'g')
+          // String.raw is required here. In a plain template literal the
+          // string parser consumes the backslashes before RegExp ever sees
+          // them: \b becomes a backspace character (U+0008), \s becomes the
+          // letter s and \d becomes the letter d. The pattern then compiles
+          // to something no invoice description can match, so `best` stayed
+          // null and monthly_fee_paid_through was never advanced on a
+          // commission offset. String.raw keeps the escapes intact while
+          // still interpolating the month list normally.
+          const re = new RegExp(String.raw`\b(${MONTHS.join('|')})\s+(20\d{2})\b`, 'g')
           let best: { year: number; monthIdx: number } | null = null
           let m: RegExpExecArray | null
           while ((m = re.exec(haystack)) !== null) {
