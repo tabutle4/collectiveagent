@@ -262,6 +262,35 @@ export async function GET(
     const processingFee = sumAgentRows('processing_fee')
     const coachingFee = sumAgentRows('coaching_fee')
     const otherFees = sumAgentRows('other_fees')
+    // The compliance/CDA form stamps this marker onto other_fees_description
+    // so a later resubmission can tell "the form wrote these fees" from "the
+    // office typed a custom fee" and never clobber the latter. It is a machine
+    // marker for that ownership test, so it has to come off before an agent
+    // reads the line. Declared locally rather than shared because the two
+    // writers (app/api/agent/forms/compliance-cda/route.ts, in the
+    // resubmission block and again in the first-submission block) hold their
+    // own copies of this literal; if you change it there, change it here.
+    const REFERRAL_FEES_FORM_TAG = '[referral fees - compliance form]'
+    // The Other Fees line is a sumAgentRows() total, so its label has to
+    // explain every row that contributed to it, not just the anchor row's.
+    // Rows carrying no fee are skipped: a stale description left behind after
+    // a fee was zeroed out would otherwise name a charge the agent was not
+    // billed. Duplicates collapse because the same referral is commonly
+    // written onto both a primary and a co_agent row for the same agent, and
+    // printing it twice reads as two separate charges.
+    const otherFeesDescription = Array.from(
+      new Set(
+        agentRows
+          .filter((r: any) => (parseFloat(r.other_fees) || 0) > 0)
+          .map((r: any) =>
+            String(r.other_fees_description || '')
+              .split(REFERRAL_FEES_FORM_TAG).join('')
+              .replace(/\s+/g, ' ')
+              .trim()
+          )
+          .filter(Boolean)
+      )
+    ).join('; ')
     const rebateAmount = sumAgentRows('rebate_amount')
     const totalFees = processingFee + coachingFee + otherFees
     // Additional-comp rows (extra checks to the same agent) add their own 1099
@@ -563,6 +592,7 @@ export async function GET(
       processing_fee: processingFee > 0 ? fmt$(processingFee) : null,
       coaching_fee: coachingFee > 0 ? fmt$(coachingFee) : null,
       other_fees: otherFees > 0 ? fmt$(otherFees) : null,
+      other_fees_description: otherFees > 0 && otherFeesDescription ? otherFeesDescription : null,
       // A rebate reduces the 1099 the same way a fee does, so it has to appear
       // wherever the deductions are listed. Without it the calculation shows a
       // split and a set of fees that do not add up to the 1099 figure beneath
@@ -845,7 +875,7 @@ function generateStatementHTML(data: Record<string, any>): string {
       ` : ''}
       ${data.other_fees ? `
       <div style="display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px dotted #ddd;">
-        <span>Less Other Fees</span>
+        <span>Less Other Fees${data.other_fees_description ? ` <span style="color: #999; font-size: 9px; margin-left: 6px;">${data.other_fees_description}</span>` : ''}</span>
         <span style="font-weight: 500;">- ${data.other_fees}</span>
       </div>
       ` : ''}
@@ -909,7 +939,7 @@ function generateStatementHTML(data: Record<string, any>): string {
         </div>
         ${data.processing_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Processing Fee</span><span style="color: #333;">- ${data.processing_fee}</span></div>` : ''}
         ${data.coaching_fee ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Coaching Fee</span><span style="color: #333;">- ${data.coaching_fee}</span></div>` : ''}
-        ${data.other_fees ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Other Fees</span><span style="color: #333;">- ${data.other_fees}</span></div>` : ''}
+        ${data.other_fees ? `<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #666;">Other Fees${data.other_fees_description ? ` <span style="color: #999;">${data.other_fees_description}</span>` : ''}</span><span style="color: #333;">- ${data.other_fees}</span></div>` : ''}
       </div>
     </div>
 
