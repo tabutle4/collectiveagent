@@ -238,6 +238,10 @@ export default function AdminCompliancePage() {
     }
   }, [])
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'closed' | 'cancelled'>('active')
+  // Needs CDA sub-filter. Only rendered on that tab. "all" is the default view
+  // and is unchanged from before this filter existed: sent and unsent together,
+  // compliance complete.
+  const [cdaFilter, setCdaFilter] = useState<'all' | 'sent' | 'not_sent' | 'pending_compliance'>('all')
   const [search, setSearch] = useState('')
   const [linkFilter, setLinkFilter] = useState<'all' | 'linked' | 'unlinked'>('all')
   const [sortBy, setSortBy] = useState<'recent' | 'closing' | 'agent' | 'status'>('recent')
@@ -300,6 +304,13 @@ export default function AdminCompliancePage() {
     if (tab === 'pending_checklist' && linkFilter !== 'all') setLinkFilter('all')
   }, [tab, linkFilter])
 
+  // The CDA sub-filter only has meaning on Needs CDA and its control is hidden
+  // everywhere else. Reset it on the way out so it cannot silently narrow the
+  // tab the next time it is opened.
+  useEffect(() => {
+    if (tab !== 'needs_cda' && cdaFilter !== 'all') setCdaFilter('all')
+  }, [tab, cdaFilter])
+
   const pendingCompliance = (r: TrackerRow) => r.compliance_status !== 'complete'
   // Only deals whose compliance submission is actually linked to a transaction.
   // An unlinked submission has no deal to run a checklist against, so it was
@@ -327,6 +338,16 @@ export default function AdminCompliancePage() {
     !r.is_lease &&
     !isReferredOut(r) &&
     r.compliance_status === 'complete' &&
+    (txnStatus(r) !== 'closed' || !r.all_payees_paid)
+  // Needs CDA -> "Pending compliance": the same deal shape as needsCda (a sale
+  // CRC will issue a CDA for, not yet finished) except compliance is NOT signed
+  // off, so it is deliberately absent from the default view. This is the
+  // look-ahead list -- work that is coming, not work that is ready.
+  const cdaPendingCompliance = (r: TrackerRow) =>
+    r.submission_mode !== 'retainer' &&
+    !r.is_lease &&
+    !isReferredOut(r) &&
+    r.compliance_status !== 'complete' &&
     (txnStatus(r) !== 'closed' || !r.all_payees_paid)
   // Post closing: compliance is signed off but the post-closing work is not
   // finished. Leases and referred-out deals are excluded here for the same
@@ -382,7 +403,19 @@ export default function AdminCompliancePage() {
     : 'documents'
   const visible = (() => {
     let list = rows.filter(r => statusPasses(r))
-    if (tab !== 'all') list = list.filter(tabPredicate[tab])
+    // "Pending compliance" replaces the Needs CDA predicate rather than
+    // narrowing it, because needsCda requires compliance to be complete and
+    // these deals by definition are not. Every other view still runs the tab
+    // predicate first and then narrows on whether the CDA went out.
+    if (tab === 'needs_cda' && cdaFilter === 'pending_compliance') {
+      list = list.filter(cdaPendingCompliance)
+    } else if (tab !== 'all') {
+      list = list.filter(tabPredicate[tab])
+    }
+    if (tab === 'needs_cda' && cdaFilter === 'sent') list = list.filter(r => r.cda_sent)
+    // Deals marked "CDA not needed" stay in the not-sent list on purpose -- no
+    // CDA has gone out on them, and they should still be visible here.
+    else if (tab === 'needs_cda' && cdaFilter === 'not_sent') list = list.filter(r => !r.cda_sent)
 
     if (linkFilter === 'linked') list = list.filter(r => r.transaction_id)
     else if (linkFilter === 'unlinked') list = list.filter(r => !r.transaction_id)
@@ -1247,6 +1280,19 @@ export default function AdminCompliancePage() {
           <option value="cancelled">Cancelled</option>
         </select>
 
+        {tab === 'needs_cda' && (
+          <select
+            value={cdaFilter}
+            onChange={e => setCdaFilter(e.target.value as typeof cdaFilter)}
+            className="select-luxury text-xs py-1.5"
+          >
+            <option value="all">Sent and not sent</option>
+            <option value="sent">CDA sent</option>
+            <option value="not_sent">CDA not sent</option>
+            <option value="pending_compliance">Pending compliance</option>
+          </select>
+        )}
+
         <div className="relative flex-1 min-w-[200px]">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-luxury-gray-4" />
           <input
@@ -1368,7 +1414,10 @@ export default function AdminCompliancePage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-luxury-gray-1 whitespace-nowrap">
                       {fmtDate(r.closing_date) || '-'}
-                      {tab === 'needs_cda' && !r.cda_sent && r.cda_manual_status !== 'not_needed' && (() => {
+                      {/* Not shown in the pending-compliance view: compliance
+                          is not signed off on those deals, so "send now" would
+                          be telling you to do something you cannot do yet. */}
+                      {tab === 'needs_cda' && cdaFilter !== 'pending_compliance' && !r.cda_sent && r.cda_manual_status !== 'not_needed' && (() => {
                         const d = daysUntil(r.closing_date)
                         if (d === null || d > cdaDueSoonDays) return null
                         return (
