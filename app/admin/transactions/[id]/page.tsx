@@ -6452,8 +6452,8 @@ export default function AdminTransactionDetailPage() {
                         <p className="text-xs text-luxury-gray-3 mt-0.5">
                           {isNewAgentPlan ? (
                             txnIsLease 
-                              ? `Leases do not count toward the ${qualifyingTarget} sales needed to upgrade to 85/15`
-                              : `This sale will count toward the ${qualifyingTarget} needed to upgrade to 85/15`
+                              ? `Leases do not count toward the ${qualifyingTarget} sales needed to pick Cap or No Cap`
+                              : `This sale will count toward the ${qualifyingTarget} needed to pick Cap or No Cap`
                           ) : (
                             `The $${parseFloat(markPaidModal.agent?.brokerage_split || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} brokerage split will be added to cap progress`
                           )}

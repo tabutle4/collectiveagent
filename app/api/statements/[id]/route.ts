@@ -688,7 +688,7 @@ function generateStatementHTML(data: Record<string, any>): string {
   <div style="background: #f9f7f4; border: 1px solid #e5ddd3; border-radius: 6px; padding: 12px 14px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
     <div>
       <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #8a7a60; margin-bottom: 2px;">New Agent Plan progress</div>
-      <div style="font-size: 13px; color: #333;">After ${data.qualifying_target} qualifying sales, you'll upgrade to the <strong>85/15 plan</strong></div>
+      <div style="font-size: 13px; color: #333;">After ${data.qualifying_target} qualifying sales, you'll choose between the <strong>Cap Plan</strong> and the <strong>No Cap Plan</strong></div>
     </div>
     <div style="text-align: right;">
       <div style="font-size: 24px; font-weight: 600; color: #333;">${data.qualifying_count} <span style="font-size: 14px; font-weight: 400; color: #666;">of ${data.qualifying_target}</span></div>
