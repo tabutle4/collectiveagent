@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { ensurePrimaryTia, autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
+import { findDuplicateTransactions } from '@/lib/transactions/dedupe'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -247,6 +248,33 @@ export async function POST(request: NextRequest) {
       } else {
         insertRow.closing_date = dateVal
         insertRow.sales_price = salesPrice
+      }
+
+      // Creating a deal from a submission that could not be linked. If one
+      // already exists at this address, say so instead of adding a second:
+      // this route exists precisely to attach orphaned submissions to deals,
+      // so silently making a duplicate here defeats its own purpose. Admin
+      // decides, so the response names the match rather than auto-attaching.
+      if (!body?.confirm_new_deal) {
+        const existing = await findDuplicateTransactions(insertRow.property_address)
+        if (existing.length) {
+          // 409 here, unlike POST /api/transactions which returns 200. The
+          // callers of this route branch on res.ok and record data.transaction_id
+          // on success, so a 200 carrying success:false would be read as a
+          // successful create and would store an undefined id while clearing
+          // the item from the queue. The status stays an error and the message
+          // names the deal, because on this screen linking to the existing deal
+          // is a first-class action already in the UI.
+          const names = existing
+            .map(m => `${m.property_address || m.client_name} (${m.status})`)
+            .join('; ')
+          return NextResponse.json({
+            success: false,
+            duplicate_check: true,
+            matches: existing,
+            error: `A transaction already exists for this property: ${names}. Link this submission to it, or use Create anyway if it is a different deal.`,
+          }, { status: 409 })
+        }
       }
 
       const { data: newTxn, error: txnErr } = await supabaseAdmin

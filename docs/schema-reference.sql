@@ -562,11 +562,15 @@ CREATE TABLE public.transactions (
   cda_sent_manual_at timestamp with time zone,
   cda_sent_manual_by uuid,
   cda_manual_status text,
+  archived_at timestamp with time zone,
+  archived_by uuid,
+  archive_reason text,
   CONSTRAINT transactions_pkey PRIMARY KEY (id),
   CONSTRAINT transactions_revenue_share_recipient_id_fkey FOREIGN KEY (revenue_share_recipient_id) REFERENCES public.users(id),
   CONSTRAINT transactions_assigned_tc_id_fkey FOREIGN KEY (assigned_tc_id) REFERENCES public.users(id),
   CONSTRAINT transactions_homestead_county_id_fkey FOREIGN KEY (homestead_county_id) REFERENCES public.homestead_links(id),
-  CONSTRAINT transactions_cda_sent_manual_by_fkey FOREIGN KEY (cda_sent_manual_by) REFERENCES public.users(id)
+  CONSTRAINT transactions_cda_sent_manual_by_fkey FOREIGN KEY (cda_sent_manual_by) REFERENCES public.users(id),
+  CONSTRAINT transactions_archived_by_fkey FOREIGN KEY (archived_by) REFERENCES public.users(id)
 );
 CREATE TABLE public.transaction_internal_agents (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

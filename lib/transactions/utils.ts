@@ -1,4 +1,5 @@
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
+import { canonicalAddressKey } from '@/lib/transactions/addressKey'
 // ===== Text Formatting =====
 
 /** Convert text to Title Case (every word capitalized) */
@@ -156,19 +157,19 @@ export function normalizeAddressForStorage(str: string | null | undefined): stri
 
 /**
  * Produce a canonical MATCH KEY for comparing two addresses in find-or-create
- * logic. This is NOT stored or shown to anyone. It lowercases, strips
- * punctuation, and collapses whitespace so "123 Main St." and "123 main  street"
- * compare as close as possible. It intentionally keeps unit/zip content so that
- * a missing unit or zip still produces a different key (we do not want to merge
- * two genuinely different units into one deal).
+ * logic. This is NOT stored or shown to anyone.
+ *
+ * The implementation lives in lib/transactions/addressKey.ts and is shared with
+ * every other create path. This name is kept so existing callers keep working.
+ *
+ * The previous body here lowercased and stripped . , # and nothing else, so it
+ * never delivered what its own comment claimed: "St" and "Street" produced
+ * different keys, and every caller relying on it created duplicate deals for
+ * one property. Unit and zip tokens are still kept, so two genuinely different
+ * units never merge.
  */
 export function addressMatchKey(str: string | null | undefined): string {
-  if (!str) return ''
-  return str
-    .toLowerCase()
-    .replace(/[.,#]/g, ' ') // drop common punctuation
-    .replace(/\s+/g, ' ') // collapse whitespace
-    .trim()
+  return canonicalAddressKey(str)
 }
 
 /**

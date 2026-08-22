@@ -5,6 +5,7 @@ import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
 import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
+import { findDuplicateTransactions } from '@/lib/transactions/dedupe'
 import { checkRequired, requiredFieldsError, UNDER_CONTRACT_RULES } from '@/lib/forms/requiredFields'
 import { getEmailLayout } from '@/lib/email/layout'
 import { buildFormAnswersHtml } from '@/lib/form-fields'
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       lender_company, lender_contact_name, lender_phone, lender_email,
       add_transaction_coordination, documents_uploaded_ack,
       bedrooms, bathrooms, garage, sqft,
-      on_behalf_of_agent_id,
+      on_behalf_of_agent_id, confirm_new_deal,
     } = body
 
     // Normalize the address once so it is stored consistently (Title Case,
@@ -97,6 +98,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Selected agent not found' }, { status: 400 })
       }
       agentId = on_behalf_of_agent_id
+    }
+
+    // This route creates a transaction every time it is called and had no
+    // duplicate check at all, which is how one property ended up with two
+    // Under Contract submissions on the same day and two deals to match.
+    // confirm_new_deal=true means the agent has already seen the matches and
+    // said it is a different deal, so the check is skipped on that pass.
+    // Same response shape the compliance form already uses, so the agent sees
+    // the same picker in both places.
+    if (!confirm_new_deal) {
+      const matches = await findDuplicateTransactions(normalizedAddress)
+      if (matches.length) {
+        return NextResponse.json({ success: false, duplicate_check: true, matches })
+      }
     }
 
     // ── Required-field validation (server side) ──────────────────────────────

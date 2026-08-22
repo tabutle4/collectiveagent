@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase, fetchAllRows } from '@/lib/supabase'
-import { addressMatchKey } from '@/lib/transactions/utils'
+import { canonicalAddressKey, findExactTransactionByAddress } from '@/lib/transactions/dedupe'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { Resend } from 'resend'
 import { getEmailLayout, emailSection, emailButton } from '@/lib/email/layout'
@@ -239,18 +239,29 @@ export async function POST(request: NextRequest) {
     // ── Commission link: match property address to a transaction ────────────
     if (isCommission) {
       const submittedAddress = readAttr(txn.attrs, 'Property Address')
-      const key = addressMatchKey(submittedAddress)
+      // Strict key only. This path runs unattended with nobody to confirm a
+      // guess, so it attaches on an exact property match and never on the
+      // looser 'did you mean' tier.
+      const key = canonicalAddressKey(submittedAddress)
 
       let matchedTxn: any = null
       if (key) {
-        // fetchAllRows: the transactions table can exceed Supabase's 1000-row
-        // page cap, and a bare select would silently miss older deals.
-        const candidates = await fetchAllRows(
-          'transactions',
-          'id, property_address, submitted_by',
-          { filters: [{ type: 'not', column: 'property_address', value: null }] }
-        )
-        matchedTxn = candidates.find(t => addressMatchKey(t.property_address) === key) || null
+        // Exactly one match, or none. One address legitimately carries several
+        // live deals - bought in 2024, leased in 2025, sold in 2026 - and 17
+        // addresses look like that today. The old code took the first row it
+        // found, which on those addresses means attaching a commission payment
+        // to an arbitrary one of three deals. Leaving it unmatched puts the
+        // money on the checks page for the office to link deliberately, which
+        // is recoverable; attaching it to the wrong deal is not.
+        const only = await findExactTransactionByAddress(submittedAddress)
+        if (only) {
+          const { data } = await supabase
+            .from('transactions')
+            .select('id, property_address, submitted_by')
+            .eq('id', only.id)
+            .maybeSingle()
+          matchedTxn = data || null
+        }
       }
 
       if (matchedTxn) {
@@ -431,6 +442,40 @@ export async function POST(request: NextRequest) {
     // Create the transaction, mirroring the POST /api/transactions flow:
     // insert, then auto-add the agent to transaction_internal_agents with
     // side/role/plan derived from the type code.
+    // A retainer has no property address yet - the deal is created from the
+    // payer's name - so the address matcher has nothing to work with and
+    // correctly returns no key. The duplicate shape here is a second payment
+    // for the same client, so this matches on agent plus client name against
+    // prospects that are still open. Anything already advanced past prospect
+    // is a live deal and must not absorb a new retainer silently.
+    const retainerKey = (payerName || '').trim().toLowerCase()
+    if (retainerKey) {
+      const { data: priorProspects } = await supabase
+        .from('transactions')
+        .select('id, client_name, property_address, status, archived_at')
+        .eq('submitted_by', agentUser.id)
+        .eq('status', 'prospect')
+      const already = (priorProspects || []).find((t: any) =>
+        !t.archived_at &&
+        String(t.client_name || t.property_address || '').trim().toLowerCase() === retainerKey
+      )
+      if (already) {
+        const { data: check, error: dupErr } = await supabase
+          .from('checks_received')
+          .insert({
+            ...baseCheck,
+            transaction_id: already.id,
+            property_address: already.property_address || payerName || 'Retainer',
+            notes: `Payload retainer for an existing prospect. Realtor: ${realtorName || 'none'}. Client type: ${clientTypeRaw || 'none'}. Payer: ${payerName || 'unknown'}${payerEmail ? ` (${payerEmail})` : ''}. Attached to the retainer already open for this client rather than creating a second deal.`,
+          })
+          .select('id')
+          .single()
+        if (dupErr) throw dupErr
+        console.log('Pay-link retainer attached to existing prospect:', check.id, 'txn:', already.id)
+        return NextResponse.json({ received: true })
+      }
+    }
+
     const nowIso = new Date().toISOString()
     const { data: newTxn, error: txnError } = await supabase
       .from('transactions')

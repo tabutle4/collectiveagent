@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requirePermission } from '@/lib/api-auth'
 import { createClient } from '@/lib/supabase/server'
+import { applyAgentVisibility } from '@/lib/transactions/dedupe'
 
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'can_manage_listings')
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
       .in('id', transactionIds)
       .order('created_at', { ascending: false })
       .limit(50)
+    // Agent-facing search: cancelled and archived deals are not offered as
+    // listing targets.
+    query = applyAgentVisibility(query)
 
     if (addressQuery.trim()) {
       query = query.ilike('property_address', `%${addressQuery.trim()}%`)

@@ -42,6 +42,7 @@ export default function CreateMissingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [bulkRunning, setBulkRunning] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 })
+  const [dupBlocked, setDupBlocked] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -81,7 +82,7 @@ export default function CreateMissingPage() {
     setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
   }
 
-  const createOne = async (it: UnlinkedItem): Promise<boolean> => {
+  const createOne = async (it: UnlinkedItem, confirmNewDeal = false): Promise<boolean> => {
     setBusy(prev => ({ ...prev, [it.submission_id]: true }))
     setErrors(prev => ({ ...prev, [it.submission_id]: '' }))
     const e = edits[it.submission_id]
@@ -101,11 +102,17 @@ export default function CreateMissingPage() {
       const res = await fetch('/api/admin/compliance/link-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', submission_id: it.submission_id, overview }),
+        body: JSON.stringify({ action: 'create', submission_id: it.submission_id, overview, confirm_new_deal: confirmNewDeal }),
       })
       const data = await res.json()
       if (!res.ok) {
         setErrors(prev => ({ ...prev, [it.submission_id]: data.error || 'Failed' }))
+        // A duplicate block is recoverable: the deal may genuinely be a second
+        // side on the same property. Remember it so the row can offer a way
+        // through instead of dead-ending on the error text.
+        if (data.duplicate_check) {
+          setDupBlocked(prev => ({ ...prev, [it.submission_id]: true }))
+        }
         return false
       }
       setDone(prev => ({ ...prev, [it.submission_id]: data.transaction_id }))
@@ -248,8 +255,19 @@ export default function CreateMissingPage() {
               </div>
 
               {err && (
-                <div className="flex items-center gap-2 mt-3 text-sm text-red-600">
-                  <AlertCircle className="w-4 h-4" /> {err}
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <AlertCircle className="w-4 h-4" /> {err}
+                  </div>
+                  {dupBlocked[it.submission_id] && (
+                    <button
+                      onClick={() => createOne(it, true)}
+                      disabled={isBusy}
+                      className="btn btn-secondary text-xs"
+                    >
+                      Create anyway - this is a different deal
+                    </button>
+                  )}
                 </div>
               )}
             </div>

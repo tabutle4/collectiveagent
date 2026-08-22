@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { applyAgentVisibility } from '@/lib/transactions/dedupe'
 
 const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
 
@@ -51,7 +52,9 @@ export async function GET(request: NextRequest) {
       .limit(10)
 
     if (!isStaff) {
-      transactionQuery = transactionQuery.eq('submitted_by', user.id)
+      // Cancelled is already excluded above for everyone. Archived is hidden
+      // from agents only; the office keeps full visibility by design.
+      transactionQuery = applyAgentVisibility(transactionQuery).eq('submitted_by', user.id)
     }
 
     const { data: transactionResults } = await transactionQuery

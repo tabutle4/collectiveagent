@@ -149,6 +149,11 @@ export async function GET(
       .in('agent_role', ['primary_agent', 'listing_agent'])
       .eq('counts_toward_progress', true)
       .eq('transactions.status', 'closed')
+      // Archived deals keep status 'closed', so without this an archived
+      // duplicate still adds its brokerage split to cap progress and moves the
+      // agent toward their cap on a deal that happened once. Cancelling is
+      // caught by the status test above; archiving is not.
+      .is('transactions.archived_at', null)
       .gte('transactions.closing_date', `${currentYear}-01-01`)
     
     const calculatedCapProgress = (capData || []).reduce(

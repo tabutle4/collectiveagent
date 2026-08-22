@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase'
 import { qualifyingCountForAgent } from '@/lib/transactions/qualifyingCount'
+import { AGENT_VISIBLE_TRANSACTION_FILTERS } from '@/lib/transactions/dedupe'
 import { verifySessionToken } from '@/lib/session'
 
 export async function GET(request: NextRequest) {
@@ -30,7 +31,12 @@ export async function GET(request: NextRequest) {
         'transactions',
         'id, property_address, status, transaction_type, sales_price, monthly_rent, lease_term, client_name, updated_at, closing_date, closed_date, move_in_date',
         {
-          filters: [{ type: 'eq', column: 'submitted_by', value: userId }],
+          filters: [
+            { type: 'eq', column: 'submitted_by', value: userId },
+            // This route is agent-scoped by definition, so cancelled and
+            // archived deals are always hidden here. Admin routes are untouched.
+            ...AGENT_VISIBLE_TRANSACTION_FILTERS,
+          ],
           orderBy: { column: 'closing_date', ascending: false },
         },
         supabase

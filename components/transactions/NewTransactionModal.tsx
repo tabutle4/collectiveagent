@@ -38,6 +38,8 @@ export default function NewTransactionModal({
   const [submittedBy, setSubmittedBy] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
 
   const handleCreate = async () => {
     if (!propertyAddress.trim()) {
@@ -60,6 +62,7 @@ export default function NewTransactionModal({
       if (canAssignAgent && submittedBy) {
         body.submitted_by = submittedBy
       }
+      body.confirm_new_deal = confirmedNewDeal
 
       const res = await fetch('/api/transactions', {
         method: 'POST',
@@ -73,6 +76,17 @@ export default function NewTransactionModal({
       }
 
       const data = await res.json()
+
+      // A deal already exists at this address. Show it and let the office
+      // decide: a second live deal here is often correct (landlord plus
+      // tenant, or a lease then a sale), so this is a confirmation step and
+      // not an error.
+      if (data.duplicate_check) {
+        setDuplicateMatches(data.matches || [])
+        setCreating(false)
+        return
+      }
+
       const newId = data.transaction?.id
       if (!newId) throw new Error('No transaction id returned')
 
@@ -171,6 +185,29 @@ export default function NewTransactionModal({
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {duplicateMatches.length > 0 && (
+            <div className="inner-card border-luxury-accent/40 bg-luxury-accent/5 space-y-3">
+              <p className="text-sm font-semibold text-luxury-gray-1">This property already has a deal.</p>
+              <p className="text-xs text-luxury-gray-3">A second deal here is often correct, for example a landlord and a tenant side, or a property leased one year and sold the next. Check the list, then continue if this is a different deal.</p>
+              <div className="space-y-2">
+                {duplicateMatches.map((m: any) => (
+                  <div key={m.id} className="inner-card">
+                    <p className="text-sm font-medium text-luxury-gray-1">{m.property_address || m.client_name}</p>
+                    <p className="text-xs text-luxury-gray-3">
+                      {m.confidence === 'similar' ? 'Similar address' : 'Same address'} - {m.transaction_type || 'no type'} - {m.status} - created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => { setConfirmedNewDeal(true); setDuplicateMatches([]) }}
+                className="btn btn-secondary text-xs"
+              >
+                Not the same - create new
+              </button>
             </div>
           )}
 

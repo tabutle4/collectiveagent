@@ -727,8 +727,11 @@ export default function ComplianceCdaForm() {
                 {duplicateMatches.map((m: any) => (
                   <div key={m.id} className="inner-card flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-luxury-gray-1">{m.client_name}</p>
-                      <p className="text-xs text-luxury-gray-3">Created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{m.confidence ? (m.property_address || m.client_name) : m.client_name}</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {m.confidence ? `${m.confidence === 'similar' ? 'Similar address' : 'Same address'} - ${m.status} - created ` : 'Created '}
+                        {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
                     </div>
                     {/* A retainer prospect can exist without its compliance
                         having been filed, so a match is not a dead end: the
@@ -875,14 +878,25 @@ export default function ComplianceCdaForm() {
         {mode === 'compliance' && duplicateMatches.length > 0 && (
           <section>
             <div className="inner-card border-luxury-accent/40 bg-luxury-accent/5 space-y-4">
-              <p className="text-sm font-semibold text-luxury-gray-1">We found a retainer you submitted for a client with a similar name.</p>
-              <p className="text-xs text-luxury-gray-3">Attaching adds this property and deal to that retainer instead of creating a separate transaction.</p>
+              <p className="text-sm font-semibold text-luxury-gray-1">
+                {duplicateMatches.some((m: any) => m.confidence)
+                  ? 'This property already has a deal in Collective Agent.'
+                  : 'We found a retainer you submitted for a client with a similar name.'}
+              </p>
+              <p className="text-xs text-luxury-gray-3">
+                {duplicateMatches.some((m: any) => m.confidence)
+                  ? 'Attaching files this submission against the deal that already exists instead of creating a second one for the same property.'
+                  : 'Attaching adds this property and deal to that retainer instead of creating a separate transaction.'}
+              </p>
               <div className="space-y-2">
                 {duplicateMatches.map((m: any) => (
                   <div key={m.id} className="inner-card flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-medium text-luxury-gray-1">{m.client_name}</p>
-                      <p className="text-xs text-luxury-gray-3">Created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                      <p className="text-sm font-medium text-luxury-gray-1">{m.confidence ? (m.property_address || m.client_name) : m.client_name}</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {m.confidence ? `${m.confidence === 'similar' ? 'Similar address' : 'Same address'} - ${m.status} - created ` : 'Created '}
+                        {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
                     </div>
                     <button
                       onClick={() => { setAttachTo({ id: m.id, client_name: m.client_name }); setDuplicateMatches([]) }}

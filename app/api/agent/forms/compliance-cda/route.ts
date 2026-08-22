@@ -11,6 +11,7 @@ import { createFlyerFromForm } from '@/lib/flyers/createFlyerFromForm'
 import { ensurePrimaryTia, autoCascadeTransaction, recomputeOfficeNet } from '@/lib/transactions/cascade'
 import { syncEcommissionRecords } from '@/lib/transactions/ecommissionSync'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
+import { findDuplicateTransactions } from '@/lib/transactions/dedupe'
 
 // Convert compliance-form commission inputs into a gross commission dollar
 // amount. commission_basis_price is the PRICE the commission is computed on
@@ -79,33 +80,42 @@ const FROM_EMAIL = 'Collective Realty Co. <transactions@coachingbrokeragetools.c
 // A typed address rarely matches the stored one exactly (commas, suffixes,
 // city/zip present or missing, double spaces). Fall back to matching on the
 // street number + street name when the full string finds nothing.
-function addressSearchTerms(typed: string): string[] {
-  const full = typed.replace(/\s+/g, ' ').trim()
-  const tokens = full.replace(/[.,#]/g, ' ').replace(/\s+/g, ' ').trim().split(' ')
-  const terms = [full]
-  if (tokens.length >= 2) terms.push(`${tokens[0]} ${tokens[1]}`)
-  return terms
-}
-
+/**
+ * Resolve the transaction an agent means by an address they typed.
+ *
+ * Previously this did an ilike on the first two words, scoped to the agent's
+ * own commission rows. Two words is loose enough to hit the wrong deal on a
+ * street with several listings, and the agent scope meant a deal created by
+ * the Under Contract form or the Payload webhook was invisible here, so the
+ * compliance submission made a second transaction for the same property.
+ *
+ * Now it uses the one canonical matcher, brokerage-wide. The agent's own deals
+ * are preferred when several match, so the common case is unchanged.
+ */
 async function findTransactionByAddress(agentId: string, propertyAddress: string) {
+  const matches = await findDuplicateTransactions(propertyAddress)
+  if (!matches.length) return null
+
   const { data: tiaRows } = await supabaseAdmin
     .from('transaction_internal_agents')
     .select('transaction_id')
     .eq('agent_id', agentId)
-  if (!tiaRows?.length) return null
-  const ids = tiaRows.map((r: any) => r.transaction_id)
-  for (const term of addressSearchTerms(propertyAddress)) {
-    const { data } = await supabaseAdmin
-      .from('transactions')
-      .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status')
-      .ilike('property_address', `%${term}%`)
-      .in('id', ids)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (data) return data
-  }
-  return null
+  const ownIds = new Set((tiaRows || []).map((r: any) => r.transaction_id).filter(Boolean))
+
+  // Exact beats similar (findDuplicateTransactions already sorted that way);
+  // among equals, the agent's own deal wins over a colleague's.
+  const chosen =
+    matches.find(m => m.confidence === 'exact' && ownIds.has(m.id)) ||
+    matches.find(m => m.confidence === 'exact') ||
+    matches.find(m => ownIds.has(m.id)) ||
+    matches[0]
+
+  const { data } = await supabaseAdmin
+    .from('transactions')
+    .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status')
+    .eq('id', chosen.id)
+    .maybeSingle()
+  return data || null
 }
 
 async function sendNotifications(emails: string[], subject: string, html: string, identifier: string) {
@@ -154,15 +164,16 @@ export async function GET(request: NextRequest) {
         .eq('id', transactionId).single()
       txn = data
     } else if (address?.trim()) {
-      const { data: tiaRows } = await supabaseAdmin.from('transaction_internal_agents').select('transaction_id').eq('agent_id', lookupAgentId)
-      if (tiaRows?.length) {
-        const ids = tiaRows.map((r: any) => r.transaction_id)
-        for (const term of addressSearchTerms(address)) {
-          const { data } = await supabaseAdmin.from('transactions')
-            .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
-            .ilike('property_address', `%${term}%`).in('id', ids).order('created_at', { ascending: false }).limit(5)
-          if (data?.length) { txn = data[0]; break }
-        }
+      // Same canonical resolver the POST path uses, so the deal the form
+      // previews is always the deal the submission attaches to. These two
+      // disagreeing is what let an agent see "no existing deal" and file a
+      // duplicate.
+      const resolved = await findTransactionByAddress(lookupAgentId, address)
+      if (resolved) {
+        const { data } = await supabaseAdmin.from('transactions')
+          .select('id, property_address, is_locked, compliance_status, transaction_type, representing, status, tenant_transaction_type, lease_term, closing_date, move_in_date, mls_link, client_name, client_email, lead_source, loan_type, sales_price, monthly_rent, gross_commission, bonus_amount, btsa_amount, rebate_amount, internal_referral, internal_referral_fee, external_referral, external_referral_fee, brokerage_referral, brokerage_referral_fee, title_officer_name, title_company, title_company_email, flyer_division, client_phone, title_officer_phone, unit, bedrooms, bathrooms, garage, building_sqft, acceptance_date')
+          .eq('id', resolved.id).maybeSingle()
+        txn = data
       }
     }
     if (!txn) return NextResponse.json({ transaction: null, last_submission: null })
@@ -1247,6 +1258,20 @@ export async function POST(request: NextRequest) {
       buildDisplayAddress(addrParts) ||
       normalizeAddressForStorage(property_address || '') ||
       txn?.property_address
+
+    // The retainer-prospect check above only looks at this agent's own retainer
+    // rows, matched on client name. It cannot see a deal already created for
+    // this property by the Under Contract form, by the Payload commission
+    // webhook, or by another agent, so an address that already exists still got
+    // a second transaction. This checks the resolved address brokerage-wide.
+    // It runs only when no transaction was found, which is the sole branch that
+    // creates one, and only before the agent has confirmed.
+    if (!txn && !body.confirm_new_deal) {
+      const addressMatches = await findDuplicateTransactions(resolvedAddress)
+      if (addressMatches.length) {
+        return NextResponse.json({ success: false, duplicate_check: true, matches: addressMatches })
+      }
+    }
 
     const submissionData = {
       submission_mode: 'compliance', property_address: resolvedAddress,

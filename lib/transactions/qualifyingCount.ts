@@ -13,9 +13,9 @@ import {
  * decrement to fire and nothing guaranteed one did, and six surfaces read the
  * column so any missed write showed a different number on a different screen.
  *
- * Counting the deals instead removes all three. A deal that cancels drops off
- * the next read with no code needing to notice, and every surface asks the same
- * question of the same rows.
+ * Counting the deals instead removes all three. A deal that cancels or is
+ * archived drops off the next read with no code needing to notice, and every
+ * surface asks the same question of the same rows.
  *
  * A deal counts when ALL of these hold:
  *   - the agent holds a primary_agent or listing_agent row on it
@@ -24,6 +24,7 @@ import {
  *     waits on an admin clicking Mark Paid
  *   - the deal is not a lease
  *   - the deal is not referred out
+ *   - the deal is not archived
  *
  * Referred out is tested at two levels on purpose. transaction_type excludes
  * the whole deal, for a file where CRC only made the referral. tia.side
@@ -43,6 +44,13 @@ function rowQualifies(row: any): boolean {
 
 function dealQualifies(txn: any): boolean {
   if (!txn) return false
+  // An archived deal is one the office has retired, and the reason it is
+  // archived is almost always that it duplicates another deal that IS counted.
+  // Status stays 'closed' on an archived row, so unlike cancelling, archiving
+  // is invisible to the status test above and would credit the agent twice for
+  // one sale. Guarded here so both the count and the will-this-count preview
+  // agree without either having to remember.
+  if (txn.archived_at) return false
   if (isLeaseTransactionType(txn.transaction_type)) return false
   if (isReferredOutTransactionType(txn.transaction_type)) return false
   return true
@@ -74,7 +82,7 @@ export async function qualifyingCountsForAgents(
   try {
     data = await fetchAllRows(
       'transaction_internal_agents',
-      'agent_id, agent_role, counts_toward_progress, side, transaction_id, transaction:transactions!inner(id, status, transaction_type)',
+      'agent_id, agent_role, counts_toward_progress, side, transaction_id, transaction:transactions!inner(id, status, transaction_type, archived_at)',
       {
         filters: [
           { type: 'in', column: 'agent_id', value: ids },

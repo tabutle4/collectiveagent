@@ -30,6 +30,8 @@ export default function PreListingForm() {
   // Address completeness, including the unit question.
   const [addressComplete, setAddressComplete] = useState(false)
   const [error, setError] = useState('')
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
   const [coordinationConfig, setCoordinationConfig] = useState<ServiceConfiguration | null>(null)
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([])
   const [submissionType, setSubmissionType] = useState<'new' | 'update'>('new')
@@ -137,10 +139,21 @@ export default function PreListingForm() {
           ...formData,
           submission_type: submissionType,
           user_id: user?.id,
+          confirm_new_deal: confirmedNewDeal,
         }),
       })
 
       const data = await response.json()
+
+      // A deal already exists at a very similar address. Show it and let the
+      // agent decide instead of quietly creating a second one.
+      // These handlers clear loading per-branch rather than in a finally, so
+      // this branch must clear it itself or the button stays spinning.
+      if (response.ok && data.duplicate_check) {
+        setDuplicateMatches(data.matches || [])
+        setLoading(false)
+        return
+      }
 
       if (data.success) {
         // Redirect to the user's dashboard. Agents used to land on a public
@@ -631,6 +644,31 @@ export default function PreListingForm() {
                 </label>
               </div>
             </div>
+
+            {duplicateMatches.length > 0 && (
+              <div className="inner-card border-luxury-accent/40 bg-luxury-accent/5 space-y-4">
+                <p className="text-sm font-semibold text-luxury-gray-1">This property may already have a deal in Collective Agent.</p>
+                <p className="text-xs text-luxury-gray-3">The address below is close to the one you entered. If it is the same property, check the address you typed. If it is a different property, continue.</p>
+                <div className="space-y-2">
+                  {duplicateMatches.map((m: any) => (
+                    <div key={m.id} className="inner-card">
+                      <p className="text-sm font-medium text-luxury-gray-1">{m.property_address || m.client_name}</p>
+                      <p className="text-xs text-luxury-gray-3">
+                        {m.confidence === 'similar' ? 'Similar address' : 'Same address'} - {m.status} - created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 pt-2 border-t border-luxury-gray-5/50">
+                  <button
+                    onClick={() => { setConfirmedNewDeal(true); setDuplicateMatches([]) }}
+                    className="btn btn-secondary text-xs"
+                  >
+                    Not the same - create new
+                  </button>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 p-3 bg-red-50 rounded text-xs text-red-700">

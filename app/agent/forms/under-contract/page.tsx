@@ -37,6 +37,8 @@ export default function UnderContractForm() {
   const ADMIN_ROLES = ['admin', 'broker', 'operations', 'tc', 'support']
   const isAdmin = ADMIN_ROLES.includes(String(user?.role || '').toLowerCase())
   const [submitting, setSubmitting] = useState(false)
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([])
+  const [confirmedNewDeal, setConfirmedNewDeal] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [submitResult, setSubmitResult] = useState<any>(null)
@@ -123,6 +125,7 @@ export default function UnderContractForm() {
         ...form,
         on_behalf_of_agent_id: isAdmin && onBehalfAgent ? onBehalfAgent.id : null,
         add_transaction_coordination: form.add_transaction_coordination === 'yes',
+        confirm_new_deal: confirmedNewDeal,
       }
       const res = await fetch('/api/agent/forms/under-contract', {
         method: 'POST',
@@ -130,6 +133,9 @@ export default function UnderContractForm() {
         body: JSON.stringify(payload),
       })
       const data = await res.json()
+      // The server found a deal that already exists for this property. Show it
+      // and let the agent decide, rather than quietly making a second one.
+      if (res.ok && data.duplicate_check) { setDuplicateMatches(data.matches || []); return }
       if (!res.ok || !data.success) { setError(data.error || 'Submission failed. Please try again.'); return }
       setSubmitResult(data)
       setSubmitted(true)
@@ -436,6 +442,33 @@ export default function UnderContractForm() {
             <span className="text-xs text-luxury-gray-2">Before submitting this form, please upload the contract documents.</span>
           </label>
         </section>
+
+        {duplicateMatches.length > 0 && (
+          <section>
+            <div className="inner-card border-luxury-accent/40 bg-luxury-accent/5 space-y-4">
+              <p className="text-sm font-semibold text-luxury-gray-1">This property already has a deal in Collective Agent.</p>
+              <p className="text-xs text-luxury-gray-3">Submitting again would create a second transaction for the same property. If one of these is your deal, the office will file this contract against it.</p>
+              <div className="space-y-2">
+                {duplicateMatches.map((m: any) => (
+                  <div key={m.id} className="inner-card">
+                    <p className="text-sm font-medium text-luxury-gray-1">{m.property_address || m.client_name}</p>
+                    <p className="text-xs text-luxury-gray-3">
+                      {m.confidence === 'similar' ? 'Similar address' : 'Same address'} - {m.status} - created {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3 pt-2 border-t border-luxury-gray-5/50">
+                <button
+                  onClick={() => { setConfirmedNewDeal(true); setDuplicateMatches([]) }}
+                  className="btn btn-secondary text-xs"
+                >
+                  Not the same - create new
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 p-3 bg-red-50 rounded text-xs text-red-700">

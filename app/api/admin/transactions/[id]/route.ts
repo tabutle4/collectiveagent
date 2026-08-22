@@ -698,6 +698,62 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await request.json()
     const { action } = body
 
+    // ── Archive / unarchive ──────────────────────────────────────────────────
+    // Archive, never delete. transactions has 15 tables pointing at it by
+    // foreign key and none were created ON DELETE CASCADE, so a DELETE either
+    // fails or, with cascades added, silently removes checks, ledger entries
+    // and payout history. Archiving hides the deal from agents, keeps it fully
+    // visible to the office, and is reversible.
+    //
+    // Guarded on status: only a cancelled deal can be archived. Archiving a
+    // live deal would hide it from the agent working it, and archiving a
+    // closed one would pull it out of that agent's cap progress and New Agent
+    // Plan count. Cancel it first, then archive.
+    if (action === 'archive_transaction' || action === 'unarchive_transaction') {
+      const archiving = action === 'archive_transaction'
+      const { data: current, error: readErr } = await supabase
+        .from('transactions')
+        .select('id, status, property_address, archived_at')
+        .eq('id', id)
+        .single()
+      if (readErr || !current) {
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+      }
+      if (archiving && current.status !== 'cancelled') {
+        return NextResponse.json({
+          error: 'Only a cancelled deal can be archived. Cancel it first, then archive.',
+        }, { status: 400 })
+      }
+      if (archiving && current.archived_at) {
+        return NextResponse.json({ success: true, already: true, archived_at: current.archived_at })
+      }
+
+      const { error: archErr } = await supabase
+        .from('transactions')
+        .update(archiving
+          ? {
+              archived_at: new Date().toISOString(),
+              archived_by: auth.user.id,
+              archive_reason: String(body.archive_reason || '').trim() || 'Cancelled duplicate',
+              updated_at: new Date().toISOString(),
+            }
+          : {
+              archived_at: null,
+              archived_by: null,
+              archive_reason: null,
+              updated_at: new Date().toISOString(),
+            })
+        .eq('id', id)
+      if (archErr) {
+        return NextResponse.json({ error: archErr.message }, { status: 400 })
+      }
+      return NextResponse.json({
+        success: true,
+        archived: archiving,
+        property_address: current.property_address,
+      })
+    }
+
     // ── Update transaction fields ────────────────────────────────────────────
     if (action === 'update_transaction') {
       const { updates } = body

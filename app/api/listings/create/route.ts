@@ -15,6 +15,7 @@ import { Resend } from 'resend'
 import { normalizeAddressComponents, buildDisplayAddress, validateAddressComponents, normalizePropertyStats } from '@/lib/transactions/utils'
 import { checkRequired, requiredFieldsError, JUST_LISTED_RULES, PRE_LISTING_RULES } from '@/lib/forms/requiredFields'
 import { normalizeAddressForStorage, addressMatchKey } from '@/lib/transactions/utils'
+import { findExactTransactionByAddress, isVisibleToAgent, findDuplicateTransactions } from '@/lib/transactions/dedupe'
 import { formatNameToTitleCase } from '@/lib/nameFormatter'
 
 // Helper function to find existing transaction by property address and agent.
@@ -53,11 +54,26 @@ async function findExistingTransaction(
   const targetKey = addressMatchKey(propertyAddress)
   if (!targetKey) return null
 
+  // Cancelled and archived deals are not link targets: linking a new listing to
+  // a deal the office already retired would resurrect it on the agent's screen.
   const match = candidates.find(
-    (t: any) => addressMatchKey(t.property_address) === targetKey
+    (t: any) => isVisibleToAgent(t) && addressMatchKey(t.property_address) === targetKey
   )
+  if (match) return match
 
-  return match || null
+  // Nothing among this agent's own deals. Before creating one, check the whole
+  // brokerage: a deal for this property may already exist under the Payload
+  // webhook with no agent row, or under a co-agent, and creating here would
+  // make it a duplicate. Exact tier only - this path runs without a person to
+  // confirm a looser guess.
+  const exact = await findExactTransactionByAddress(propertyAddress)
+  if (!exact) return null
+  const { data: brokerageMatch } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', exact.id)
+    .maybeSingle()
+  return brokerageMatch || null
 }
 
 // Option B: link a listing to a transaction. Finds an existing transaction for
@@ -286,6 +302,29 @@ export async function POST(request: NextRequest) {
       body.property_address = buildDisplayAddress(parts)
     } else if (body.property_address) {
       body.property_address = normalizeAddressForStorage(body.property_address)
+    }
+
+    // Both the Pre-Listing and Just Listed forms land here, and both create a
+    // transaction through findOrCreateListingTransaction below. That helper
+    // attaches on an exact address match, which is right and needs no prompt,
+    // but it cannot see a near miss: a pre-listing typed "Southbrook Drive"
+    // against an existing "Southbrook St" would create a second deal for one
+    // property, which is the exact pair that reached production.
+    //
+    // So: exact matches stay silent and auto-attach. A similar-only match asks
+    // the agent, using the same duplicate_check contract the other forms use.
+    // Checked here, before createListing, so a declined submission does not
+    // leave an orphan listing row behind.
+    if (body.submission_type !== 'update' && !body.confirm_new_deal && body.property_address) {
+      const listingMatches = await findDuplicateTransactions(body.property_address)
+      const exactCount = listingMatches.filter(m => m.confidence === 'exact').length
+      // Exactly one exact match is unambiguous, so the helper below attaches to
+      // it silently. Anything else needs a person: no exact match but a similar
+      // one is a possible typo, and several exact matches means the property
+      // has more than one live deal and only the agent knows which is theirs.
+      if (exactCount !== 1 && listingMatches.length) {
+        return NextResponse.json({ success: false, duplicate_check: true, matches: listingMatches })
+      }
     }
 
     // Get agent_id (either from body.agent_id or look up by agent_name)

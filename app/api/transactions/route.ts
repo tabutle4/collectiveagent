@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTransactionEntryFields } from '@/lib/transactions/utils'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows, supabaseAdmin } from '@/lib/supabase'
+import { findDuplicateTransactions, AGENT_VISIBLE_TRANSACTION_FILTERS } from '@/lib/transactions/dedupe'
 import { autoCascadeTransaction } from '@/lib/transactions/cascade'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions, PermissionCode } from '@/lib/permissions'
@@ -83,7 +84,12 @@ export async function GET(request: NextRequest) {
           'transactions',
           TRANSACTION_COLUMNS,
           {
-            filters: [{ type: 'eq' as const, column: 'submitted_by', value: userId }],
+            filters: [
+              { type: 'eq' as const, column: 'submitted_by', value: userId },
+              // Cancelled and archived deals stay fully visible to admins and
+              // disappear for agents. Only this !canViewAll branch is filtered.
+              ...AGENT_VISIBLE_TRANSACTION_FILTERS,
+            ],
             orderBy: TRANSACTION_ORDER,
           },
           supabase
@@ -93,7 +99,10 @@ export async function GET(request: NextRequest) {
               'transactions',
               TRANSACTION_COLUMNS,
               {
-                filters: [{ type: 'in' as const, column: 'id', value: participatingIds }],
+                filters: [
+                  { type: 'in' as const, column: 'id', value: participatingIds },
+                  ...AGENT_VISIBLE_TRANSACTION_FILTERS,
+                ],
                 orderBy: TRANSACTION_ORDER,
               },
               supabase
@@ -182,6 +191,27 @@ export async function POST(request: NextRequest) {
 
     // Remove fields that shouldn't be inserted directly
     delete transactionData.id
+
+    // Every create modal in the app posts here, and this route had no address
+    // check at all. Same contract the agent forms use: report the matches and
+    // let the caller resubmit with confirm_new_deal once a person has looked.
+    if (!body.confirm_new_deal) {
+      const existing = await findDuplicateTransactions(transactionData.property_address)
+      if (existing.length) {
+        // 200, not 409, and deliberately so. A second live deal at one address
+        // is routine here - landlord plus tenant on the same property, or a
+        // house leased one year and sold the next - so this is a question, not
+        // a failure. Returning an error status made the modal throw, which hid
+        // the match list and left no way to continue. Same shape the four agent
+        // form routes return, so every client handles one contract.
+        return NextResponse.json({
+          success: false,
+          duplicate_check: true,
+          matches: existing,
+        })
+      }
+    }
+    delete transactionData.confirm_new_deal
 
     const { data: newTransaction, error } = await supabase
       .from('transactions')
