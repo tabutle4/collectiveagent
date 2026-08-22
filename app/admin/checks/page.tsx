@@ -408,7 +408,7 @@ function DesktopRow({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdm
     .join(', ') || '-'
 
   const txnHref = c.transaction_id
-    ? (isAdmin ? `/admin/transactions/${c.transaction_id}` : `/agent/transactions/${c.transaction_id}`)
+    ? `/admin/transactions/${c.transaction_id}`
     : null
 
   return (
@@ -474,7 +474,7 @@ function DesktopRow({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdm
 
 function MobileCard({ check: c, isAdmin, onMoveCheck }: { check: CheckRow; isAdmin: boolean; onMoveCheck?: (check: CheckRow) => void }) {
   const txnHref = c.transaction_id
-    ? (isAdmin ? `/admin/transactions/${c.transaction_id}` : `/agent/transactions/${c.transaction_id}`)
+    ? `/admin/transactions/${c.transaction_id}`
     : null
 
   const agentNames = c.agents.map(a => a.name).join(', ')

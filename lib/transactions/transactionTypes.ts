@@ -109,6 +109,20 @@ export function isLeaseTransactionType(
   )
 }
 
+/**
+ * Deals referred out to another brokerage collect a referral fee without the
+ * agent closing a sale, so they do not count toward the New Agent plan's
+ * qualifying-sales progress (office decision, Aug 21 2026). Same
+ * substring-based detection as the lease test, so a future referred variant
+ * is caught too.
+ */
+export function isReferredOutTransactionType(
+  code: string | null | undefined
+): boolean {
+  if (!code) return false
+  return code.toLowerCase().includes('referred')
+}
+
 export type TransactionTypeCategory =
   | 'Buyers'
   | 'Sellers'

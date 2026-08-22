@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase'
+import { qualifyingCountForAgent } from '@/lib/transactions/qualifyingCount'
 import { verifySessionToken } from '@/lib/session'
 
 export async function GET(request: NextRequest) {
@@ -105,8 +106,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Derived, so the dashboard tile agrees with the statement and the preview.
+    const qualifying = await qualifyingCountForAgent(String(session.user.id))
     return NextResponse.json({
-      user,
+      user: { ...user, qualifying_transaction_count: qualifying },
       commissionPlan,
       transactions,
       agentRows,

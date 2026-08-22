@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifySessionToken } from '@/lib/session'
 import { getUserPermissions } from '@/lib/permissions'
+import { qualifyingCountForAgent } from '@/lib/transactions/qualifyingCount'
 
 export async function GET(request: NextRequest) {
   try {
@@ -43,8 +44,11 @@ export async function GET(request: NextRequest) {
     const permissionSet = await getUserPermissions(session.user.id)
     const permissions: string[] = Array.from(permissionSet)
 
+    // Overwrite the stored counter with the derived count so AuthContext
+    // never carries a number that disagrees with the statement.
+    const qualifying = await qualifyingCountForAgent(String(session.user.id))
     return NextResponse.json({
-      user: { ...session.user, ...dbUser },
+      user: { ...session.user, ...dbUser, qualifying_transaction_count: qualifying },
       permissions,
     })
   } catch (error) {

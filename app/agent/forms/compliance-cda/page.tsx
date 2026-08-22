@@ -492,6 +492,7 @@ export default function ComplianceCdaForm() {
                 ? `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} qualifying sales - time to pick Cap or No Cap`
                 : `${previewInfo.new_agent_deals} of ${previewInfo.new_agent_required || 5} qualifying sales (leases do not count)`
             )}
+            <div className="pt-1 mt-1 border-t border-luxury-gray-5 text-luxury-gray-2">A preview based on what you've entered. The office confirms everything before payout.</div>
           </div>
         )}
         <div className="text-xs text-luxury-gray-2 space-y-1">

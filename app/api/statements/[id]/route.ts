@@ -4,6 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { computeCommission } from '@/lib/transactions/math'
 import { AGENT_ROLE_OPTIONS } from '@/lib/transactions/constants'
 import { sideCategory } from '@/lib/transactions/sides'
+import { qualifyingCountForAgent, dealWouldQualifyForAgent } from '@/lib/transactions/qualifyingCount'
 
 const formatRole = (role: string | null | undefined): string => {
   if (!role) return 'Agent'
@@ -438,7 +439,16 @@ export async function GET(
     const showNewAgentProgress = isNewAgentPlan(plan)
     const capProgress = calculatedCapProgress
     const capAmount = 18000
-    const qualifyingCount = agent?.qualifying_transaction_count || 0
+    // Derived, not read from users.qualifying_transaction_count: the stored
+    // counter moved at Mark Paid, which is after the money is real and after
+    // statements go out. See lib/transactions/qualifyingCount.ts.
+    const qualifyingCount = await qualifyingCountForAgent(String(agent?.id || ''))
+    // This deal is not closed yet but would count once it is. Say so rather
+    // than pre-counting it: deals get delayed and cancelled, and a statement
+    // should never promise a number the agent might not get.
+    const qualifyingPending =
+      String(txn?.status || '') !== 'closed' &&
+      dealWouldQualifyForAgent(txn, agentRows)
     const qualifyingTarget = agent?.qualifying_transaction_target ?? 5
 
     const agentName = agent
@@ -632,6 +642,7 @@ export async function GET(
       cap_remaining: fmt$(Math.max(0, capAmount - capProgress)),
       cap_percentage: Math.min(100, Math.round((capProgress / capAmount) * 100)),
       show_new_agent_progress: showNewAgentProgress,
+      qualifying_pending: qualifyingPending,
       qualifying_count: qualifyingCount,
       qualifying_target: qualifyingTarget,
     })
@@ -682,6 +693,7 @@ function generateStatementHTML(data: Record<string, any>): string {
     <div style="text-align: right;">
       <div style="font-size: 24px; font-weight: 600; color: #333;">${data.qualifying_count} <span style="font-size: 14px; font-weight: 400; color: #666;">of ${data.qualifying_target}</span></div>
       <div style="font-size: 9px; color: #888;">qualifying sales</div>
+      ${data.qualifying_pending ? `<div style="font-size: 10px; color: #666; margin-top: 6px;">This deal will count once it closes.</div>` : ''}
     </div>
   </div>` : ''
 

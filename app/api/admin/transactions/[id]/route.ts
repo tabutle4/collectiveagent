@@ -4,6 +4,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase'
 import { syncCheckComplianceDate } from '@/lib/compliance/syncCheckComplianceDate'
 import { Resend } from 'resend'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { qualifyingCountsForAgents } from '@/lib/transactions/qualifyingCount'
 import { resolveGoverningTeamAgreement, resolveGoverningTeamLeads } from '@/lib/transactions/teamAgreement'
 import { computeCommission } from '@/lib/transactions/math'
 import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recomputeGrossAndOffice, cascadePrimarySplit, autoCascadeTransaction } from '@/lib/transactions/cascade'
@@ -602,6 +603,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
+      // Derived New Agent Plan counts for every agent on this deal, so the
+      // "Qualifying Txns" figure agrees with the statement and the preview.
+      const qualifyingByAgent = await qualifyingCountsForAgents(
+        (agents || []).map((a: any) => String(a.agent_id)).filter(Boolean)
+      )
+
       return NextResponse.json({
         transaction: txn,
         agents: (agents || []).map((a: any) => {
@@ -621,7 +628,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             : []
           return {
             ...a,
-            user: { ...u, referred_agents: referredNames },
+            user: { ...u, referred_agents: referredNames, qualifying_transaction_count: qualifyingByAgent[String(u.id)] ?? 0 },
             team_membership: membershipByAgent[a.agent_id] || null,
             billing: billingByAgent[a.agent_id] || null,
             commission_plan_friendly: friendlyPlanLabel(planCode),
@@ -1646,13 +1653,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         return NextResponse.json({ error: 'agent_id is required' }, { status: 400 })
       }
 
+      // The client may omit counts_toward_progress -- the payout modal does not
+      // send it. Defaulting to true silently added lease rows to cap progress,
+      // which the cap rule excludes ("leases never count toward cap"). Resolve
+      // the default the same way AddAgentModal already does: non-lease, and a
+      // primary or listing role. An explicit value from the client still wins.
+      let defaultCountsToward = true
+      if (agent.counts_toward_progress === undefined || agent.counts_toward_progress === null) {
+        const { data: txnForFlag } = await supabase
+          .from('transactions')
+          .select('transaction_type')
+          .eq('id', id)
+          .single()
+        const roleForFlag = agent.agent_role || 'co_agent'
+        defaultCountsToward =
+          !isLeaseTransactionType(txnForFlag?.transaction_type) &&
+          (roleForFlag === 'primary_agent' || roleForFlag === 'listing_agent')
+      }
+
       const insertData: Record<string, any> = {
         transaction_id: id,
         agent_id: agent.agent_id,
         agent_role: agent.agent_role || 'co_agent',
         payment_status: agent.payment_status || 'pending',
         funding_source: agent.funding_source || 'crc',
-        counts_toward_progress: agent.counts_toward_progress ?? true,
+        counts_toward_progress: agent.counts_toward_progress ?? defaultCountsToward,
       }
 
       // Optional fields
@@ -3180,6 +3205,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         agent_net: agentNet,
         updated_at: new Date().toISOString(),
       }
+      // Persist the office's "counts toward progress" decision. It used to
+      // arrive in the body, feed the counter increment, and then be discarded,
+      // so the decision lived nowhere durable. The New Agent Plan count is
+      // derived from this column now, so it has to be written. Only write when
+      // the client actually sends a boolean: an absent key must not overwrite
+      // an existing false set by add_internal_agent or apply_primary_split.
+      if (typeof counts_toward_progress === 'boolean') {
+        tiaUpdate.counts_toward_progress = counts_toward_progress
+      }
 
       const { error: updateTiaError } = await supabase
         .from('transaction_internal_agents')
@@ -3248,45 +3282,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               creditUpdate.date_resolved = payment_date
             }
             await supabase.from('agent_debts').update(creditUpdate).eq('id', creditApp.credit_id)
-          }
-        }
-      }
-
-      // Increment qualifying_transaction_count for new_agent plan primary/listing on non-lease.
-      // Fires ONCE per (transaction_id, agent_id) pair - not once per installment.
-      // Check first: has any other paid TIA row exists for this agent on this transaction?
-      const countsThis = counts_toward_progress !== false
-      if (
-        countsThis &&
-        (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') &&
-        agentUser
-      ) {
-        const { data: otherPaidRows } = await supabase
-          .from('transaction_internal_agents')
-          .select('id')
-          .eq('transaction_id', id)
-          .eq('agent_id', tia.agent_id)
-          .eq('payment_status', 'paid')
-          .neq('id', internal_agent_id)
-
-        const alreadyCountedForThisDeal = (otherPaidRows || []).length > 0
-        if (!alreadyCountedForThisDeal) {
-          const plan = (agentUser.commission_plan || '').toLowerCase().trim()
-          const txnIsLease = transaction_type ? isLeaseType(transaction_type) : false
-          if (!txnIsLease) {
-            const isNewAgentPlan =
-              plan === '70_30_new' ||
-              plan === 'new_agent' ||
-              plan === 'new agent plan' ||
-              (plan.includes('new') && plan.includes('agent'))
-            if (isNewAgentPlan) {
-              await supabase
-                .from('users')
-                .update({
-                  qualifying_transaction_count: (agentUser.qualifying_transaction_count || 0) + 1,
-                })
-                .eq('id', tia.agent_id)
-            }
           }
         }
       }
@@ -3399,50 +3394,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('id', internal_agent_id)
       if (updErr) throw updErr
 
-      // Decrement qualifying_transaction_count if this was a non-lease primary/listing on new_agent plan.
-      // Only decrement if NO other paid TIA row remains for this agent on this transaction
-      // (i.e., this was the last installment that had been paid).
-      if (tia.agent_role === 'primary_agent' || tia.agent_role === 'listing_agent') {
-        const { data: stillPaid } = await supabase
-          .from('transaction_internal_agents')
-          .select('id')
-          .eq('transaction_id', id)
-          .eq('agent_id', tia.agent_id)
-          .eq('payment_status', 'paid')
-          .neq('id', internal_agent_id)
-
-        const lastPaidRow = (stillPaid || []).length === 0
-        if (lastPaidRow) {
-        const { data: txn } = await supabase
-          .from('transactions')
-          .select('transaction_type')
-          .eq('id', id)
-          .single()
-        const txnIsLease = isLeaseType(txn?.transaction_type || '')
-        if (!txnIsLease) {
-          const { data: agentUser } = await supabase
-            .from('users')
-            .select('commission_plan, qualifying_transaction_count')
-            .eq('id', tia.agent_id)
-            .single()
-          if (agentUser) {
-            const plan = (agentUser.commission_plan || '').toLowerCase().trim()
-            const isNewAgentPlan =
-              plan === '70_30_new' ||
-              plan === 'new_agent' ||
-              plan === 'new agent plan' ||
-              (plan.includes('new') && plan.includes('agent'))
-            const current = agentUser.qualifying_transaction_count || 0
-            if (isNewAgentPlan && current > 0) {
-              await supabase
-                .from('users')
-                .update({ qualifying_transaction_count: current - 1 })
-                .eq('id', tia.agent_id)
-            }
-          }
-        }
-        }  // close if (lastPaidRow)
-      }
 
       await recomputeOfficeNet(id)
 

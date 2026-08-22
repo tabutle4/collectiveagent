@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { qualifyingCountForAgent } from '@/lib/transactions/qualifyingCount'
 import { getFirmMinimumPct } from '@/lib/transactions/cascade'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { feeCodeFromRepresenting } from '@/lib/transactions/feeCode'
@@ -101,16 +102,18 @@ export async function POST(request: NextRequest) {
     const coachingFee = coachingWaived ? 0 : Number(plan?.coaching_fee_amount ?? 0)
     const firmMinimumPct = await getFirmMinimumPct(isLease)
 
-    // New Agent Plan progress toward the Cap-or-No-Cap choice. The OFFICIAL
-    // counter is users.qualifying_transaction_count: Mark Paid increments it
-    // only for qualifying closed SALES (leases never count), and the office's
-    // "counts toward" checkbox at Mark Paid can exclude a deal. Never re-count
-    // rows here - that would ignore the office's checkbox decisions.
+    // New Agent Plan progress toward the Cap-or-No-Cap choice. Derived from
+    // the deals, not read from users.qualifying_transaction_count. The earlier
+    // note here said never to re-count rows because that would ignore the
+    // office's "counts toward" checkbox -- it does not: counts_toward_progress
+    // is a persisted column on the agent's row and the shared helper filters
+    // on it, so the checkbox is honoured. Deriving is what keeps this preview,
+    // the statement and the dashboard from disagreeing.
     const isNewAgentPlan = String(plan?.code || '') === '70_30_new' || /new[ _]?agent|70_30_new/i.test(planCode)
     let newAgentDeals: number | null = null
     let newAgentRequired = 5
     if (isNewAgentPlan) {
-      newAgentDeals = Number((agent as any).qualifying_transaction_count ?? 0) || 0
+      newAgentDeals = await qualifyingCountForAgent(String((agent as any).id || ''))
       newAgentRequired = Number((agent as any).qualifying_transaction_target ?? 5) || 5
     }
 
