@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { cookies } from 'next/headers'
+import { avalaraConfigured, companyIdFor, createAndSendW9 } from '@/lib/avalara/w9'
 
 export const dynamic = 'force-dynamic'
 
 // Portal route -- authenticated by pm_session cookie
-// Creates a Track1099 form_request server-side for a landlord
+//
+// Asks Avalara to email the landlord a W-9 request. Avalara owns the email and the
+// signing page; the app reads the result back with getW9FormStatus.
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -45,41 +48,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'W-9 already completed' }, { status: 400 })
     }
 
-    const apiToken = process.env.TRACK1099_API_TOKEN
-    const teamId = process.env.TRACK1099_TEAM_API_ID
-    const companyId = process.env.TRACK1099_CRC_COMPANY_ID
+    const companyId = companyIdFor(false)
 
-    if (!apiToken || !teamId || !companyId) {
+    if (!avalaraConfigured() || !companyId) {
       return NextResponse.json({
         error: 'W-9 service not configured. Please contact pm@collectiverealtyco.com',
         fallback: true,
       }, { status: 503 })
     }
 
-    const res = await fetch(`https://www.track1099.com/api/v1/${teamId}/form_requests`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/vnd.api+json',
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'form_request',
-          attributes: {
-            form_type: 'W-9',
-            company_id: parseInt(companyId),
-            reference_id: landlord.id,
-          },
-        },
-      }),
+    if (!landlord.email) {
+      return NextResponse.json({ error: 'No email address on file' }, { status: 400 })
+    }
+
+    const name = [landlord.first_name, landlord.last_name].filter(Boolean).join(' ').trim()
+
+    const result = await createAndSendW9({
+      email: landlord.email,
+      name: name || landlord.email,
+      companyId,
+      referenceId: landlord.id,
     })
 
-    const responseData = await res.json()
-
-    if (!res.ok) {
-      console.error('Track1099 form_request failed:', responseData)
+    if (!result.ok) {
       return NextResponse.json(
-        { error: 'Failed to create W-9 request. Please try again or contact support.' },
+        { error: 'Failed to send W-9 request. Please try again or contact support.' },
         { status: 500 }
       )
     }
@@ -88,11 +81,12 @@ export async function POST(request: NextRequest) {
       .from('landlords')
       .update({
         w9_status: 'pending',
+        track1099_form_request_id: result.formId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', landlord.id)
 
-    return NextResponse.json({ success: true, form_request: responseData.data })
+    return NextResponse.json({ success: true, emailed: true, form_id: result.formId })
   } catch (error: any) {
     console.error('request-w9 error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })

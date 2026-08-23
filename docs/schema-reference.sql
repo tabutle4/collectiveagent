@@ -116,6 +116,7 @@ CREATE TABLE public.users (
   new_signature_completed_at timestamp with time zone,
   is_coaching_client boolean NOT NULL DEFAULT false,
   w9_tin_status text,
+  w9_form_id text,
   w9_signed_at timestamp with time zone,
   payload_activation_id text,
   payload_payment_method_id text,

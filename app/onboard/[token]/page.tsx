@@ -24,7 +24,6 @@ type JoinFormData = {
 declare global {
   interface Window {
     Payload: any
-    Avalara1099: any
   }
 }
 
@@ -587,17 +586,6 @@ export default function OnboardingPage() {
     script.async = true
     document.head.appendChild(script)
     payloadScriptLoaded.current = true
-  }, [])
-
-  // Load Track1099/Avalara W-9 SDK for W-9 step
-  useEffect(() => {
-    const existing = document.querySelector('script[src*="track1099.com/api/request_form"]')
-    if (existing) return
-    const script = document.createElement('script')
-    script.src = 'https://www.track1099.com/api/request_form.js'
-    script.type = 'module'
-    script.async = true
-    document.head.appendChild(script)
   }, [])
 
   useEffect(() => {
@@ -1644,45 +1632,19 @@ const checkout = new window.Payload.Checkout({
                           body: JSON.stringify({ token }),
                         })
                         const result = await res.json()
-                        if (!res.ok || !result.form_request) {
-                          await notifyW9Error('API response not ok or missing form_request')
-                          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
+                        if (!res.ok || !result.emailed) {
+                          await notifyW9Error(result?.error || 'W-9 request was not sent')
+                          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Avalara.')
                           return
                         }
-                        if (typeof window !== 'undefined' && window.Avalara1099) {
-                          window.Avalara1099.requestW9(result.form_request, {
-                            onComplete: async (completedRequest: any) => {
-                              const attrs = completedRequest?.data?.attributes
-                              await fetch('/api/onboarding/complete-w9', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  token,
-                                  tin_status: attrs?.tin_match_status || null,
-                                  signed_at: attrs?.signed_at || null,
-                                }),
-                              })
-                              // Mark the W-9 step complete client-side so a Back
-                              // navigation shows the completed state, not the
-                              // "request received" message.
-                              setCompletedSteps(prev => ({ ...prev, [isReferralAgent ? 5 : 6]: true }))
-                              setCurrentStep(isReferralAgent ? 6 : 7)
-                              window.scrollTo({ top: 0, behavior: 'smooth' })
-                            },
-                            onError: (errors: any) => {
-                              console.error('W-9 errors:', errors)
-                              notifyW9Error('Avalara onError: ' + JSON.stringify(errors))
-                              alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
-                            },
-                          })
-                        } else {
-                          await notifyW9Error('Avalara1099 SDK not loaded on page')
-                          alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
-                        }
+                        // Avalara emails the W-9 request and hosts the signing page,
+                        // so there is no embedded widget to render here. The step is
+                        // marked complete once Avalara reports the form signed.
+                        setW9Submitted(true)
                       } catch (err) {
                         console.error('W-9 request error:', err)
                         await notifyW9Error('Exception: ' + (err instanceof Error ? err.message : String(err)))
-                        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Track1099.')
+                        alert('The office has been notified. We will send the W-9 request to you via email. Please look for a W-9 Request email from Avalara.')
                       }
                     }}
                     className="btn btn-primary w-full py-3.5 text-sm tracking-widest uppercase"
@@ -1690,7 +1652,7 @@ const checkout = new window.Payload.Checkout({
                     Complete W-9 Now
                   </button>
                   <p className="text-xs text-luxury-gray-3">
-                    Powered by Avalara Track1099. Your information is encrypted and stored securely.
+                    Powered by Avalara. Your information is encrypted and stored securely.
                   </p>
                 </div>
               </>
