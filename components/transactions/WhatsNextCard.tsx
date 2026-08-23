@@ -30,12 +30,22 @@ export default function WhatsNextCard({
   transaction,
   onReleaseToAgents,
   onMarkCompliant,
+  payoutReadyCount,
+  payoutTotalCount,
+  payoutBlockedNote,
+  onGoToPayouts,
 }: {
   stage: PipelineStage
   role: AppRole
   transaction: any
   onReleaseToAgents?: () => void
   onMarkCompliant?: () => void
+  /** Live funding wiring: how many unpaid agent rows pass every payout gate. */
+  payoutReadyCount?: number
+  payoutTotalCount?: number
+  /** One short clause naming what's holding the rest (e.g. a missing statement). */
+  payoutBlockedNote?: string
+  onGoToPayouts?: () => void
 }) {
   const next = computeNextStep({
     stage,
@@ -43,6 +53,10 @@ export default function WhatsNextCard({
     transaction,
     onReleaseToAgents,
     onMarkCompliant,
+    payoutReadyCount,
+    payoutTotalCount,
+    payoutBlockedNote,
+    onGoToPayouts,
   })
 
   return (
@@ -71,12 +85,20 @@ function computeNextStep({
   transaction,
   onReleaseToAgents,
   onMarkCompliant,
+  payoutReadyCount,
+  payoutTotalCount,
+  payoutBlockedNote,
+  onGoToPayouts,
 }: {
   stage: PipelineStage
   role: AppRole
   transaction: any
   onReleaseToAgents?: () => void
   onMarkCompliant?: () => void
+  payoutReadyCount?: number
+  payoutTotalCount?: number
+  payoutBlockedNote?: string
+  onGoToPayouts?: () => void
 }): NextStep {
   const released = !!transaction?.released_to_agent_at
   const isBrokerOrAdmin = role === 'broker' || role === 'admin'
@@ -156,6 +178,19 @@ function computeNextStep({
 
     case 'funded':
       if (isBrokerOrAdmin) {
+        // Live payout wiring: when the deal page has computed which unpaid
+        // rows pass every gate, name the count and deep-link to the queue.
+        if (payoutTotalCount != null && payoutTotalCount > 0 && onGoToPayouts) {
+          const ready = payoutReadyCount ?? 0
+          const copy =
+            ready > 0
+              ? `Next: ${ready} of ${payoutTotalCount} agent${payoutTotalCount === 1 ? '' : 's'} ready for payout.${payoutBlockedNote ? ` ${payoutBlockedNote}` : ''}`
+              : `Next: 0 of ${payoutTotalCount} agent${payoutTotalCount === 1 ? '' : 's'} ready for payout.${payoutBlockedNote ? ` ${payoutBlockedNote}` : ''}`
+          return {
+            copy,
+            action: { label: 'Go to payouts', onClick: onGoToPayouts },
+          }
+        }
         if (!released) {
           return {
             copy:

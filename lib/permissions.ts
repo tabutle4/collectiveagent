@@ -122,6 +122,11 @@ export type PermissionCode =
   // Agent Email Dashboard
   | 'can_view_agent_email'
   | 'can_manage_agent_email'
+  // Dashboard views (DB rows already exist: owner/ops → broker+operations,
+  // admin → broker+operations+tc+support)
+  | 'can_view_owner_dashboard'
+  | 'can_view_ops_dashboard'
+  | 'can_view_admin_dashboard'
 
 // Role names as defined in the database
 export type RoleName = 'agent' | 'tc' | 'operations' | 'broker' | 'support'
@@ -346,6 +351,10 @@ export async function getPermissionsObject(
     // Agent Email Dashboard
     'can_view_agent_email',
     'can_manage_agent_email',
+    // Dashboard views
+    'can_view_owner_dashboard',
+    'can_view_ops_dashboard',
+    'can_view_admin_dashboard',
   ]
 
   for (const perm of allPermissions) {

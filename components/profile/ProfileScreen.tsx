@@ -154,6 +154,7 @@ export default function ProfileScreen({
     accepted_trec: false,
     w9_completed: false,
     independent_contractor_agreement_signed: false,
+    onboarding_fee_paid: false,
   })
 
   // Permission checks from DB
@@ -397,6 +398,7 @@ export default function ProfileScreen({
         accepted_trec: freshUserData.accepted_trec || false,
         w9_completed: freshUserData.w9_completed || false,
         independent_contractor_agreement_signed: freshUserData.independent_contractor_agreement_signed || false,
+        onboarding_fee_paid: freshUserData.onboarding_fee_paid || false,
       })
 
       setLoading(false)
@@ -617,6 +619,14 @@ export default function ProfileScreen({
             accepted_trec: billingForm.accepted_trec,
             w9_completed: billingForm.w9_completed,
             independent_contractor_agreement_signed: billingForm.independent_contractor_agreement_signed,
+            onboarding_fee_paid: billingForm.onboarding_fee_paid,
+            // Same pair the Payload webhook writes. Marking paid by hand
+            // stamps today only if no date exists, so a webhook-recorded
+            // date is never overwritten by an unrelated save on this screen;
+            // unmarking clears it, matching revert-to-prospect.
+            onboarding_fee_paid_date: billingForm.onboarding_fee_paid
+              ? user.onboarding_fee_paid_date || new Date().toISOString().split('T')[0]
+              : null,
           },
         }),
       })
@@ -2018,6 +2028,7 @@ export default function ProfileScreen({
                     { key: 'accepted_trec', label: 'TREC Accepted', desc: 'Agent has accepted TREC sponsorship' },
                     { key: 'w9_completed', label: 'W-9 Completed', desc: 'W-9 form has been received' },
                     { key: 'independent_contractor_agreement_signed', label: 'ICA Signed', desc: 'Independent Contractor Agreement signed' },
+                    { key: 'onboarding_fee_paid', label: 'Onboarding Fee Paid', desc: 'Set automatically when Payload records the fee. Toggle on only for a payment taken outside the app.' },
                   ].map(({ key, label, desc }) => (
                     <div key={key} className="flex items-center justify-between">
                       <div>

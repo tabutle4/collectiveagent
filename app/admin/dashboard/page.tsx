@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { TrendingUp, DollarSign, Hash } from 'lucide-react'
+import { TrendingUp, DollarSign, Hash, Crown } from 'lucide-react'
 import { useAuth } from '@/lib/context/AuthContext'
 import { getTransactionTypeCategory } from '@/lib/transactions/transactionTypes'
+import OwnerDashboard from '@/components/dashboard/OwnerDashboard'
 
 type DateRange =
   | 'ytd'
@@ -308,7 +309,69 @@ function MultiSegmentDonut({
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
+
+  // ── View resolver ─────────────────────────────────────────────────────
+  // Three registered views: owner (Courtney's queue-first page), ops, and
+  // admin (ops/admin are today's dashboard, registered as two views —
+  // identical until designed apart). Default by role: broker → owner,
+  // everyone else → ops (falling back to admin when ops isn't held).
+  // ?view=owner|ops|admin overrides, but only into views the user holds
+  // permission for.
+  type DashboardView = 'owner' | 'ops' | 'admin'
+  const heldViews: DashboardView[] = ([
+    hasPermission('can_view_owner_dashboard') ? 'owner' : null,
+    hasPermission('can_view_ops_dashboard') ? 'ops' : null,
+    hasPermission('can_view_admin_dashboard') ? 'admin' : null,
+  ].filter(Boolean) as DashboardView[])
+  const defaultView: DashboardView =
+    (user?.role || '').toLowerCase() === 'broker' && heldViews.includes('owner')
+      ? 'owner'
+      : heldViews.includes('ops')
+        ? 'ops'
+        : heldViews.includes('admin')
+          ? 'admin'
+          : heldViews[0] || 'admin'
+  const [view, setView] = useState<DashboardView | null>(null)
+  useEffect(() => {
+    if (!user) return
+    const param = new URLSearchParams(window.location.search).get('view')
+    if (
+      (param === 'owner' || param === 'ops' || param === 'admin') &&
+      heldViews.includes(param)
+    ) {
+      setView(param)
+    } else {
+      setView(defaultView)
+    }
+    // Resolve once the auth context has the user; heldViews derives from it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+  const switchView = (v: DashboardView) => {
+    setView(v)
+    const params = new URLSearchParams(window.location.search)
+    params.set('view', v)
+    window.history.replaceState(null, '', `?${params.toString()}`)
+  }
+  const VIEW_LABELS: Record<DashboardView, string> = {
+    owner: 'Broker view',
+    ops: 'Ops view',
+    admin: 'Admin view',
+  }
+  const viewPill =
+    heldViews.length > 1 ? (
+      <button
+        onClick={() => {
+          const idx = heldViews.indexOf((view || defaultView) as DashboardView)
+          switchView(heldViews[(idx + 1) % heldViews.length])
+        }}
+        className="flex items-center gap-1.5 text-xs font-medium bg-[#F5EDE2] text-luxury-accent px-2.5 py-1 rounded-full flex-shrink-0"
+        title="Switch dashboard view"
+      >
+        <Crown size={12} /> {VIEW_LABELS[(view || defaultView) as DashboardView]}
+      </button>
+    ) : null
+
   const [prospects, setProspects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState<DateRange>('ytd')
@@ -526,13 +589,28 @@ export default function AdminDashboard() {
 
   const rangeInfo = getDateRange(dateRange)
 
-  if (loading) {
+  if (loading || view === null) {
     return <div className="text-center py-12 text-sm text-luxury-gray-3">Loading...</div>
+  }
+
+  // Owner view — Courtney's queue-first page. Ops and admin fall through to
+  // today's dashboard content below (registered as two views, identical
+  // until designed apart).
+  if (view === 'owner') {
+    return (
+      <OwnerDashboard
+        firstName={user?.preferred_first_name || user?.first_name || ''}
+        viewPill={viewPill}
+      />
+    )
   }
 
   return (
     <div>
-      <h1 className="page-title mb-6">DASHBOARD</h1>
+      <div className="flex items-start justify-between mb-6">
+        <h1 className="page-title">DASHBOARD</h1>
+        {viewPill}
+      </div>
 
       <div className="container-card mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -635,7 +713,7 @@ export default function AdminDashboard() {
                     : `${needsAttention.cdaNeeded} sale${needsAttention.cdaNeeded === 1 ? '' : 's'} with compliance complete, CDA not sent`}
                 </p>
               </div>
-              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/transactions')}>
+              <div className="inner-card cursor-pointer hover:border-luxury-gray-3" onClick={() => router.push('/transactions?funding=matched')}>
                 <div className="flex items-center justify-between mb-1.5">
                   <p className="text-sm font-semibold text-luxury-gray-1">Eligible for Payout</p>
                   <span className="text-xs font-semibold text-luxury-accent bg-luxury-accent/10 px-2.5 py-1 rounded">

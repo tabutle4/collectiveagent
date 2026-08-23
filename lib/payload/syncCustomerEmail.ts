@@ -6,15 +6,23 @@ const authHeader = () =>
  *
  * Agents onboard with a personal email, so their Payload customer (created
  * at the $399 payment) carries that address. When systems access assigns
- * their office email, the Payload account must follow: bank activation
- * requests send only a name and email to Payload, and Payload auto-creates
- * a brand-new empty customer when the email does not match an existing one.
- * That is how duplicate "ghost" accounts were born, and how one agent's
- * bank connection ended up attached to a ghost that later got deleted.
+ * their office email, the billing customer should carry the current one, and
+ * this is what updates it.
+ *
+ * What this does NOT do is prevent Payload creating a second customer.
+ * Payload's bank activation flow creates a new customer as a matter of
+ * course and lets the person type any email they like on it: Tara connected
+ * her own bank and watched Payload create a separate customer carrying the
+ * same email she had entered. So matching the email is not a de-duplication
+ * mechanism, and an earlier version of this comment claiming it stopped
+ * Payload creating duplicate customers was wrong. The sync is worth keeping -
+ * a billing customer with a stale email is its own problem - but the
+ * separate payout customer is the reason users.payload_payout_customer_id
+ * exists, and that pointer, not this sync, is what keeps a bank connection
+ * attached to the right customer.
  *
  * Called when the office email is assigned (activation) and defensively
- * before every bank activation request, so the linked account and the email
- * Payload matches on can never drift apart again.
+ * before every bank activation request.
  *
  * Fire-and-forget: a Payload hiccup must never fail activation or a bank
  * request. Failures log and the sync retries naturally on the next call.

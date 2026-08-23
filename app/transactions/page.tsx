@@ -8,6 +8,11 @@ import NewTransactionModal from '@/components/transactions/NewTransactionModal'
 import { TransactionStatus } from '@/lib/transactions/types'
 import { STATUS_GROUPS } from '@/lib/transactions/constants'
 import { getTransactionTypeLabel } from '@/lib/transactions/transactionTypes'
+import {
+  fundingFilterState,
+  FUNDING_FILTER_LABELS,
+  type FundingState,
+} from '@/lib/transactions/funding'
 
 export default function TransactionsPage() {
   const router = useRouter()
@@ -22,6 +27,10 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [quarterFilter, setQuarterFilter] = useState('all')
   const [tia, setTia] = useState<any[]>([])
+  // Admin-only: the deal's checks, for the funding filter. Agents never
+  // receive this key from the API.
+  const [checks, setChecks] = useState<any[]>([])
+  const [fundingFilter, setFundingFilter] = useState<FundingState | 'all'>('all')
   const [canViewAll, setCanViewAll] = useState(false)
   const [showNewModal, setShowNewModal] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -34,8 +43,16 @@ export default function TransactionsPage() {
   // has to arrive this way. Read from window.location rather than
   // useSearchParams to avoid the Suspense boundary that would require.
   useEffect(() => {
-    const open = new URLSearchParams(window.location.search).get('open')
+    const search = new URLSearchParams(window.location.search)
+    const open = search.get('open')
     if (open) setExpandedId(open)
+    // Deep link: /transactions?funding=waiting|partial|matched|mismatch
+    // lands with that funding chip active (admin only — the chip row itself
+    // only renders for canViewAll).
+    const fp = search.get('funding')
+    if (fp && ['waiting', 'partial', 'matched', 'mismatch'].includes(fp)) {
+      setFundingFilter(fp as FundingState)
+    }
   }, [])
   // The rows only exist once the deals have loaded, so bring the deep-linked
   // one into view then. Without this the row is expanded but can be far down a
@@ -74,6 +91,7 @@ export default function TransactionsPage() {
         const data = await res.json()
         setTransactions(data.transactions || [])
         setTia(data.tia || [])
+        setChecks(data.checks || [])
         setAgents(data.agents || [])
         setPermissions(data.permissions || {})
         setCanViewAll(data.canViewAll || false)
@@ -162,8 +180,57 @@ export default function TransactionsPage() {
     return opts
   }, [visible])
 
+  // ── Funding filter (admin only) ──────────────────────────────────────────
+  // One definition, shared with the dashboard tiles: fundingFilterState()
+  // decides both scope and state, so a tile count always matches this list.
+  const checksByTxn = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const c of checks) {
+      if (!c.transaction_id) continue
+      const list = map.get(c.transaction_id) || []
+      list.push(c)
+      map.set(c.transaction_id, list)
+    }
+    return map
+  }, [checks])
+
+  const fundingByTxn = useMemo(() => {
+    const map = new Map<string, FundingState>()
+    if (!canViewAll) return map
+    for (const t of transactions) {
+      const st = fundingFilterState(t, checksByTxn.get(t.id) || [])
+      if (st) map.set(t.id, st)
+    }
+    return map
+  }, [transactions, checksByTxn, canViewAll])
+
+  const fundingCounts = useMemo(() => {
+    const counts: Record<FundingState, number> = { waiting: 0, partial: 0, matched: 0, mismatch: 0 }
+    for (const st of Array.from(fundingByTxn.values())) counts[st]++
+    return counts
+  }, [fundingByTxn])
+
+  const setFundingFilterAndUrl = (f: FundingState | 'all') => {
+    setFundingFilter(f)
+    const params = new URLSearchParams(window.location.search)
+    if (f === 'all') params.delete('funding')
+    else params.set('funding', f)
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }
+
   const filtered = useMemo(() => {
     let list = [...visible]
+
+    if (canViewAll && fundingFilter !== 'all') {
+      list = list.filter(t => fundingByTxn.get(t.id) === fundingFilter)
+      if (fundingFilter === 'waiting') {
+        // Oldest first: the longest-waiting money at the top.
+        list.sort((a, b) =>
+          String(a.closing_date || '9999').localeCompare(String(b.closing_date || '9999'))
+        )
+      }
+    }
 
     if (quarterFilter !== 'all') {
       const range = quarterRange(quarterFilter)
@@ -194,7 +261,7 @@ export default function TransactionsPage() {
     }
 
     return list
-  }, [visible, quarterFilter, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll])
+  }, [visible, quarterFilter, searchQuery, statusFilter, agentFilter, typeFilter, agents, canViewAll, fundingFilter, fundingByTxn])
 
   const statusCounts = useMemo(
     () => ({
@@ -352,7 +419,7 @@ export default function TransactionsPage() {
         {canViewAll && (
           <div>
             <a
-              href={`/admin/transactions/${t.id}`}
+              href={`/admin/transactions/${t.id}${fundingFilter !== 'all' ? '?tab=check_payouts' : ''}`}
               className="underline hover:text-luxury-gray-1"
               onClick={e => e.stopPropagation()}
             >
@@ -507,6 +574,34 @@ export default function TransactionsPage() {
               </select>
             )}
           </div>
+
+          {/* Funding chips — canViewAll ONLY. Agents never see these chips
+              or the Expected/Received columns below. */}
+          {canViewAll && (
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-luxury-gray-3">Funding</span>
+                {(['waiting', 'partial', 'matched', 'mismatch'] as FundingState[]).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setFundingFilterAndUrl(fundingFilter === f ? 'all' : f)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      fundingFilter === f
+                        ? 'bg-luxury-accent/10 border-luxury-accent text-luxury-accent font-medium'
+                        : 'border-luxury-gray-5 text-luxury-gray-3 hover:text-luxury-gray-1'
+                    }`}
+                  >
+                    {FUNDING_FILTER_LABELS[f]} · {fundingCounts[f]}
+                  </button>
+                ))}
+              </div>
+              {fundingFilter === 'waiting' && (
+                <p className="text-xs text-luxury-gray-3 mt-1.5">
+                  Sorted oldest first - the longest-waiting money is at the top.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {transactions.length === 0 ? (
@@ -533,6 +628,12 @@ export default function TransactionsPage() {
                     <th className="th-luxury">Sales Volume</th>
                     <th className="th-luxury">Status</th>
                     {canViewAll && <th className="th-luxury">Compliance</th>}
+                    {canViewAll && fundingFilter !== 'all' && (
+                      <th className="th-luxury text-right">Expected</th>
+                    )}
+                    {canViewAll && fundingFilter !== 'all' && (
+                      <th className="th-luxury text-right">Received</th>
+                    )}
                     <th className="th-luxury">Closing Date</th>
                     <th className="th-luxury">Move In Date</th>
                   </tr>
@@ -585,6 +686,29 @@ export default function TransactionsPage() {
                           </span>
                         </td>
                       )}
+                      {canViewAll && fundingFilter !== 'all' && (() => {
+                        const txnChecks = checksByTxn.get(t.id) || []
+                        const expected = parseFloat(String(t.office_gross ?? 0)) || 0
+                        const received = txnChecks
+                          .filter((c: any) => c.cleared_date)
+                          .reduce((s: number, c: any) => s + (parseFloat(String(c.check_amount ?? 0)) || 0), 0)
+                        const waitingDays = received === 0 && t.closing_date
+                          ? Math.max(0, Math.floor((Date.now() - new Date(t.closing_date).getTime()) / 86400000))
+                          : null
+                        return (
+                          <>
+                            <td className="py-3 px-4 text-xs text-luxury-gray-2 text-right">
+                              {fmtMoney(expected)}
+                            </td>
+                            <td className="py-3 px-4 text-xs text-luxury-gray-2 text-right">
+                              {fmtMoney(received)}
+                              {waitingDays != null && (
+                                <span className="text-luxury-gray-3"> · {waitingDays} days</span>
+                              )}
+                            </td>
+                          </>
+                        )
+                      })()}
                       <td className="py-3 px-4 text-xs text-luxury-gray-3">
                         {formatDate(t.closing_date)}
                       </td>
@@ -594,7 +718,7 @@ export default function TransactionsPage() {
                     </tr>
                     {expandedId === t.id && (
                       <tr>
-                        <td colSpan={canViewAll ? 9 : 7} className="px-4 pb-3">
+                        <td colSpan={canViewAll ? (fundingFilter !== 'all' ? 11 : 9) : 7} className="px-4 pb-3">
                           {renderExpanded(t)}
                         </td>
                       </tr>

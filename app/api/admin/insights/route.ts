@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
 import { getGraphToken } from '@/lib/microsoft-graph'
 
@@ -20,22 +20,44 @@ async function getAgents() {
 
 const PRODUCTION_ROLES = ['primary_agent', 'listing_agent']
 
+// Chunk an .in() id list so a wide date range (1,500+ TIA rows across
+// 1,000+ closed deals) neither truncates at the PostgREST 1,000-row cap nor
+// blows the URL length limit with one giant id list.
+const IN_CHUNK = 200
+async function fetchTiaForTxnIds(txnIds: string[], columns: string) {
+  const rows: any[] = []
+  for (let i = 0; i < txnIds.length; i += IN_CHUNK) {
+    const chunk = txnIds.slice(i, i + IN_CHUNK)
+    const chunkRows = await fetchAllRows('transaction_internal_agents', columns, {
+      filters: [{ type: 'in', column: 'transaction_id', value: chunk }],
+    })
+    rows.push(...chunkRows)
+  }
+  return rows
+}
+
 async function getTransactions(dateFrom: string, dateTo: string) {
-  const { data: txns } = await supabaseAdmin
-    .from('transactions')
-    .select('id, status, transaction_type, closing_date, sales_price, monthly_rent')
-    .eq('status', 'closed')
-    .gte('closing_date', dateFrom)
-    .lte('closing_date', dateTo)
-    .limit(1000)
+  // Paginated: the closed-transaction set already exceeds a bare select's
+  // 1,000-row cap on wide ranges, which silently truncated these insights.
+  const txns = await fetchAllRows(
+    'transactions',
+    'id, status, transaction_type, closing_date, sales_price, monthly_rent',
+    {
+      filters: [
+        { type: 'eq', column: 'status', value: 'closed' },
+        { type: 'gte', column: 'closing_date', value: dateFrom },
+        { type: 'lte', column: 'closing_date', value: dateTo },
+      ],
+    }
+  )
 
   if (!txns || txns.length === 0) return { txns: [], tiaRows: [] }
 
   const txnIds = txns.map((t: any) => t.id)
-  const { data: tiaRows } = await supabaseAdmin
-    .from('transaction_internal_agents')
-    .select('transaction_id, agent_id, agent_role, agent_net, sales_volume')
-    .in('transaction_id', txnIds)
+  const tiaRows = await fetchTiaForTxnIds(
+    txnIds,
+    'transaction_id, agent_id, agent_role, agent_net, sales_volume'
+  )
 
   return { txns: txns || [], tiaRows: tiaRows || [] }
 }
@@ -49,20 +71,20 @@ async function getPreviousPeriodTransactions(dateFrom: string, dateTo: string) {
   const prevFrom = new Date(prevTo)
   prevFrom.setDate(prevFrom.getDate() - daysDiff)
 
-  const { data: txns } = await supabaseAdmin
-    .from('transactions')
-    .select('id, status')
-    .eq('status', 'closed')
-    .gte('closing_date', prevFrom.toISOString().slice(0, 10))
-    .lte('closing_date', prevTo.toISOString().slice(0, 10))
-    .limit(1000)
+  const txns = await fetchAllRows('transactions', 'id, status', {
+    filters: [
+      { type: 'eq', column: 'status', value: 'closed' },
+      { type: 'gte', column: 'closing_date', value: prevFrom.toISOString().slice(0, 10) },
+      { type: 'lte', column: 'closing_date', value: prevTo.toISOString().slice(0, 10) },
+    ],
+  })
 
   if (!txns || txns.length === 0) return []
 
-  const { data: tiaRows } = await supabaseAdmin
-    .from('transaction_internal_agents')
-    .select('agent_id, agent_role')
-    .in('transaction_id', txns.map((t: any) => t.id))
+  const tiaRows = await fetchTiaForTxnIds(
+    txns.map((t: any) => t.id),
+    'agent_id, agent_role'
+  )
 
   const agentsWithCloses = new Set<string>()
   for (const ta of (tiaRows || [])) {

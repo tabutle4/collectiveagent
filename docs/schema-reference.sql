@@ -79,6 +79,7 @@ CREATE TABLE public.users (
   role text,
   revenue_share_percentage numeric DEFAULT 2,
   payload_payee_id text,
+  payload_payout_customer_id text,
   bank_connected boolean DEFAULT false,
   bank_connected_at timestamp with time zone,
   qualifying_transaction_count integer DEFAULT 0,
@@ -1244,6 +1245,7 @@ CREATE TABLE public.onboarding_admin_tasks (
   description text,
   display_order integer DEFAULT 0,
   is_active boolean DEFAULT true,
+  agent_variant text,
   CONSTRAINT onboarding_admin_tasks_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.onboarding_admin_task_completions (

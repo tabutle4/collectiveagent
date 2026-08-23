@@ -64,13 +64,26 @@ export async function GET(request: NextRequest) {
 
     // Fetch transactions (batched)
     let transactions: any[]
+    // Checks power the admin funding filter. They are fetched and returned
+    // ONLY in the canViewAll branch — an agent's payload must not carry
+    // check data, and office_gross is likewise admin-only.
+    let fundingChecks: any[] = []
     if (canViewAll) {
-      transactions = await fetchAllRows(
-        'transactions',
-        TRANSACTION_COLUMNS,
-        { orderBy: TRANSACTION_ORDER },
-        supabase
-      )
+      ;[transactions, fundingChecks] = await Promise.all([
+        fetchAllRows(
+          'transactions',
+          `${TRANSACTION_COLUMNS},
+       office_gross`,
+          { orderBy: TRANSACTION_ORDER },
+          supabase
+        ),
+        fetchAllRows(
+          'checks_received',
+          'transaction_id, check_amount, cleared_date',
+          {},
+          supabase
+        ),
+      ])
     } else {
       // An agent's deal list is the union of deals they hold a commission row
       // on and deals they submitted. Filtering on submitted_by alone hid every
@@ -145,6 +158,8 @@ export async function GET(request: NextRequest) {
       agents,
       permissions: permissionsObject,
       canViewAll,
+      // Key present ONLY for canViewAll — the agent payload is unchanged.
+      ...(canViewAll ? { checks: fundingChecks } : {}),
     })
   } catch (error) {
     return NextResponse.json({ error: 'Server error', details: String(error) }, { status: 500 })

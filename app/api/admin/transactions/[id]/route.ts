@@ -11,12 +11,10 @@ import { isLeaseType, num, computeCommissionBreakdown, recomputeOfficeNet, recom
 import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
-import {
-  buildStatementEmail,
-  buildCdaEmail,
-  buildPaymentSentEmail,
-} from '@/lib/email/buildTransactionEmails'
+import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
+import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { processPayout, previewPayout, payoutStatus, recentPayoutCredits } from '@/lib/payload/processPayout'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +64,49 @@ const LOCKED_TEB_FIELDS = new Set([
   'agent_email',
   'agent_phone',
 ])
+
+// ─── Gate helpers ────────────────────────────────────────────────────────────
+// Same checklist rule the dashboard uses: sales must finish the 'cda'
+// template, leases the 'payouts' template, and "complete" means every ACTIVE
+// item on that template has a completion row for this deal.
+async function dealChecklistComplete(
+  transactionId: string,
+  isLeaseDeal: boolean
+): Promise<boolean> {
+  const slug = isLeaseDeal ? 'payouts' : 'cda'
+  const { data: template } = await supabase
+    .from('checklist_templates')
+    .select('id')
+    .eq('slug', slug)
+    .single()
+  if (!template?.id) return false
+  const { data: items } = await supabase
+    .from('checklist_items')
+    .select('id')
+    .eq('checklist_template_id', template.id)
+    .eq('is_active', true)
+  const required = (items || []).map((i: any) => i.id)
+  if (required.length === 0) return false
+  const { data: completions } = await supabase
+    .from('checklist_completions')
+    .select('checklist_item_id')
+    .eq('transaction_id', transactionId)
+  const done = new Set((completions || []).map((c: any) => c.checklist_item_id))
+  return required.every((iid: string) => done.has(iid))
+}
+
+// Funding state for a deal, from its checks vs office gross. One read, one
+// definition — the same fundingStatus() the banner and the list filter use.
+async function dealFundingStatus(transactionId: string) {
+  const [{ data: checks }, { data: txnRow }] = await Promise.all([
+    supabase
+      .from('checks_received')
+      .select('check_amount, cleared_date')
+      .eq('transaction_id', transactionId),
+    supabase.from('transactions').select('office_gross').eq('id', transactionId).single(),
+  ])
+  return fundingStatus(checks || [], txnRow?.office_gross)
+}
 
 // Alias to central helper - keeps existing call sites stable
 async function resolveAgentPlanSplit(
@@ -647,6 +688,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         // fraction the payouts report shows, instead of a stale dropdown.
         compliance_derived: {
           status: derivedCompliance.status || null,
+          complete_date: derivedCompliance.complete_date || null,
           sides_expected: derivedCompliance.expected ?? null,
           sides_complete: (derivedCompliance.sides || []).filter(
             (side: { status: string }) => side.status === 'complete'
@@ -3017,124 +3059,260 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
     }
 
-    // ── Mark payment sent (TIA) ──────────────────────────────────────────────
-    // Records that the payment has been initiated and tells the agent. This is
-    // a different moment from mark_paid: marking paid means the money has
-    // cleared the office bank, which is days after the agent needed to know.
-    // Deliberately does not touch payment_status -- the row is still owed until
-    // it clears, and every report in the app decides that by comparing against
-    // 'paid'. Only the sent date, method and reference are recorded.
-    if (action === 'mark_payment_sent') {
-      const {
-        internal_agent_id,
-        payment_sent_date,
-        payment_method,
-        payment_reference,
-      } = body
+    // ── Process payout (Payload ACH) ────────────────────────────────────────
+    // Sends the agent's net through Payload. Hard server-side gates, no
+    // override: every one of these must hold before money moves, whatever
+    // the client claimed. Mark Paid stays ungated — it records that funds
+    // cleared, including payments made outside the app.
+    if (action === 'process_payout') {
+      // Money-movement actions carry their own permission on top of the
+      // handler's can_edit_transactions: sending, previewing, status-checking
+      // and clearing a payout all require can_process_payouts, matching the
+      // permission that already gates Send Bank Connect.
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
+      const { internal_agent_id } = body
       if (!internal_agent_id) {
         return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
       }
 
-      const { data: tia, error: tiaError } = await supabase
-        .from('transaction_internal_agents')
-        .select('id, payment_status, payment_sent_date')
-        .eq('id', internal_agent_id)
-        .single()
-      if (tiaError || !tia) throw new Error('Agent record not found')
+      const [{ data: gateTxn }, funding, complianceByTxnGate] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('id, status, transaction_type, office_gross')
+          .eq('id', id)
+          .single(),
+        dealFundingStatus(id),
+        deriveComplianceForTransactions([id]),
+      ])
+      if (!gateTxn) {
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+      }
+      const gateIsLease = isLeaseTransactionType(gateTxn.transaction_type)
+      const [checklistDone, { data: gateTia }] = await Promise.all([
+        dealChecklistComplete(id, gateIsLease),
+        supabase
+          .from('transaction_internal_agents')
+          .select('id, agent_statement_sent')
+          .eq('id', internal_agent_id)
+          .eq('transaction_id', id)
+          .single(),
+      ])
+      if (!gateTia) {
+        return NextResponse.json({ error: 'Agent record not found on this deal' }, { status: 404 })
+      }
 
-      if (tia.payment_status === 'paid') {
-        return NextResponse.json(
-          { error: 'This row is already marked paid, so the payment has already cleared.' },
-          { status: 409 }
+      const blocks: string[] = []
+      const gateCompliance = complianceByTxnGate[id]
+      if (gateCompliance?.status !== 'complete') {
+        blocks.push('Compliance is not complete - finish the compliance review first')
+      }
+      if (funding.state === 'waiting') {
+        blocks.push(
+          `No checks received yet - expecting $${funding.expected.toFixed(2)} (office gross)`
+        )
+      } else if (funding.state === 'partial') {
+        blocks.push(
+          `${funding.checkCount - funding.clearedCount} of ${funding.checkCount} checks have not cleared - mark them cleared when the bank clears them`
+        )
+      } else if (funding.state === 'mismatch') {
+        blocks.push(
+          `Checks received ($${funding.received.toFixed(2)}) do not match office gross ($${funding.expected.toFixed(2)}) - fix the deal before paying`
         )
       }
-      if (tia.payment_sent_date) {
-        return NextResponse.json(
-          { error: 'This payment was already recorded as sent, so the agent has been notified.' },
-          { status: 409 }
+      if (String(gateTxn.status || '') !== 'closed') {
+        blocks.push('Deal is not closed - close the transaction first')
+      }
+      if (!checklistDone) {
+        blocks.push(
+          `Checklist is not complete - finish the ${gateIsLease ? 'payouts' : 'CDA'} checklist`
         )
       }
-
-      const sentDate = payment_sent_date || new Date().toISOString().split('T')[0]
-      const tiaUpdate: Record<string, any> = {
-        payment_sent_date: sentDate,
-        updated_at: new Date().toISOString(),
+      if (!gateTia.agent_statement_sent) {
+        blocks.push('Statement not sent - send it from the Commissions tab')
       }
-      // Method and reference are known at initiation and are what the agent is
-      // told. Only write them if given, so a blank field never wipes a value
-      // the office already recorded.
-      if (payment_method) tiaUpdate.payment_method = payment_method
-      if (payment_reference) tiaUpdate.payment_reference = payment_reference
-
-      // Build the email BEFORE claiming the row. Every figure in it comes from a
-      // read that can fail, and a failed read produces a plausible-looking zero
-      // rather than an error. Doing this first means a database problem aborts
-      // with nothing written, so the button stays clickable and the office can
-      // try again -- rather than the row being marked sent while the agent is
-      // either told a wrong number or told nothing at all.
-      let preview
-      try {
-        preview = await buildPaymentSentEmail(id, internal_agent_id, sentDate)
-      } catch (e: any) {
-        console.error('Could not build the payment sent notice:', e)
+      if (blocks.length > 0) {
         return NextResponse.json(
-          { error: `${e?.message || 'Could not read this payout'} Nothing was recorded, so you can try again.` },
-          { status: 500 }
-        )
-      }
-      if (!preview.to) {
-        return NextResponse.json(
-          { error: 'No email address on file for this agent, so there is nobody to notify. Nothing was recorded.' },
+          { error: `This payout is blocked: ${blocks.join(' · ')}`, blocks },
           { status: 400 }
         )
       }
 
-      // Conditional on the date still being null, so two admins clicking at the
-      // same moment cannot both pass the check above and both send. The read
-      // guard alone is a read-then-write race, and this is the one path where
-      // losing it means the agent gets the same notice twice.
-      const { data: claimed, error: updateError } = await supabase
-        .from('transaction_internal_agents')
-        .update(tiaUpdate)
-        .eq('id', internal_agent_id)
-        .is('payment_sent_date', null)
-        .select('id')
-      if (updateError) throw updateError
-      if (!claimed || claimed.length === 0) {
-        return NextResponse.json(
-          { error: 'This payment was already recorded as sent, so the agent has been notified.' },
-          { status: 409 }
-        )
+      // Bank verification (connection, type, status, and customer ownership)
+      // lives inside processPayout, right next to the money.
+      const result = await processPayout({ transactionId: id, internalAgentId: internal_agent_id })
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error, blocks: [result.error] }, { status: 400 })
       }
 
-      // Only the send itself is best-effort now, and only because by this point
-      // the row is claimed: the money has already left, so a Resend outage must
-      // not make it look like recording that failed. The figures are known good
-      // -- what is uncertain is delivery, and the response says which happened.
-      let emailed = false
-      let emailError: string | null = null
-      try {
-        const { error: sendError } = await resend.emails.send({
-          from: 'Collective Realty Co. <transactions@coachingbrokeragetools.com>',
-          to: [preview.to],
-          cc: preview.cc ? [preview.cc] : undefined,
-          replyTo: preview.replyTo,
-          subject: preview.subject,
-          html: preview.html,
-        })
-        if (sendError) emailError = sendError.message || 'Send failed'
-        else emailed = true
-      } catch (e: any) {
-        emailError = e?.message || 'Send failed'
-      }
-      if (emailError) console.error('Payment sent notice failed:', emailError)
-
+      // The app sends NO email of its own here. The agent is notified by
+      // Payload's receipt, addressed to the `receipts` recipient that
+      // processPayout names from their DB email - see the note there for why
+      // that parameter is passed rather than trusting Payload to infer a
+      // recipient. The agent gets exactly two things: their commission
+      // statement, sent manually by the office, and Payload's receipt.
       return NextResponse.json({
         success: true,
-        payment_sent_date: sentDate,
-        emailed,
-        email_error: emailError,
+        payout_id: result.payoutId,
+        amount: result.amount,
+        payment_sent_date: result.paymentSentDate,
+        receipt_email: result.receiptEmail ?? null,
       })
+    }
+
+    // ── Payout preview (read-only) ───────────────────────────────────────────
+    // Everything the confirm modal shows before any money moves: the
+    // server-computed amount plus the customer name/email and bank details
+    // pulled LIVE from Payload. No writes, no gates weakened - the send
+    // itself still re-checks everything.
+    if (action === 'payout_preview') {
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
+      const { internal_agent_id } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+      const preview = await previewPayout({ transactionId: id, internalAgentId: internal_agent_id })
+      if (!preview.ok) {
+        return NextResponse.json({ error: preview.error }, { status: 400 })
+      }
+      return NextResponse.json({
+        success: true,
+        amount: preview.amount,
+        description: preview.description,
+        customer_name: preview.customerName,
+        customer_email: preview.customerEmail,
+        account_holder: preview.accountHolder,
+        bank_name: preview.bankName,
+        account_type: preview.accountType,
+        account_last4: preview.accountLast4,
+        bank_status: preview.bankStatus,
+      })
+    }
+
+    // ── Payout status (read-only) ────────────────────────────────────────────
+    // In-app answer to "did this payout land," so nobody needs Payload's own
+    // dashboard. With a payment_reference: GET /transactions/{id}. Without
+    // one (the ambiguous send path - no response, nothing captured): list
+    // recent credits for the payee customer since just before the send so
+    // the operator can visually match one or see there is none.
+    if (action === 'payout_status') {
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
+      const { internal_agent_id } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+      const { data: statusTia } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, agent_id, payment_sent_date, payment_reference')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!statusTia) {
+        return NextResponse.json({ error: 'Agent record not found on this deal' }, { status: 404 })
+      }
+      if (!statusTia.payment_sent_date) {
+        return NextResponse.json({ error: 'No payout has been initiated for this row.' }, { status: 400 })
+      }
+
+      if (statusTia.payment_reference) {
+        const lookup = await payoutStatus(statusTia.payment_reference)
+        if (!lookup.ok) {
+          return NextResponse.json({ error: lookup.error }, { status: 502 })
+        }
+        return NextResponse.json({
+          success: true,
+          mode: 'reference',
+          not_found: !!lookup.notFound,
+          status: lookup.status ?? null,
+          status_message: lookup.statusMessage ?? null,
+          funding_status: lookup.fundingStatus ?? null,
+          amount: lookup.amount ?? null,
+          processed_date: lookup.processedDate ?? null,
+        })
+      }
+
+      const { data: statusUser } = await supabase
+        .from('users')
+        .select('id, payload_payout_customer_id, payload_payee_id')
+        .eq('id', statusTia.agent_id)
+        .single()
+      const statusCustomer = String(
+        statusUser?.payload_payout_customer_id || statusUser?.payload_payee_id || ''
+      )
+      if (!statusCustomer) {
+        return NextResponse.json(
+          { error: 'Agent has no Payload customer on file, so there is nothing to search.' },
+          { status: 400 }
+        )
+      }
+      // Since two days before the recorded send date, to absorb timezone and
+      // clock skew around the moment the response was lost.
+      const sinceMs = new Date(statusTia.payment_sent_date).getTime() - 2 * 86400000
+      const sinceIso = new Date(sinceMs).toISOString().split('T')[0]
+      const search = await recentPayoutCredits(statusCustomer, sinceIso)
+      if (!search.ok) {
+        return NextResponse.json({ error: search.error }, { status: 502 })
+      }
+      return NextResponse.json({
+        success: true,
+        mode: 'search',
+        candidates: search.candidates || [],
+      })
+    }
+
+    // ── Clear payment sent (re-enable the payout button) ─────────────────────
+    // For a payout the status lookup shows does NOT exist in Payload: releases
+    // the claim so the button works again. Refuses on a row already marked
+    // paid. Clears the reference too, so a retry starts clean.
+    if (action === 'clear_payment_sent') {
+      const payoutAuth = await requirePermission(request, 'can_process_payouts')
+      if (payoutAuth.error) return payoutAuth.error
+      const { internal_agent_id } = body
+      if (!internal_agent_id) {
+        return NextResponse.json({ error: 'internal_agent_id required' }, { status: 400 })
+      }
+      const { data: clearTia } = await supabase
+        .from('transaction_internal_agents')
+        .select('id, payment_status, payment_sent_date')
+        .eq('id', internal_agent_id)
+        .eq('transaction_id', id)
+        .single()
+      if (!clearTia) {
+        return NextResponse.json({ error: 'Agent record not found on this deal' }, { status: 404 })
+      }
+      if (clearTia.payment_status === 'paid') {
+        return NextResponse.json(
+          { error: 'This row is already marked paid - clearing the sent date is not allowed.' },
+          { status: 400 }
+        )
+      }
+      if (!clearTia.payment_sent_date) {
+        return NextResponse.json({ error: 'No payout has been initiated for this row.' }, { status: 400 })
+      }
+      await supabase
+        .from('transaction_internal_agents')
+        .update({
+          payment_sent_date: null,
+          payment_reference: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', internal_agent_id)
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Mark all checks processed ────────────────────────────────────────────
+    // Bulk form of the per-check "Payment Processed" toggle: flips
+    // crc_transferred on every check of the deal in one click.
+    if (action === 'set_all_checks_processed') {
+      const { data: flipped, error: bulkError } = await supabase
+        .from('checks_received')
+        .update({ crc_transferred: true, updated_at: new Date().toISOString() })
+        .eq('transaction_id', id)
+        .select('id')
+      if (bulkError) throw bulkError
+      return NextResponse.json({ success: true, updated: (flipped || []).length })
     }
 
     // ── Mark agent paid (TIA) ────────────────────────────────────────────────
@@ -3260,6 +3438,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         debts_deducted: Math.round(totalDebtsDeducted * 100) / 100,
         agent_net: agentNet,
         updated_at: new Date().toISOString(),
+      }
+      // Money paid outside the app (check, wire, Zelle, or a payout sent
+      // straight from the Payload dashboard) never passes through
+      // process_payout, so nothing stamps payment_sent_date and the row would
+      // read as paid with no record of when it went out. Fill it from the date
+      // the office entered - which also restores backdating, since that field
+      // is operator-supplied. Only written when empty: a real Payload
+      // initiation date is never overwritten.
+      if (!tia.payment_sent_date && payment_date) {
+        tiaUpdate.payment_sent_date = payment_date
       }
       // Persist the office's "counts toward progress" decision. It used to
       // arrive in the body, feed the counter increment, and then be discarded,
@@ -3519,6 +3707,63 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === 'close_transaction') {
       const { closed_date, userId } = body
 
+      // Hard gates, no override (Tara: no exceptions on close-transaction
+      // gating). Referred-out deals get NO exemption — checks come in for
+      // referred-out deals too, so their money must reconcile the same way.
+      const [funding, { data: closeTxn }, { data: closeAgents }, { data: closeTebs }] =
+        await Promise.all([
+          dealFundingStatus(id),
+          supabase
+            .from('transactions')
+            .select('id, office_gross, office_net')
+            .eq('id', id)
+            .single(),
+          supabase
+            .from('transaction_internal_agents')
+            .select('agent_net')
+            .eq('transaction_id', id),
+          supabase
+            .from('transaction_external_brokerages')
+            .select('commission_amount')
+            .eq('transaction_id', id),
+        ])
+
+      const closeBlocks: string[] = []
+      if (funding.state === 'waiting') {
+        closeBlocks.push(
+          `No checks received yet - expecting $${funding.expected.toFixed(2)} (office gross)`
+        )
+      } else if (funding.state === 'partial') {
+        closeBlocks.push(
+          `${funding.checkCount - funding.clearedCount} of ${funding.checkCount} checks have not cleared`
+        )
+      } else if (funding.state === 'mismatch') {
+        closeBlocks.push(
+          `Checks received total $${funding.received.toFixed(2)} but office gross is $${funding.expected.toFixed(2)} - ${funding.diff > 0 ? `$${funding.diff.toFixed(2)} over` : `waiting on $${Math.abs(funding.diff).toFixed(2)}`}`
+        )
+      }
+      const closeOfficeGross = num(closeTxn?.office_gross)
+      const closeAgentNets = (closeAgents || []).reduce(
+        (s: number, a: any) => s + num(a.agent_net),
+        0
+      )
+      const closeExternal = (closeTebs || []).reduce(
+        (s: number, b: any) => s + num(b.commission_amount),
+        0
+      )
+      const closeActual = closeAgentNets + closeExternal + num(closeTxn?.office_net)
+      if (Math.abs(closeOfficeGross - closeActual) > MATH_TOLERANCE) {
+        closeBlocks.push(
+          `Payees don't add up: agent nets + external + office net ($${closeActual.toFixed(2)}) is $${Math.abs(closeOfficeGross - closeActual).toFixed(2)} ${closeActual < closeOfficeGross ? 'short of' : 'over'} office gross ($${closeOfficeGross.toFixed(2)})`
+        )
+      }
+      if (closeBlocks.length > 0) {
+        return NextResponse.json(
+          { error: `Can't close yet - fix the deal first: ${closeBlocks.join(' · ')}`, blocks: closeBlocks },
+          { status: 400 }
+        )
+      }
+
       const updates: any = {
         status: 'closed',
         closed_at: new Date().toISOString(),
@@ -3707,6 +3952,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           )
         }
       }
+      if (email_type === 'statement') {
+        // A statement promises the agent a number. Derived compliance (never
+        // the stored column) and the deal's checklist must both be done
+        // before that promise goes out. Hard gate, no override.
+        const { data: gateTxn } = await supabase
+          .from('transactions')
+          .select('transaction_type')
+          .eq('id', id)
+          .single()
+        const gateIsLease = isLeaseTransactionType(gateTxn?.transaction_type)
+        const [complianceByTxnGate, checklistDone] = await Promise.all([
+          deriveComplianceForTransactions([id]),
+          dealChecklistComplete(id, gateIsLease),
+        ])
+        const gateBlocks: string[] = []
+        if (complianceByTxnGate[id]?.status !== 'complete') {
+          gateBlocks.push('Compliance is not complete - finish the compliance review first')
+        }
+        if (!checklistDone) {
+          gateBlocks.push(
+            `Checklist is not complete - finish the ${gateIsLease ? 'payouts' : 'CDA'} checklist`
+          )
+        }
+        if (gateBlocks.length > 0) {
+          return NextResponse.json(
+            { error: `This statement is blocked: ${gateBlocks.join(' · ')}`, blocks: gateBlocks },
+            { status: 400 }
+          )
+        }
+      }
       if (!internal_agent_id || !email_type) {
         return NextResponse.json(
           { error: 'email_type and internal_agent_id required' },
@@ -3747,17 +4022,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       }
 
-      // Track sent date on TIA row and update CDA status on transaction
+      // Track sent date on TIA row and update CDA status on transaction.
+      // Only a STATEMENT send sets agent_statement_sent — sending a CDA used
+      // to flip it too, which falsely satisfied "statement sent" checks on
+      // deals where no statement ever went out. (Historical rows keep
+      // whatever the old behavior wrote; that ambiguity is accepted.)
       if (email_type === 'statement') {
         await supabase
           .from('transaction_internal_agents')
           .update({ agent_statement_sent: true, agent_statement_sent_date: new Date().toISOString() })
           .eq('id', internal_agent_id)
       } else if (email_type === 'cda') {
-        await supabase
-          .from('transaction_internal_agents')
-          .update({ agent_statement_sent: true, agent_statement_sent_date: new Date().toISOString() })
-          .eq('id', internal_agent_id)
         await supabase
           .from('transactions')
           .update({

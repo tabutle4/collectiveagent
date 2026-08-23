@@ -74,10 +74,19 @@ function authHeaders(token: string): Record<string, string> {
 
 // Which Avalara company a form is filed under. These are two separate legal entities
 // and filing under the wrong one is a tax problem, so the caller must be explicit.
+//
+// CRC = Collective Realty Co LLC (419474368), RC = Referral Collective LLC
+// (171116363). Referral agents are mls_choice = 'Referral Collective (No MLS)';
+// PM landlords file under CRC.
+//
+// The AVALARA_* names are the real ones now that Track1099 is retired. The
+// TRACK1099_* fallback stays until the Vercel variables are renamed, so a
+// deploy that lands before the env change still resolves a company id. Drop
+// the fallback once AVALARA_CRC_COMPANY_ID / AVALARA_RC_COMPANY_ID are set.
 export function companyIdFor(isReferral: boolean): string | undefined {
   return isReferral
-    ? process.env.TRACK1099_RC_COMPANY_ID
-    : process.env.TRACK1099_CRC_COMPANY_ID
+    ? process.env.AVALARA_RC_COMPANY_ID || process.env.TRACK1099_RC_COMPANY_ID
+    : process.env.AVALARA_CRC_COMPANY_ID || process.env.TRACK1099_CRC_COMPANY_ID
 }
 
 export interface W9SendResult {

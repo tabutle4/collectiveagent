@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, AlertTriangle, CheckCircle } from 'lucide-react'
+import { X, AlertTriangle, CheckCircle, Lock, XCircle } from 'lucide-react'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
+import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
 
 const fmt$ = (n: number | null | undefined) => {
   if (n == null || (typeof n === 'number' && isNaN(n))) return '--'
@@ -19,11 +20,13 @@ const num = (v: any): number => parseFloat(v ?? 0) || 0
 const isLeaseType = isLeaseTransactionType
 
 export default function CloseDialog({
-  transactionId, transaction, agents, onClose, onClosed, userId,
+  transactionId, transaction, agents, checks, onClose, onClosed, userId,
 }: {
   transactionId: string
   transaction: any
   agents: any[]
+  /** The deal's checks_received rows — drive the hard funding gate. */
+  checks: any[]
   onClose: () => void
   onClosed: () => void
   userId: string | null
@@ -44,7 +47,46 @@ export default function CloseDialog({
       .finally(() => setLoadingTebs(false))
   }, [transactionId])
 
-  // Compile warnings (warn-only; Close button is never blocked)
+  // Hard gates — the Close button is DISABLED while any of these fail.
+  // Same math the server enforces on close_transaction: funding must be
+  // matched (fundingStatus) and the payees must reconcile to office gross
+  // within the $1 tolerance. No override path on this dialog, and
+  // referred-out deals get no exemption.
+  const funding = fundingStatus(checks || [], transaction?.office_gross)
+  const hardBlocks: string[] = []
+  const passing: string[] = []
+  if (funding.state === 'matched') {
+    passing.push('Funds verified · checks received match office gross')
+  } else if (funding.state === 'waiting') {
+    hardBlocks.push(
+      `No checks received yet - expecting ${fmt$(funding.expected)} (office gross)`
+    )
+  } else if (funding.state === 'partial') {
+    hardBlocks.push(
+      `${funding.checkCount - funding.clearedCount} of ${funding.checkCount} checks have not cleared`
+    )
+  } else {
+    hardBlocks.push(
+      `Checks received total ${fmt$(funding.received)} but office gross is ${fmt$(funding.expected)} - ${funding.diff > 0 ? `${fmt$(funding.diff)} over` : `waiting on ${fmt$(Math.abs(funding.diff))}`}`
+    )
+  }
+  const allocOfficeGross = num(transaction?.office_gross)
+  const allocAgentNets = (agents || []).reduce((s: number, a: any) => s + num(a.agent_net), 0)
+  const allocExternal = brokerages.reduce((s: number, b: any) => s + num(b.commission_amount), 0)
+  const allocActual = allocAgentNets + allocExternal + num(transaction?.office_net)
+  const allocGap = allocOfficeGross - allocActual
+  if (!loadingTebs) {
+    if (Math.abs(allocGap) <= MATH_TOLERANCE) {
+      passing.push('Payees add up · agent nets + external + office net = office gross')
+    } else {
+      hardBlocks.push(
+        `Payees don't add up: agent nets + external + office net (${fmt$(allocActual)}) is ${fmt$(Math.abs(allocGap))} ${allocActual < allocOfficeGross ? 'short of' : 'over'} office gross (${fmt$(allocOfficeGross)})`
+      )
+    }
+  }
+  const blocked = hardBlocks.length > 0
+
+  // Compile warnings (informational — separate from the hard gates above)
   const txnWarnings: string[] = []
   const agentWarnings: { agent: any; issues: string[] }[] = []
   const tebWarnings: { teb: any; issues: string[] }[] = []
@@ -182,7 +224,35 @@ export default function CloseDialog({
             <p className="text-xs text-luxury-gray-3 text-center py-2">Checking brokerages...</p>
           )}
 
-          {!loadingTebs && totalIssueCount === 0 && (
+          {!loadingTebs && blocked && (
+            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded">
+              <p className="text-xs text-red-800 font-semibold flex items-center gap-1.5 mb-2">
+                <Lock size={13} /> Can't close yet - fix the deal first
+              </p>
+              <div className="space-y-1">
+                {hardBlocks.map((b, i) => (
+                  <p key={i} className="text-xs text-red-700 flex items-start gap-1.5">
+                    <XCircle size={12} className="text-red-500 flex-shrink-0 mt-0.5" /> {b}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loadingTebs && passing.length > 0 && (
+            <div className="mb-4 p-3 border border-luxury-gray-5 rounded">
+              <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Passing</p>
+              <div className="space-y-1">
+                {passing.map((p, i) => (
+                  <p key={i} className="text-xs text-luxury-gray-2 flex items-start gap-1.5">
+                    <CheckCircle size={12} className="text-green-600 flex-shrink-0 mt-0.5" /> {p}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loadingTebs && totalIssueCount === 0 && !blocked && (
             <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded mb-4">
               <CheckCircle size={14} className="text-green-700" />
               <p className="text-xs text-green-800">No warnings. Ready to close.</p>
@@ -249,7 +319,12 @@ export default function CloseDialog({
           <button onClick={onClose} disabled={saving} className="btn btn-secondary text-xs px-3 py-1.5">
             Cancel
           </button>
-          <button onClick={submit} disabled={saving || loadingTebs} className="btn btn-primary text-xs px-3 py-1.5">
+          <button
+            onClick={submit}
+            disabled={saving || loadingTebs || blocked}
+            className={`btn text-xs px-3 py-1.5 ${blocked ? 'btn-secondary opacity-50 cursor-not-allowed' : 'btn-primary'}`}
+            title={blocked ? 'Fix the deal before closing' : undefined}
+          >
             {saving ? 'Closing...' : 'Close Transaction'}
           </button>
         </div>

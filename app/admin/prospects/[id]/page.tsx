@@ -17,6 +17,9 @@ export default function ProspectDetailPage() {
   const [resetting, setResetting] = useState(false)
   const [resetResult, setResetResult] = useState<'success' | 'error' | null>(null)
   const [advancingW9, setAdvancingW9] = useState(false)
+  // Confirm dialog for "Advance Past W-9" - the click must not fire the
+  // advance (office email + agent email) until the office confirms.
+  const [advanceW9ModalOpen, setAdvanceW9ModalOpen] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -57,10 +60,11 @@ export default function ProspectDetailPage() {
     setUpdating(false)
   }
 
+  // Fires only from the confirm dialog's Advance button - the row button
+  // opens the dialog instead of calling this directly.
   const advancePastW9 = async () => {
     if (!prospect) return
-    const name = prospect.preferred_first_name || prospect.first_name || 'this agent'
-    if (!confirm(`Advance ${name} past the W-9 step and email them the "You're Almost There" message? Only do this after their W-9 is complete.`)) return
+    setAdvanceW9ModalOpen(false)
     setAdvancingW9(true)
     try {
       const res = await fetch('/api/prospects/advance-past-w9', {
@@ -112,6 +116,42 @@ export default function ProspectDetailPage() {
 
   return (
     <div>
+      {/* ── Advance Past W-9 confirm dialog ─────────────────────────────── */}
+      {advanceW9ModalOpen && (() => {
+        // Full name, matching the tracker's dialog so the same action reads
+        // the same way on both screens.
+        const name = `${prospect.preferred_first_name || prospect.first_name || ''} ${prospect.preferred_last_name || prospect.last_name || ''}`.trim() || 'this agent'
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+              <div className="p-4 border-b border-luxury-gray-5">
+                <h2 className="text-sm font-semibold text-luxury-gray-1">
+                  Advance {name} past W-9?
+                </h2>
+              </div>
+              <div className="p-4">
+                <p className="text-xs text-luxury-gray-2">
+                  This will email the office and send {name} a &apos;You&apos;re Almost There&apos; email.
+                </p>
+              </div>
+              <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
+                <button
+                  onClick={advancePastW9}
+                  className="btn btn-primary text-xs flex-1"
+                >
+                  Advance
+                </button>
+                <button
+                  onClick={() => setAdvanceW9ModalOpen(false)}
+                  className="btn btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
       {convertModalOpen && (
         <AdminUserProfileModal
           user={{
@@ -183,7 +223,7 @@ export default function ProspectDetailPage() {
             </button>
 
             <button
-              onClick={advancePastW9}
+              onClick={() => setAdvanceW9ModalOpen(true)}
               disabled={advancingW9}
               className="px-3 md:px-4 py-2.5 md:py-2 text-xs md:text-sm rounded transition-colors text-center btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
             >

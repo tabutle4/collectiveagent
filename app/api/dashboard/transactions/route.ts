@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin, fetchAllRows } from '@/lib/supabase'
 import { requirePermission } from '@/lib/api-auth'
+import { deriveComplianceForTransactions } from '@/lib/compliance/derive'
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,6 +68,20 @@ export async function GET(request: NextRequest) {
       supabaseAdmin.from('checklist_templates').select('id, slug').in('slug', ['cda', 'payouts']),
     ])
     const checkTxnIds = new Set((checkRows || []).map((c: any) => c.transaction_id))
+    // DERIVED compliance for the payout-eligibility tile. The stored
+    // transactions.compliance_status is dual-written and falls behind what
+    // the compliance page actually recorded, which made this tile miscount.
+    // Derivation is scoped to deals that have a check — eligibility requires
+    // one anyway, so this keeps the submission query small. Chunked because
+    // the helper puts the whole id list in one .in() URL.
+    const eligibleIds = Array.from(checkTxnIds).filter(Boolean) as string[]
+    const complianceByTxn: Record<string, any> = {}
+    for (let i = 0; i < eligibleIds.length; i += 200) {
+      Object.assign(
+        complianceByTxn,
+        await deriveComplianceForTransactions(eligibleIds.slice(i, i + 200))
+      )
+    }
     const cdaTemplateId = (templates || []).find((t: any) => t.slug === 'cda')?.id || null
     const payoutTemplateId = (templates || []).find((t: any) => t.slug === 'payouts')?.id || null
     const { data: itemRows } = await supabaseAdmin
@@ -113,7 +128,7 @@ export async function GET(request: NextRequest) {
     const eligibleForPayout = (transactions as any[]).filter(
       t =>
         checkTxnIds.has(t.id) &&
-        String(t.compliance_status || '') === 'complete' &&
+        complianceByTxn[t.id]?.status === 'complete' &&
         checklistDone(t) &&
         unpaidTxnIds.has(t.id)
     ).length

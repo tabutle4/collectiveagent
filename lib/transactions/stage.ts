@@ -89,6 +89,14 @@ export interface StageInputs {
   /** Funding (aggregated from checks) */
   total_check_amount_received?: number | null
   total_check_amount_expected?: number | null
+  /**
+   * Verified funding state from lib/transactions/funding.ts. When provided
+   * it is authoritative for the Funded gate: only 'matched' counts as
+   * funded, so an over/under mismatch never paints the Funded dot. The raw
+   * received/expected comparison below remains as the fallback for callers
+   * that haven't computed the funding state.
+   */
+  funding_state?: 'waiting' | 'partial' | 'matched' | 'mismatch' | null
 
   /** Derived from TIA payment_status */
   all_agents_paid?: boolean | null
@@ -114,6 +122,9 @@ export function getPipelineStage(t: StageInputs): PipelineStage | null {
   const closedGateMet =
     !!t.compliance_complete_date && !!t.closed_date
   if (closedGateMet) {
+    if (t.funding_state) {
+      return t.funding_state === 'matched' ? 'funded' : 'awaiting_payment'
+    }
     const expected = t.total_check_amount_expected
     const received = t.total_check_amount_received ?? 0
     if (expected != null && expected > 0 && received >= expected) {

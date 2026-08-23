@@ -29,10 +29,18 @@ import {
   Maximize2,
   Minimize2,
   ArrowRightLeft,
+  Lock,
+  Archive,
 } from 'lucide-react'
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import { computeCommission } from '@/lib/transactions/math'
+import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { getPipelineStage, allAgentsPaid } from '@/lib/transactions/stage'
+import { getAppRole } from '@/lib/transactions/role'
+import FundingBanner from '@/components/transactions/FundingBanner'
+import PipelineRail from '@/components/transactions/PipelineRail'
+import WhatsNextCard from '@/components/transactions/WhatsNextCard'
 import StatusBadge from '@/components/transactions/StatusBadge'
 import CloseTransactionModal from "@/components/transactions/CloseDialog"
 import PayoutModal from '@/components/transactions/PayoutModal'
@@ -2293,9 +2301,11 @@ export default function AdminTransactionDetailPage() {
     error: null,
   })
 
-  // Holds the tia id whose payment-sent notice is in flight, so only that one
-  // card's button shows a spinner rather than every card on the deal.
-  const [sendingPaymentNotice, setSendingPaymentNotice] = useState<string | null>(null)
+  // Holds the tia id whose Payload payout is in flight, so only that one
+  // row's button shows a spinner rather than every row on the deal.
+  const [processingPayoutId, setProcessingPayoutId] = useState<string | null>(null)
+  const [markingAllChecks, setMarkingAllChecks] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   // Mark Paid modal state
   // Debt/credit selection lives on the per-card billing panel (billingApplied
   // state). The modal only collects payment metadata.
@@ -2355,6 +2365,17 @@ export default function AdminTransactionDetailPage() {
   const [extractingContacts, setExtractingContacts] = useState(false)
   const [contactSuggestions, setContactSuggestions] = useState<any[]>([])
   const [userPermissions, setUserPermissions] = useState<string[]>([])
+  // "Process payout" opens this preview modal instead of sending on first
+  // click; its verification data is pulled live from Payload when it opens.
+  const [payoutPreview, setPayoutPreview] = useState<{
+    open: boolean
+    agent: any | null
+    loading: boolean
+    error: string | null
+    data: any | null
+  }>({ open: false, agent: null, loading: false, error: null, data: null })
+  // Per-TIA payout status lookups (Check status / Check Payload now).
+  const [payoutStatusById, setPayoutStatusById] = useState<Record<string, any>>({})
   const [additionalIncome, setAdditionalIncome] = useState<any[]>([])
   const [addingIncome, setAddingIncome] = useState<{ listing: boolean; buying: boolean }>({ listing: false, buying: false })
   const [incomeForm, setIncomeForm] = useState<{ listing: { label: string; amount: string }; buying: { label: string; amount: string } }>({
@@ -3166,47 +3187,183 @@ export default function AdminTransactionDetailPage() {
   }
 
 
-  // Records that the payment was initiated and emails the agent. Separate from
-  // Mark Paid, which is the later moment when the funds clear the office bank.
-  // Confirms first because it sends mail the moment it is clicked.
-  const markPaymentSent = async (agent: any) => {
+  // ── Payout preview + send ────────────────────────────────────────────
+  // "Process payout" no longer sends on first click. It opens a preview
+  // modal whose verification data (customer name/email, bank details) is
+  // pulled LIVE from Payload at that moment; only "Confirm and send $X"
+  // inside the modal calls the actual process_payout action. If the live
+  // lookup fails, the modal says so and Confirm stays disabled.
+  const openPayoutPreview = async (agent: any) => {
+    setPayoutPreview({ open: true, agent, loading: true, error: null, data: null })
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'payout_preview', internal_agent_id: agent.id }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        setPayoutPreview(prev => ({ ...prev, loading: false, error: d.error || 'Could not verify this account against Payload right now - try again' }))
+        return
+      }
+      setPayoutPreview(prev => ({ ...prev, loading: false, data: d }))
+    } catch (err: any) {
+      setPayoutPreview(prev => ({ ...prev, loading: false, error: 'Could not verify this account against Payload right now - try again' }))
+    }
+  }
+
+  const closePayoutPreview = () =>
+    setPayoutPreview({ open: false, agent: null, loading: false, error: null, data: null })
+
+  // Sends the agent's payout through Payload. Fires ONLY from the preview
+  // modal's Confirm button. The server recomputes the amount and re-checks
+  // every gate; this handler just calls and reports. On success the row's
+  // payment_sent_date is stamped server-side.
+  const runProcessPayout = async (agent: any) => {
     const name = fmtName(agent.user)
-    if (!confirm(`Record the payment to ${name} as sent and email them now?`)) return
-    setSendingPaymentNotice(agent.id)
+    closePayoutPreview()
+    setProcessingPayoutId(agent.id)
     try {
       const res = await fetch(`/api/admin/transactions/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'mark_payment_sent',
+          action: 'process_payout',
           internal_agent_id: agent.id,
-          payment_sent_date: new Date().toISOString().split('T')[0],
-          payment_method: agent.payment_method || null,
-          payment_reference: agent.payment_reference || null,
         }),
       })
       const d = await res.json()
       if (!res.ok) {
-        alert(d.error || 'Failed to record the payment as sent')
+        alert(d.error || 'Payout failed')
         return
       }
-      setData((prev: any) => ({
-        ...prev,
-        agents: prev.agents.map((a: any) =>
-          a.id === agent.id ? { ...a, payment_sent_date: d.payment_sent_date } : a
-        ),
-      }))
-      // The date is saved either way, so say plainly whether the mail went. A
-      // silent failure here means the agent is never told and nobody knows.
-      if (!d.emailed) {
-        alert(`Recorded as sent, but the email did not go out: ${d.email_error || 'unknown error'}`)
-      }
+      // Report what the app actually did, not what the vendor is assumed to
+      // do. The app names a receipt recipient on the send; whether Payload
+      // delivers to it has not been watched end to end yet, so say which
+      // address it was addressed to and let the operator confirm. Claiming
+      // "they have been emailed" would be a false assurance at the exact
+      // moment money moves.
+      alert(
+        d.receipt_email
+          ? `Payout of $${Number(d.amount || 0).toFixed(2)} sent to ${name} (Payload ${d.payout_id || ''}). Payload's receipt is addressed to ${d.receipt_email}. Confirm they got it.`
+          : `Payout of $${Number(d.amount || 0).toFixed(2)} sent to ${name} (Payload ${d.payout_id || ''}). No receipt address was on file, so nobody has been emailed. Tell them yourself.`
+      )
+      await loadData()
     } catch (err: any) {
-      alert(err?.message || 'Failed to record the payment as sent')
+      alert(err?.message || 'Payout failed')
     } finally {
-      setSendingPaymentNotice(null)
+      setProcessingPayoutId(null)
     }
   }
+
+  // ── Payout status lookups, per TIA row ───────────────────────────────
+  // In-app answer to "did this payout land." A row with a payment_reference
+  // reads the live Transaction status; an ambiguous row (sent date but no
+  // reference captured) lists recent credits for the payee to match against.
+  const checkPayoutStatus = async (agent: any) => {
+    setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: true, error: null } }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'payout_status', internal_agent_id: agent.id }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        setPayoutStatusById(prev => ({ ...prev, [agent.id]: { loading: false, error: d.error || 'Status check failed' } }))
+        return
+      }
+      setPayoutStatusById(prev => ({ ...prev, [agent.id]: { loading: false, error: null, ...d } }))
+    } catch (err: any) {
+      setPayoutStatusById(prev => ({ ...prev, [agent.id]: { loading: false, error: err?.message || 'Status check failed' } }))
+    }
+  }
+
+  const clearPaymentSent = async (agent: any) => {
+    if (!confirm(`Clear the payment sent date for ${fmtName(agent.user)} and re-enable the payout button? Only do this when the status check shows no payout exists in Payload.`)) return
+    setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: true } }))
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear_payment_sent', internal_agent_id: agent.id }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        alert(d.error || 'Clear failed')
+        setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: false } }))
+        return
+      }
+      setPayoutStatusById(prev => {
+        const next = { ...prev }
+        delete next[agent.id]
+        return next
+      })
+      await loadData()
+    } catch (err: any) {
+      alert(err?.message || 'Clear failed')
+      setPayoutStatusById(prev => ({ ...prev, [agent.id]: { ...(prev[agent.id] || {}), loading: false } }))
+    }
+  }
+
+  // Bulk form of the per-check "Payment Processed" toggle.
+  const markAllChecksProcessed = async () => {
+    if (!confirm('Mark every check on this deal as processed?')) return
+    setMarkingAllChecks(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_all_checks_processed' }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        alert(d.error || 'Failed to mark checks processed')
+        return
+      }
+      await loadData()
+    } catch (err: any) {
+      alert(err?.message || 'Failed to mark checks processed')
+    } finally {
+      setMarkingAllChecks(false)
+    }
+  }
+
+  // Archive / unarchive a cancelled deal — calls the existing server
+  // actions shipped with the archive system. Admin keeps full visibility;
+  // agents stop seeing archived deals.
+  const toggleArchive = async (archivingNow: boolean) => {
+    const verb = archivingNow ? 'Archive' : 'Unarchive'
+    let reason: string | null = null
+    if (archivingNow) {
+      reason = prompt('Archive reason (optional):', 'Cancelled duplicate')
+      if (reason === null) return
+    } else if (!confirm('Unarchive this deal?')) {
+      return
+    }
+    setArchiving(true)
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: archivingNow ? 'archive_transaction' : 'unarchive_transaction',
+          ...(archivingNow ? { archive_reason: reason || null } : {}),
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        alert(d.error || `${verb} failed`)
+        return
+      }
+      await loadData()
+    } catch (err: any) {
+      alert(err?.message || `${verb} failed`)
+    } finally {
+      setArchiving(false)
+    }
+  }
+
 
   // ── Mark Paid Modal Functions ────────────────────────────────────────────────
 
@@ -3690,20 +3847,16 @@ export default function AdminTransactionDetailPage() {
   }, 0)
   const totalExternalCommissions = payoutBrokerages.reduce((s: number, b: any) => s + parseFloat(b.commission_amount || 0), 0)
 
-  // Commission math check: fires when any check has a cleared_date set
-  // Compares total checks received vs office gross vs sum of agent nets
+  // Funding state — computed ONCE per render and shared by the banner, the
+  // header chip, the pipeline rail, the what's-next strip, and the payout
+  // gate chips. Replaces the old cleared-vs-office-gross amber flag, which
+  // false-positived while checks were still outstanding.
   const clearedChecks = checks.filter((c: any) => c.cleared_date)
-  const clearedCheckTotal = clearedChecks.reduce((s: number, c: any) => s + parseFloat(c.check_amount || 0), 0)
   const officeGross = parseFloat(txn?.office_gross || 0)
   const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
-  const MATH_TOLERANCE = 1.00 // $1 rounding tolerance
+  const funding = fundingStatus(checks, officeGross)
   const commissionMathFlags: string[] = []
   if (txn && clearedChecks.length > 0) {
-    if (Math.abs(clearedCheckTotal - officeGross) > MATH_TOLERANCE) {
-      commissionMathFlags.push(
-        `Cleared check total ($${clearedCheckTotal.toFixed(2)}) does not match Office Gross ($${officeGross.toFixed(2)})`
-      )
-    }
     const expectedPayout = officeGross
     const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn?.office_net || 0)
     if (Math.abs(expectedPayout - actualPayout) > MATH_TOLERANCE) {
@@ -3717,6 +3870,90 @@ export default function AdminTransactionDetailPage() {
   const completedCount = checklist.filter((i: any) => i.completion).length
 
   const leaseTransaction = txn ? isLease(txn.transaction_type) : false
+
+  // Pipeline stage for the rail and the what's-next strip. The Funded gate
+  // reads the SAME funding computation as the banner, so the two can never
+  // disagree. Cancelled deals get no rail (stage is null).
+  const complianceDerivedFull = data?.compliance_derived || null
+  const complianceIsComplete = complianceDerivedFull?.status === 'complete'
+  const pipelineStage = txn
+    ? getPipelineStage({
+        status: txn.status,
+        transaction_type: txn.transaction_type,
+        under_contract_date: txn.acceptance_date || null,
+        compliance_status: txn.compliance_status,
+        compliance_complete_date: complianceIsComplete
+          ? complianceDerivedFull?.complete_date || txn.closed_date || txn.updated_at
+          : null,
+        closed_date: txn.closed_date || null,
+        funding_state: funding.state,
+        all_agents_paid: allAgentsPaid(agents),
+      })
+    : null
+
+  // Payout gates, per unpaid agent row. The server re-checks every one of
+  // these on process_payout; this is the rendering copy so blocked rows can
+  // say exactly what to fix. checklistOk mirrors the server rule: every
+  // active item on the deal's template is complete.
+  const checklistOk = checklist.length > 0 && completedCount === checklist.length
+  const payoutGatesFor = (a: any): { key: string; label: string; ok: boolean; fix: string }[] => [
+    {
+      key: 'compliance',
+      label: 'Compliance',
+      ok: complianceIsComplete,
+      fix: 'Compliance is not complete - finish the compliance review first',
+    },
+    {
+      key: 'funding',
+      label: 'Funds verified',
+      ok: funding.state === 'matched',
+      fix:
+        funding.state === 'waiting'
+          ? `No checks received yet - record the check when funds arrive`
+          : funding.state === 'partial'
+            ? `${funding.checkCount - funding.clearedCount} of ${funding.checkCount} checks have not cleared - mark them cleared when the bank clears them`
+            : `Checks received ($${funding.received.toFixed(2)}) do not match office gross ($${funding.expected.toFixed(2)}) - fix the deal before paying`,
+    },
+    {
+      key: 'closed',
+      label: 'Deal closed',
+      ok: txn?.status === 'closed',
+      fix: 'Deal is not closed - close the transaction first',
+    },
+    {
+      key: 'checklist',
+      label: 'Checklist',
+      ok: checklistOk,
+      fix: `Checklist is not complete - finish the ${leaseTransaction ? 'payouts' : 'CDA'} checklist below`,
+    },
+    {
+      key: 'statement',
+      label: 'Statement sent',
+      ok: !!a.agent_statement_sent,
+      fix: 'Statement not sent - send it from the Commissions tab',
+    },
+    {
+      key: 'bank',
+      label: 'Bank verified',
+      ok: !!a.user?.bank_connected,
+      fix: "Bank connection doesn't match this agent's Payload account - resend Bank Connect from the app",
+    },
+  ]
+  const payoutRows = agents.filter(
+    (a: any) => a.payment_status !== 'paid' && parseFloat(a.agent_net || 0) > 0
+  )
+  const payoutReadyRows = payoutRows.filter((a: any) => payoutGatesFor(a).every(g => g.ok))
+  // One short clause for the what's-next strip naming the most common holdup.
+  const payoutBlockedNote = (() => {
+    const blockedRows = payoutRows.filter((a: any) => !payoutGatesFor(a).every(g => g.ok))
+    if (blockedRows.length === 0) return undefined
+    const firstBlocked = blockedRows[0]
+    const firstGate = payoutGatesFor(firstBlocked).find(g => !g.ok)
+    if (firstGate?.key === 'statement') {
+      return `Statement still needed for ${fmtName(firstBlocked.user)}.`
+    }
+    return undefined
+  })()
 
   // Helper functions for multi-check editing
   const getCheckEditData = (checkId: string) => editChecksData[checkId] || {}
@@ -3817,6 +4054,49 @@ export default function AdminTransactionDetailPage() {
               {addrCity && <p className="text-xs text-luxury-gray-3">{addrCity}</p>}
             </div>
             <div className="flex items-center gap-2">
+              {/* Miniature funding chip — reuses the banner's state colors and
+                  jumps to the checks section. */}
+              <button
+                onClick={() => setActiveTab('check_payouts')}
+                className={`hidden sm:flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border transition-colors ${
+                  funding.state === 'matched'
+                    ? 'bg-green-50 border-green-200 text-green-800'
+                    : funding.state === 'mismatch'
+                      ? 'bg-red-50 border-red-200 text-red-800'
+                      : funding.state === 'partial'
+                        ? 'bg-amber-50 border-amber-200 text-amber-800'
+                        : 'bg-luxury-gray-5/30 border-luxury-gray-5 text-luxury-gray-2'
+                }`}
+                title="Open Check & Payouts"
+              >
+                <span className="font-semibold">
+                  ${funding.received.toLocaleString()} of ${funding.expected.toLocaleString()}
+                </span>
+                <span className="underline">
+                  {funding.checkCount} check{funding.checkCount !== 1 ? 's' : ''}
+                </span>
+              </button>
+              {txn.status === 'cancelled' && (
+                txn.archived_at ? (
+                  <button
+                    onClick={() => toggleArchive(false)}
+                    disabled={archiving}
+                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-50"
+                    title="Restore this deal to agent views"
+                  >
+                    <Archive size={13} /> {archiving ? 'Working...' : 'Unarchive'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => toggleArchive(true)}
+                    disabled={archiving}
+                    className="btn btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-50"
+                    title="Hide this cancelled deal from agent views (admin keeps full visibility)"
+                  >
+                    <Archive size={13} /> {archiving ? 'Working...' : 'Archive'}
+                  </button>
+                )
+              )}
               {txn.status !== 'closed' && (
                 <button
                   onClick={() => setShowCloseModal(true)}
@@ -3922,10 +4202,31 @@ export default function AdminTransactionDetailPage() {
         </div>
       </div>
 
+      {/* ── Pipeline rail — cancelled deals get the status badge instead ──── */}
+      {pipelineStage && <PipelineRail currentStage={pipelineStage} />}
+
       {/* ── Main Content + Right Panel ──────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row min-w-0">
         {/* Main content */}
         <div className="flex-1 p-4 md:p-6 min-w-0">
+          {/* Funding banner + what's-next strip — shown on every tab, all
+              reading the single fundingStatus() computed above. */}
+          {txn.status !== 'cancelled' && (
+            <div className="space-y-3 mb-4">
+              <FundingBanner funding={funding} />
+              {pipelineStage && (
+                <WhatsNextCard
+                  stage={pipelineStage}
+                  role={getAppRole(user)}
+                  transaction={txn}
+                  payoutReadyCount={payoutReadyRows.length}
+                  payoutTotalCount={payoutRows.length}
+                  payoutBlockedNote={payoutBlockedNote}
+                  onGoToPayouts={() => setActiveTab('check_payouts')}
+                />
+              )}
+            </div>
+          )}
           {/* ── OVERVIEW TAB ─────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
@@ -4680,27 +4981,14 @@ export default function AdminTransactionDetailPage() {
                                   Mark Paid
                                 </button>
                               )}
-                              {/* Payment sent is a separate, earlier moment from
-                                  Mark Paid. Mark Paid means the money cleared the
-                                  office bank; this is when it was initiated, and
-                                  it is what the agent gets told about. Once
-                                  recorded it becomes a label, since sending the
-                                  notice twice is worse than not sending it. */}
-                              {!isPaid && (
-                                a.payment_sent_date ? (
-                                  <span className="text-xs text-luxury-gray-3">
-                                    Payment sent {fmtDate(a.payment_sent_date)}
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() => markPaymentSent(a)}
-                                    disabled={sendingPaymentNotice === a.id}
-                                    className="btn btn-secondary text-xs px-3 py-1 disabled:opacity-50"
-                                    title="Record that the payment has been initiated and email the agent"
-                                  >
-                                    {sendingPaymentNotice === a.id ? 'Sending...' : 'Payment sent'}
-                                  </button>
-                                )
+                              {/* Initiation is recorded by Process Payout on the
+                                  Check & Payouts tab now (Payload emails the agent
+                                  its own payout notice). Historical rows keep
+                                  their read-only label. */}
+                              {!isPaid && a.payment_sent_date && (
+                                <span className="text-xs text-luxury-gray-3">
+                                  Payment sent {fmtDate(a.payment_sent_date)}
+                                </span>
                               )}
                               {isPaid && ['primary_agent', 'listing_agent', 'co_agent'].includes(a.agent_role) && (
                                 <button
@@ -5289,6 +5577,219 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     )
                   })}
+                </>
+              )}
+
+              {/* ── Agent payouts — rendered whether or not a check row exists
+                  yet. The server-side funding gate already produces the correct
+                  "no checks received yet" block on its own, so a deal with zero
+                  checks still shows each agent's row and exactly what is
+                  blocking it. ── */}
+              {(payoutRows.length > 0 || commissionMathFlags.length > 0) && (
+                <div className="container-card">
+                  <SectionHeader>Agent Payouts</SectionHeader>
+                    {/* Commission math warning — auto-fires when a check clears */}
+                    {commissionMathFlags.length > 0 && (
+                      <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-[11px] font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
+                          <AlertCircle size={12} /> Commission Math
+                        </p>
+                        {commissionMathFlags.map((flag, i) => (
+                          <p key={i} className="text-[11px] text-amber-700">{flag}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ── Process Payout rows — one per unpaid agent, gates
+                        visible whether they pass or block. The server
+                        re-checks every gate; these chips are the rendering
+                        copy so the office sees exactly what to fix. ── */}
+                    {payoutRows.length > 0 && (
+                      <div className="mb-3 space-y-2">
+                        {payoutRows.map((a: any) => {
+                          const gates = payoutGatesFor(a)
+                          const failing = gates.filter(g => !g.ok)
+                          const ready = failing.length === 0
+                          const initials = `${(a.user?.preferred_first_name || a.user?.first_name || '?')[0] || ''}${(a.user?.preferred_last_name || a.user?.last_name || '')[0] || ''}`.toUpperCase()
+                          const roleLabel =
+                            a.agent_role === 'team_lead' ? 'Team Lead Split'
+                            : a.agent_role === 'referral_agent' ? 'Referral Split'
+                            : a.agent_role === 'momentum_partner' ? 'Momentum Partner Split'
+                            : 'Commission'
+                          return (
+                            <div key={a.id} className="inner-card">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${ready ? 'bg-[#F5EDE2] text-luxury-accent' : 'bg-luxury-gray-5 text-luxury-gray-3'}`}>
+                                  {initials}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-luxury-gray-1 truncate">
+                                    {fmtName(a.user)}
+                                    <span className="font-normal text-luxury-gray-3"> · {String(a.agent_role || '').replace(/_/g, ' ')}</span>
+                                  </p>
+                                  <p className="text-[11px] text-luxury-gray-3 truncate">
+                                    Net to agent {fmt$(a.agent_net)} · {roleLabel} - {txn.property_address || 'this deal'}
+                                  </p>
+                                </div>
+                                {a.payment_sent_date ? (
+                                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-right">
+                                    {a.payment_reference ? (
+                                      <>
+                                        <span className="text-xs text-luxury-gray-3">
+                                          Sent {fmtDate(a.payment_sent_date)}
+                                          {payoutStatusById[a.id]?.mode === 'reference' && !payoutStatusById[a.id]?.not_found && payoutStatusById[a.id]?.status
+                                            ? ` · ${payoutStatusById[a.id].status}${payoutStatusById[a.id].funding_status ? ` (funding ${payoutStatusById[a.id].funding_status})` : ''}`
+                                            : ''}
+                                          {payoutStatusById[a.id]?.mode === 'reference' && payoutStatusById[a.id]?.not_found
+                                            ? ' · not found in Payload'
+                                            : ''}
+                                        </span>
+                                        {payoutStatusById[a.id]?.error && (
+                                          <span className="text-[11px] text-red-600">{payoutStatusById[a.id].error}</span>
+                                        )}
+                                        {userPermissions.includes('can_process_payouts') && (
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => checkPayoutStatus(a)}
+                                              disabled={payoutStatusById[a.id]?.loading}
+                                              className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                            >
+                                              {payoutStatusById[a.id]?.loading ? 'Checking...' : 'Check status'}
+                                            </button>
+                                            {payoutStatusById[a.id]?.mode === 'reference' && payoutStatusById[a.id]?.not_found && (
+                                              <button
+                                                onClick={() => clearPaymentSent(a)}
+                                                disabled={payoutStatusById[a.id]?.loading}
+                                                className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                              >
+                                                Clear and allow retry
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-xs text-amber-800">
+                                          Status unknown - Payload didn&apos;t respond when this was sent {fmtDate(a.payment_sent_date)}
+                                        </span>
+                                        {payoutStatusById[a.id]?.error && (
+                                          <span className="text-[11px] text-red-600">{payoutStatusById[a.id].error}</span>
+                                        )}
+                                        {payoutStatusById[a.id]?.mode === 'search' && (
+                                          <div className="text-left w-full max-w-xs">
+                                            {(payoutStatusById[a.id].candidates || []).length === 0 ? (
+                                              <p className="text-[11px] text-luxury-gray-3">
+                                                No credit to this agent&apos;s Payload account since the send date - the payout was not created. Clear and allow retry below.
+                                              </p>
+                                            ) : (
+                                              <>
+                                                <p className="text-[11px] font-semibold text-luxury-gray-2">Recent credits to this agent in Payload - match one to this payout:</p>
+                                                {(payoutStatusById[a.id].candidates || []).map((c: any) => (
+                                                  <p key={c.id} className="text-[11px] text-luxury-gray-3">
+                                                    {c.createdAt || 'unknown date'} · {fmt$(c.amount)} · {c.status || 'unknown status'} · {c.id}
+                                                  </p>
+                                                ))}
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                        {userPermissions.includes('can_process_payouts') && (
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              onClick={() => checkPayoutStatus(a)}
+                                              disabled={payoutStatusById[a.id]?.loading}
+                                              className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                            >
+                                              {payoutStatusById[a.id]?.loading ? 'Checking...' : 'Check Payload now'}
+                                            </button>
+                                            {payoutStatusById[a.id]?.mode === 'search' && (
+                                              <button
+                                                onClick={() => clearPaymentSent(a)}
+                                                disabled={payoutStatusById[a.id]?.loading}
+                                                className="btn btn-secondary text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                              >
+                                                Clear and allow retry
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {/* Money that moved outside the app - check, wire,
+                                        Zelle, or a payout sent straight from Payload -
+                                        still has to be recordable. Mark Paid is not
+                                        gated, so this stays available even when the
+                                        payout gates block sending from here. */}
+                                    <button
+                                      onClick={() => openMarkPaidModal(a)}
+                                      className="btn btn-secondary text-xs px-3 py-1.5"
+                                      title="Record a payment made outside the app"
+                                    >
+                                      Mark paid manually
+                                    </button>
+                                    {userPermissions.includes('can_process_payouts') && (
+                                      <button
+                                        onClick={() => openPayoutPreview(a)}
+                                        disabled={!ready || processingPayoutId === a.id}
+                                        className={`text-xs px-3 py-1.5 rounded transition-colors ${
+                                          ready
+                                            ? 'bg-luxury-accent text-white hover:opacity-90'
+                                            : 'bg-luxury-gray-5 text-luxury-gray-3 cursor-not-allowed'
+                                        } disabled:opacity-70`}
+                                      >
+                                        {processingPayoutId === a.id ? 'Sending...' : 'Process payout'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Gate chips for a ready row now live in the
+                                  payout preview modal; a blocked row keeps
+                                  its what-to-fix list here since its button
+                                  is disabled and cannot open the modal. */}
+                              {!a.payment_sent_date && failing.length > 0 ? (
+                                <div className="mt-2 ml-11 p-2.5 bg-amber-50 border border-amber-200 rounded">
+                                  <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5 mb-1">
+                                    <Lock size={11} /> {failing.length} step{failing.length !== 1 ? 's' : ''} before this payout can go
+                                  </p>
+                                  {failing.map((g, i) => (
+                                    <p key={g.key} className="text-[11px] text-amber-800">
+                                      {i + 1}. {g.fix}
+                                    </p>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          )
+                        })}
+                        {/* Slim checks bar + bulk toggle */}
+                        <div className="flex items-center justify-between px-1 py-1.5">
+                          <p className="text-[11px] text-luxury-gray-3 flex items-center gap-1.5">
+                            <ClipboardList size={12} />
+                            {checks.length} check{checks.length !== 1 ? 's' : ''} on this deal · {checks.filter((c: any) => c.crc_transferred).length} marked processed
+                          </p>
+                          {checks.length > 0 && checks.some((c: any) => !c.crc_transferred) && (
+                            <button
+                              onClick={markAllChecksProcessed}
+                              disabled={markingAllChecks}
+                              className="btn btn-secondary text-[11px] px-2.5 py-1 disabled:opacity-50"
+                            >
+                              {markingAllChecks ? 'Working...' : 'Mark all checks processed'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {/* Checks exist */}
+              {checks.length > 0 && (
+                <>
 
                   {/* Payouts */}
                   <div className="container-card">
@@ -5304,17 +5805,6 @@ export default function AdminTransactionDetailPage() {
                       </div>
                     </div>
 
-                    {/* Commission math warning — auto-fires when a check clears */}
-                    {commissionMathFlags.length > 0 && (
-                      <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-[11px] font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
-                          <AlertCircle size={12} /> Commission Math
-                        </p>
-                        {commissionMathFlags.map((flag, i) => (
-                          <p key={i} className="text-[11px] text-amber-700">{flag}</p>
-                        ))}
-                      </div>
-                    )}
 
                     {/* Summary row */}
                     <div className="inner-card flex justify-between items-center mb-3">
@@ -6484,12 +6974,129 @@ export default function AdminTransactionDetailPage() {
         </div>
       )}
 
+      {/* ── Payout Preview Modal ────────────────────────────────────────────── */}
+      {/* Step 1 of the payout: verification in front of the money. The data
+          here is Payload's own record, fetched live when the modal opened -
+          a visible cross-check against what the app thinks. Confirm is the
+          only thing that sends. */}
+      {payoutPreview.open && payoutPreview.agent && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-luxury-gray-5">
+              <h2 className="text-sm font-semibold text-luxury-gray-1">Process Payout</h2>
+              <p className="text-xs text-luxury-gray-3">
+                {fmtName(payoutPreview.agent.user)}
+                <span> · {String(payoutPreview.agent.agent_role || '').replace(/_/g, ' ')}</span>
+              </p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {payoutPreview.loading ? (
+                <p className="text-xs text-luxury-gray-3">Verifying this account against Payload...</p>
+              ) : payoutPreview.error ? (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded">
+                  <p className="text-[11px] text-amber-800">{payoutPreview.error}</p>
+                </div>
+              ) : payoutPreview.data ? (
+                <>
+                  <div className="inner-card">
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payment</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Amount to be paid</span>
+                        <span className="font-semibold">{fmt$(payoutPreview.data.amount)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Description</span>
+                        <span className="text-right">{payoutPreview.data.description}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="inner-card">
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Payload Account</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Payload account name</span>
+                        <span>{payoutPreview.data.customer_name || 'not on file'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Payload account email</span>
+                        <span className="text-right break-all">{payoutPreview.data.customer_email || 'not on file'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="inner-card">
+                    <p className="text-xs font-semibold text-luxury-gray-2 mb-2">Bank Account</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Name on account</span>
+                        <span>{payoutPreview.data.account_holder || 'not on file'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Bank</span>
+                        <span>{payoutPreview.data.bank_name || 'not on file'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-luxury-gray-3">Account</span>
+                        <span>
+                          {payoutPreview.data.account_type || ''}
+                          {payoutPreview.data.account_last4 ? ` •••• ${payoutPreview.data.account_last4}` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Payload marks a live-but-troubled connection
+                        'declining'. The send allows it; the office should
+                        know before confirming. */}
+                    {String(payoutPreview.data.bank_status || '').toLowerCase() === 'declining' && (
+                      <p className="text-[11px] text-amber-800 mt-2">
+                        Payload reports this bank account as declining. The payout will still be
+                        attempted, but it may be returned. Consider resending Bank Connect first.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Gate results - the same six the server re-checks on send */}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {payoutGatesFor(payoutPreview.agent).map(g => (
+                      <span
+                        key={g.key}
+                        className={`flex items-center gap-1 text-[11px] ${g.ok ? 'text-green-700' : 'text-amber-800'}`}
+                      >
+                        {g.ok ? <Check size={11} /> : <Lock size={11} />} {g.label}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="flex gap-2 p-4 border-t border-luxury-gray-5">
+              <button
+                onClick={() => runProcessPayout(payoutPreview.agent)}
+                disabled={payoutPreview.loading || !!payoutPreview.error || !payoutPreview.data}
+                className="btn-primary text-xs flex-1 disabled:opacity-50"
+              >
+                {payoutPreview.data
+                  ? `Confirm and send ${fmt$(payoutPreview.data.amount)}`
+                  : 'Confirm and send'}
+              </button>
+              <button onClick={closePayoutPreview} className="btn-secondary text-xs">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Close Transaction Modal ─────────────────────────────────────────── */}
       {showCloseModal && (
         <CloseTransactionModal
           transactionId={id}
           transaction={data.transaction}
           agents={data.agents || []}
+          checks={data.checks || []}
           userId={user?.id || ''}
           onClose={() => setShowCloseModal(false)}
           onClosed={() => { setShowCloseModal(false); loadData() }}
