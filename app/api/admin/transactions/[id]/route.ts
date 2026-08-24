@@ -13,7 +13,7 @@ import { parseCustomPlanSplit } from '@/lib/transactions/customPlanParser'
 import { settlePayloadInvoiceForDebt } from '@/lib/payload/settleInvoiceForDebt'
 import { buildStatementEmail, buildCdaEmail } from '@/lib/email/buildTransactionEmails'
 import { getEmailLayout } from '@/lib/email/layout'
-import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { processPayout, previewPayout, payoutStatus, recentPayoutCredits } from '@/lib/payload/processPayout'
 
 export const dynamic = 'force-dynamic'
@@ -95,17 +95,33 @@ async function dealChecklistComplete(
   return required.every((iid: string) => done.has(iid))
 }
 
-// Funding state for a deal, from its checks vs office gross. One read, one
-// definition — the same fundingStatus() the banner and the list filter use.
+// Funding state for a deal, from its checks vs what the deal expects. One
+// read, one definition — the same fundingStatus() the banner and the list
+// filter use.
+//
+// What the deal expects is office_gross + BTSA, not office_gross alone. BTSA
+// arrives in the same check from title and passes through to the agent, and
+// the sum is already what computeGrossFromSides() calls gross_commission. The
+// BTSA figure comes from transaction_internal_agents.btsa_amount, which is the
+// same column recomputeGrossAndOffice() sums. Reading office_gross alone made
+// the close and payout gates block correct BTSA deals.
 async function dealFundingStatus(transactionId: string) {
-  const [{ data: checks }, { data: txnRow }] = await Promise.all([
+  const [{ data: checks }, { data: txnRow }, { data: btsaRows }] = await Promise.all([
     supabase
       .from('checks_received')
       .select('check_amount, cleared_date')
       .eq('transaction_id', transactionId),
     supabase.from('transactions').select('office_gross').eq('id', transactionId).single(),
+    supabase
+      .from('transaction_internal_agents')
+      .select('btsa_amount')
+      .eq('transaction_id', transactionId),
   ])
-  return fundingStatus(checks || [], txnRow?.office_gross)
+  return fundingStatus(
+    checks || [],
+    txnRow?.office_gross,
+    btsaTotalFromAgentRows(btsaRows)
+  )
 }
 
 // Alias to central helper - keeps existing call sites stable
@@ -355,7 +371,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const [
         { data: txn, error: txnError },
         { data: agents, error: agentsError },
-        { data: settings }
+        { data: settings },
+        // External brokerages come down with the main payload, not from the
+        // Check & Payouts tab's own lazy fetch. The pipeline rail's Paid Out
+        // gate needs them on EVERY tab: sourcing them from tab-scoped state
+        // meant the rail read Paid Out on Overview and changed when the tab
+        // was opened.
+        { data: externalBrokeragesFull },
       ] = await Promise.all([
           supabase.from('transactions').select('*').eq('id', id).single(),
           supabase.from('transaction_internal_agents').select(`
@@ -378,6 +400,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             .from('company_settings')
             .select('referral_tracking_url, crm_url, crm_name')
             .single(),
+          supabase
+            .from('transaction_external_brokerages')
+            .select('*')
+            .eq('transaction_id', id)
+            .order('created_at', { ascending: true }),
         ])
 
       if (txnError || !txn) {
@@ -676,6 +703,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           }
         }),
         primary_agent: primaryAgent || null,
+        external_brokerages: externalBrokeragesFull || [],
         agent_billing: agentBilling,
         team_info: teamInfo,
         checks,
@@ -3109,7 +3137,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       if (funding.state === 'waiting') {
         blocks.push(
-          `No checks received yet - expecting $${funding.expected.toFixed(2)} (office gross)`
+          `No checks received yet - expecting $${funding.expected.toFixed(2)} (${fundingExpectedLabel(funding.btsa)})`
         )
       } else if (funding.state === 'partial') {
         blocks.push(
@@ -3117,7 +3145,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       } else if (funding.state === 'mismatch') {
         blocks.push(
-          `Checks received ($${funding.received.toFixed(2)}) do not match office gross ($${funding.expected.toFixed(2)}) - fix the deal before paying`
+          `Checks received ($${funding.received.toFixed(2)}) do not match ${fundingExpectedLabel(funding.btsa)} ($${funding.expected.toFixed(2)}) - fix the deal before paying`
         )
       }
       if (String(gateTxn.status || '') !== 'closed') {
@@ -3742,7 +3770,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const closeBlocks: string[] = []
       if (funding.state === 'waiting') {
         closeBlocks.push(
-          `No checks received yet - expecting $${funding.expected.toFixed(2)} (office gross)`
+          `No checks received yet - expecting $${funding.expected.toFixed(2)} (${fundingExpectedLabel(funding.btsa)})`
         )
       } else if (funding.state === 'partial') {
         closeBlocks.push(
@@ -3750,10 +3778,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         )
       } else if (funding.state === 'mismatch') {
         closeBlocks.push(
-          `Checks received total $${funding.received.toFixed(2)} but office gross is $${funding.expected.toFixed(2)} - ${funding.diff > 0 ? `$${funding.diff.toFixed(2)} over` : `waiting on $${Math.abs(funding.diff).toFixed(2)}`}`
+          `Checks received total $${funding.received.toFixed(2)} but ${fundingExpectedLabel(funding.btsa)} is $${funding.expected.toFixed(2)} - ${funding.diff > 0 ? `$${funding.diff.toFixed(2)} over` : `waiting on $${Math.abs(funding.diff).toFixed(2)}`}`
         )
       }
-      const closeOfficeGross = num(closeTxn?.office_gross)
+      // agent_net already carries BTSA, so the payee side reconciles to office
+      // gross PLUS BTSA. funding.btsa is the same sum dealFundingStatus used,
+      // so this gate and the funding gate above cannot disagree.
+      const closeOfficeGross = num(closeTxn?.office_gross) + funding.btsa
       const closeAgentNets = (closeAgents || []).reduce(
         (s: number, a: any) => s + num(a.agent_net),
         0
@@ -3765,7 +3796,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const closeActual = closeAgentNets + closeExternal + num(closeTxn?.office_net)
       if (Math.abs(closeOfficeGross - closeActual) > MATH_TOLERANCE) {
         closeBlocks.push(
-          `Payees don't add up: agent nets + external + office net ($${closeActual.toFixed(2)}) is $${Math.abs(closeOfficeGross - closeActual).toFixed(2)} ${closeActual < closeOfficeGross ? 'short of' : 'over'} office gross ($${closeOfficeGross.toFixed(2)})`
+          `Payees don't add up: agent nets + external + office net ($${closeActual.toFixed(2)}) is $${Math.abs(closeOfficeGross - closeActual).toFixed(2)} ${closeActual < closeOfficeGross ? 'short of' : 'over'} ${fundingExpectedLabel(funding.btsa)} ($${closeOfficeGross.toFixed(2)})`
         )
       }
       if (closeBlocks.length > 0) {

@@ -146,7 +146,11 @@ export interface StageInputs {
    */
   funding_state?: 'waiting' | 'partial' | 'matched' | 'mismatch' | null
 
-  /** Derived from TIA payment_status */
+  /**
+   * Derived from TIA payment_status AND external-brokerage payment_status.
+   * Build it with allAgentsPaid(tias, externals) - see that helper for why the
+   * external rows are not optional in practice.
+   */
   all_agents_paid?: boolean | null
 }
 
@@ -171,7 +175,9 @@ export function getPipelineStage(t: StageInputs): PipelineStage | null {
     (!!t.compliance_status &&
       COMPLIANCE_SUBMITTED_STATUSES.has(t.compliance_status.toLowerCase()))
 
-  // Gate 8: Paid Out — every agent paid. Authoritative, outranks everything.
+  // Gate 8: Paid Out — every agent AND every external brokerage paid.
+  // Authoritative, outranks everything, which is exactly why it must not be
+  // computed from the internal agent rows alone.
   if (t.all_agents_paid) return 'paid_out'
 
   // Gate 7: Closed. One-way progression still holds: a closed_date with
@@ -258,13 +264,40 @@ export function stageState(
 }
 
 /**
- * Helper: given TIA rows, returns whether all agents on the transaction
- * are paid. Used to derive the Paid Out stage without the deprecated
- * checks.agents_paid toggle.
+ * Helper: whether EVERY payee on the transaction is paid. Used to derive the
+ * Paid Out stage without the deprecated checks.agents_paid toggle.
+ *
+ * Two sets of payees, and both have to be paid:
+ *   transaction_internal_agents      - CRC's own agents
+ *   transaction_external_brokerages  - co-op brokerages, referral brokerages,
+ *                                     and eCommission advance repayments
+ *
+ * The external rows carry their own payment_status / payment_date /
+ * payment_method / payment_reference and are real money owed out of the same
+ * commission. Reading only the internal rows made Paid Out fire while a co-op
+ * brokerage was still owed, and because Gate 8 outranks every other gate the
+ * rail claimed the deal was finished. Confirmed live on 5725 Adamite Way,
+ * where the rail showed Paid Out with a $3,120.95 eCommission advance
+ * repayment still unpaid.
+ *
+ * `externals` is optional ONLY so the signature stays backwards compatible.
+ * Omitting it reproduces the bug, so every caller passes it. The deal page
+ * reads them from its main data payload, not from the lazily-fetched
+ * Check & Payouts tab state, so the rail is right on first paint.
+ *
+ * app/admin/reports/payouts/page.tsx has always had its own local version of
+ * this predicate that DID check the external rows. That one is correct; this
+ * one was the outlier.
  */
 export function allAgentsPaid(
-  tias: Array<{ payment_status?: string | null }>
+  tias: Array<{ payment_status?: string | null }>,
+  externals?: Array<{ payment_status?: string | null }> | null
 ): boolean {
-  if (!tias || tias.length === 0) return false
-  return tias.every((t) => (t.payment_status || '').toLowerCase() === 'paid')
+  const internalRows = tias || []
+  const externalRows = externals || []
+  // No payees at all means nothing has been paid out, not that everything has.
+  if (internalRows.length === 0 && externalRows.length === 0) return false
+  const isPaid = (r: { payment_status?: string | null }) =>
+    (r.payment_status || '').toLowerCase() === 'paid'
+  return internalRows.every(isPaid) && externalRows.every(isPaid)
 }

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       // Agent payment rows for the funding predicate: a paid agent means the
       // deal is funded even when no check ever passed through the office.
       // Past 1,500 rows, so fetchAllRows.
-      fetchAllRows('transaction_internal_agents', 'transaction_id, payment_date, agent_basis'),
+      fetchAllRows('transaction_internal_agents', 'transaction_id, payment_date, agent_basis, btsa_amount'),
       needsAttentionCounts(),
     ])
 
@@ -85,12 +85,23 @@ export async function GET(request: NextRequest) {
       checksByTxn.set(c.transaction_id, list)
     }
     // Two booleans per deal, matching the shape the transactions list gets.
-    const agentSummaryByTxn = new Map<string, { anyPaid: boolean; anyBasis: boolean }>()
+    // btsaTotal is part of what the deal EXPECTS to receive: BTSA arrives in
+    // the same check from title and passes through to the agent. Leaving it out
+    // reported every BTSA deal on this dashboard as a mismatch.
+    const agentSummaryByTxn = new Map<
+      string,
+      { anyPaid: boolean; anyBasis: boolean; btsaTotal: number }
+    >()
     for (const r of fundingAgentRows as any[]) {
       if (!r?.transaction_id) continue
-      const cur = agentSummaryByTxn.get(r.transaction_id) || { anyPaid: false, anyBasis: false }
+      const cur = agentSummaryByTxn.get(r.transaction_id) || {
+        anyPaid: false,
+        anyBasis: false,
+        btsaTotal: 0,
+      }
       if (r.payment_date) cur.anyPaid = true
       if ((parseFloat(String(r.agent_basis ?? 0)) || 0) > 0) cur.anyBasis = true
+      cur.btsaTotal += parseFloat(String(r.btsa_amount ?? 0)) || 0
       agentSummaryByTxn.set(r.transaction_id, cur)
     }
 
@@ -101,12 +112,17 @@ export async function GET(request: NextRequest) {
       const st = fundingFilterState(
         t,
         txnChecks,
-        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false }
+        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false, btsaTotal: 0 }
       )
       if (!st) continue
       fundingCounts[st]++
       if (st === 'mismatch') {
-        const expected = parseFloat(String(t.office_gross ?? 0)) || 0
+        // Same expectation the state above was decided on, or the tile would
+        // list a deal as mismatched and then print a diff computed a different
+        // way.
+        const expected =
+          (parseFloat(String(t.office_gross ?? 0)) || 0) +
+          (agentSummaryByTxn.get(t.id)?.btsaTotal || 0)
         const received = txnChecks
           .filter((c: any) => c.cleared_date)
           .reduce((s: number, c: any) => s + (parseFloat(String(c.check_amount ?? 0)) || 0), 0)

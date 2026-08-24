@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, CheckCircle, Lock, XCircle } from 'lucide-react'
 import { isLeaseTransactionType } from '@/lib/transactions/transactionTypes'
-import { fundingStatus, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
 
 const fmt$ = (n: number | null | undefined) => {
   if (n == null || (typeof n === 'number' && isNaN(n))) return '--'
@@ -49,17 +49,24 @@ export default function CloseDialog({
 
   // Hard gates — the Close button is DISABLED while any of these fail.
   // Same math the server enforces on close_transaction: funding must be
-  // matched (fundingStatus) and the payees must reconcile to office gross
-  // within the $1 tolerance. No override path on this dialog, and
+  // matched (fundingStatus) and the payees must reconcile to what the deal
+  // expects, within the $1 tolerance. No override path on this dialog, and
   // referred-out deals get no exemption.
-  const funding = fundingStatus(checks || [], transaction?.office_gross)
+  //
+  // What the deal expects is office gross PLUS BTSA. BTSA arrives in the same
+  // check from title and passes through to the agent, so leaving it out
+  // blocked the close on correct deals. Same helper the deal page and the
+  // server gate use.
+  const btsaTotal = btsaTotalFromAgentRows(agents)
+  const expectedLabel = fundingExpectedLabel(btsaTotal)
+  const funding = fundingStatus(checks || [], transaction?.office_gross, btsaTotal)
   const hardBlocks: string[] = []
   const passing: string[] = []
   if (funding.state === 'matched') {
-    passing.push('Funds verified · checks received match office gross')
+    passing.push(`Funds verified · checks received match ${expectedLabel}`)
   } else if (funding.state === 'waiting') {
     hardBlocks.push(
-      `No checks received yet - expecting ${fmt$(funding.expected)} (office gross)`
+      `No checks received yet - expecting ${fmt$(funding.expected)} (${expectedLabel})`
     )
   } else if (funding.state === 'partial') {
     hardBlocks.push(
@@ -67,20 +74,22 @@ export default function CloseDialog({
     )
   } else {
     hardBlocks.push(
-      `Checks received total ${fmt$(funding.received)} but office gross is ${fmt$(funding.expected)} - ${funding.diff > 0 ? `${fmt$(funding.diff)} over` : `waiting on ${fmt$(Math.abs(funding.diff))}`}`
+      `Checks received total ${fmt$(funding.received)} but ${expectedLabel} is ${fmt$(funding.expected)} - ${funding.diff > 0 ? `${fmt$(funding.diff)} over` : `waiting on ${fmt$(Math.abs(funding.diff))}`}`
     )
   }
-  const allocOfficeGross = num(transaction?.office_gross)
+  // agent_net already carries BTSA, so the payee side has to be compared
+  // against office gross + BTSA or every BTSA deal reads as over-allocated.
+  const allocOfficeGross = num(transaction?.office_gross) + btsaTotal
   const allocAgentNets = (agents || []).reduce((s: number, a: any) => s + num(a.agent_net), 0)
   const allocExternal = brokerages.reduce((s: number, b: any) => s + num(b.commission_amount), 0)
   const allocActual = allocAgentNets + allocExternal + num(transaction?.office_net)
   const allocGap = allocOfficeGross - allocActual
   if (!loadingTebs) {
     if (Math.abs(allocGap) <= MATH_TOLERANCE) {
-      passing.push('Payees add up · agent nets + external + office net = office gross')
+      passing.push(`Payees add up · agent nets + external + office net = ${expectedLabel}`)
     } else {
       hardBlocks.push(
-        `Payees don't add up: agent nets + external + office net (${fmt$(allocActual)}) is ${fmt$(Math.abs(allocGap))} ${allocActual < allocOfficeGross ? 'short of' : 'over'} office gross (${fmt$(allocOfficeGross)})`
+        `Payees don't add up: agent nets + external + office net (${fmt$(allocActual)}) is ${fmt$(Math.abs(allocGap))} ${allocActual < allocOfficeGross ? 'short of' : 'over'} ${expectedLabel} (${fmt$(allocOfficeGross)})`
       )
     }
   }

@@ -12,6 +12,7 @@
  */
 
 import { Clock, Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
+import { fundingExpectedLabel } from '@/lib/transactions/funding'
 import type { FundingStatus } from '@/lib/transactions/funding'
 
 const fmt$ = (n: number) =>
@@ -31,13 +32,16 @@ export default function FundingBanner({
    */
   fundedWithoutChecks?: boolean
 }) {
-  const { state, expected, received, diff, checkCount, clearedCount } = funding
+  const { state, expected, btsa, received, diff, checkCount, clearedCount } = funding
+  // What `expected` is made of. Reads "office gross" on almost every deal and
+  // widens only when BTSA is part of the check.
+  const expectedLabel = fundingExpectedLabel(btsa)
 
   let border = 'border-luxury-gray-5'
   let icon = <Clock size={16} className="text-luxury-gray-3 flex-shrink-0" />
   let titleClass = 'text-luxury-gray-1'
   let title = 'Waiting on funds'
-  let subtext = `No checks received yet. Expecting ${fmt$(expected)} (office gross).`
+  let subtext = `No checks received yet. Expecting ${fmt$(expected)} (${expectedLabel}).`
   let pillClass = 'bg-luxury-gray-5/40 text-luxury-gray-2'
   let pillText = `$0 of ${fmt$(expected)}`
 
@@ -72,7 +76,7 @@ export default function FundingBanner({
     icon = <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
     titleClass = 'text-green-800'
     title = 'Funds verified'
-    subtext = 'Checks received match office gross. Ready to pay and close.'
+    subtext = `Checks received match ${expectedLabel}. Ready to pay and close.`
     pillClass = 'bg-green-50 text-green-800'
     pillText = `${fmt$(expected)} of ${fmt$(expected)}`
   } else if (state === 'mismatch') {

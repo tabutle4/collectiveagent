@@ -200,10 +200,16 @@ export default function TransactionsPage() {
   }, [checks])
 
   const agentSummaryByTxn = useMemo(() => {
-    const map = new Map<string, { anyPaid: boolean; anyBasis: boolean }>()
+    const map = new Map<string, { anyPaid: boolean; anyBasis: boolean; btsaTotal: number }>()
     for (const r of fundingAgents) {
       if (!r?.transaction_id) continue
-      map.set(r.transaction_id, { anyPaid: !!r.any_paid, anyBasis: !!r.any_basis })
+      map.set(r.transaction_id, {
+        anyPaid: !!r.any_paid,
+        anyBasis: !!r.any_basis,
+        // Part of what the deal expects to receive - BTSA rides in on the same
+        // check. Omitting it made every BTSA deal read as a mismatch here.
+        btsaTotal: parseFloat(String(r.btsa_total ?? 0)) || 0,
+      })
     }
     return map
   }, [fundingAgents])
@@ -217,7 +223,7 @@ export default function TransactionsPage() {
       const st = fundingFilterState(
         t,
         checksByTxn.get(t.id) || [],
-        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false }
+        agentSummaryByTxn.get(t.id) || { anyPaid: false, anyBasis: false, btsaTotal: 0 }
       )
       if (st) map.set(t.id, st)
     }

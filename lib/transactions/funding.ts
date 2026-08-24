@@ -6,6 +6,24 @@
  * close/payout gates in the admin transaction route, the transactions-list
  * funding filter, and the dashboard tiles, so every surface agrees.
  *
+ * WHAT THE DEAL EXPECTS. office_gross is the office's own commission. It is
+ * NOT the whole check. BTSA (bonus to selling agent) is money the title
+ * company adds to the same check, which passes through the office to the
+ * agent, so the check that arrives is office_gross + BTSA. The app already
+ * defines that sum: computeGrossFromSides() in lib/transactions/math.ts
+ * returns gross_commission = office_gross + btsa_total, and
+ * recomputeGrossAndOffice() feeds it the SUM OF transaction_internal_agents
+ * .btsa_amount. This file now compares the cleared checks against the same
+ * figure.
+ *
+ * BTSA comes from transaction_internal_agents.btsa_amount ONLY. Measured over
+ * 1,187 non-cancelled deals on 24 August 2026: the TIA column is non-zero on
+ * 25 deals, transactions.btsa_amount on 5, and there are ZERO deals carrying
+ * it on transactions without also carrying it on the TIA rows - the TIA
+ * column is a strict superset, and on all 5 overlapping deals the two values
+ * are identical. transactions.has_btsa and transactions.bonus_amount are
+ * form-capture echoes of the same figure. Never sum more than one of them.
+ *
  * States:
  *   waiting  - no checks received yet
  *   partial  - at least one check has not cleared. Never flagged as a
@@ -13,7 +31,8 @@
  *              incomplete total against office gross is the false positive
  *              the old amber math flag kept firing on.
  *   matched  - every check cleared AND the cleared total is within the $1
- *              rounding tolerance of office gross. Ready to pay and close.
+ *              rounding tolerance of what the deal expects. Ready to pay and
+ *              close.
  *   mismatch - every check cleared and the totals still disagree. Fix the
  *              deal before paying or closing.
  */
@@ -31,8 +50,10 @@ export interface FundingCheckInput {
 
 export interface FundingStatus {
   state: FundingState
-  /** What the deal expects: office gross. */
+  /** What the deal expects: office gross + BTSA. */
   expected: number
+  /** The BTSA portion of `expected`. 0 on the overwhelming majority of deals. */
+  btsa: number
   /** Sum of CLEARED check amounts. */
   received: number
   /** received - expected. Positive = over, negative = short. */
@@ -46,12 +67,57 @@ const num = (v: unknown): number => {
   return isNaN(n) ? 0 : n
 }
 
+/**
+ * The deal's BTSA total, from its agent rows. ONE definition, used by the deal
+ * page banner, the close dialog, the close/payout gates, the transactions list
+ * and the dashboard tiles, so no two surfaces can disagree about what a deal
+ * expects.
+ *
+ * Deliberately UNFILTERED by agent_role, because the figure this has to agree
+ * with is transactions.gross_commission, and recomputeGrossAndOffice() sums
+ * every row's btsa_amount without filtering before handing it to
+ * computeGrossFromSides(). Matching that exactly is the point.
+ *
+ * Note that components/transactions/CloseDialog.tsx and the deal page's
+ * Overview "Gross" display both compute the same sum with the linked roles
+ * (team_lead, momentum_partner, referral_agent) filtered out. That filter is a
+ * NO-OP on live data: of the 26 agent rows carrying a non-zero btsa_amount on
+ * 24 August 2026, all 26 are agent_role = 'primary_agent' and not one linked
+ * row carries any. So filtered and unfiltered agree today. If a linked row
+ * ever gets a BTSA the two would part company, and gross_commission would
+ * follow this one.
+ */
+export function btsaTotalFromAgentRows(
+  rows: Array<{ btsa_amount?: number | string | null }> | null | undefined
+): number {
+  return Math.round((rows || []).reduce((s, r) => s + num(r?.btsa_amount), 0) * 100) / 100
+}
+
+/**
+ * How to name the figure in `FundingStatus.expected` to a human. Kept here so
+ * the banner, the close dialog, the deal-page payout chips and the server's
+ * close and payout gates all use the same words. Says "office gross" on the
+ * overwhelming majority of deals, where BTSA is zero, and only widens when
+ * there is BTSA to account for.
+ */
+export function fundingExpectedLabel(btsa: number | string | null | undefined): string {
+  return num(btsa) > 0 ? 'office gross plus BTSA' : 'office gross'
+}
+
 export function fundingStatus(
   checks: FundingCheckInput[] | null | undefined,
-  officeGross: number | string | null | undefined
+  officeGross: number | string | null | undefined,
+  /**
+   * Sum of transaction_internal_agents.btsa_amount for the deal. Optional so
+   * every existing call site keeps compiling, but a caller that omits it on a
+   * BTSA deal will report a false mismatch - see the docblock at the top of
+   * this file.
+   */
+  btsaTotal?: number | string | null
 ): FundingStatus {
   const list = checks || []
-  const expected = Math.round(num(officeGross) * 100) / 100
+  const btsa = Math.round(num(btsaTotal) * 100) / 100
+  const expected = Math.round((num(officeGross) + num(btsaTotal)) * 100) / 100
   const cleared = list.filter(c => !!c.cleared_date)
   const received =
     Math.round(cleared.reduce((s, c) => s + num(c.check_amount), 0) * 100) / 100
@@ -71,6 +137,7 @@ export function fundingStatus(
   return {
     state,
     expected,
+    btsa,
     received,
     diff,
     checkCount: list.length,
@@ -80,8 +147,10 @@ export function fundingStatus(
 
 /**
  * What the deal's agent rows say about money, aggregated per transaction.
- * Deliberately booleans rather than amounts: the list page only needs to know
- * THAT an agent was paid, so no commission figure has to cross the wire.
+ * Booleans wherever a boolean will do: the list page only needs to know THAT
+ * an agent was paid, so no agent's commission figure has to cross the wire.
+ * btsaTotal is the one amount here, and it is the office's expectation rather
+ * than anyone's pay.
  */
 export interface FundingAgentSummary {
   /** At least one agent row on this deal has a payment_date. */
@@ -89,6 +158,13 @@ export interface FundingAgentSummary {
   /** At least one agent row has agent_basis > 0, i.e. the deal carries real
    *  payout data at all. */
   anyBasis?: boolean | null
+  /**
+   * Sum of btsa_amount across the deal's agent rows. Part of what the deal
+   * expects to receive, because BTSA arrives in the same check. An amount
+   * rather than a boolean: unlike the flags above it has to be compared, not
+   * just known about, and it is the office's own figure, not an agent's net.
+   */
+  btsaTotal?: number | string | null
 }
 
 /**
@@ -148,12 +224,16 @@ export function fundingFilterState(
   const status = String(txn?.status || '').toLowerCase()
   if (status === 'cancelled') return null
   const expected = num(txn?.office_gross)
+  // Guard stays on office_gross alone, deliberately. It decides whether a deal
+  // is in the funding story at all, and widening it to office_gross + BTSA
+  // would pull deals with no office commission into the tiles.
   if (expected <= 0) return null
+  const btsa = num(agents?.btsaTotal)
 
   // Checks first: where they exist, their verdict is the answer. A paid agent
   // does not make a mismatch go away.
   const list = checks || []
-  if (list.length > 0) return fundingStatus(list, expected).state
+  if (list.length > 0) return fundingStatus(list, expected, btsa).state
 
   // No check record. A paid agent is proof the money arrived anyway - this is
   // the title-paid-the-agent-directly case.
@@ -166,7 +246,7 @@ export function fundingFilterState(
   // nobody is actually waiting on.
   if (agents && !agents.anyBasis) return null
 
-  return fundingStatus(list, expected).state
+  return fundingStatus(list, expected, btsa).state
 }
 
 export const FUNDING_FILTER_LABELS: Record<FundingState, string> = {

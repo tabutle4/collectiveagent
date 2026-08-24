@@ -35,7 +35,7 @@ import {
 import { TransactionStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/transactions/types'
 import { intermediaryBadgeProps, sideLabel } from '@/lib/transactions/sides'
 import { computeCommission } from '@/lib/transactions/math'
-import { fundingStatus, fundingFilterState, MATH_TOLERANCE } from '@/lib/transactions/funding'
+import { fundingStatus, fundingFilterState, btsaTotalFromAgentRows, fundingExpectedLabel, MATH_TOLERANCE } from '@/lib/transactions/funding'
 import { getPipelineStage, allAgentsPaid } from '@/lib/transactions/stage'
 import FundingBanner from '@/components/transactions/FundingBanner'
 import PipelineRail from '@/components/transactions/PipelineRail'
@@ -3743,6 +3743,11 @@ export default function AdminTransactionDetailPage() {
   const checklist = data?.checklist || []
   const settings = data?.company_settings
   const agents = data?.agents || []
+  // External brokerage rows from the MAIN payload, so they exist on every tab.
+  // payoutBrokerages below is the Check & Payouts tab's own lazily-fetched copy
+  // and is empty on every other tab, which makes it unusable for the pipeline
+  // rail's Paid Out gate.
+  const externalBrokerages = data?.external_brokerages || []
   // Compliance as the compliance page actually recorded it. The stored column
   // on the transaction is dual-written and drifts, so the derived value wins
   // for display while the dropdown keeps writing the stored column.
@@ -3854,8 +3859,13 @@ export default function AdminTransactionDetailPage() {
   // false-positived while checks were still outstanding.
   const clearedChecks = checks.filter((c: any) => c.cleared_date)
   const officeGross = parseFloat(txn?.office_gross || 0)
+  // BTSA rides in on the same check from title and passes through the office to
+  // the agent, so what the deal expects to receive is office gross PLUS BTSA -
+  // the figure the app already calls gross_commission. Summed from the agent
+  // rows, which is the same column recomputeGrossAndOffice sums.
+  const btsaTotal = btsaTotalFromAgentRows(agents)
   const totalAgentNetsRaw = agents.reduce((s: number, a: any) => s + parseFloat(a.agent_net || 0), 0)
-  const funding = fundingStatus(checks, officeGross)
+  const funding = fundingStatus(checks, officeGross, btsaTotal)
   // The corrected funding verdict, shared with the transactions list chips and
   // the dashboard tiles so all three agree. Differs from `funding` above in
   // exactly one case: no check ever reached the office but an agent was paid,
@@ -3870,16 +3880,23 @@ export default function AdminTransactionDetailPage() {
     {
       anyPaid: agents.some((a: any) => !!a.payment_date),
       anyBasis: agents.some((a: any) => (parseFloat(String(a.agent_basis ?? 0)) || 0) > 0),
+      btsaTotal,
     }
   )
   const fundedWithoutChecks = checks.length === 0 && fundingVerdict === 'matched'
   const commissionMathFlags: string[] = []
   if (txn && clearedChecks.length > 0) {
-    const expectedPayout = officeGross
+    // Same expectation as the funding banner, for the same reason: agent_net
+    // already carries BTSA, so comparing the payout side against office gross
+    // alone reported every BTSA deal as broken. On 5725 Adamite Way that was a
+    // $5,000 phantom; with BTSA included the two sides agree to a cent.
+    const expectedPayout = officeGross + btsaTotal
     const actualPayout = totalAgentNetsRaw + totalExternalCommissions + parseFloat(txn?.office_net || 0)
     if (Math.abs(expectedPayout - actualPayout) > MATH_TOLERANCE) {
       commissionMathFlags.push(
-        `Commission split does not add up: Agent Nets + External + Office Net ($${actualPayout.toFixed(2)}) vs Office Gross ($${officeGross.toFixed(2)})`
+        btsaTotal > 0
+          ? `Commission split does not add up: Agent Nets + External + Office Net ($${actualPayout.toFixed(2)}) vs Office Gross plus BTSA ($${expectedPayout.toFixed(2)})`
+          : `Commission split does not add up: Agent Nets + External + Office Net ($${actualPayout.toFixed(2)}) vs Office Gross ($${officeGross.toFixed(2)})`
       )
     }
   }
@@ -3905,7 +3922,11 @@ export default function AdminTransactionDetailPage() {
           : null,
         closed_date: txn.closed_date || null,
         funding_state: fundingVerdict ?? funding.state,
-        all_agents_paid: allAgentsPaid(agents),
+        // Both payee sets. Paid Out outranks every other gate, so computing it
+        // from the internal agent rows alone let the rail claim a deal was
+        // finished while a co-op brokerage or an eCommission advance repayment
+        // was still owed.
+        all_agents_paid: allAgentsPaid(agents, externalBrokerages),
       })
     : null
 
@@ -3930,7 +3951,7 @@ export default function AdminTransactionDetailPage() {
           ? `No checks received yet - record the check when funds arrive`
           : funding.state === 'partial'
             ? `${funding.checkCount - funding.clearedCount} of ${funding.checkCount} checks have not cleared - mark them cleared when the bank clears them`
-            : `Checks received ($${funding.received.toFixed(2)}) do not match office gross ($${funding.expected.toFixed(2)}) - fix the deal before paying`,
+            : `Checks received ($${funding.received.toFixed(2)}) do not match ${fundingExpectedLabel(funding.btsa)} ($${funding.expected.toFixed(2)}) - fix the deal before paying`,
     },
     {
       key: 'closed',

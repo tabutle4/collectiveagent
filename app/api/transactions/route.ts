@@ -76,7 +76,16 @@ export async function GET(request: NextRequest) {
     // transaction_internal_agents is past 1,500 rows, so fetchAllRows, not a
     // bare select that would silently truncate at 1,000.
     let fundingChecks: any[] = []
-    let fundingAgents: Array<{ transaction_id: string; any_paid: boolean; any_basis: boolean }> = []
+    // btsa_total travels with the paid/basis flags because it is part of what
+    // the deal EXPECTS to receive, not part of anyone's pay: BTSA arrives in
+    // the same check from title. Without it the list chips and the dashboard
+    // tiles read every BTSA deal as a mismatch.
+    let fundingAgents: Array<{
+      transaction_id: string
+      any_paid: boolean
+      any_basis: boolean
+      btsa_total: number
+    }> = []
     if (canViewAll) {
       let fundingAgentRows: any[] = []
       ;[transactions, fundingChecks, fundingAgentRows] = await Promise.all([
@@ -95,23 +104,28 @@ export async function GET(request: NextRequest) {
         ),
         fetchAllRows(
           'transaction_internal_agents',
-          'transaction_id, payment_date, agent_basis',
+          'transaction_id, payment_date, agent_basis, btsa_amount',
           {},
           supabase
         ),
       ])
-      const agentAgg = new Map<string, { any_paid: boolean; any_basis: boolean }>()
+      const agentAgg = new Map<
+        string,
+        { any_paid: boolean; any_basis: boolean; btsa_total: number }
+      >()
       for (const r of fundingAgentRows as any[]) {
         const tid = r?.transaction_id
         if (!tid) continue
-        const cur = agentAgg.get(tid) || { any_paid: false, any_basis: false }
+        const cur = agentAgg.get(tid) || { any_paid: false, any_basis: false, btsa_total: 0 }
         if (r.payment_date) cur.any_paid = true
         if (parseFloat(String(r.agent_basis ?? 0)) > 0) cur.any_basis = true
+        cur.btsa_total += parseFloat(String(r.btsa_amount ?? 0)) || 0
         agentAgg.set(tid, cur)
       }
       fundingAgents = Array.from(agentAgg.entries()).map(([transaction_id, v]) => ({
         transaction_id,
         ...v,
+        btsa_total: Math.round(v.btsa_total * 100) / 100,
       }))
     } else {
       // An agent's deal list is the union of deals they hold a commission row
