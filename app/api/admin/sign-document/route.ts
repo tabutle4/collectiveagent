@@ -326,9 +326,14 @@ export async function POST(request: NextRequest) {
       await supabaseAdmin.from('users').update(activationUpdate).eq('id', agent.id)
 
       // The agent's email just changed from personal to office. Their Payload
-      // customer account (created at onboarding payment with the personal
-      // email) must follow, or the next bank activation request will not
-      // match it and Payload will create a duplicate ghost account.
+      // billing customer (created at onboarding payment with the personal
+      // email) should follow so it carries a current address.
+      //
+      // It does NOT prevent Payload creating a second customer at the next
+      // bank activation. Payload creates one as a matter of course and lets
+      // the person type any email on it, whether or not the addresses match,
+      // so an earlier version of this comment saying the sync stopped
+      // duplicates was wrong. See lib/payload/syncCustomerEmail.ts.
       if (officeEmail) {
         await syncPayloadCustomerEmail(agent.payload_payee_id, officeEmail)
       }

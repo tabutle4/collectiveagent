@@ -258,8 +258,130 @@ export async function PATCH(request: NextRequest) {
       const { error } = await supabaseAdmin.from('users').update(filteredUpdates).eq('id', id)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     } else {
-      // Admin can update anything
-      const { error } = await supabaseAdmin.from('users').update(updates).eq('id', id)
+      // Admin branch. It used to be `.update(updates)` straight from the
+      // request body, so anyone who passed canManageAgent could write any
+      // column on users - password_hash, ms_refresh_token, the Payload
+      // pointers, the monthly-fee and cap counters. Client-side gating on the
+      // admin screens is not a server-side restriction, and this is the same
+      // pattern that was removed from the onboarding route's `update_user`
+      // action for exactly this reason.
+      //
+      // The list is the union of every field the two admin PATCH callers
+      // actually send - components/profile/ProfileScreen.tsx (personal, real
+      // estate, license, billing) and components/admin/AdminUserProfileModal
+      // .tsx (create-then-update, and edit) - plus the three self-updatable
+      // columns above that those screens do not send (phone, headshot_url,
+      // headshot_crop), so an admin is never able to do less to their own
+      // record than an agent can. Every name below is a real column on
+      // public.users, verified against information_schema.
+      //
+      // Adding a field to an admin screen means adding it here too, or the
+      // save will silently drop it.
+      const allowedAdminUpdateFields = [
+        // Identity and contact
+        'first_name',
+        'last_name',
+        'preferred_first_name',
+        'preferred_last_name',
+        'email',
+        'office_email',
+        'personal_email',
+        'personal_phone',
+        'business_phone',
+        'phone',
+        'job_title',
+        // Personal details and shipping
+        'birth_month',
+        'date_of_birth',
+        'shirt_type',
+        'shirt_size',
+        'shipping_address_line1',
+        'shipping_address_line2',
+        'shipping_city',
+        'shipping_state',
+        'shipping_zip',
+        // Social
+        'instagram_handle',
+        'tiktok_handle',
+        'threads_handle',
+        'youtube_url',
+        'linkedin_url',
+        'facebook_url',
+        // Headshot
+        'headshot_url',
+        'headshot_crop',
+        // Roster and role
+        'office',
+        'status',
+        'is_active',
+        'is_licensed_agent',
+        'division',
+        'join_date',
+        'role',
+        'roles',
+        'full_nav_access',
+        'referring_agent',
+        'referring_agent_id',
+        // License and association
+        'license_number',
+        'license_expiration',
+        'mls_id',
+        'nrds_id',
+        'association',
+        'association_status_on_join',
+        // Commission plan
+        'commission_plan',
+        'commission_plan_other',
+        'lease_commission_plan',
+        'cap_amount_override',
+        'post_cap_split_override',
+        'qualifying_transaction_target',
+        'special_commission_notes',
+        'revenue_share',
+        // Billing and compliance flags
+        'monthly_fee_waived',
+        'waive_buyer_processing_fees',
+        'waive_seller_processing_fees',
+        'half_buyer_processing_fees',
+        'half_seller_processing_fees',
+        'waive_coaching_fee',
+        'accepted_trec',
+        'w9_completed',
+        'independent_contractor_agreement_signed',
+        'onboarding_fee_paid',
+        'onboarding_fee_paid_date',
+        'admin_notes',
+      ]
+      const submittedKeys = Object.keys(updates || {})
+      const filteredUpdates: Record<string, any> = {}
+      const rejectedKeys: string[] = []
+      for (const key of submittedKeys) {
+        if (allowedAdminUpdateFields.includes(key)) {
+          filteredUpdates[key] = updates[key]
+        } else {
+          rejectedKeys.push(key)
+        }
+      }
+      if (rejectedKeys.length > 0) {
+        console.warn(
+          'PATCH /api/users/profile: dropped fields not on the admin whitelist for user',
+          id,
+          rejectedKeys.join(', ')
+        )
+      }
+      // Nothing survived the filter. Returning 200 here would report success
+      // for a save that wrote nothing, which is how the old flat-payload bug
+      // stayed hidden. Fail loudly instead and name the fields.
+      if (Object.keys(filteredUpdates).length === 0) {
+        return NextResponse.json(
+          {
+            error: 'No updatable fields in this request',
+            rejected_fields: rejectedKeys,
+          },
+          { status: 400 }
+        )
+      }
+      const { error } = await supabaseAdmin.from('users').update(filteredUpdates).eq('id', id)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     }
 

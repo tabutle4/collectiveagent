@@ -86,6 +86,28 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // No fallback. PAYLOAD_PROCESSING_ID is the account that RECEIVES agent
+    // invoices, so falling back to it would land a tenant rent payment in the
+    // wrong account whenever the PM variable was unset - silently, and with
+    // real money. The old second fallback to '' was worse still: processing_id
+    // is optional on Payload's invoice object
+    // (docs.payload.com/apis/object-reference/invoices/) and the docs do not
+    // say which account an empty or absent value resolves to, so the
+    // destination was simply unknowable. The agent payout path and the PM
+    // disbursement route have no fallback for the same reason. Unset means
+    // stop, and it stops here - before a Payload customer is created - so an
+    // unconfigured deploy leaves nothing behind.
+    const pmProcessingId = process.env.PAYLOAD_PM_PROCESSING_ID
+    if (!pmProcessingId) {
+      return NextResponse.json(
+        {
+          error:
+            'PM processing account is not configured (PAYLOAD_PM_PROCESSING_ID).',
+        },
+        { status: 500 }
+      )
+    }
+
     // Create Payload customer if tenant doesn't have one
     let customerId = tenant.payload_customer_id
     if (!customerId) {
@@ -134,7 +156,7 @@ export async function POST(request: NextRequest) {
       body: new URLSearchParams({
         type: 'bill',
         due_date: invoice.due_date,
-        processing_id: process.env.PAYLOAD_PM_PROCESSING_ID || process.env.PAYLOAD_PROCESSING_ID || '',
+        processing_id: pmProcessingId,
         customer_id: customerId,
         description,
         'items[0][description]': description,

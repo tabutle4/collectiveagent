@@ -5,10 +5,11 @@ import { getEmailLayout } from '@/lib/email/layout'
 
 export const dynamic = 'force-dynamic'
 // This route makes one sequential Payload call per linked customer per
-// active agent (~140 today) plus an email sweep only for agents with no
-// bank on a linked customer. Vercel's default function timeout would cut
-// that off mid-loop, leaving a partly reconciled table and no report
-// email. 300s is the ceiling on Pro.
+// active agent (90 in scope as of 23 August 2026: status = 'active' AND
+// is_active = true) plus an email sweep only for agents with no bank on a
+// linked customer. Vercel's default function timeout would cut that off
+// mid-loop, leaving a partly reconciled table and no report email. 300s is
+// the ceiling on Pro.
 export const maxDuration = 300
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -31,9 +32,10 @@ const plAuth = () => 'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':'
 //   payload_payee_id is NEVER written. It is the BILLING pointer: invoices
 //   send to it and the payment webhook matches on it.
 //
-// Scope is is_active = true, not status = 'active' - five departed agents
-// still carry status 'active', and hunting a departed agent's bank account
-// by email address is not something an unattended job should do.
+// Scope is is_active = true, not status = 'active' - ten departed agents
+// still carry status 'active' (23 August 2026), and hunting a departed
+// agent's bank account by email address is not something an unattended job
+// should do.
 //
 // Selection is deterministic: Payload's own default_credit_method first,
 // then oldest created_at, then id. An unordered methods[0] pick meant an
@@ -107,9 +109,9 @@ export async function GET(request: NextRequest) {
         'id, first_name, last_name, preferred_first_name, preferred_last_name, email, office_email, personal_email, is_active, bank_connected, payload_payment_method_id, payload_payout_customer_id, payload_payee_id'
       )
       .eq('status', 'active')
-      // is_active is the real departure flag; five departed agents still
-      // carry status 'active'. An unattended job must not go hunting a
-      // departed agent's bank account.
+      // is_active is the real departure flag; ten departed agents still
+      // carry status 'active' (23 August 2026). An unattended job must not go
+      // hunting a departed agent's bank account.
       .eq('is_active', true)
 
     const fixed: { name: string; email: string; change: string }[] = []
@@ -159,6 +161,16 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // A failed Payload lookup is counted for every agent, whatever their
+      // current connection state. It used to be counted only inside the
+      // `agent.bank_connected` branch below, so a lookup failure for an agent
+      // with no connection fell through to unchanged++ and never appeared in
+      // the report - the run read cleaner than it was. payload_errors now
+      // means "agents with at least one failed Payload lookup this run" and
+      // deliberately overlaps the other counters: the same agent can be
+      // counted here and in fixed, cant_fix, or unchanged.
+      if (anyLookupFailed) payloadErrors++
+
       if (found) {
         // Repoint within customers already linked to this agent.
         // payload_payee_id is untouched - billing changes are human-only.
@@ -193,8 +205,8 @@ export async function GET(request: NextRequest) {
         })
       } else if (agent.bank_connected) {
         if (anyLookupFailed) {
-          // Never clear flags on a flaky Payload response.
-          payloadErrors++
+          // Never clear flags on a flaky Payload response. Already counted in
+          // payloadErrors above.
           continue
         }
         // The app claimed a connection and no active bank exists anywhere we

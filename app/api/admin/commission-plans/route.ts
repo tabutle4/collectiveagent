@@ -13,15 +13,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // The column is is_active. There is no `active` column on
+    // commission_plans, so selecting it made PostgREST reject the query and
+    // this route 500 on every call - the plan dropdown on agent commission
+    // cards came back empty.
     const { data, error } = await supabaseAdmin
       .from('commission_plans')
-      .select('id, code, name, active')
+      .select('id, code, name, is_active')
       .order('name')
 
     if (error) throw error
 
     const plans = (data || [])
-      .filter((p: any) => p.active !== false)
+      .filter((p: any) => p.is_active !== false)
       .map((p: any) => ({
         id: p.id,
         plan_code: p.code,

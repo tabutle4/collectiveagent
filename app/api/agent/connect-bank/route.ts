@@ -38,10 +38,18 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    // Keep the linked Payload account's email matched to the email this
-    // activation is sent to. Payload matches send_to by email and creates a
-    // brand-new empty customer on a mismatch, which is how duplicate ghost
-    // accounts were born.
+    // Keep the linked Payload billing customer pointed at the email this
+    // activation is sent to, so it carries a current address.
+    //
+    // This does NOT stop Payload creating a second customer. Payload's bank
+    // activation flow creates a new customer as a matter of course and lets
+    // the person type any email they like on it: Tara connected her own bank
+    // and watched Payload create a separate customer carrying the same email
+    // she had entered. So matching the email is not a de-duplication
+    // mechanism, and an earlier version of this comment saying it prevented
+    // duplicate customers was wrong. users.payload_payout_customer_id is what
+    // keeps a bank connection attached to the right customer. See
+    // lib/payload/syncCustomerEmail.ts.
     await syncPayloadCustomerEmail(agent.payload_payee_id, agent.email)
 
     const res = await fetch('https://api.payload.com/payment_activations/', {

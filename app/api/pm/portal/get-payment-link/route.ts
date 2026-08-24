@@ -78,6 +78,32 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
+    // No fallback. PAYLOAD_PROCESSING_ID is the account that RECEIVES agent
+    // invoices, so falling back to it would land a tenant rent payment in the
+    // wrong account whenever the PM variable was unset - silently, and with
+    // real money. The old second fallback to '' was worse still: processing_id
+    // is optional on Payload's invoice object
+    // (docs.payload.com/apis/object-reference/invoices/) and the docs do not
+    // say which account an empty or absent value resolves to, so the
+    // destination was simply unknowable. The agent payout path and the PM
+    // disbursement route have no fallback for the same reason. Unset means
+    // stop, and it stops here - before a Payload customer is created - so an
+    // unconfigured deploy leaves nothing behind.
+    //
+    // A tenant is reading this response, so the variable name goes to the
+    // server log and to `detail`, not into the sentence they see.
+    const pmProcessingId = process.env.PAYLOAD_PM_PROCESSING_ID
+    if (!pmProcessingId) {
+      console.error(
+        'get-payment-link: PAYLOAD_PM_PROCESSING_ID is not set - refusing to create a Payload invoice'
+      )
+      return NextResponse.json({
+        error: 'Payment service not configured. Please contact pm@collectiverealtyco.com',
+        detail: 'PAYLOAD_PM_PROCESSING_ID is not set',
+        fallback: true,
+      }, { status: 503 })
+    }
+
     // Use first invoice's tenant info (they should all be same tenant)
     const tenant = invoices[0].tenants
     
@@ -130,7 +156,7 @@ export async function POST(request: NextRequest) {
     const invoiceParams = new URLSearchParams({
       type: 'bill',
       due_date: earliestDueDate,
-      processing_id: process.env.PAYLOAD_PM_PROCESSING_ID || process.env.PAYLOAD_PROCESSING_ID || '',
+      processing_id: pmProcessingId,
       customer_id: customerId,
       description,
     })
