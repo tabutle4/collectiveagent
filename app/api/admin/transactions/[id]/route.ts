@@ -3215,6 +3215,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         account_type: preview.accountType,
         account_last4: preview.accountLast4,
         bank_status: preview.bankStatus,
+        can_receive_credit: preview.canReceiveCredit,
+        transfer_type: preview.transferType,
       })
     }
 

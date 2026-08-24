@@ -7075,6 +7075,17 @@ export default function AdminTransactionDetailPage() {
                         attempted, but it may be returned. Consider resending Bank Connect first.
                       </p>
                     )}
+                    {/* Payload records whether an account may receive a credit.
+                        A commission payout is a credit, so a false here is what
+                        a billing-only bank account looks like. The send still
+                        allows it, so this is the office's chance to notice. */}
+                    {payoutPreview.data.can_receive_credit === false && (
+                      <p className="text-[11px] text-amber-800 mt-2">
+                        Payload does not mark this account as one that can receive credits, which is
+                        what a monthly-fee billing account looks like. Check in Payload that this is
+                        the agent&apos;s payout bank before sending.
+                      </p>
+                    )}
                   </div>
 
                   {/* Gate results - the same six the server re-checks on send */}

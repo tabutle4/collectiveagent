@@ -42,6 +42,63 @@ const plAuth = () =>
   'Basic ' + Buffer.from(process.env.PAYLOAD_SECRET_KEY + ':').toString('base64')
 
 /** Role → payout description prefix, per the office's Payload conventions. */
+/**
+ * Whether a Payload payment method may RECEIVE a commission payout, and the
+ * customer it must belong to.
+ *
+ * Payload keeps two different things behind two different setup pages, and
+ * records the difference on the method itself
+ * (docs.payload.com/apis/object-reference/payment-methods):
+ *
+ *   default_credit_method   - may be the default for CREDITS. A payout is a
+ *                             credit.
+ *   default_payment_method  - may be the default for PAYMENTS, i.e. being
+ *                             charged. That is the monthly-fee account.
+ *   transfer_type           - 'send-only' | 'receive-only' | 'two-way'.
+ *
+ * On 24 Aug 2026 the verify-bank-connections cron adopted 16 agents' BILLING
+ * customer as their payout customer, because it looked for any active bank
+ * account and treated default_credit_method as a sort key. This guard is the
+ * layer that refuses to send money on the back of that.
+ *
+ * Two rules, and the blast radius of each was measured before shipping:
+ *
+ *  1. payload_payout_customer_id must be set, and must NOT equal
+ *     payload_payee_id. A payout customer that IS the billing customer is
+ *     the corrupted shape; 41 of 57 payable agents have them genuinely
+ *     distinct and are unaffected, 0 agents relied on the old
+ *     `|| payload_payee_id` fallback, and the 16 corrupted rows are refused
+ *     until a human re-links them.
+ *
+ *  2. transfer_type 'send-only' cannot receive anything, so it is refused.
+ *
+ * default_credit_method is deliberately NOT a hard block: this code cannot
+ * see how consistently Payload populates it across existing methods, and
+ * blocking every payout on an unverified flag is worse than the problem. It
+ * is surfaced in the preview and reported by the cron instead.
+ */
+export function payoutTargetProblem(agentUser: {
+  payload_payout_customer_id?: string | null
+  payload_payee_id?: string | null
+}): string | null {
+  const payoutCustomer = String(agentUser.payload_payout_customer_id || '')
+  const billingCustomer = String(agentUser.payload_payee_id || '')
+  if (!payoutCustomer) {
+    return 'No payout customer is on file for this agent, only a billing customer. Send Bank Activation so they set up a payout bank account in Payload.'
+  }
+  if (billingCustomer && payoutCustomer === billingCustomer) {
+    return 'This agent\'s payout customer is the same Payload customer used to bill their monthly fee, so the account on file may be their billing bank rather than a payout bank. Confirm the payout account in Payload and re-link it from their profile before paying.'
+  }
+  return null
+}
+
+export function payoutMethodProblem(pm: any): string | null {
+  if (String(pm?.transfer_type || '').toLowerCase() === 'send-only') {
+    return 'The bank account on file is send-only in Payload, so it cannot receive a commission payout. The agent needs to set up a payout bank account.'
+  }
+  return null
+}
+
 export function payoutDescription(
   tia: { agent_role?: string | null; installment_kind?: string | null },
   propertyAddress: string
@@ -203,15 +260,30 @@ export async function processPayout({
   if (String(pm?.status || '').toLowerCase() === 'inactive') {
     return { ok: false, error: 'Bank account is inactive in Payload - resend Bank Connect from the app.' }
   }
+  // Is this agent's payout target trustworthy at all? Checked BEFORE the
+  // ownership comparison, because the comparison cannot catch a payout
+  // customer that was copied from the billing customer - it would just be
+  // agreeing with itself.
+  const targetProblem = payoutTargetProblem(agentUser)
+  if (targetProblem) {
+    return { ok: false, error: targetProblem }
+  }
+  const methodProblem = payoutMethodProblem(pm)
+  if (methodProblem) {
+    return { ok: false, error: methodProblem }
+  }
   const pmCustomer = String(pm?.customer_id || pm?.customer?.id || '')
-  const expectedCustomer = String(
-    agentUser.payload_payout_customer_id || agentUser.payload_payee_id || ''
-  )
+  // No `|| payload_payee_id` fallback. Falling back to the billing customer
+  // made a bank on the billing account an acceptable payout target, which is
+  // the whole failure being closed here. Measured 24 Aug 2026: 0 of the 57
+  // payable agents relied on that fallback, so removing it blocks nobody who
+  // was not already misdirected.
+  const expectedCustomer = String(agentUser.payload_payout_customer_id || '')
   if (!expectedCustomer || !pmCustomer || pmCustomer !== expectedCustomer) {
     return {
       ok: false,
       error:
-        "Payment method belongs to a different Payload customer than this agent's payee - resend Bank Connect from the app",
+        "Payment method belongs to a different Payload customer than this agent's payout customer - resend Bank Connect from the app",
     }
   }
 
@@ -395,6 +467,16 @@ export interface PreviewPayoutResult {
   /** Payload's payment-method status. 'declining' still sends, but the
    *  office should see it before confirming. */
   bankStatus?: string | null
+  /**
+   * Payload's default_credit_method flag on this account. A commission payout
+   * is a credit, so `false` is what a billing-only bank account looks like.
+   * NOT a hard block - the send still allows it, because how consistently
+   * Payload populates the flag on already-connected methods is unverified.
+   * Shown in the confirm modal so the office sends with eyes open.
+   */
+  canReceiveCredit?: boolean
+  /** 'send-only' | 'receive-only' | 'two-way'. send-only is refused. */
+  transferType?: string | null
 }
 
 export async function previewPayout({
@@ -452,9 +534,13 @@ export async function previewPayout({
       error: 'Agent has no verified bank connection - resend Bank Connect from the app.',
     }
   }
-  const expectedCustomer = String(
-    agentUser.payload_payout_customer_id || agentUser.payload_payee_id || ''
-  )
+  // Same rules as the send below, or the modal would show a green preview for
+  // a payout processPayout is about to refuse.
+  const previewTargetProblem = payoutTargetProblem(agentUser)
+  if (previewTargetProblem) {
+    return { ok: false, error: previewTargetProblem }
+  }
+  const expectedCustomer = String(agentUser.payload_payout_customer_id || '')
   if (!expectedCustomer) {
     return {
       ok: false,
@@ -501,6 +587,10 @@ export async function previewPayout({
       error: 'Bank account is inactive in Payload - resend Bank Connect from the app.',
     }
   }
+  const previewMethodProblem = payoutMethodProblem(pm)
+  if (previewMethodProblem) {
+    return { ok: false, error: previewMethodProblem }
+  }
 
   // Mask server-side: only the last 4 of the account number ever reaches the
   // browser, and the routing number is never read out of the response.
@@ -518,6 +608,8 @@ export async function previewPayout({
     accountType: pm?.bank_account?.account_type ?? null,
     accountLast4,
     bankStatus: pm?.status ?? null,
+    canReceiveCredit: !!pm?.default_credit_method,
+    transferType: pm?.transfer_type ?? null,
   }
 }
 
